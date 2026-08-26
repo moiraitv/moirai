@@ -1,0 +1,40 @@
+{
+  "name": "@moirai/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/dev.mjs --server-only",
+    "build": "node build.mjs",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/static": "^10.1.3",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/websocket": "^11.3.0",
+    "@js-temporal/polyfill": "^0.5.1",
+    "@moirai/ersatztv-contract": "*",
+    "@moirai/shared": "*",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "better-sqlite3": "^13.0.3",
+    "chokidar": "^4.0.3",
+    "drizzle-orm": "^0.45.2",
+    "fast-xml-parser": "^5.3.0",
+    "fastify": "^5.6.0",
+    "fastify-type-provider-zod": "^7.0.0",
+    "pino": "^10.3.1",
+    "sharp": "^0.35.3",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ws": "^8.18.1"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.2"
+  }
+}

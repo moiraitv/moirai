@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest';
+import { channelCreateSchema, type Channel } from '@moirai/shared';
+import {
+	ETV_CONTRACT_REVISION,
+	ETV_PLAYOUT_VERSION,
+	toEtvChannelConfig,
+	toEtvPlayout,
+	validateEtvDocument,
+} from '@ersatztv-source/index.js';
+
+function channel(): Channel {
+	return {
+		...channelCreateSchema.parse({ number: '7', name: 'Moirai Cinema' }),
+		id: crypto.randomUUID(),
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
+}
+
+describe('ErsatzTV adapter', () => {
+	it('maps domain normalization to the pinned contract', () => {
+		const document = toEtvChannelConfig(channel());
+		expect(document).toMatchObject({
+			normalization: {
+				audio: { format: 'aac' },
+				video: { format: 'h264', scaling_mode: 'scale_and_pad' },
+			},
+		});
+		expect(() => validateEtvDocument('channel', document)).not.toThrow();
+		expect(ETV_CONTRACT_REVISION).toMatch(/^[a-f0-9]{40}$/);
+	});
+
+	it('maps local media and dead air into the pinned playout contract', () => {
+		const document = toEtvPlayout([
+			{
+				type: 'local',
+				id: 'media-1',
+				start: '2026-08-23T12:00:00Z',
+				finish: '2026-08-23T13:00:00Z',
+				path: '/media/movie.mkv',
+				inPointMs: 30_000,
+				outPointMs: 3_630_000,
+			},
+			{
+				type: 'dead-air',
+				id: 'dead-air-1',
+				start: '2026-08-23T13:00:00Z',
+				finish: '2026-08-23T14:00:00Z',
+				width: 1920,
+				height: 1080,
+			},
+		]);
+
+		expect(document).toMatchObject({
+			version: ETV_PLAYOUT_VERSION,
+			items: [
+				{ source: { source_type: 'local', in_point_ms: 30_000, out_point_ms: 3_630_000 } },
+				{ tracks: { video: { source: { source_type: 'lavfi' } } } },
+			],
+		});
+		expect(() => validateEtvDocument('playout', document)).not.toThrow();
+	});
+});

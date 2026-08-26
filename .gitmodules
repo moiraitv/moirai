@@ -1,0 +1,3 @@
+[submodule "ersatztv-next"]
+	path = vendor/ersatztv-next
+	url = https://github.com/ErsatzTV/next.git

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+packages/ersatztv-contract/src/vendor/
+vendor/
+package-lock.json
+**/*.js
+**/*.mjs
+**/*.cjs
+**/*.ts
+**/*.tsx
+**/*.vue

@@ -1,0 +1,574 @@
+import { Temporal } from '@js-temporal/polyfill';
+import {
+	XMLTV_EPG_DAYS,
+	type ChannelSchedule,
+	type LiveEvent,
+	type ScheduleTemplate,
+	type SchedulingCatalog,
+	type SchedulingProgram,
+	type SelectionStateRecord,
+} from '@moirai/shared';
+import type { LiveEventPublisher } from '../operations/live-events.js';
+import { internalErrorMessage } from '../error-message.js';
+import type { Repository } from '../repository/index.js';
+import type { MaterializedSegmentRecord } from '../repository/contracts.js';
+import { generateTimelineDetailed } from './engine.js';
+import type { SchedulingWorkerPool } from './worker-pool.js';
+import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
+import { stableJsonFingerprint } from './stable-json.js';
+import { currentTimestamp } from '../time.js';
+
+/** Delay between background checks of the durable rolling schedule window. */
+const MATERIALIZATION_INTERVAL_MS = 60_000;
+
+/** Return whether a media group is contained by any selected group. */
+function belongsToGroup(
+	groupId: string | null,
+	candidates: Set<string>,
+	parents: Record<string, string | null>,
+): boolean {
+	let current = groupId;
+	const visited = new Set<string>();
+	while (current && !visited.has(current)) {
+		if (candidates.has(current)) {
+			return true;
+		}
+
+		visited.add(current);
+		current = parents[current] ?? null;
+	}
+	return false;
+}
+
+/** Collect every program reachable from the selected schedule resources. */
+function referencedPrograms(
+	templateIds: Set<string>,
+	templates: ScheduleTemplate[],
+	programs: SchedulingProgram[],
+	seedProgramIds: string[] = [],
+): SchedulingProgram[] {
+	const ids = new Set<string>(seedProgramIds);
+	for (const template of templates) {
+		if (!templateIds.has(template.id)) {
+			continue;
+		}
+
+		for (const slot of template.slots) {
+			if (slot.programId) {
+				ids.add(slot.programId);
+			}
+			if (slot.filler.mode === 'configured') {
+				ids.add(slot.filler.config.programId);
+			}
+		}
+		if (template.defaultFiller) {
+			ids.add(template.defaultFiller.programId);
+		}
+	}
+	let changed = true;
+	while (changed) {
+		changed = false;
+		for (const program of programs) {
+			if (!ids.has(program.id) || program.config.type !== 'sequence') {
+				continue;
+			}
+
+			for (const entry of program.config.entries) {
+				if (!ids.has(entry.programId)) {
+					ids.add(entry.programId);
+					changed = true;
+				}
+			}
+		}
+	}
+	return programs.filter((program) => ids.has(program.id));
+}
+
+/** Hash programming inputs that determine whether committed future output is stale. */
+function inputFingerprint(
+	schedule: ChannelSchedule,
+	templates: ScheduleTemplate[],
+	programs: SchedulingProgram[],
+	catalog: SchedulingCatalog,
+): string {
+	// Restrict templates and recursively referenced programs to this channel schedule.
+	const templateIds = new Set([
+		schedule.defaultTemplateId,
+		...schedule.layers.map((layer) => layer.templateId),
+	]);
+	const selectedTemplates = templates
+		.filter((template) => templateIds.has(template.id))
+		.sort((left, right) => left.id.localeCompare(right.id));
+	const selectedPrograms = referencedPrograms(
+		templateIds,
+		templates,
+		programs,
+		schedule.defaultFiller ? [schedule.defaultFiller.programId] : [],
+	).sort((left, right) => left.id.localeCompare(right.id));
+
+	// Collect only catalog scopes that can affect those programs.
+	const libraryIds = new Set<string>();
+	const itemIds = new Set<string>();
+	const groupIds = new Set<string>();
+	for (const program of selectedPrograms) {
+		if (program.config.type !== 'content') {
+			continue;
+		}
+
+		const source = program.config.source;
+		if (source.type === 'item') {
+			itemIds.add(source.itemId);
+		}
+		else if (source.type === 'group') {
+			groupIds.add(source.groupId);
+		}
+		else {
+			libraryIds.add(source.libraryId);
+			if (source.type === 'group-collection') {
+				for (const groupId of source.groupIds) {
+					groupIds.add(groupId);
+				}
+			}
+		}
+	}
+
+	// Include matching media while ignoring transient availability in the durable fingerprint.
+	const selectedMedia = catalog.media
+		.filter(
+			(media) =>
+				libraryIds.has(media.libraryId)
+				|| itemIds.has(media.id)
+				|| belongsToGroup(media.groupId, groupIds, catalog.groupParents),
+		)
+		.map((media) => ({ ...media, availability: 'ignored' }))
+		.sort((left, right) => left.id.localeCompare(right.id));
+	const selectedLibraryIds = new Set(libraryIds);
+	for (const media of selectedMedia) {
+		selectedLibraryIds.add(media.libraryId);
+	}
+
+	// Include the ancestor hierarchy and library attributes used during materialization.
+	const selectedGroupIds = new Set(groupIds);
+	for (const media of selectedMedia) {
+		let groupId = media.groupId;
+		while (groupId && !selectedGroupIds.has(groupId)) {
+			selectedGroupIds.add(groupId);
+			groupId = catalog.groupParents[groupId] ?? null;
+		}
+	}
+
+	// Hash stable authored inputs and catalog eligibility data together.
+	return stableJsonFingerprint({
+		schedule,
+		templates: selectedTemplates,
+		programs: selectedPrograms,
+		catalog: {
+			media: selectedMedia,
+			groupParents: Object.fromEntries(
+				[...selectedGroupIds].map((id) => [id, catalog.groupParents[id] ?? null]),
+			),
+			groupTitles: Object.fromEntries(
+				[...selectedGroupIds].map((id) => [id, catalog.groupTitles[id] ?? null]),
+			),
+			libraryNames: Object.fromEntries(
+				[...selectedLibraryIds].map((id) => [id, catalog.libraryNames[id] ?? null]),
+			),
+			libraryEnabled: Object.fromEntries(
+				[...selectedLibraryIds].map((id) => [id, catalog.libraryEnabled?.[id] ?? true]),
+			),
+		},
+	});
+}
+
+/** Restore the selection state recorded immediately after a committed segment. */
+function stateAfter(
+	initial: SelectionStateRecord[],
+	segments: MaterializedSegmentRecord[],
+	cutoff: string,
+): SelectionStateRecord[] {
+	const state = new Map(initial.map((record) => [record.consumerKey, structuredClone(record)]));
+	for (const record of segments) {
+		if (record.segment.start >= cutoff) {
+			break;
+		}
+
+		for (const changed of record.stateDelta) {
+			state.set(changed.consumerKey, structuredClone(changed));
+		}
+	}
+	return [...state.values()].sort((left, right) =>
+		left.consumerKey.localeCompare(right.consumerKey));
+}
+
+/** Keep only persistent cursor records when advancing the durable window. */
+function persistentState(records: SelectionStateRecord[]): SelectionStateRecord[] {
+	return records.filter((record) => !/:\d{4}-\d{2}-\d{2}(?::|$)/u.test(record.consumerKey));
+}
+
+/** Freeze catalog availability for media already committed to the durable timeline. */
+function committedCatalog(catalog: SchedulingCatalog): SchedulingCatalog {
+	return indexSchedulingCatalog({
+		...catalog,
+		media: catalog.media.map((media) => ({
+			...media,
+			availability: catalog.libraryEnabled?.[media.libraryId] === false
+				? media.availability
+				: 'available',
+		})),
+		libraryAvailability: Object.fromEntries(
+			Object.keys(catalog.libraryAvailability).map((libraryId) => [
+				libraryId,
+				catalog.libraryEnabled?.[libraryId] === false ? 'unavailable' : 'available',
+			]),
+		),
+	});
+}
+
+/** Convert an instant to the configured scheduling calendar date. */
+function localDate(value: string, timeZone: string): Temporal.PlainDate {
+	return Temporal.Instant.from(value).toZonedDateTimeISO(timeZone).toPlainDate();
+}
+
+/** Convert a scheduling date to its first instant in the configured time zone. */
+function startOfDate(date: Temporal.PlainDate, timeZone: string): string {
+	return date.toZonedDateTime(timeZone).toInstant().toString();
+}
+
+/**
+ * Own the durable rolling schedule and act as the only production cursor-state writer. The
+ * materializer reacts to scheduling and catalog changes, generates authoritative future windows,
+ * and commits segments, selection state, and health as one persistence workflow.
+ */
+export class TimelineMaterializer {
+	private timer: NodeJS.Timeout | null = null;
+	private active: Promise<void> | null = null;
+	private running = false;
+	private dirty = true;
+	private lastCheckedAt = 0;
+	private revision = 0;
+	private closed = false;
+
+	constructor(
+		private readonly repository: Repository,
+		private readonly events: LiveEventPublisher,
+		private readonly timeZone: string,
+		private readonly workers?: SchedulingWorkerPool,
+	) {}
+
+	/** Return whether the rolling materializer is accepting background work. */
+	health(): { status: 'ready' | 'degraded'; detail?: string } {
+		return this.running
+			? { status: 'ready' }
+			: { status: 'degraded', detail: 'Timeline materializer is not running' };
+	}
+
+	/** Start periodic rolling timeline materialization. */
+	start(): void {
+		if (this.running) {
+			return;
+		}
+
+		this.closed = false;
+		this.running = true;
+		void this.runNow()
+			.catch(() => undefined)
+			.finally(() => this.schedule());
+	}
+
+	/** Stop scheduled work and wait for the active materialization to settle. */
+	async close(): Promise<void> {
+		this.closed = true;
+		this.running = false;
+		if (this.timer) {
+			clearTimeout(this.timer);
+			this.timer = null;
+		}
+		await this.active?.catch(() => undefined);
+	}
+
+	/** Mark timelines dirty when scheduling or playable catalog inputs change. */
+	handleEvent(event: LiveEvent): void {
+		const relevantScan = event.type === 'scan.changed' && event.data.affectsProgramming;
+		if (event.type === 'scheduling.changed' || relevantScan) {
+			this.dirty = true;
+			this.revision += 1;
+			void this.runNow().catch(() => undefined);
+		}
+	}
+
+	/** Materialize rolling timelines now, sharing one active pass across callers. */
+	async runNow(force = false): Promise<void> {
+		if (this.active) {
+			if (force) {
+				this.dirty = true;
+				this.revision += 1;
+			}
+			await this.active;
+			if (!this.closed && this.dirty) {
+				return this.runNow();
+			}
+
+			return;
+		}
+
+		if (!force && !this.dirty && Date.now() - this.lastCheckedAt < MATERIALIZATION_INTERVAL_MS) {
+			return;
+		}
+
+		const revision = this.revision;
+		this.active = this.materializeAll();
+		try {
+			await this.active;
+			this.dirty = revision !== this.revision;
+			this.lastCheckedAt = Date.now();
+		}
+		finally {
+			this.active = null;
+		}
+	}
+
+	/** Apply pending schedule configuration after the current committed item. */
+	async applyNow(channelId: string): Promise<void> {
+		if (this.active) {
+			await this.active;
+		}
+		const now = Temporal.Now.instant()
+			.round({ smallestUnit: 'second', roundingMode: 'ceil' })
+			.toString();
+		this.repository.markTimelinePending([channelId], now, now);
+		this.dirty = true;
+		this.revision += 1;
+		this.events.publish({ type: 'timeline.changed', data: { channelId, status: 'pending' } });
+		await this.runNow(true);
+	}
+
+	/** Schedule the next rolling materialization if one is not already queued. */
+	private schedule(): void {
+		if (!this.running) {
+			return;
+		}
+
+		this.timer = setTimeout(() => {
+			this.timer = null;
+			void this.runNow()
+				.catch(() => undefined)
+				.finally(() => this.schedule());
+		}, MATERIALIZATION_INTERVAL_MS);
+		this.timer.unref();
+	}
+
+	/** Refresh each configured channel using one shared catalog snapshot. */
+	private async materializeAll(): Promise<void> {
+		const programsPromise = this.repository.listPrograms();
+		const [schedules, templates, programs] = await Promise.all([
+			this.repository.listChannelSchedules(),
+			this.repository.listScheduleTemplates(),
+			programsPromise,
+		]);
+		const catalog = await this.repository.getSchedulingCatalog(
+			programs,
+			schedulingRootProgramIds(templates, schedules),
+		);
+		for (const schedule of schedules) {
+			try {
+				await this.materializeChannel(schedule, templates, programs, catalog);
+			}
+			catch (error) {
+				const message = internalErrorMessage(error);
+				this.repository.markTimelineFailed(schedule.channelId, message, currentTimestamp());
+				this.events.publish({
+					type: 'timeline.changed',
+					data: { channelId: schedule.channelId, status: 'failed' },
+				});
+			}
+		}
+	}
+
+	/** Extend or replace one channel's committed rolling timeline. */
+	private async materializeChannel(
+		schedule: ChannelSchedule,
+		templates: ScheduleTemplate[],
+		programs: SchedulingProgram[],
+		sourceCatalog: SchedulingCatalog,
+	): Promise<void> {
+		// Resolve the base template and desired rolling guide window.
+		const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
+		if (!template) {
+			return;
+		}
+
+		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' });
+		const today = now.toZonedDateTimeISO(this.timeZone).toPlainDate();
+		const desiredStart = startOfDate(today, this.timeZone);
+		const desiredEndDate = today.add({ days: XMLTV_EPG_DAYS });
+		const desiredEnd = startOfDate(desiredEndDate, this.timeZone);
+		const currentFingerprint = inputFingerprint(schedule, templates, programs, sourceCatalog);
+
+		// Load the current commit and its state-bearing segments once.
+		let current = await this.repository.getTimelineMaterialization(schedule.channelId);
+		const retryingFailure = current?.health === 'failed';
+		const existing = current
+			? await this.repository.listMaterializedTimelineSegments(
+				current.windowStart,
+				current.continuationAt,
+				schedule.channelId,
+			)
+			: [];
+
+		// Stage changed configuration at the next local-day boundary.
+		if (
+			current
+			&& !retryingFailure
+			&& current.inputFingerprint !== currentFingerprint
+			&& !current.pendingSince
+		) {
+			const applyAfter = startOfDate(today.add({ days: 1 }), this.timeZone);
+			const pendingSince = now.toString();
+			this.repository.markTimelinePending([schedule.channelId], applyAfter, pendingSince);
+			current = { ...current, health: 'pending', pendingSince, applyAfter };
+			this.events.publish({
+				type: 'timeline.changed',
+				data: { channelId: schedule.channelId, status: 'pending' },
+			});
+		}
+
+		if (current?.applyAfter && Temporal.Instant.compare(now, current.applyAfter) < 0) {
+			return;
+		}
+
+		// Choose the replacement boundary and reconstruct selection state at that instant.
+		let replaceFrom = desiredStart;
+		let initialState: SelectionStateRecord[] = [];
+		let baseState: SelectionStateRecord[] = [];
+		if (current) {
+			baseState = persistentState(stateAfter(current.baseState, existing, desiredStart));
+			if (current.applyAfter) {
+				replaceFrom = current.applyAfter;
+				const active = existing.find(
+					({ segment }) =>
+						segment.start < replaceFrom
+						&& segment.finish > replaceFrom
+						&& segment.role !== 'dead-air',
+				);
+				if (active) {
+					replaceFrom = active.segment.finish;
+				}
+				initialState = stateAfter(current.baseState, existing, replaceFrom);
+			}
+			else if (retryingFailure) {
+				replaceFrom
+					= Temporal.Instant.compare(now, Temporal.Instant.from(desiredStart)) > 0
+						? now.toString()
+						: desiredStart;
+				const active = existing.find(
+					({ segment }) =>
+						segment.start < replaceFrom
+						&& segment.finish > replaceFrom
+						&& segment.role !== 'dead-air',
+				);
+				if (active) {
+					replaceFrom = active.segment.finish;
+				}
+				initialState = stateAfter(current.baseState, existing, replaceFrom);
+			}
+			else if (current.windowEnd < desiredEnd) {
+				replaceFrom = current.continuationAt;
+				initialState = await this.repository.getSelectionState(schedule.channelId);
+			}
+			else {
+				return;
+			}
+		}
+		else {
+			initialState = await this.repository.getSelectionState(schedule.channelId);
+			baseState = persistentState(initialState);
+		}
+
+		if (replaceFrom >= desiredEnd) {
+			return;
+		}
+
+		// Generate only the missing or replaceable part of the rolling window.
+		const generationDate = localDate(replaceFrom, this.timeZone);
+		const days = Math.max(1, generationDate.until(desiredEndDate, { largestUnit: 'days' }).days);
+		const catalog = committedCatalog(sourceCatalog);
+		const generated = this.workers
+			? await this.workers.generate({
+				channelId: schedule.channelId,
+				timeZone: this.timeZone,
+				startDate: generationDate.toString(),
+				days,
+				schedule,
+				template,
+				templates,
+				programs,
+				catalog,
+				state: initialState,
+				initialCursor: replaceFrom,
+			})
+			: generateTimelineDetailed({
+				channelId: schedule.channelId,
+				timeZone: this.timeZone,
+				startDate: generationDate.toString(),
+				days,
+				schedule,
+				template,
+				templates,
+				programs,
+				catalog,
+				state: initialState,
+				initialCursor: replaceFrom,
+			});
+		if (generated.issues.some((issue) => issue.code === 'media-duration-missing')) {
+			throw new Error('Scheduled media requires technical inspection before playback');
+		}
+
+		// Snapshot media labels and state deltas so committed output survives catalog changes.
+		const transitions = new Map(
+			generated.stateTransitions.map((transition) => [transition.segmentId, transition.stateDelta]),
+		);
+		const media = new Map(catalog.media.map((item) => [item.id, item]));
+		const segments: MaterializedSegmentRecord[] = generated.segments
+			.filter((segment) => segment.start < desiredEnd)
+			.map((segment) => ({
+				segment,
+				mediaSnapshot: segment.mediaItemId
+					? (() => {
+						const item = media.get(segment.mediaItemId);
+						if (!item) {
+							return null;
+						}
+
+						const parentId = item.groupId ? catalog.groupParents[item.groupId] : null;
+						return {
+							...item,
+							seriesTitle: item.kind === 'episode' && item.groupId
+								? (catalog.groupTitles[parentId ?? item.groupId] ?? null)
+								: null,
+						};
+					})()
+					: null,
+				stateDelta: transitions.get(segment.id) ?? [],
+			}));
+
+		// Atomically commit the replacement range and notify guide and playout consumers.
+		const committedAt = currentTimestamp();
+		this.repository.commitMaterializedTimeline({
+			channelId: schedule.channelId,
+			windowStart: desiredStart,
+			windowEnd: desiredEnd,
+			replaceFrom,
+			continuationAt: generated.continuationAt,
+			inputFingerprint: currentFingerprint,
+			baseState,
+			finalState: persistentState(generated.proposedState),
+			segments,
+			issues: generated.issues,
+			committedAt,
+		});
+		this.events.publish({
+			type: 'timeline.changed',
+			data: { channelId: schedule.channelId, status: 'ready' },
+		});
+	}
+}

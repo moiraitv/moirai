@@ -1,0 +1,10 @@
+.git
+node_modules
+**/dist
+coverage
+data
+test-results
+playwright-report
+.env
+.DS_Store
+vendor/ersatztv-next

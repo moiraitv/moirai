@@ -1,0 +1,40 @@
+{
+  "playout": {
+    "folder": "./playout"
+  },
+  "ffmpeg": {
+    "ffmpeg_path": "",
+    "ffprobe_path": "",
+    "disabled_filters": []
+  },
+  "normalization": {
+    "audio": {
+      "format": "aac",
+      "bitrate_kbps": 192,
+      "buffer_kbps": 384,
+      "channels": 2,
+      "sample_rate_hz": 48000,
+      "normalize_loudness": true,
+      "loudness": {
+        "integrated_target": -16,
+        "range_target": 11,
+        "true_peak": -1.5
+      }
+    },
+    "video": {
+      "format": "h264",
+      "bit_depth": 8,
+      "width": 1920,
+      "height": 1080,
+      "bitrate_kbps": 2000,
+      "buffer_kbps": 4000,
+      "accel": "",
+      "tonemap_algorithm": "linear",
+      "vaapi_device": "/dev/dri/renderD128",
+      "vaapi_driver": "iHD"
+    },
+    "subtitle": {
+      "mode": "burn"
+    }
+  }
+}

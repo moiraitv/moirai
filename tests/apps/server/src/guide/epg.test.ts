@@ -1,0 +1,139 @@
+import { randomUUID } from 'node:crypto';
+import { XMLParser } from 'fast-xml-parser';
+import { describe, expect, it } from 'vitest';
+import { channelCreateSchema, type ScheduleGuide, type SchedulingCatalog } from '@moirai/shared';
+import { buildXmltv, effectiveTvgId, xmltvTimestamp } from '@server/guide/epg.js';
+
+function catalog(): SchedulingCatalog {
+	const showId = randomUUID();
+	const seasonId = randomUUID();
+	return {
+		media: [
+			{
+				id: 'c84419f8-6019-4550-b704-c0711adf1dc9',
+				libraryId: randomUUID(),
+				groupId: seasonId,
+				kind: 'episode',
+				title: 'The <Arrival> & Return',
+				sortTitle: 'arrival return',
+				playbackPath: '/media/arrival.mkv',
+				durationSeconds: 3600,
+				seasonNumber: 2,
+				episodeNumber: 3,
+				genres: ['science-fiction'],
+				genreNames: ['Science Fiction'],
+				plot: 'A ship arrives & changes everything.',
+				year: 2026,
+				artworkUrl: '/api/v1/artwork/items/c84419f8-6019-4550-b704-c0711adf1dc9?v=poster',
+				availability: 'available',
+			},
+		],
+		groupParents: { [showId]: null, [seasonId]: showId },
+		groupTitles: { [showId]: 'Example Show', [seasonId]: 'Season 2' },
+		libraryNames: {},
+		libraryAvailability: {},
+	};
+}
+
+function guide(channelId: string, mediaId: string): ScheduleGuide {
+	return {
+		timeZone: 'America/Los_Angeles',
+		startDate: '2026-11-01',
+		days: 1,
+		channels: [
+			{
+				channelId,
+				preview: {
+					channelId,
+					timeZone: 'America/Los_Angeles',
+					startDate: '2026-11-01',
+					days: 1,
+					segments: [
+						{
+							id: randomUUID(),
+							role: 'primary',
+							channelId,
+							scheduleLayerId: null,
+							templateId: randomUUID(),
+							slotId: randomUUID(),
+							programId: randomUUID(),
+							mediaItemId: mediaId,
+							title: 'The <Arrival> & Return',
+							playbackPath: '/media/arrival.mkv',
+							start: '2026-11-01T08:30:00Z',
+							finish: '2026-11-01T09:30:00Z',
+							sourceStartSeconds: 0,
+							sourceFinishSeconds: null,
+							truncated: false,
+						},
+						{
+							id: randomUUID(),
+							role: 'dead-air',
+							channelId,
+							scheduleLayerId: null,
+							templateId: randomUUID(),
+							slotId: randomUUID(),
+							programId: null,
+							mediaItemId: null,
+							title: 'Dead air',
+							playbackPath: null,
+							start: '2026-11-01T09:30:00Z',
+							finish: '2026-11-01T10:00:00Z',
+							sourceStartSeconds: 0,
+							sourceFinishSeconds: null,
+							truncated: false,
+						},
+					],
+					issues: [],
+					proposedState: [],
+				},
+			},
+		],
+	};
+}
+
+describe('XMLTV EPG', () => {
+	it('formats each instant with the correct DST offset', () => {
+		expect(xmltvTimestamp('2026-11-01T08:30:00Z', 'America/Los_Angeles')).toBe(
+			'20261101013000 -0700',
+		);
+		expect(xmltvTimestamp('2026-11-01T09:30:00Z', 'America/Los_Angeles')).toBe(
+			'20261101013000 -0800',
+		);
+	});
+
+	it('emits rich episode metadata, proxied artwork, and explicit no-programming entries', () => {
+		const channel = {
+			...channelCreateSchema.parse({
+				number: '7',
+				name: 'Example & More',
+				logo: 'https://images.example.test/channel.png?size=large&v=old',
+			}),
+			id: '3a9bb80f-e7a0-4fa9-ad69-e67e92473e25',
+			createdAt: '2026-08-21T00:00:00Z',
+			updatedAt: '2026-08-21T00:00:00Z',
+		};
+		const source = catalog();
+		const xml = buildXmltv(
+			[channel],
+			guide(channel.id, source.media[0]!.id),
+			source,
+			'https://moirai.example.test',
+		);
+
+		expect(() => new XMLParser({ ignoreAttributes: false }).parse(xml)).not.toThrow();
+		expect(effectiveTvgId(channel)).toBe('C7.3a9bb80f.moirai.tv');
+		expect(xml).toContain('<channel id="C7.3a9bb80f.moirai.tv">');
+		expect(xml).toContain('<display-name>Example &amp; More</display-name>');
+		expect(xml).toContain(
+			'src="https://images.example.test/channel.png?size=large&amp;v=2026-08-21T00%3A00%3A00Z"',
+		);
+		expect(xml).toContain('<title>Example Show</title>');
+		expect(xml).toContain('<sub-title>The &lt;Arrival&gt; &amp; Return</sub-title>');
+		expect(xml).toContain('<episode-num system="xmltv_ns">1.2.</episode-num>');
+		expect(xml).toContain('<category>Science Fiction</category>');
+		expect(xml).toContain('src="https://moirai.example.test/api/v1/artwork/items/');
+		expect(xml).toContain('v=poster&amp;variant=compat&amp;dpr=3');
+		expect(xml).toContain('<title>No programming</title>');
+	});
+});

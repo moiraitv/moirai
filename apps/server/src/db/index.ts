@@ -1,0 +1,27 @@
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import * as schema from './schema.js';
+
+/** Database handle to the SQLite connection. */
+export type MoiraiDatabase = ReturnType<typeof createDatabase>['db'];
+
+/** Open and configure the single-process SQLite database. */
+export function createDatabase(databasePath: string, migrationsDir: string) {
+	if (databasePath !== ':memory:') {
+		mkdirSync(path.dirname(databasePath), { recursive: true });
+	}
+
+	const sqlite = new Database(databasePath);
+	sqlite.pragma('foreign_keys = ON');
+	sqlite.pragma('busy_timeout = 5000');
+	if (databasePath !== ':memory:') {
+		sqlite.pragma('journal_mode = WAL');
+	}
+
+	const db = drizzle(sqlite, { schema });
+	migrate(db, { migrationsFolder: migrationsDir });
+	return { db, sqlite, close: () => sqlite.close() };
+}

@@ -1,0 +1,361 @@
+import { sql } from 'drizzle-orm';
+import type {
+	Channel,
+	ChannelCreate,
+	ChannelSchedule,
+	ChannelScheduleConfig,
+	ChannelUpdate,
+	MediaGroup,
+	MediaBrowseResult,
+	MediaGenreFacet,
+	MediaItem,
+	MediaItemDetail,
+	MediaSourcePickerResult,
+	PlaybackSettings,
+	ProgramCreate,
+	ProgramUpdate,
+	ScheduleTemplate,
+	ScheduleTemplateCreate,
+	ScheduleTemplateUpdate,
+	SchedulingCatalog,
+	SchedulingProgram,
+	SelectionStateRecord,
+	ChannelTimelineMaterializationStatus,
+	DataConflictReport,
+} from '@moirai/shared';
+import type { MoiraiDatabase } from '../db/index.js';
+import { MediaCatalogRepository } from './catalog.js';
+import { ChannelRepository } from './channels.js';
+import { SchedulingRepository } from './scheduling.js';
+import { SettingsRepository } from './settings.js';
+import { LibraryRepository } from './libraries.js';
+import { listDataConflicts } from './conflicts.js';
+import type {
+	MediaBrowseQuery,
+	MediaFileOwner,
+	MediaProbeCacheEntry,
+	MediaSourcePickerQuery,
+	TimelineCommit,
+	TimelineMaterializationRecord,
+	MaterializedSegmentRecord,
+} from './contracts.js';
+
+export type {
+	CatalogConflictObservation,
+	DiscoveredGroup,
+	DiscoveredItem,
+	MaterializedSegmentRecord,
+	MediaBrowseQuery,
+	MediaFileOwner,
+	MediaProbeCacheEntry,
+	MediaSourcePickerQuery,
+	ScanHistoryRetention,
+	ReconciledScan,
+	TimelineCommit,
+	TimelineMaterializationRecord,
+} from './contracts.js';
+
+/**
+ * Serve as the application's single persistence facade for libraries, scans, catalog data, channels,
+ * scheduling, and playback settings. It composes focused repository domains over one database while
+ * centralizing catalog invalidation and cross-domain queries for service callers.
+ */
+export class Repository extends LibraryRepository {
+	private readonly catalog: MediaCatalogRepository;
+	private readonly channels: ChannelRepository;
+	private readonly scheduling: SchedulingRepository;
+	private readonly settings: SettingsRepository;
+
+	constructor(private readonly database: MoiraiDatabase) {
+		super(database);
+		this.catalog = new MediaCatalogRepository(database);
+		this.channels = new ChannelRepository(database);
+		this.scheduling = new SchedulingRepository(database);
+		this.settings = new SettingsRepository(database);
+	}
+
+	/** Run the smallest SQLite query used to verify database readiness. */
+	checkDatabase(): void {
+		this.database.run(sql`SELECT 1`);
+	}
+
+	/** Return source and resource-identity conflicts that require user review. */
+	async listDataConflicts(): Promise<DataConflictReport> {
+		return listDataConflicts(this.database);
+	}
+
+	/** Return artwork owners that still exist in the indexed library. */
+	async existingArtworkOwnerIds(
+		libraryId: string,
+		kind: 'items' | 'groups',
+		ownerIds: string[],
+	): Promise<Set<string>> {
+		return this.catalog.existingArtworkOwnerIds(libraryId, kind, ownerIds);
+	}
+
+	/** Delegate a catalog browse query to the focused catalog repository. */
+	async browseMedia(libraryId: string, query: MediaBrowseQuery): Promise<MediaBrowseResult> {
+		return this.catalog.browseMedia(libraryId, query);
+	}
+
+	/** Return bounded media choices for the program source picker. */
+	async browseMediaSourceOptions(
+		libraryId: string,
+		query: MediaSourcePickerQuery,
+	): Promise<MediaSourcePickerResult> {
+		return this.catalog.browseMediaSourceOptions(libraryId, query);
+	}
+
+	/** List normalized genre facets present in one library. */
+	async listMediaGenres(libraryId: string): Promise<MediaGenreFacet[]> {
+		return this.catalog.listMediaGenres(libraryId);
+	}
+
+	/** Collect the stable identifiers for list media items by. */
+	async listMediaItemsByIds(libraryId: string, itemIds: string[]): Promise<MediaItem[]> {
+		return this.catalog.listMediaItemsByIds(libraryId, itemIds);
+	}
+
+	/** Return successful probe data used to avoid reopening unchanged media files. */
+	async listMediaProbeCache(libraryId: string): Promise<MediaProbeCacheEntry[]> {
+		return this.catalog.listMediaProbeCache(libraryId);
+	}
+
+	/** Return whether an enabled library still contains unprobed media. */
+	async libraryNeedsMediaProbe(libraryId: string): Promise<boolean> {
+		return this.catalog.libraryNeedsMediaProbe(libraryId);
+	}
+
+	/** Collect the stable identifiers for list media groups by. */
+	async listMediaGroupsByIds(libraryId: string, groupIds: string[]): Promise<MediaGroup[]> {
+		return this.catalog.listMediaGroupsByIds(libraryId, groupIds);
+	}
+
+	/** Return a media item's full catalog detail, if it still exists. */
+	async getMediaItem(id: string): Promise<MediaItemDetail | null> {
+		return this.catalog.getMediaItem(id);
+	}
+
+	/** Return the library source location that owns a media item. */
+	async getMediaFileOwner(id: string): Promise<MediaFileOwner | null> {
+		return this.catalog.getMediaFileOwner(id);
+	}
+
+	/** Return the source artwork location for a catalog item or group. */
+	async getArtworkOwner(kind: 'items' | 'groups', id: string) {
+		return this.catalog.getArtworkOwner(kind, id);
+	}
+
+	/** List channels in channel-number order. */
+	async listChannels(): Promise<Channel[]> {
+		return this.channels.listChannels();
+	}
+
+	/** Return a channel by identifier. */
+	async getChannel(id: string): Promise<Channel | null> {
+		return this.channels.getChannel(id);
+	}
+
+	/** Return a channel by its canonicalized public number. */
+	async getChannelByNumber(number: string): Promise<Channel | null> {
+		return this.channels.getChannelByNumber(number);
+	}
+
+	/** Create a channel with its stable Moirai XMLTV identifier. */
+	async createChannel(input: ChannelCreate): Promise<Channel> {
+		return this.channels.createChannel(input);
+	}
+
+	/** Merge channel changes and refresh the derived Moirai XMLTV identifier. */
+	async updateChannel(id: string, input: ChannelUpdate): Promise<Channel | null> {
+		return this.channels.updateChannel(id, input);
+	}
+
+	/** Replace only the logo reference using a channel already fetched by the request. */
+	async updateChannelLogo(channel: Channel, logo: string | null): Promise<Channel> {
+		return this.channels.updateChannelLogo(channel, logo);
+	}
+
+	/** Remove a channel and report whether it existed. */
+	async deleteChannel(id: string): Promise<boolean> {
+		return this.channels.deleteChannel(id);
+	}
+
+	/** List reusable scheduling programs. */
+	async listPrograms(): Promise<SchedulingProgram[]> {
+		return this.scheduling.listPrograms();
+	}
+
+	/** Return one reusable scheduling program. */
+	async getProgram(id: string): Promise<SchedulingProgram | null> {
+		return this.scheduling.getProgram(id);
+	}
+
+	/** Persist a reusable scheduling program. */
+	async createProgram(input: ProgramCreate): Promise<SchedulingProgram> {
+		return this.scheduling.createProgram(input);
+	}
+
+	/** Replace a program configuration while preserving its identity. */
+	async updateProgram(id: string, input: ProgramUpdate): Promise<SchedulingProgram | null> {
+		return this.scheduling.updateProgram(id, input);
+	}
+
+	/** Delete a program when no scheduling configuration references it. */
+	async deleteProgram(id: string): Promise<boolean> {
+		return this.scheduling.deleteProgram(id);
+	}
+
+	/** List authored daily schedule templates. */
+	async listScheduleTemplates(): Promise<ScheduleTemplate[]> {
+		return this.scheduling.listScheduleTemplates();
+	}
+
+	/** Return one authored daily schedule template. */
+	async getScheduleTemplate(id: string): Promise<ScheduleTemplate | null> {
+		return this.scheduling.getScheduleTemplate(id);
+	}
+
+	/** Persist a new daily schedule template. */
+	async createScheduleTemplate(input: ScheduleTemplateCreate): Promise<ScheduleTemplate> {
+		return this.scheduling.createScheduleTemplate(input);
+	}
+
+	/** Replace an existing daily schedule template. */
+	async updateScheduleTemplate(
+		id: string,
+		input: ScheduleTemplateUpdate,
+	): Promise<ScheduleTemplate | null> {
+		return this.scheduling.updateScheduleTemplate(id, input);
+	}
+
+	/** Delete a template when no channel schedule references it. */
+	async deleteScheduleTemplate(id: string): Promise<boolean> {
+		return this.scheduling.deleteScheduleTemplate(id);
+	}
+
+	/** Return the layered schedule assigned to a channel. */
+	async getChannelSchedule(channelId: string): Promise<ChannelSchedule | null> {
+		return this.scheduling.getChannelSchedule(channelId);
+	}
+
+	/** List every configured channel schedule. */
+	async listChannelSchedules(): Promise<ChannelSchedule[]> {
+		return this.scheduling.listChannelSchedules();
+	}
+
+	/** Persist a channel's base and conditional template stack. */
+	async setChannelSchedule(
+		channelId: string,
+		config: ChannelScheduleConfig,
+	): Promise<ChannelSchedule | null> {
+		return this.scheduling.setChannelSchedule(channelId, config);
+	}
+
+	/** Delete a channel's authored schedule and generated playback state. */
+	async deleteChannelSchedule(channelId: string): Promise<boolean> {
+		return this.scheduling.deleteChannelSchedule(channelId);
+	}
+
+	/** Make a template the base schedule for exactly the supplied channels. */
+	async setTemplateAssignments(
+		templateId: string,
+		channelIds: string[],
+	): Promise<ChannelSchedule[]> {
+		return this.scheduling.setTemplateAssignments(templateId, channelIds);
+	}
+
+	/** Discard cached scheduling catalog scopes after index changes. */
+	protected catalogChanged(): void {
+		this.invalidateSchedulingCatalog();
+	}
+
+	/** Discard cached scheduling catalog scopes after index changes. */
+	invalidateSchedulingCatalog(): void {
+		this.scheduling.invalidateSchedulingCatalog();
+	}
+
+	/** Load the smallest catalog scope needed by the requested programs. */
+	async getSchedulingCatalog(
+		programs?: SchedulingProgram[],
+		rootProgramIds?: Iterable<string>,
+	): Promise<SchedulingCatalog> {
+		return this.scheduling.getSchedulingCatalog(programs, rootProgramIds);
+	}
+
+	/** Load persistent program cursors for one channel. */
+	async getSelectionState(channelId: string): Promise<SelectionStateRecord[]> {
+		return this.scheduling.getSelectionState(channelId);
+	}
+
+	/** Load persistent program cursors grouped by channel. */
+	async getSelectionStatesByChannel(): Promise<Map<string, SelectionStateRecord[]>> {
+		return this.scheduling.getSelectionStatesByChannel();
+	}
+
+	/** Return the committed timeline window for one channel. */
+	async getTimelineMaterialization(
+		channelId: string,
+	): Promise<TimelineMaterializationRecord | null> {
+		return this.scheduling.getTimelineMaterialization(channelId);
+	}
+
+	/** Return timeline health even when no successful timeline has been committed. */
+	async getTimelineMaterializationStatus(
+		channelId: string,
+	): Promise<ChannelTimelineMaterializationStatus | null> {
+		return this.scheduling.getTimelineMaterializationStatus(channelId);
+	}
+
+	/** List materialization health and pending state for all channels. */
+	async listTimelineMaterializationStatuses(): Promise<ChannelTimelineMaterializationStatus[]> {
+		return this.scheduling.listTimelineMaterializationStatuses();
+	}
+
+	/** List committed timeline windows for all channels. */
+	async listTimelineMaterializations(): Promise<TimelineMaterializationRecord[]> {
+		return this.scheduling.listTimelineMaterializations();
+	}
+
+	/** Read committed timeline segments overlapping a time range. */
+	async listMaterializedTimelineSegments(
+		rangeStart: string,
+		rangeEnd: string,
+		channelId?: string,
+	): Promise<MaterializedSegmentRecord[]> {
+		return this.scheduling.listMaterializedTimelineSegments(rangeStart, rangeEnd, channelId);
+	}
+
+	/** Return one committed timeline segment scoped to its owning channel. */
+	async getMaterializedTimelineSegment(
+		channelId: string,
+		segmentId: string,
+	): Promise<MaterializedSegmentRecord | null> {
+		return this.scheduling.getMaterializedTimelineSegment(channelId, segmentId);
+	}
+
+	/** Mark channels for regeneration after a coalescing deadline. */
+	markTimelinePending(channelIds: string[], applyAfter: string, pendingSince: string): void {
+		this.scheduling.markTimelinePending(channelIds, applyAfter, pendingSince);
+	}
+
+	/** Record a failed materialization without discarding its prior timeline. */
+	markTimelineFailed(channelId: string, message: string, failedAt: string): void {
+		this.scheduling.markTimelineFailed(channelId, message, failedAt);
+	}
+
+	/** Atomically commit a generated timeline tail and its final selection checkpoint. */
+	commitMaterializedTimeline(input: TimelineCommit): void {
+		this.scheduling.commitMaterializedTimeline(input);
+	}
+
+	/** Return persisted playback settings or safe defaults. */
+	async getPlaybackSettings(): Promise<PlaybackSettings> {
+		return this.settings.getPlaybackSettings();
+	}
+
+	/** Persist validated playback settings. */
+	async setPlaybackSettings(value: PlaybackSettings): Promise<PlaybackSettings> {
+		return this.settings.setPlaybackSettings(value);
+	}
+}

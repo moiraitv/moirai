@@ -1,0 +1,57 @@
+{
+  "name": "moirai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "allowScripts": {
+    "better-sqlite3": true,
+    "esbuild": true,
+    "fsevents": true
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build -w @moirai/shared && npm run build -w @moirai/ersatztv-contract && npm run build -w @moirai/server && npm run build -w @moirai/web",
+    "start": "npm run start -w @moirai/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tests/tsconfig.json --noEmit",
+    "format": "eslint . --fix && prettier --write .",
+    "format:check": "eslint . && prettier --check .",
+    "docs:api": "tsx scripts/api-docs.ts",
+    "docs:api:check": "tsx scripts/api-docs.ts --check",
+    "etv:setup": "node scripts/etv-development.mjs setup",
+    "etv:build": "node scripts/etv-development.mjs build",
+    "etv:check": "tsx scripts/etv-contract.ts check",
+    "etv:sync": "tsx scripts/etv-contract.ts sync"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
+    "@asyncapi/parser": "^3.6.3",
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.55.0",
+    "@scalar/fastify-api-reference": "^1.66.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^24.7.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.0",
+    "eslint-plugin-jsdoc": "^61.7.1",
+    "eslint-plugin-vue": "^10.5.0",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.0",
+    "vue-eslint-parser": "^10.2.0",
+    "yaml": "^2.8.3"
+  }
+}

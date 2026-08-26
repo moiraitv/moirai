@@ -1,0 +1,482 @@
+import { mkdtemp, mkdir, opendir, readdir, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Library } from '@moirai/shared';
+import { MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
+import { MediaProbeError } from '@server/media/media-probe.js';
+import { discoverOnDisk } from '@server/scanner/on-disk.js';
+
+const roots: string[] = [];
+async function library(typeKey = 'movies'): Promise<Library> {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-scan-'));
+	roots.push(root);
+	return {
+		id: crypto.randomUUID(),
+		name: 'Fixture',
+		typeKey,
+		sourceType: 'on-disk',
+		sourceConfig: { scanRoot: root, playbackRoot: '/media' },
+		scanIntervalMinutes: 15,
+		watcherEnabled: true,
+		enabled: true,
+		watcherStatus: 'stopped',
+		sourceAvailability: 'available',
+		sourceAvailabilityUpdatedAt: null,
+		reconciliationStatus: 'idle',
+		pendingRemovalCount: 0,
+		lastScanStartedAt: null,
+		lastScanCompletedAt: null,
+		lastChangeDetectedAt: null,
+		lastIndexedChangeAt: null,
+		itemCount: 0,
+		warningCount: 0,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
+}
+afterEach(async () => {
+	const { rm } = await import('node:fs/promises');
+	await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe('discoverOnDisk', () => {
+	it('processes duplicate filesystem entries only once', async () => {
+		const fixture = await library();
+		const mediaPath = path.join(fixture.sourceConfig.scanRoot, 'Duplicate.mp4');
+		await writeFile(mediaPath, 'video');
+		const entries = await readdir(fixture.sourceConfig.scanRoot, { withFileTypes: true });
+		const openDirectory = vi.fn(async () => ({
+			async *[Symbol.asyncIterator]() {
+				for (const entry of entries) {
+					yield entry;
+					yield entry;
+				}
+			},
+		}) as unknown as Awaited<ReturnType<typeof opendir>>);
+		const onProgress = vi.fn();
+		const probeMedia = vi.fn().mockResolvedValue({
+			durationMilliseconds: 60_000,
+			fileSizeBytes: 5,
+			container: 'mov,mp4',
+			streams: [{ type: 'video' as const, codec: 'h264', width: 1280, height: 720 }],
+			resolution: { width: 1280, height: 720 },
+		});
+
+		const result = await discoverOnDisk(fixture, { openDirectory, onProgress, probeMedia });
+
+		expect(result.items).toHaveLength(1);
+		expect(probeMedia).toHaveBeenCalledOnce();
+		expect(onProgress.mock.calls[0]?.[0]).toEqual({
+			phase: 'processing',
+			processedCount: 0,
+			totalCount: 1,
+		});
+		expect(onProgress.mock.calls.at(-1)?.[0]).toEqual({
+			phase: 'finalizing',
+			processedCount: 1,
+			totalCount: 1,
+		});
+	});
+
+	it('reports exact processing progress after discovering the media inventory', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Alpha.mp4'), 'video');
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Beta.mp4'), 'video');
+		const onProgress = vi.fn();
+
+		await discoverOnDisk(fixture, {
+			discoveryConcurrency: 2,
+			onProgress,
+		});
+
+		expect(onProgress.mock.calls[0]?.[0]).toEqual({
+			phase: 'processing',
+			processedCount: 0,
+			totalCount: 2,
+		});
+		expect(onProgress.mock.calls.map(([progress]) => progress)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ phase: 'processing', processedCount: 1, totalCount: 2 }),
+				expect.objectContaining({ phase: 'processing', processedCount: 2, totalCount: 2 }),
+			]),
+		);
+		expect(onProgress.mock.calls.at(-1)?.[0]).toEqual({
+			phase: 'finalizing',
+			processedCount: 2,
+			totalCount: 2,
+		});
+	});
+
+	it('uses measured duration instead of NFO runtime and reuses an unchanged probe', async () => {
+		const fixture = await library();
+		const mediaPath = path.join(fixture.sourceConfig.scanRoot, 'Measured.mp4');
+		await writeFile(mediaPath, 'video');
+		await writeFile(
+			path.join(fixture.sourceConfig.scanRoot, 'Measured.nfo'),
+			'<movie><title>Measured</title><runtime>999</runtime></movie>',
+		);
+		const probeMedia = vi.fn().mockResolvedValue({
+			durationMilliseconds: 90_125,
+			fileSizeBytes: 5,
+			container: 'mov,mp4',
+			streams: [{ type: 'video' as const, codec: 'h264', width: 1280, height: 720 }],
+			resolution: { width: 1280, height: 720 },
+		});
+		const first = await discoverOnDisk(fixture, { probeMedia });
+		expect(first.items[0]).toMatchObject({
+			durationMilliseconds: 90_125,
+			probeStatus: 'complete',
+			metadata: { reportedRuntimeMinutes: 999 },
+		});
+		const item = first.items[0]!;
+		const second = await discoverOnDisk(fixture, {
+			probeMedia,
+			probeCache: new Map([['Measured.mp4', {
+				relativePath: 'Measured.mp4',
+				probeFingerprint: item.probeFingerprint,
+				durationMilliseconds: item.durationMilliseconds,
+				probeStatus: 'complete',
+				probeUpdatedAt: item.probeUpdatedAt,
+				probeErrorCode: null,
+				technicalMetadata: item.technicalMetadata,
+			}]]),
+		});
+		expect(second.items[0]?.durationMilliseconds).toBe(90_125);
+		expect(probeMedia).toHaveBeenCalledOnce();
+	});
+
+	it('collapses a system-wide probe resource failure into one partial-scan diagnostic', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Alpha.mp4'), 'video');
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Beta.mp4'), 'video');
+		const probeMedia = vi.fn().mockRejectedValue(
+			new MediaProbeError('resource-exhausted', 'System resource capacity prevented media inspection'),
+		);
+
+		const result = await discoverOnDisk(fixture, { discoveryConcurrency: 2, probeMedia });
+
+		expect(result.items.every((item) => item.probeStatus === 'failed')).toBe(true);
+		expect(result.issues.filter((issue) => issue.code === 'media_resource_exhausted')).toEqual([
+			expect.objectContaining({ path: null, severity: 'error' }),
+		]);
+	});
+
+	it('uses public extensions and maps scan paths to ETV playback paths', async () => {
+		const fixture = await library();
+		const extension = MEDIA_EXTENSIONS.find((candidate) => candidate === '.mkv')!;
+		const folder = path.join(fixture.sourceConfig.scanRoot, 'Film');
+		await mkdir(folder);
+		await writeFile(path.join(folder, `Film${extension}`), 'video');
+		await writeFile(
+			path.join(folder, 'Film.nfo'),
+			'<movie><title>Film Title</title><year>2020</year></movie>',
+		);
+		await writeFile(path.join(folder, 'poster.jpg'), 'image');
+
+		const result = await discoverOnDisk(fixture);
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({
+			title: 'Film Title',
+			relativePath: `Film/Film${extension}`,
+			playbackPath: `/media/Film/Film${extension}`,
+			metadataStatus: 'complete',
+			artworkRelativePath: 'Film/poster.jpg',
+		});
+	});
+
+	it('indexes a playable file with filename metadata when NFO is missing', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'No_NFO.mp4'), 'video');
+		const result = await discoverOnDisk(fixture);
+		expect(result.items[0]).toMatchObject({ title: 'No NFO', metadataStatus: 'incomplete' });
+		expect(result.issues.some((issue) => issue.code === 'nfo_missing')).toBe(true);
+	});
+
+	it('deduplicates repeated people by type and normalized name', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Credits.mp4'), 'video');
+		await writeFile(
+			path.join(fixture.sourceConfig.scanRoot, 'Credits.nfo'),
+			`<movie>
+				<title>Credits</title>
+				<director>Jane Doe</director>
+				<director> jane doe </director>
+				<actor><name>Alex Smith</name><order>4</order></actor>
+				<actor><name>ALEX SMITH</name><role>Lead</role><order>1</order></actor>
+			</movie>`,
+		);
+
+		const result = await discoverOnDisk(fixture);
+
+		expect(result.items[0]?.people).toEqual([
+			{
+				personType: 'director',
+				name: 'Jane Doe',
+				normalizedName: 'jane doe',
+				role: null,
+				sortOrder: null,
+			},
+			{
+				personType: 'actor',
+				name: 'Alex Smith',
+				normalizedName: 'alex smith',
+				role: 'Lead',
+				sortOrder: 1,
+			},
+		]);
+	});
+
+	it('skips oversized sidecars with a bounded diagnostic', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Large.mp4'), 'video');
+		await writeFile(
+			path.join(fixture.sourceConfig.scanRoot, 'Large.nfo'),
+			`<movie><plot>${'x'.repeat(MAX_NFO_BYTES)}</plot></movie>`,
+		);
+		const result = await discoverOnDisk(fixture);
+		expect(result.items[0]?.metadataStatus).toBe('invalid');
+		expect(result.issues).toEqual(
+			expect.arrayContaining([expect.objectContaining({ code: 'nfo_too_large' })]),
+		);
+	});
+
+	it('builds show and season groups using Kodi metadata', async () => {
+		const fixture = await library('shows');
+		const show = path.join(fixture.sourceConfig.scanRoot, 'Signal');
+		await mkdir(path.join(show, 'Season 01'), { recursive: true });
+		await writeFile(
+			path.join(show, 'tvshow.nfo'),
+			'<tvshow><title>Signal</title><year>2019</year><uniqueid>signal</uniqueid></tvshow>',
+		);
+		await writeFile(path.join(show, 'Season 01', 'Signal.S01E02.mkv'), 'video');
+		await writeFile(
+			path.join(show, 'Season 01', 'Signal.S01E02.nfo'),
+			'<episodedetails><title>Second Light</title><aired>2021-03-04</aired><season>1</season><episode>2</episode></episodedetails>',
+		);
+		const result = await discoverOnDisk(fixture);
+		expect(result.groups.map((group) => group.kind)).toEqual(['show', 'season']);
+		expect(result.groups.find((group) => group.kind === 'show')).toMatchObject({
+			year: 2019,
+			metadata: { yearEnd: 2021 },
+		});
+		expect(result.items[0]).toMatchObject({
+			title: 'Second Light',
+			year: 2021,
+			seasonNumber: 1,
+			episodeNumber: 2,
+		});
+	});
+
+	it('keeps show folders separate when their provider IDs collide', async () => {
+		const fixture = await library('shows');
+		for (const folder of ['Alpha', 'Beta']) {
+			const show = path.join(fixture.sourceConfig.scanRoot, folder);
+			await mkdir(show, { recursive: true });
+			await writeFile(
+				path.join(show, 'tvshow.nfo'),
+				`<tvshow><title>${folder}</title><uniqueid type="tmdb">42</uniqueid></tvshow>`,
+			);
+			await writeFile(path.join(show, `${folder}.S01E01.mkv`), 'video');
+			await writeFile(
+				path.join(show, `${folder}.S01E01.nfo`),
+				`<episodedetails><title>${folder} Pilot</title><season>1</season><episode>1</episode></episodedetails>`,
+			);
+		}
+
+		const result = await discoverOnDisk(fixture);
+		const shows = result.groups.filter((group) => group.kind === 'show');
+		expect(shows).toHaveLength(2);
+		expect(new Set(result.items.map((item) => item.groupId))).toHaveProperty('size', 2);
+		expect(result.conflicts).toEqual([
+			expect.objectContaining({ kind: 'show-external-id', provider: 'tmdb', externalId: '42' }),
+		]);
+		expect(result.issues).toEqual(
+			expect.arrayContaining([expect.objectContaining({ code: 'show_external_id_conflict' })]),
+		);
+	});
+
+	it('reports malformed TV-show metadata while retaining folder-derived groups', async () => {
+		const fixture = await library('shows');
+		const show = path.join(fixture.sourceConfig.scanRoot, 'Broken Signal');
+		await mkdir(path.join(show, 'Season 01'), { recursive: true });
+		await writeFile(path.join(show, 'tvshow.nfo'), 'not an XML metadata document');
+		await writeFile(path.join(show, 'Season 01', 'Broken.Signal.S01E01.mkv'), 'video');
+		await writeFile(
+			path.join(show, 'Season 01', 'Broken.Signal.S01E01.nfo'),
+			'<episodedetails><title>Fallback Episode</title><season>1</season><episode>1</episode></episodedetails>',
+		);
+
+		const result = await discoverOnDisk(fixture);
+		expect(result.groups.find((group) => group.kind === 'show')?.title).toBe('Broken Signal');
+		expect(result.issues).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: 'Broken Signal/tvshow.nfo',
+					code: 'tvshow_nfo_invalid',
+					severity: 'warning',
+				}),
+			]),
+		);
+	});
+
+	it('collapses complete multipart videos and inventories logical and part subtitles', async () => {
+		const fixture = await library();
+		const folder = path.join(fixture.sourceConfig.scanRoot, 'Long Film');
+		await mkdir(folder);
+		await writeFile(path.join(folder, 'Long Film-cd1.mkv'), 'part one');
+		await writeFile(path.join(folder, 'Long Film-cd2.mkv'), 'part two');
+		await writeFile(path.join(folder, 'Long Film.nfo'), '<movie><title>Long Film</title></movie>');
+		await writeFile(path.join(folder, 'Long Film.en.default.srt'), 'subtitle');
+		await writeFile(path.join(folder, 'Long Film-cd2.es.forced.ass'), 'subtitle');
+		const probeMedia = vi.fn(async (_root: string, file: string) => ({
+			durationMilliseconds: file.endsWith('cd1.mkv') ? 60_000 : 90_000,
+			fileSizeBytes: 8,
+			container: 'matroska',
+			streams: [{
+				index: 0,
+				type: 'video' as const,
+				codec: 'h264',
+				width: 1280,
+				height: 720,
+				language: null,
+				title: null,
+				isDefault: false,
+				isForced: false,
+				isHearingImpaired: false,
+				isCommentary: false,
+			}],
+			resolution: { width: 1280, height: 720 },
+			tags: {},
+		}));
+
+		const result = await discoverOnDisk(fixture, { probeMedia });
+
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({
+			title: 'Long Film',
+			multipartStatus: 'complete',
+			durationMilliseconds: 150_000,
+			technicalMetadata: { fileSizeBytes: 16 },
+		});
+		expect(result.items[0]?.aliasIds).toHaveLength(1);
+		expect(result.items[0]?.parts).toEqual([
+			expect.objectContaining({ number: 1, relativePath: 'Long Film/Long Film-cd1.mkv' }),
+			expect.objectContaining({
+				number: 2,
+				relativePath: 'Long Film/Long Film-cd2.mkv',
+				subtitleTracks: [expect.objectContaining({ language: 'es', isForced: true })],
+			}),
+		]);
+		expect(result.items[0]?.subtitleTracks).toEqual([
+			expect.objectContaining({ language: 'en', isDefault: true, partNumber: null }),
+		]);
+	});
+
+	it('retains invalid multipart videos for browsing with an unschedulable duration', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Broken-part1.mp4'), 'video');
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Broken-part3.mp4'), 'video');
+		const probeMedia = vi.fn().mockResolvedValue({
+			durationMilliseconds: 60_000,
+			fileSizeBytes: 5,
+			container: 'mov,mp4',
+			streams: [],
+			resolution: { width: 1280, height: 720 },
+			tags: {},
+		});
+
+		const result = await discoverOnDisk(fixture, { probeMedia });
+
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({
+			title: 'Broken',
+			multipartStatus: 'incomplete',
+			durationMilliseconds: null,
+			probeStatus: 'failed',
+			probeErrorCode: 'multipart-incomplete',
+		});
+		expect(result.issues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: 'multipart_incomplete' }),
+		]));
+	});
+
+	it('builds artist and album groups and applies music-video tag precedence', async () => {
+		const fixture = await library('music-videos');
+		const album = path.join(fixture.sourceConfig.scanRoot, 'Folder Artist', 'Folder Album');
+		await mkdir(album, { recursive: true });
+		await writeFile(path.join(album, '04 - Filename Title.mkv'), 'video');
+		await writeFile(
+			path.join(album, 'Folder Artist - Folder Album.nfo'),
+			'<album><title>NFO Album</title><year>2022</year><thumb>album-cover.jpg</thumb></album>',
+		);
+		await writeFile(path.join(album, 'album-cover.jpg'), 'art');
+		await writeFile(
+			path.join(fixture.sourceConfig.scanRoot, 'Folder Artist', 'folder.jpg'),
+			'artist art',
+		);
+		const probeMedia = vi.fn().mockResolvedValue({
+			durationMilliseconds: 180_000,
+			fileSizeBytes: 5,
+			container: 'matroska',
+			streams: [],
+			resolution: { width: 1920, height: 1080 },
+			tags: {
+				title: 'Tagged Title',
+				artist: 'Tagged Artist; Guest Artist',
+				album: 'Tagged Album',
+				track: '4/10',
+				disc: '2/2',
+				date: '2023-04-01',
+				genre: 'Rock; Live',
+			},
+		});
+
+		const result = await discoverOnDisk(fixture, { probeMedia });
+
+		expect(result.groups.map((group) => group.kind)).toEqual(['artist', 'album']);
+		expect(result.groups.find((group) => group.kind === 'artist')).toMatchObject({
+			artworkRelativePath: 'Folder Artist/folder.jpg',
+		});
+		expect(result.groups.find((group) => group.kind === 'album')).toMatchObject({
+			title: 'NFO Album',
+			year: 2022,
+			artworkRelativePath: 'Folder Artist/Folder Album/album-cover.jpg',
+		});
+		expect(result.items[0]).toMatchObject({
+			title: 'Tagged Title',
+			year: 2023,
+			trackNumber: 4,
+			discNumber: 2,
+			artists: ['Tagged Artist', 'Guest Artist'],
+		});
+		expect(result.items[0]?.genres.map((genre) => genre.name)).toEqual(['Rock', 'Live']);
+	});
+
+	it('ignores symlinked item and show sidecars outside the library root', async () => {
+		const fixture = await library('shows');
+		const outside = await mkdtemp(path.join(tmpdir(), 'moirai-outside-nfo-'));
+		roots.push(outside);
+		const show = path.join(fixture.sourceConfig.scanRoot, 'Safe Show');
+		const season = path.join(show, 'Season 01');
+		await mkdir(season, { recursive: true });
+		const outsideShowNfo = path.join(outside, 'tvshow.nfo');
+		const outsideEpisodeNfo = path.join(outside, 'episode.nfo');
+		await writeFile(outsideShowNfo, '<tvshow><title>Leaked Show</title></tvshow>');
+		await writeFile(
+			outsideEpisodeNfo,
+			'<episodedetails><title>Leaked Episode</title></episodedetails>',
+		);
+		await symlink(outsideShowNfo, path.join(show, 'tvshow.nfo'));
+		await writeFile(path.join(season, 'Safe.Show.S01E01.mkv'), 'video');
+		await symlink(outsideEpisodeNfo, path.join(season, 'Safe.Show.S01E01.nfo'));
+
+		const result = await discoverOnDisk(fixture);
+		expect(result.groups.find((group) => group.kind === 'show')?.title).toBe('Safe Show');
+		expect(result.items[0]).toMatchObject({
+			title: 'Episode 1',
+			metadataStatus: 'incomplete',
+		});
+		expect(result.issues.map((issue) => issue.code)).toContain('nfo_missing');
+	});
+});

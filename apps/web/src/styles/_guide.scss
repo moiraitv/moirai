@@ -1,0 +1,335 @@
+.channel-number {
+	width: 45px;
+	height: 45px;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border-radius: 8px;
+	color: #effffb;
+	background: linear-gradient(145deg, #0e9578, #075c4b);
+	font-size: 0.76rem;
+	font-weight: 750;
+}
+
+.guide-toolbar {
+	margin-bottom: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 18px;
+}
+
+.guide-week-controls,
+.guide-time-zone {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+}
+
+.guide-week-controls strong {
+	margin-left: 5px;
+	color: #eaf0f5;
+	font-size: 0.88rem;
+}
+
+.guide-time-zone {
+	color: var(--muted);
+	font-size: 0.74rem;
+}
+
+.epg-feed-card {
+	margin-bottom: 24px;
+	padding: 22px 24px;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: start;
+	gap: 17px;
+	border: 1px solid var(--line-bright);
+	border-radius: 14px;
+	background: linear-gradient(135deg, rgba(13, 31, 44, 0.96), rgba(8, 23, 34, 0.96));
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);
+}
+
+.epg-feed-icon {
+	width: 52px;
+	height: 52px;
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+	color: var(--accent);
+	background: rgba(16, 190, 145, 0.15);
+	box-shadow: inset 0 0 0 1px rgba(28, 219, 169, 0.12);
+}
+
+.epg-feed-copy {
+	min-width: 0;
+}
+
+.epg-feed-copy h2 {
+	margin: 1px 0 5px;
+}
+
+.epg-feed-copy > p:not(.eyebrow, .epg-copy-status) {
+	margin-bottom: 16px;
+	color: var(--muted-strong);
+}
+
+.epg-url-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	gap: 10px;
+}
+
+.epg-url-row input {
+	min-width: 0;
+	padding: 0 14px;
+	border: 1px solid var(--line-bright);
+	border-radius: 8px;
+	color: #dce9f1;
+	background: #06121d;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.78rem;
+}
+
+.epg-copy-status {
+	min-height: 1.15rem;
+	margin: 7px 0 0;
+	color: var(--accent);
+	font-size: 0.72rem;
+}
+
+.guide-frame {
+	overflow: hidden;
+	border: 1px solid var(--line-bright);
+	border-radius: 12px;
+	background: #08131e;
+	box-shadow: 0 20px 55px rgba(0, 0, 0, 0.2);
+}
+
+.guide-scroll {
+	max-height: calc(100vh - 245px);
+	min-height: 280px;
+	overflow: auto;
+	scrollbar-color: #365269 #09131d;
+}
+
+.guide-canvas {
+	--guide-channel-width: 288px;
+	width: calc(var(--guide-channel-width) + var(--guide-timeline-width));
+	min-height: 100%;
+	display: grid;
+	grid-template-columns: var(--guide-channel-width) var(--guide-timeline-width);
+	grid-template-rows: 78px;
+	grid-auto-rows: auto;
+}
+
+.guide-corner,
+.guide-time-header {
+	position: sticky;
+	top: 0;
+	z-index: 4;
+	border-bottom: 1px solid var(--line-bright);
+	background: #0c1b28;
+}
+
+.guide-corner {
+	left: 0;
+	z-index: 6;
+	padding: 0 17px;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	border-right: 1px solid var(--line-bright);
+	color: #e3eaf1;
+	font-size: 0.78rem;
+	font-weight: 750;
+	text-transform: uppercase;
+	letter-spacing: 0.09em;
+}
+
+.guide-time-header,
+.guide-channel-track {
+	width: var(--guide-timeline-width);
+}
+
+.guide-channel-track {
+	position: relative;
+}
+
+.guide-programme {
+	position: absolute;
+	top: 12px;
+	bottom: 12px;
+	z-index: 1;
+	min-width: 3px;
+	padding: 8px 9px;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--program-color) 68%, white 14%);
+	border-radius: 7px;
+	color: var(--program-color-foreground);
+	background: linear-gradient(145deg, var(--program-color), var(--program-color-dark));
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+	appearance: none;
+}
+
+.guide-programme:hover,
+.guide-programme:focus-visible {
+	z-index: 3;
+	border-color: color-mix(in srgb, var(--program-color) 46%, white 54%);
+	box-shadow: 0 0 0 2px var(--program-color-glow);
+	outline: none;
+}
+
+.guide-programme.role-filler {
+	border-style: dashed;
+}
+
+.guide-programme.role-dead-air {
+	border-color: #3c4a58;
+	background: repeating-linear-gradient(135deg, #172430, #172430 7px, #101b25 7px, #101b25 14px);
+	color: #a5b2bd;
+}
+
+.guide-programme.role-dead-air:hover,
+.guide-programme.role-dead-air:focus-visible {
+	border-color: #81909e;
+	box-shadow: 0 0 0 2px rgba(129, 144, 158, 0.2);
+}
+
+.guide-programme.truncated {
+	border-right: 3px solid #ff9a55;
+}
+
+.guide-programme strong,
+.guide-programme small {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.guide-programme strong {
+	font-size: 0.72rem;
+}
+
+.guide-programme small,
+.guide-channel-copy small {
+	color: #adbbc6;
+	font-size: 0.61rem;
+}
+
+.guide-programme small {
+	color: inherit;
+	opacity: 0.78;
+}
+
+.guide-preview-modal {
+	width: min(880px, 100%);
+}
+
+.guide-preview-layout {
+	margin-top: 22px;
+	display: grid;
+	grid-template-columns: 190px minmax(0, 1fr);
+	gap: 25px;
+}
+
+.guide-preview-poster {
+	position: relative;
+	aspect-ratio: 2 / 3;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	color: #587087;
+	background: #08131e;
+}
+
+.guide-preview-poster img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.guide-preview-copy {
+	min-width: 0;
+}
+
+.guide-preview-badges,
+.guide-preview-genres {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+}
+
+.guide-preview-badges span,
+.guide-preview-genres span {
+	padding: 5px 9px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	color: #c8d2da;
+	font-size: 0.72rem;
+}
+
+.guide-preview-airtime {
+	margin: 15px 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: #d9e1e7;
+}
+
+.guide-preview-plot {
+	color: #b9c5ce;
+	line-height: 1.65;
+}
+
+.guide-preview-source {
+	margin-top: 20px;
+	padding: 16px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	background: rgba(7, 18, 27, 0.66);
+}
+
+.guide-preview-source h3 {
+	margin-bottom: 10px;
+	font-size: 0.86rem;
+}
+
+.guide-preview-source p {
+	margin: 7px 0;
+	display: grid;
+	grid-template-columns: 18px 76px minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+	color: var(--muted);
+}
+
+.guide-preview-source strong {
+	min-width: 0;
+	overflow: hidden;
+	color: #e4e9ed;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.guide-preview-details {
+	margin-top: 18px;
+}
+
+.guide-preview-loading {
+	min-height: 240px;
+	display: grid;
+	place-items: center;
+	color: var(--muted);
+}
+
+.guide-warning {
+	color: #ffac72;
+}

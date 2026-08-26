@@ -1,0 +1,263 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { RouterLink, RouterView, useRoute } from 'vue-router';
+import {
+	CalendarDays,
+	CalendarRange,
+	ChevronDown,
+	ChevronRight,
+	CircleAlert,
+	CircleCheck,
+	CircleGauge,
+	FileText,
+	LayoutGrid,
+	Library,
+	Menu,
+	RefreshCw,
+	Settings,
+	TvMinimal,
+	X,
+} from '@lucide/vue';
+import type { PlaybackEngineStatus } from '@moirai/shared';
+import logoUrl from './assets/moirai-logo.png';
+import { api } from './api';
+import { liveEvents } from './live-events';
+import { useLibrariesStore } from './stores/libraries';
+import { useChannelsStore } from './stores/channels';
+
+const route = useRoute();
+const libraryStore = useLibrariesStore();
+const channelsStore = useChannelsStore();
+const { libraries, loaded } = storeToRefs(libraryStore);
+const { publicUrlStatus } = storeToRefs(channelsStore);
+const drawerOpen = ref(false);
+const libraryNavOpen = ref(true);
+const scheduleNavOpen = ref(true);
+const playback = ref<PlaybackEngineStatus | null>(null);
+
+const playbackLabel = computed(() => {
+	if (!playback.value) {
+		return 'Checking playback…';
+	}
+
+	return playback.value.status === 'ready' ? 'IPTV service ready' : 'Playback degraded';
+});
+
+const playbackDetail = computed(() => {
+	if (!playback.value) {
+		return 'Loading status';
+	}
+
+	if (playback.value.detail) {
+		return playback.value.detail;
+	}
+
+	return `${playback.value.activeSessionCount} of ${playback.value.maxActiveSessions} streams active`;
+});
+
+/** Load integrated playback state from the authoritative source. */
+async function loadPlaybackState(): Promise<void> {
+	try {
+		playback.value = await api.playbackStatus();
+	}
+	catch {
+		playback.value = null;
+	}
+}
+
+/** Stop drawer and release resources held by the app workflow. */
+function closeDrawer(): void {
+	drawerOpen.value = false;
+}
+
+/** Close the mobile navigation drawer when Escape is pressed. */
+function handleKeydown(event: KeyboardEvent): void {
+	if (event.key === 'Escape') {
+		closeDrawer();
+	}
+}
+
+const unsubscribe = liveEvents.subscribe((event) => {
+	if (
+		event.type === 'system.ready'
+		|| event.type === 'library.changed'
+		|| event.type === 'scan.changed'
+	) {
+		libraryStore.scheduleRefresh();
+	}
+	if (
+		event.type === 'system.ready'
+		|| event.type === 'playback.changed'
+	) {
+		void loadPlaybackState();
+	}
+});
+
+watch(
+	() => route.fullPath,
+	() => closeDrawer(),
+);
+onMounted(() => {
+	window.addEventListener('keydown', handleKeydown);
+	void libraryStore.load();
+	void channelsStore.loadCapabilities().catch(() => undefined);
+	void loadPlaybackState();
+});
+onUnmounted(() => {
+	window.removeEventListener('keydown', handleKeydown);
+	unsubscribe();
+});
+</script>
+
+<template>
+	<div class="app-shell">
+		<header class="mobile-header">
+			<RouterLink class="mobile-brand" to="/" aria-label="Moirai home">
+				<img :src="logoUrl" alt="" />
+				<span>Moirai</span>
+			</RouterLink>
+			<button
+				class="mobile-menu-button"
+				aria-label="Open navigation"
+				aria-controls="primary-sidebar"
+				:aria-expanded="drawerOpen"
+				@click="drawerOpen = true"
+			>
+				<Menu :size="22" />
+			</button>
+		</header>
+
+		<button
+			v-if="drawerOpen"
+			class="sidebar-backdrop"
+			aria-label="Close navigation"
+			@click="closeDrawer"
+		></button>
+		<aside id="primary-sidebar" class="sidebar" :class="{ 'sidebar-open': drawerOpen }">
+			<div class="sidebar-heading">
+				<RouterLink class="brand" to="/">
+					<img :src="logoUrl" alt="" />
+					<span><strong>Moirai</strong><small>IPTV Scheduler</small></span>
+				</RouterLink>
+				<button class="sidebar-close" aria-label="Close navigation" @click="closeDrawer">
+					<X :size="20" />
+				</button>
+			</div>
+
+			<nav class="primary-nav" aria-label="Primary navigation">
+				<RouterLink class="nav-link" to="/guide">
+					<CalendarDays :size="18" /><span>Guide (EPG)</span>
+				</RouterLink>
+				<RouterLink class="nav-link" to="/channels"
+				><TvMinimal :size="18" /><span>Channels</span></RouterLink
+				>
+				<div class="nav-section">
+					<div class="nav-section-heading">
+						<RouterLink class="nav-link nav-section-link" to="/schedules/channels">
+							<CalendarRange :size="18" /><span>Scheduling</span>
+						</RouterLink>
+						<button
+							class="nav-section-toggle"
+							:aria-expanded="scheduleNavOpen"
+							aria-label="Toggle schedule navigation"
+							@click="scheduleNavOpen = !scheduleNavOpen"
+						>
+							<ChevronDown :size="16" :class="{ rotated: !scheduleNavOpen }" />
+						</button>
+					</div>
+					<div v-show="scheduleNavOpen" class="library-nav">
+						<RouterLink class="library-nav-link" to="/schedules/channels">
+							<span class="library-nav-icon"><TvMinimal :size="16" /></span>
+							<span>Channel Schedules</span>
+						</RouterLink>
+						<RouterLink class="library-nav-link" to="/schedules/templates">
+							<span class="library-nav-icon"><CalendarRange :size="16" /></span>
+							<span>Templates</span>
+						</RouterLink>
+						<RouterLink class="library-nav-link" to="/schedules/programs">
+							<span class="library-nav-icon"><CalendarDays :size="16" /></span>
+							<span>Programs</span>
+						</RouterLink>
+					</div>
+				</div>
+
+				<div class="nav-section">
+					<div class="nav-section-heading">
+						<RouterLink class="nav-link nav-section-link" to="/libraries">
+							<Library :size="18" /><span>Library</span>
+						</RouterLink>
+						<button
+							class="nav-section-toggle"
+							:aria-expanded="libraryNavOpen"
+							aria-label="Toggle configured libraries"
+							@click="libraryNavOpen = !libraryNavOpen"
+						>
+							<ChevronDown :size="16" :class="{ rotated: !libraryNavOpen }" />
+						</button>
+					</div>
+					<div v-show="libraryNavOpen" class="library-nav">
+						<RouterLink
+							v-for="library in libraries"
+							:key="library.id"
+							:to="`/libraries/${library.id}`"
+							class="library-nav-link"
+						>
+							<span class="library-nav-icon"><LayoutGrid :size="16" /></span>
+							<span>{{ library.name }}</span>
+						</RouterLink>
+						<span v-if="!loaded" class="library-nav-empty">Loading libraries…</span>
+						<span v-else-if="!libraries.length" class="library-nav-empty">No libraries yet</span>
+					</div>
+				</div>
+
+				<RouterLink class="nav-link" to="/settings"
+				><Settings :size="18" /><span>Settings</span></RouterLink
+				>
+				<RouterLink class="nav-link" to="/"
+				><CircleGauge :size="18" /><span>Status</span></RouterLink
+				>
+				<RouterLink class="nav-link" to="/logs"
+				><FileText :size="18" /><span>Logs</span></RouterLink
+				>
+			</nav>
+
+			<RouterLink
+				class="etv-card"
+				:class="`playback-${playback?.status ?? 'loading'}`"
+				to="/settings"
+				aria-live="polite"
+			>
+				<span class="etv-card-icon">
+					<CircleCheck v-if="playback?.status === 'ready'" :size="19" />
+					<CircleAlert
+						v-else-if="playback?.status === 'degraded'"
+						:size="19"
+					/>
+					<RefreshCw
+						v-else-if="!playback"
+						class="playback-spin"
+						:size="19"
+					/>
+					<LayoutGrid v-else :size="19" />
+				</span>
+				<span
+				><strong>{{ playbackLabel }}</strong
+				><small>{{ playbackDetail }}</small></span
+				>
+				<ChevronRight :size="17" />
+			</RouterLink>
+		</aside>
+
+		<main class="app-content">
+			<div v-if="publicUrlStatus === 'unreachable-default'" class="public-url-warning" role="alert">
+				<CircleAlert :size="19" />
+				<span>
+					<strong>Public URL is only reachable from this machine.</strong>
+					Set <code>MOIRAI_PUBLIC_URL</code> to an address your IPTV clients can reach.
+				</span>
+			</div>
+			<RouterView />
+		</main>
+	</div>
+</template>
