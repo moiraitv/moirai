@@ -456,7 +456,7 @@ Moirai serves the client-facing outputs directly:
 | `GET /epg.xml`                    | XMLTV electronic program guide |
 | Per-channel HLS URLs from the M3U | Live channel playback          |
 
-The Guide UI displays the copyable XMLTV URL derived from `MOIRAI_PUBLIC_URL`.
+The Guide UI displays copyable channel-playlist and XMLTV URLs derived from `MOIRAI_PUBLIC_URL`.
 
 Guide timeline and compact schedule-preview geometry use elapsed instants across each configured
 local date. Daylight-saving transitions therefore render 23-hour and 25-hour days at their actual

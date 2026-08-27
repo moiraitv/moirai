@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
 	CalendarDays,
@@ -37,11 +37,20 @@ const initialLoading = ref(
 	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 7),
 );
 const error = ref('');
-const copyStatus = ref('');
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Public client URL whose copy action owns a transient status notice. */
+type ClientUrlKind = 'playlist' | 'guide';
+const copyNotices = reactive<Record<ClientUrlKind, { message: string; visible: boolean }>>({
+	playlist: { message: '', visible: false },
+	guide: { message: '', visible: false },
+});
+const copyNoticeTimers: Partial<Record<ClientUrlKind, ReturnType<typeof setTimeout>>> = {};
 
 const epgUrl = computed(() =>
 	publicUrl.value ? `${publicUrl.value.replace(/\/+$/, '')}/epg.xml` : '');
+const m3uUrl = computed(() =>
+	publicUrl.value ? `${publicUrl.value.replace(/\/+$/, '')}/iptv/channels.m3u` : '');
 
 const weekLabel = computed(() => {
 	if (!weekStart.value) {
@@ -110,15 +119,30 @@ async function showToday(): Promise<void> {
 	await loadGuide();
 }
 
-/** Copy the public XMLTV URL, with a selection fallback for older browsers. */
-async function copyEpgUrl(): Promise<void> {
+/** Display copy feedback briefly without adding or removing layout content. */
+function showCopyNotice(kind: ClientUrlKind, message: string): void {
+	const currentTimer = copyNoticeTimers[kind];
+	if (currentTimer) {
+		clearTimeout(currentTimer);
+	}
+
+	copyNotices[kind].message = message;
+	copyNotices[kind].visible = true;
+	copyNoticeTimers[kind] = setTimeout(() => {
+		copyNotices[kind].visible = false;
+		delete copyNoticeTimers[kind];
+	}, 1_800);
+}
+
+/** Copy one public IPTV client URL, with a selection fallback for older browsers. */
+async function copyClientUrl(value: string, label: string, kind: ClientUrlKind): Promise<void> {
 	try {
 		if (navigator.clipboard?.writeText) {
-			await navigator.clipboard.writeText(epgUrl.value);
+			await navigator.clipboard.writeText(value);
 		}
 		else {
 			const input = document.createElement('textarea');
-			input.value = epgUrl.value;
+			input.value = value;
 			input.style.position = 'fixed';
 			input.style.opacity = '0';
 			document.body.append(input);
@@ -129,15 +153,15 @@ async function copyEpgUrl(): Promise<void> {
 
 			input.remove();
 		}
-		copyStatus.value = 'EPG URL copied';
+		showCopyNotice(kind, `${label} copied`);
 	}
 	catch {
-		copyStatus.value = 'Unable to copy automatically; select the URL and copy it manually.';
+		showCopyNotice(kind, 'Unable to copy');
 	}
 }
 
-/** Select the complete XMLTV URL when its read-only field receives focus. */
-function selectEpgUrl(event: FocusEvent): void {
+/** Select a complete client URL when its read-only field receives focus. */
+function selectClientUrl(event: FocusEvent): void {
 	(event.currentTarget as HTMLInputElement).select();
 }
 
@@ -166,6 +190,9 @@ onBeforeUnmount(() => {
 	if (refreshTimer) {
 		clearTimeout(refreshTimer);
 	}
+	for (const timer of Object.values(copyNoticeTimers)) {
+		clearTimeout(timer);
+	}
 });
 </script>
 
@@ -174,14 +201,14 @@ onBeforeUnmount(() => {
 		<PageHeader
 			eyebrow="Electronic program guide"
 			title="Guide"
-			description="Review the resolved channel lineup and connect IPTV clients to Moirai's XMLTV feed."
+			description="Review the resolved channel lineup and connect IPTV clients to Moirai."
 		/>
 
 		<div class="epg-feed-card">
 			<span class="epg-feed-icon"><RadioTower :size="25" /></span>
 			<div class="epg-feed-copy">
 				<p class="eyebrow">IPTV client feed</p>
-				<h2>XMLTV EPG URL</h2>
+				<h2>Playlist and guide URLs</h2>
 				<p>
 					A committed rolling {{ XMLTV_EPG_DAYS }}-day guide generated in {{ timeZone }}. Draft
 					previews never advance playback state.
@@ -190,16 +217,66 @@ onBeforeUnmount(() => {
 					This loopback URL will not work from a remote IPTV client. Configure
 					<code>MOIRAI_PUBLIC_URL</code> with a reachable address.
 				</p>
-				<div class="epg-url-row">
-					<input :value="epgUrl" readonly aria-label="XMLTV EPG URL" @focus="selectEpgUrl" />
-					<button class="button" :disabled="!epgUrl" @click="copyEpgUrl">
-						<Copy :size="17" />Copy URL
-					</button>
-					<a class="button secondary" :href="epgUrl" target="_blank" rel="noopener">
-						<ExternalLink :size="17" />Open
-					</a>
+				<div class="epg-url-fields">
+					<div class="epg-url-field">
+						<label for="channel-playlist-url">Channel playlist (M3U)</label>
+						<div class="epg-url-row">
+							<input
+								id="channel-playlist-url"
+								:value="m3uUrl"
+								readonly
+								@focus="selectClientUrl"
+							/>
+							<span class="epg-copy-control">
+								<button
+									class="button"
+									:disabled="!m3uUrl"
+									@click="copyClientUrl(m3uUrl, 'Playlist URL', 'playlist')"
+								>
+									<Copy :size="17" />Copy URL
+								</button>
+								<span
+									class="epg-copy-status"
+									:class="{ visible: copyNotices.playlist.visible }"
+									aria-live="polite"
+								>{{ copyNotices.playlist.message }}</span
+								>
+							</span>
+							<a class="button secondary" :href="m3uUrl" target="_blank" rel="noopener">
+								<ExternalLink :size="17" />Open
+							</a>
+						</div>
+					</div>
+					<div class="epg-url-field">
+						<label for="xmltv-epg-url">XMLTV guide</label>
+						<div class="epg-url-row">
+							<input
+								id="xmltv-epg-url"
+								:value="epgUrl"
+								readonly
+								@focus="selectClientUrl"
+							/>
+							<span class="epg-copy-control">
+								<button
+									class="button"
+									:disabled="!epgUrl"
+									@click="copyClientUrl(epgUrl, 'EPG URL', 'guide')"
+								>
+									<Copy :size="17" />Copy URL
+								</button>
+								<span
+									class="epg-copy-status"
+									:class="{ visible: copyNotices.guide.visible }"
+									aria-live="polite"
+								>{{ copyNotices.guide.message }}</span
+								>
+							</span>
+							<a class="button secondary" :href="epgUrl" target="_blank" rel="noopener">
+								<ExternalLink :size="17" />Open
+							</a>
+						</div>
+					</div>
 				</div>
-				<p class="epg-copy-status" aria-live="polite">{{ copyStatus }}</p>
 			</div>
 		</div>
 

@@ -147,7 +147,7 @@ onUnmounted(() => {
 
 			<nav class="primary-nav" aria-label="Primary navigation">
 				<RouterLink class="nav-link" to="/guide">
-					<CalendarDays :size="18" /><span>Guide (EPG)</span>
+					<CalendarDays :size="18" /><span>Guide</span>
 				</RouterLink>
 				<RouterLink class="nav-link" to="/channels"
 				><TvMinimal :size="18" /><span>Channels</span></RouterLink
