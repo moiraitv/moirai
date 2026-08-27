@@ -515,13 +515,23 @@ Moirai writes playout files atomically before an active worker can read them. Th
 `ersatztv` server, `lineup.json`, or lineup reload is required.
 
 An active worker retains its startup normalization and channel settings. Relevant changes mark the
-session stale; the Settings page provides an explicit restart so the operator chooses when to
+session stale; the Status page provides an explicit restart so the operator chooses when to
 interrupt viewers.
 
 The default limit is four concurrent channel workers. Workers update private heartbeats as clients
 request playlists and segments, and the pinned engine exits inactive sessions. Child output is
 bounded, filenames and paths are validated, and shutdown terminates process groups within the
 configured grace period.
+
+Active-session status records the concrete encoder observed in each worker's optimized FFmpeg
+pipeline. It also retains at most 16 recently active client identities per shared channel worker,
+using the direct address and bounded User-Agent visible to Moirai. Client observations expire after
+the worker's 90-second heartbeat window and are never persisted. For active workers, one additional
+batched timeline query identifies the committed item occupying the current wall-clock position and
+uses its captured artwork reference. The Status page shows that poster, advances the item's position
+locally, refreshes at its finish boundary, follows playback events, and periodically reads the
+non-cacheable status resource so session starts and stops recover even when a live event connection
+is interrupted.
 
 ### Development and production engine builds
 

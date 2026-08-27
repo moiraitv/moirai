@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
 	effectiveChannelTvgId,
@@ -14,6 +14,7 @@ import {
 } from '@moirai/shared/api-contracts';
 import { publicChannelLogoUrl } from '../artwork/channel-logo-url.js';
 import type { PlaybackEngine } from '../playback/playback-engine.js';
+import type { PlaybackClientObservation } from '../playback/session-observability.js';
 import type { Repository } from '../repository/index.js';
 import { parseId } from './params.js';
 import {
@@ -91,6 +92,15 @@ function sessionContentType(filename: string): string {
 	return 'video/mp2t';
 }
 
+/** Capture the direct address and bounded User-Agent visible for one IPTV request. */
+function playbackClient(request: FastifyRequest): PlaybackClientObservation {
+	const userAgent = request.headers['user-agent'];
+	return {
+		address: request.ip,
+		userAgent: typeof userAgent === 'string' ? userAgent : null,
+	};
+}
+
 /** Register integrated playback settings, status, M3U, and HLS routes. */
 export function registerPlaybackRoutes(
 	app: FastifyInstance,
@@ -104,7 +114,10 @@ export function registerPlaybackRoutes(
 			response: { 200: responseContent('Playback status', 'application/json', playbackEngineStatusSchema) },
 			errors: [500, 503],
 		}),
-	}, async () => playback.status());
+	}, async (_request, reply) =>
+		reply
+			.header('Cache-Control', 'private, no-store')
+			.send(await playback.status()));
 	app.get('/api/v1/playback/settings', {
 		schema: apiOperation({
 			operationId: 'getPlaybackSettings',
@@ -192,7 +205,7 @@ export function registerPlaybackRoutes(
 			throw app.httpErrors.notFound('Channel not found');
 		}
 
-		await playback.ensureSession(channel);
+		await playback.ensureSession(channel, playbackClient(request));
 		return reply
 			.type('application/vnd.apple.mpegurl')
 			.header('Cache-Control', 'no-cache')
@@ -219,7 +232,7 @@ export function registerPlaybackRoutes(
 		const { channelId, filename } = sessionFileParamsSchema.parse(request.params);
 		let file: string;
 		try {
-			file = await playback.sessionFile(channelId, filename);
+			file = await playback.sessionFile(channelId, filename, playbackClient(request));
 		}
 		catch {
 			throw app.httpErrors.notFound('Session file not found');

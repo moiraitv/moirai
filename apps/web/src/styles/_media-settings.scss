@@ -418,6 +418,253 @@
 	border-top: 1px solid var(--line);
 }
 
+.status-session-heading {
+	margin-top: 0;
+}
+
+.status-session-list,
+.playback-empty-state {
+	margin-bottom: 32px;
+}
+
+.empty-state.playback-empty-state {
+	min-height: 80px;
+	padding: 12px 18px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	text-align: left;
+}
+
+.playback-empty-state > svg {
+	flex: 0 0 auto;
+	font-size: inherit;
+}
+
+.playback-empty-state h3,
+.playback-empty-state p {
+	margin: 0;
+}
+
+.playback-empty-state p {
+	margin-top: 2px;
+}
+
+.playback-session-details {
+	min-width: 0;
+}
+
+.playback-session-controls {
+	width: 38px;
+	display: flex;
+	flex: 0 0 38px;
+	flex-direction: column;
+	align-items: center;
+	gap: 5px;
+}
+
+.playback-session-glyph {
+	position: relative;
+	flex: 0 0 38px;
+	overflow: hidden;
+}
+
+.playback-session-logo {
+	position: absolute;
+	inset: 3px;
+	width: calc(100% - 6px);
+	height: calc(100% - 6px);
+	object-fit: contain;
+	border-radius: 5px;
+	background: var(--accent-deep);
+}
+
+.playback-session-restart.icon-button {
+	width: 28px;
+	height: 28px;
+	color: #8496a8;
+}
+
+.playback-session-row {
+	align-items: flex-start;
+}
+
+.playback-session-heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 3px 10px;
+}
+
+.playback-session-heading > span,
+.playback-session-error {
+	color: #8496a8;
+	font-size: 0.7rem;
+}
+
+.playback-session-error {
+	margin-top: 4px;
+}
+
+.playback-session-activity {
+	margin-top: 11px;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	border: 1px solid #253a4d;
+	border-radius: 8px;
+	background: rgba(5, 14, 22, 0.58);
+	overflow: hidden;
+}
+
+.playback-now-playing,
+.playback-client-panel {
+	min-width: 0;
+	padding: 9px 11px;
+}
+
+.playback-client-panel {
+	border-left: 1px solid #253a4d;
+}
+
+.playback-activity-heading {
+	margin-bottom: 6px;
+	font-size: 0.58rem;
+}
+
+.playback-now-playing-content {
+	display: grid;
+	grid-template-columns: 46px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+}
+
+.playback-now-playing-poster {
+	position: relative;
+	width: 46px;
+	aspect-ratio: 2 / 3;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border-radius: 5px;
+	color: #527187;
+	background: #132536;
+}
+
+.playback-now-playing-poster > img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.playback-now-playing-copy {
+	min-width: 0;
+}
+
+.playback-now-playing-copy > strong {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.playback-position-track {
+	height: 5px;
+	margin-top: 10px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #1b3041;
+}
+
+.playback-position-track > i {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--accent);
+	transition: width 1s linear;
+}
+
+.playback-position-label {
+	margin-top: 5px;
+	display: flex !important;
+	justify-content: space-between;
+	color: #91a7ba;
+	font-variant-numeric: tabular-nums;
+}
+
+.playback-programming-empty {
+	display: block;
+	color: #91a7ba;
+	font-style: italic;
+}
+
+.playback-client-list {
+	display: grid;
+	gap: 4px;
+}
+
+.playback-client {
+	display: grid !important;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 2px 8px;
+	min-width: 0;
+	color: #91a7ba;
+}
+
+.playback-client-address {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.playback-client-agent {
+	grid-column: 1 / -1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.playback-client.empty {
+	display: block !important;
+	font-style: italic;
+}
+
+.playback-session-side {
+	position: relative;
+	display: flex;
+	min-width: 104px;
+	min-height: 64px;
+	flex-direction: column;
+	align-items: flex-end;
+	align-self: stretch;
+	justify-content: center;
+	gap: 8px;
+}
+
+.playback-session-side > .status-pill {
+	position: absolute;
+	top: 0;
+	right: 0;
+}
+
+.playback-acceleration {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	color: #8496a8;
+	font-size: 0.68rem;
+	text-align: right;
+}
+
+.playback-acceleration > span {
+	display: block;
+	margin-bottom: 1px;
+	font-size: 0.55rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
 .preview details {
 	margin-bottom: 9px;
 	border: 1px solid var(--line);

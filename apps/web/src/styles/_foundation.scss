@@ -360,6 +360,7 @@ a.nav-link.router-link-exact-active {
 .etv-card small {
 	margin-top: 2px;
 	color: var(--accent);
+	white-space: nowrap;
 }
 
 .etv-card.playback-degraded .etv-card-icon,

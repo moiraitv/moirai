@@ -263,7 +263,7 @@ export const api = {
 			`/api/v1/channels/${id}/materialization/apply-now`,
 			{ method: 'POST' },
 		),
-	playbackStatus: () => request<PlaybackEngineStatus>('/api/v1/playback/status'),
+	playbackStatus: () => request<PlaybackEngineStatus>('/api/v1/playback/status', { cache: 'no-store' }),
 	predictHardwareAcceleration: (body: HardwareAccelerationPredictionRequest) =>
 		request<HardwareAccelerationPrediction>('/api/v1/playback/hardware-acceleration/predict', {
 			method: 'POST',

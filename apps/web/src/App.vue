@@ -53,7 +53,7 @@ const playbackDetail = computed(() => {
 		return playback.value.detail;
 	}
 
-	return `${playback.value.activeSessionCount} of ${playback.value.maxActiveSessions} streams active`;
+	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} channels active`;
 });
 
 /** Load integrated playback state from the authoritative source. */
@@ -146,6 +146,9 @@ onUnmounted(() => {
 			</div>
 
 			<nav class="primary-nav" aria-label="Primary navigation">
+				<RouterLink class="nav-link" to="/">
+					<CircleGauge :size="18" /><span>Status</span>
+				</RouterLink>
 				<RouterLink class="nav-link" to="/guide">
 					<CalendarDays :size="18" /><span>Guide</span>
 				</RouterLink>
@@ -213,9 +216,6 @@ onUnmounted(() => {
 
 				<RouterLink class="nav-link" to="/settings"
 				><Settings :size="18" /><span>Settings</span></RouterLink
-				>
-				<RouterLink class="nav-link" to="/"
-				><CircleGauge :size="18" /><span>Status</span></RouterLink
 				>
 				<RouterLink class="nav-link" to="/logs"
 				><FileText :size="18" /><span>Logs</span></RouterLink

@@ -792,7 +792,9 @@ describe('API', () => {
 		});
 		expect(saved.statusCode).toBe(200);
 		expect(saved.json()).toEqual({ maxActiveSessions: 6 });
-		expect((await app.inject({ url: '/api/v1/playback/status' })).json()).toMatchObject({
+		const status = await app.inject({ url: '/api/v1/playback/status' });
+		expect(status.headers['cache-control']).toBe('private, no-store');
+		expect(status.json()).toMatchObject({
 			maxActiveSessions: 6,
 			activeSessionCount: 0,
 			m3uUrl: 'https://moirai.example.test/iptv/channels.m3u',

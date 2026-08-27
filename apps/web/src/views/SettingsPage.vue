@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
-import { Copy, RadioTower, RefreshCw, Save } from '@lucide/vue';
+import { Copy, RefreshCw, Save } from '@lucide/vue';
 import type { PlaybackEngineStatus, PlaybackSettings } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
@@ -15,6 +15,10 @@ const initialLoading = ref(true);
 const saving = ref(false);
 const message = ref('');
 const error = ref('');
+let refreshingStatus = false;
+let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
+/** Polling interval that keeps client activity current without following every segment request. */
+const STATUS_REFRESH_INTERVAL_MS = 15_000;
 
 /** Load playback settings and live engine state. */
 async function load(): Promise<void> {
@@ -37,12 +41,20 @@ async function load(): Promise<void> {
 
 /** Refresh engine state without replacing an edited capacity value. */
 async function refreshStatus(): Promise<void> {
+	if (refreshingStatus) {
+		return;
+	}
+
+	refreshingStatus = true;
 	try {
 		status.value = await api.playbackStatus();
 		error.value = '';
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
+	}
+	finally {
+		refreshingStatus = false;
 	}
 }
 
@@ -75,27 +87,22 @@ async function copyUrl(value: string, label: string): Promise<void> {
 	}
 }
 
-/** Explicitly restart one active or stale channel worker. */
-async function restart(channelId: string): Promise<void> {
-	try {
-		error.value = '';
-		await api.restartPlaybackChannel(channelId);
-		message.value = 'Channel playback restarted.';
-		await refreshStatus();
-	}
-	catch (cause) {
-		error.value = errorMessage(cause);
-	}
-}
-
 const unsubscribe = liveEvents.subscribe((event) => {
 	if (event.type === 'system.ready' || event.type === 'playback.changed') {
 		void refreshStatus();
 	}
 });
 
-onMounted(() => void load());
-onUnmounted(() => unsubscribe());
+onMounted(() => {
+	void load();
+	statusRefreshTimer = setInterval(() => void refreshStatus(), STATUS_REFRESH_INTERVAL_MS);
+});
+onUnmounted(() => {
+	unsubscribe();
+	if (statusRefreshTimer) {
+		clearInterval(statusRefreshTimer);
+	}
+});
 </script>
 
 <template>
@@ -149,36 +156,11 @@ onUnmounted(() => unsubscribe());
 			<aside class="panel playback-card">
 				<p class="eyebrow">Playback engine</p>
 				<StatusPill :value="status?.status ?? 'degraded'" />
-				<h2>{{ status?.activeSessionCount ?? 0 }} / {{ status?.maxActiveSessions ?? settings.maxActiveSessions }} active</h2>
+				<h2>{{ status?.activeSessionCount ?? 0 }}/{{ status?.maxActiveSessions ?? settings.maxActiveSessions }} channels active</h2>
 				<p v-if="status?.engineVersion">{{ status.engineVersion }}</p>
 				<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
 				<code>{{ status?.contractRevision.slice(0, 12) }}</code>
 			</aside>
-		</div>
-
-		<div v-if="!initialLoading" class="section-heading">
-			<div>
-				<p class="eyebrow">On demand</p>
-				<h2>Channel sessions</h2>
-			</div>
-		</div>
-		<div v-if="status?.sessions.length" class="list-panel">
-			<div v-for="session in status.sessions" :key="session.channelId" class="list-row">
-				<span class="media-glyph"><RadioTower :size="18" /></span>
-				<span class="grow">
-					<strong>{{ session.channelNumber }} · {{ session.channelName }}</strong>
-					<small>Started {{ new Date(session.startedAt).toLocaleString() }}<template v-if="session.lastError"> · {{ session.lastError }}</template></small>
-				</span>
-				<StatusPill :value="session.state" />
-				<button class="button secondary" @click="restart(session.channelId)">
-					<RefreshCw :size="16" />Restart
-				</button>
-			</div>
-		</div>
-		<div v-else-if="!initialLoading" class="empty-state compact">
-			<RadioTower :size="28" />
-			<h3>No active streams</h3>
-			<p>A channel worker starts when an IPTV client tunes to that channel.</p>
 		</div>
 	</section>
 </template>

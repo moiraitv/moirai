@@ -12,10 +12,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
 	const loaded = ref(false);
 	const error = ref('');
 	let loadSequence = 0;
+	let playbackSequence = 0;
 
 	/** Load dashboard data while ignoring responses superseded by a newer request. */
 	async function load(): Promise<void> {
 		const sequence = ++loadSequence;
+		const playbackRequestSequence = ++playbackSequence;
 		if (!loaded.value) {
 			loading.value = true;
 		}
@@ -28,7 +30,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
 				return;
 			}
 
-			playback.value = result;
+			if (playbackRequestSequence === playbackSequence) {
+				playback.value = result;
+			}
 			conflictReport.value = conflicts;
 			loaded.value = true;
 			error.value = '';
@@ -45,5 +49,22 @@ export const useDashboardStore = defineStore('dashboard', () => {
 		}
 	}
 
-	return { playback, conflictReport, loading, loaded, error, load };
+	/** Refresh playback sessions without reloading conflict data. */
+	async function refreshPlayback(): Promise<void> {
+		const sequence = ++playbackSequence;
+		try {
+			const result = await api.playbackStatus();
+			if (sequence === playbackSequence) {
+				playback.value = result;
+				error.value = '';
+			}
+		}
+		catch (cause) {
+			if (sequence === playbackSequence) {
+				error.value = errorMessage(cause);
+			}
+		}
+	}
+
+	return { playback, conflictReport, loading, loaded, error, load, refreshPlayback };
 });

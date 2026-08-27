@@ -557,6 +557,40 @@
 		grid-template-columns: 1fr;
 	}
 
+	.playback-client {
+		grid-template-columns: 1fr;
+		gap: 2px;
+	}
+
+	.playback-session-activity {
+		grid-template-columns: 1fr;
+	}
+
+	.playback-client-panel {
+		border-top: 1px solid #253a4d;
+		border-left: 0;
+	}
+
+	.playback-client-agent {
+		grid-column: auto;
+	}
+
+	.playback-session-row {
+		flex-wrap: wrap;
+	}
+
+	.playback-session-side {
+		width: 100%;
+		min-height: 64px;
+		padding-left: 52px;
+		align-items: flex-end;
+		justify-content: center;
+	}
+
+	.playback-acceleration {
+		text-align: left;
+	}
+
 	.span-2 {
 		grid-column: auto;
 	}

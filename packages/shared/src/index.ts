@@ -486,6 +486,25 @@ export const playbackSettingsSchema = z.object({
 /** Shared wire contract for playback settings. */
 export type PlaybackSettings = z.infer<typeof playbackSettingsSchema>;
 
+/** Server-visible identity and activity for one client currently consuming a channel session. */
+export interface PlaybackClientStatus {
+	address: string;
+	userAgent: string | null;
+	firstSeenAt: string;
+	lastSeenAt: string;
+}
+
+/** Actual encoder acceleration observed in a worker pipeline or its pending state. */
+export type PlaybackSessionAcceleration = ConcreteHardwareAcceleration | 'none' | 'pending';
+
+/** Committed programming occupying a channel's current wall-clock playback position. */
+export interface PlaybackNowPlayingStatus {
+	title: string;
+	artworkUrl: string | null;
+	startedAt: string;
+	finishesAt: string;
+}
+
 /** Runtime state of one on-demand channel process. */
 export interface ChannelSessionStatus {
 	channelId: string;
@@ -495,6 +514,9 @@ export interface ChannelSessionStatus {
 	startedAt: string;
 	pid: number | null;
 	lastError: string | null;
+	acceleration: PlaybackSessionAcceleration;
+	nowPlaying: PlaybackNowPlayingStatus | null;
+	clients: PlaybackClientStatus[];
 }
 
 /** Playback engine capability and active-session state. */

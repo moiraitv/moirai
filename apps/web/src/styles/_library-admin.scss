@@ -62,6 +62,10 @@
 	text-transform: capitalize;
 }
 
+.metric > .playback-capacity {
+	white-space: nowrap;
+}
+
 .metric-icon {
 	position: absolute;
 	top: 20px;
@@ -171,6 +175,7 @@
 }
 
 .status-pill[data-status='ready'],
+.status-pill[data-status='playing'],
 .status-pill[data-status='complete'],
 .status-pill[data-status='succeeded'] {
 	color: var(--accent);

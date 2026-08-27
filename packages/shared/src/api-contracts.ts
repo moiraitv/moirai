@@ -357,6 +357,14 @@ export const timelineMaterializationStatusSchema = z.object({
 	lastError: z.string().nullable(),
 });
 
+/** Committed programming and timing exposed for one active channel session. */
+export const playbackNowPlayingStatusSchema = z.object({
+	title: z.string(),
+	artworkUrl: z.string().nullable(),
+	startedAt: isoDateSchema,
+	finishesAt: isoDateSchema,
+});
+
 /** Playback engine capability and active channel-session state. */
 export const playbackEngineStatusSchema = z.object({
 	status: z.enum(['ready', 'degraded']),
@@ -372,6 +380,17 @@ export const playbackEngineStatusSchema = z.object({
 		startedAt: isoDateSchema,
 		pid: z.number().int().nullable(),
 		lastError: z.string().nullable(),
+		acceleration: z.union([
+			concreteHardwareAccelerationSchema,
+			z.enum(['none', 'pending']),
+		]),
+		nowPlaying: playbackNowPlayingStatusSchema.nullable(),
+		clients: z.array(z.object({
+			address: z.string().min(1).max(128),
+			userAgent: z.string().max(512).nullable(),
+			firstSeenAt: isoDateSchema,
+			lastSeenAt: isoDateSchema,
+		})).max(16),
 	})),
 	detail: z.string().nullable(),
 	m3uUrl: z.string(),
