@@ -230,6 +230,26 @@ legend {
 	justify-content: flex-end;
 }
 
+.acceleration-field {
+	position: relative;
+}
+
+.acceleration-prediction {
+	position: absolute;
+	top: calc(100% + 3px);
+	left: 1px;
+	z-index: 2;
+	display: -webkit-box;
+	max-width: calc(100% - 2px);
+	overflow: hidden;
+	color: #91a7ba;
+	font-size: 0.68rem;
+	font-weight: 500;
+	line-height: 1.25;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
 .visually-hidden {
 	position: absolute !important;
 	width: 1px !important;

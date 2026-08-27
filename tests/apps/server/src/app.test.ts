@@ -800,6 +800,25 @@ describe('API', () => {
 		});
 	});
 
+	it('predicts Automatic using server-visible playback hardware', async () => {
+		const { app } = await fixture();
+		const response = await app.inject({
+			method: 'POST',
+			url: '/api/v1/playback/hardware-acceleration/predict',
+			payload: {
+				format: 'h264',
+				bitDepth: 8,
+				width: 1920,
+				height: 1080,
+				vaapiDevice: null,
+				vaapiDriver: null,
+				ffmpegPath: '/definitely/missing/moirai-ffmpeg',
+			},
+		});
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toMatchObject({ outcome: 'indeterminate', accel: null });
+	});
+
 	it('stores, proxies, lists, and removes a resolution-bounded channel logo', async () => {
 		const { app } = await fixture();
 		const forged = await app.inject({

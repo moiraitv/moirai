@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { channelCreateSchema, type Channel } from '@moirai/shared';
+import { channelCreateSchema } from '@moirai/shared';
 import {
 	ETV_CONTRACT_REVISION,
 	ETV_PLAYOUT_VERSION,
 	toEtvChannelConfig,
 	toEtvPlayout,
+	type EtvCompatibleChannel,
 	validateEtvDocument,
 } from '@ersatztv-source/index.js';
 
-function channel(): Channel {
+function channel(): EtvCompatibleChannel {
+	const config = channelCreateSchema.parse({ number: '7', name: 'Moirai Cinema' });
 	return {
-		...channelCreateSchema.parse({ number: '7', name: 'Moirai Cinema' }),
+		...config,
+		video: { ...config.video, accel: null },
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),

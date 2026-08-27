@@ -54,6 +54,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'listPrograms',
 	'listScheduleTemplates',
 	'listTimelineMaterializations',
+	'predictHardwareAcceleration',
 	'previewChannelTimeline',
 	'previewDraftChannelSchedule',
 	'previewDraftTemplate',

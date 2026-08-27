@@ -17,6 +17,7 @@ import { LogService } from './operations/log-service.js';
 import { MaintenanceService } from './operations/maintenance.js';
 import { MediaProbe } from './media/media-probe.js';
 import { PlaybackEngine } from './playback/playback-engine.js';
+import { HardwareAccelerationResolver } from './playback/hardware-acceleration.js';
 import { PlayoutSynchronizer } from './playback/playout-synchronizer.js';
 import { Repository } from './repository/index.js';
 import { ResourcePressureCoordinator } from './operations/resource-pressure.js';
@@ -127,11 +128,15 @@ export async function buildApp(
 		events,
 		logs.logger as FastifyBaseLogger,
 	);
+	const hardwareAcceleration = new HardwareAccelerationResolver(
+		logs.logger as FastifyBaseLogger,
+	);
 	const playback = new PlaybackEngine(
 		repository,
 		playout,
 		events,
 		logs.logger as FastifyBaseLogger,
+		hardwareAcceleration,
 		config.playbackEnginePath,
 		config.playbackStreamDir,
 		config.publicUrl,

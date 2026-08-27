@@ -322,6 +322,26 @@ export const audioNormalizationSchema = z.object({
 		.default({ integratedTarget: -16, rangeTarget: 11, truePeak: -1.5 }),
 });
 
+/** Concrete hardware backends understood by the integrated playback worker. */
+export const concreteHardwareAccelerationSchema = z.enum([
+	'amf',
+	'cuda',
+	'qsv',
+	'rkmpp',
+	'vaapi',
+	'videotoolbox',
+	'vulkan',
+]);
+/** Hardware-acceleration choices authored in a Moirai channel. */
+export const hardwareAccelerationSchema = z.union([
+	z.literal('automatic'),
+	concreteHardwareAccelerationSchema,
+]).nullable();
+/** Concrete playback-worker hardware acceleration backend. */
+export type ConcreteHardwareAcceleration = z.infer<typeof concreteHardwareAccelerationSchema>;
+/** Authored channel acceleration choice, including Moirai-owned automatic selection. */
+export type HardwareAcceleration = z.infer<typeof hardwareAccelerationSchema>;
+
 /** Validate the video normalization contract at runtime. */
 export const videoNormalizationSchema = z.object({
 	format: z.enum(['h264', 'hevc']).nullable().default('h264'),
@@ -331,10 +351,7 @@ export const videoNormalizationSchema = z.object({
 	scalingMode: z.enum(['scale_and_pad', 'stretch', 'crop']).default('scale_and_pad'),
 	bitrateKbps: z.number().int().positive().nullable().default(2000),
 	bufferKbps: z.number().int().positive().nullable().default(4000),
-	accel: z
-		.enum(['amf', 'cuda', 'qsv', 'rkmpp', 'vaapi', 'videotoolbox', 'vulkan'])
-		.nullable()
-		.default(null),
+	accel: hardwareAccelerationSchema.default('automatic'),
 	vaapiDevice: z.string().nullable().default(null),
 	vaapiDriver: z.enum(['ihd', 'i965', 'radeonsi']).nullable().default(null),
 	deinterlace: z.boolean().default(false),
@@ -431,7 +448,7 @@ export const channelCreateSchema = z.object({
 		scalingMode: 'scale_and_pad',
 		bitrateKbps: 2000,
 		bufferKbps: 4000,
-		accel: null,
+		accel: 'automatic',
 		vaapiDevice: null,
 		vaapiDriver: null,
 		deinterlace: false,

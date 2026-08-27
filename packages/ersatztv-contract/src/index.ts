@@ -1,6 +1,6 @@
 import Ajv2020Module, { type ErrorObject } from 'ajv/dist/2020.js';
 import addFormatsModule from 'ajv-formats';
-import type { Channel } from '@moirai/shared';
+import type { Channel, ConcreteHardwareAcceleration } from '@moirai/shared';
 import channelSchema from './vendor/schema/channel_config.json' with { type: 'json' };
 import playoutSchema from './vendor/schema/playout.json' with { type: 'json' };
 import provenance from './provenance.json' with { type: 'json' };
@@ -63,9 +63,16 @@ export function validateEtvDocument(kind: EtvDocumentKind, document: unknown): v
 	}
 }
 
+/** Moirai channel copy whose automatic acceleration has been resolved for the pinned worker. */
+export type EtvCompatibleChannel = Omit<Channel, 'video'> & {
+	video: Omit<Channel['video'], 'accel'> & {
+		accel: ConcreteHardwareAcceleration | null;
+	};
+};
+
 /** Build and validate ErsatzTV normalization and playout settings for one Moirai channel. */
 export function toEtvChannelConfig(
-	channel: Channel,
+	channel: EtvCompatibleChannel,
 	playoutFolder = './playout',
 ): Record<string, unknown> {
 	const document = {

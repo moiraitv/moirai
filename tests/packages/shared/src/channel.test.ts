@@ -8,6 +8,17 @@ import {
 } from '@shared-source/index.js';
 
 describe('channel external contracts', () => {
+	it('defaults new channels to Automatic while preserving explicit None', () => {
+		expect(channelCreateSchema.parse({ number: '1', name: 'Automatic' }).video.accel).toBe(
+			'automatic',
+		);
+		expect(channelCreateSchema.parse({
+			number: '2',
+			name: 'None',
+			video: { accel: null },
+		}).video.accel).toBeNull();
+	});
+
 	it('accepts only bounded credential-free HTTP(S) external logos', () => {
 		expect(
 			channelCreateSchema.safeParse({

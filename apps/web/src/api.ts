@@ -38,6 +38,10 @@ import type {
 	LogPage,
 	DataConflictReport,
 } from '@moirai/shared';
+import type {
+	HardwareAccelerationPrediction,
+	HardwareAccelerationPredictionRequest,
+} from '@moirai/shared/api-contracts';
 
 /** Catalog filters and paging encoded into a media browse request. */
 export interface MediaQuery {
@@ -260,6 +264,11 @@ export const api = {
 			{ method: 'POST' },
 		),
 	playbackStatus: () => request<PlaybackEngineStatus>('/api/v1/playback/status'),
+	predictHardwareAcceleration: (body: HardwareAccelerationPredictionRequest) =>
+		request<HardwareAccelerationPrediction>('/api/v1/playback/hardware-acceleration/predict', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
 	playbackSettings: () => request<PlaybackSettings>('/api/v1/playback/settings'),
 	savePlaybackSettings: (body: PlaybackSettings) =>
 		request<PlaybackSettings>('/api/v1/playback/settings', {

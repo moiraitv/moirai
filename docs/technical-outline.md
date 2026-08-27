@@ -490,6 +490,17 @@ Moirai owns channel configuration and maps it through a compatibility adapter pi
 revision `4eec042fc847aac3799b1d1ab27a4d20f4984575`. The adapter retains only the channel and playout
 schemas used by the integrated worker; vendored files retain upstream MIT attribution.
 
+New channels default to Moirai's `Automatic` hardware-acceleration setting. Immediately before
+playback, Moirai runs bounded one-frame FFmpeg encoder probes for the configured codec, bit depth,
+and output dimensions, preferring discrete devices and then platform-integrated backends. The
+verified result is converted to a concrete ErsatzTV-Next acceleration value; if no compatible
+encoder is found, playback receives `None`. Editor predictions use the same server-visible probe and
+five-minute bounded cache. Automatic probes support 8-bit and 10-bit targets through 8K UHD, while
+explicit backend selections remain available for other configurations. Existing channels that store
+`None` are not migrated. Distinct probes share a bounded queue whose eight-second deadline includes
+queue time. Indeterminate results and source-sized outputs are not cached, allowing playback to retry
+before safely falling back to `None`.
+
 The adapter produces validated, non-overlapping playout documents for each local calendar day. It:
 
 - respects DST-shortened and DST-lengthened days;

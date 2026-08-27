@@ -7,6 +7,8 @@ import {
 	type Channel,
 } from '@moirai/shared';
 import {
+	hardwareAccelerationPredictionRequestSchema,
+	hardwareAccelerationPredictionSchema,
 	playbackEngineStatusSchema,
 	playbackSettingsResponseSchema,
 } from '@moirai/shared/api-contracts';
@@ -123,6 +125,24 @@ export function registerPlaybackRoutes(
 		}),
 	}, async (request) =>
 		playback.updateSettings(playbackSettingsSchema.parse(request.body)));
+	app.post('/api/v1/playback/hardware-acceleration/predict', {
+		schema: apiOperation({
+			operationId: 'predictHardwareAcceleration',
+			tags: ['Playback'],
+			summary: 'Predict automatic channel hardware acceleration',
+			body: hardwareAccelerationPredictionRequestSchema,
+			response: {
+				200: responseContent(
+					'Automatic hardware acceleration prediction',
+					'application/json',
+					hardwareAccelerationPredictionSchema,
+				),
+			},
+			errors: [400, 500, 503],
+		}),
+	}, async (request) => playback.predictHardwareAcceleration(
+		hardwareAccelerationPredictionRequestSchema.parse(request.body),
+	));
 	app.post('/api/v1/playback/channels/:id/restart', {
 		schema: apiOperation({
 			operationId: 'restartChannelPlayback',

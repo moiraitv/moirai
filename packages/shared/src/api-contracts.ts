@@ -6,6 +6,7 @@ import {
 } from './availability.js';
 import {
 	channelCreateSchema,
+	concreteHardwareAccelerationSchema,
 	idSchema,
 	isoDateSchema,
 	libraryCreateSchema,
@@ -13,6 +14,7 @@ import {
 	playbackSettingsSchema,
 	scanRunSchema,
 	sourceCandidateSummarySchema,
+	videoNormalizationSchema,
 	watcherStatusSchema,
 } from './index.js';
 import {
@@ -378,6 +380,32 @@ export const playbackEngineStatusSchema = z.object({
 
 /** Runtime-adjustable playback settings response. */
 export const playbackSettingsResponseSchema = playbackSettingsSchema;
+
+/** Draft channel values used to predict Moirai's automatic hardware selection. */
+export const hardwareAccelerationPredictionRequestSchema = videoNormalizationSchema.pick({
+	format: true,
+	bitDepth: true,
+	width: true,
+	height: true,
+	vaapiDevice: true,
+	vaapiDriver: true,
+}).extend({
+	ffmpegPath: z.string().trim().max(4_096).nullable().default(null),
+});
+
+/** Result of probing server-visible hardware for one draft channel target. */
+export const hardwareAccelerationPredictionSchema = z.object({
+	outcome: z.enum(['hardware', 'none', 'indeterminate']),
+	accel: concreteHardwareAccelerationSchema.nullable(),
+	detail: z.string(),
+});
+
+/** Draft channel values accepted by hardware-acceleration prediction. */
+export type HardwareAccelerationPredictionRequest = z.infer<
+	typeof hardwareAccelerationPredictionRequestSchema
+>;
+/** Server-side prediction for Moirai's automatic hardware selection. */
+export type HardwareAccelerationPrediction = z.infer<typeof hardwareAccelerationPredictionSchema>;
 
 /** Retained operational log page. */
 export const logPageSchema = z.object({

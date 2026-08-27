@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RouterLink } from 'vue-router';
 import {
@@ -21,7 +21,9 @@ import {
 	type Channel,
 	type ChannelCreate,
 } from '@moirai/shared';
+import type { HardwareAccelerationPrediction } from '@moirai/shared/api-contracts';
 import { api } from '../api';
+import { formatHardwareAccelerationPrediction } from '../channel-acceleration';
 import { channelLogoUrl } from '../channel-logo';
 import { dateKey, formatDateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
@@ -56,7 +58,11 @@ const logoInput = ref<HTMLInputElement>();
 const externalLogoUrl = ref('');
 const removeLogoOnSave = ref(false);
 const saving = ref(false);
+const accelerationPrediction = ref<HardwareAccelerationPrediction>();
+const accelerationPredictionLoading = ref(false);
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let accelerationPredictionTimer: ReturnType<typeof setTimeout> | undefined;
+let accelerationPredictionSequence = 0;
 let suppressChannelEventsUntil = 0;
 /** Channel guide row with layout metadata derived for the visible window. */
 type CropInteraction = 'move' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -104,7 +110,7 @@ const defaults = (): ChannelCreate => ({
 		scalingMode: 'scale_and_pad',
 		bitrateKbps: 2000,
 		bufferKbps: 4000,
-		accel: null,
+		accel: 'automatic',
 		vaapiDevice: null,
 		vaapiDriver: null,
 		deinterlace: false,
@@ -116,6 +122,11 @@ const defaults = (): ChannelCreate => ({
 	preferredFilters: [],
 });
 const form = reactive<ChannelCreate>(defaults());
+/** Compact status displayed beneath the Automatic option without changing modal flow. */
+const accelerationPredictionText = computed(() => formatHardwareAccelerationPrediction(
+	accelerationPrediction.value,
+	accelerationPredictionLoading.value,
+));
 const scheduleByChannel = computed(
 	() =>
 		new Map(
@@ -204,6 +215,54 @@ function resetLogoEditor(logo: string | null): void {
 function closeForm(): void {
 	disposeCropSource();
 	showForm.value = false;
+}
+
+/** Debounce a server-side prediction and discard responses for superseded form values. */
+function scheduleAccelerationPrediction(): void {
+	if (accelerationPredictionTimer) {
+		clearTimeout(accelerationPredictionTimer);
+		accelerationPredictionTimer = undefined;
+	}
+
+	const sequence = ++accelerationPredictionSequence;
+	accelerationPrediction.value = undefined;
+	accelerationPredictionLoading.value = false;
+	if (!showForm.value || form.video.accel !== 'automatic') {
+		return;
+	}
+
+	accelerationPredictionLoading.value = true;
+	accelerationPredictionTimer = setTimeout(async () => {
+		accelerationPredictionTimer = undefined;
+		try {
+			const prediction = await api.predictHardwareAcceleration({
+				format: form.video.format,
+				bitDepth: form.video.bitDepth,
+				width: form.video.width,
+				height: form.video.height,
+				vaapiDevice: form.video.vaapiDevice,
+				vaapiDriver: form.video.vaapiDriver,
+				ffmpegPath: form.ffmpegPath,
+			});
+			if (sequence === accelerationPredictionSequence) {
+				accelerationPrediction.value = prediction;
+			}
+		}
+		catch {
+			if (sequence === accelerationPredictionSequence) {
+				accelerationPrediction.value = {
+					outcome: 'indeterminate',
+					accel: null,
+					detail: 'The server prediction request failed.',
+				};
+			}
+		}
+		finally {
+			if (sequence === accelerationPredictionSequence) {
+				accelerationPredictionLoading.value = false;
+			}
+		}
+	}, 350);
 }
 
 /** Capture the pointer and starting geometry for a crop move or resize. */
@@ -564,9 +623,27 @@ const unsubscribe = liveEvents.subscribe((event) => {
 		}, 180);
 	}
 });
+watch(
+	() => [
+		showForm.value,
+		form.video.accel,
+		form.video.format,
+		form.video.bitDepth,
+		form.video.width,
+		form.video.height,
+		form.video.vaapiDevice,
+		form.video.vaapiDriver,
+		form.ffmpegPath,
+	],
+	scheduleAccelerationPrediction,
+);
 onMounted(() => void loadInitial());
 onBeforeUnmount(() => {
 	unsubscribe();
+	accelerationPredictionSequence += 1;
+	if (accelerationPredictionTimer) {
+		clearTimeout(accelerationPredictionTimer);
+	}
 	if (liveRefreshTimer) {
 		clearTimeout(liveRefreshTimer);
 	}
@@ -809,16 +886,26 @@ onBeforeUnmount(() => {
 							<option value="stretch">Stretch</option>
 							<option value="crop">Crop</option>
 						</select></label
-						><label
+						><label class="acceleration-field"
 						><span>Acceleration</span
 						><select v-model="form.video.accel">
+							<option value="automatic">Automatic</option>
 							<option :value="null">None</option>
+							<option value="amf">AMF</option>
 							<option value="cuda">CUDA</option>
 							<option value="qsv">QSV</option>
+							<option value="rkmpp">RKMPP</option>
 							<option value="vaapi">VAAPI</option>
 							<option value="videotoolbox">VideoToolbox</option>
 							<option value="vulkan">Vulkan</option>
-						</select></label
+						</select
+						><small
+							v-if="form.video.accel === 'automatic' && accelerationPredictionText"
+							class="acceleration-prediction"
+							role="status"
+							:title="accelerationPrediction?.detail"
+						>{{ accelerationPredictionText }}</small
+						></label
 						><label class="check"
 						><input v-model="form.video.deinterlace" type="checkbox" /> Deinterlace</label
 						>
