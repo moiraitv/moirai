@@ -68,6 +68,116 @@ describe('ErsatzTV playout output', () => {
 		});
 	});
 
+	it('rounds floating-point clipping artifacts at a local-day boundary', () => {
+		const configured = channel();
+		const guide: ScheduleGuide = {
+			timeZone: 'America/Los_Angeles',
+			startDate: '2026-08-26',
+			days: 1,
+			channels: [{
+				channelId: configured.id,
+				preview: {
+					channelId: configured.id,
+					timeZone: 'America/Los_Angeles',
+					startDate: '2026-08-26',
+					days: 1,
+					segments: [{
+						id: 'floating-boundary',
+						role: 'primary',
+						channelId: configured.id,
+						scheduleLayerId: null,
+						templateId: randomUUID(),
+						slotId: randomUUID(),
+						programId: randomUUID(),
+						mediaItemId: randomUUID(),
+						title: 'Movie',
+						playbackPath: '/media/movie.mkv',
+						playbackParts: [{
+							playbackPath: '/media/movie.mkv',
+							durationSeconds: 7_005.047,
+						}],
+						start: '2026-08-26T05:04:25.223Z',
+						finish: '2026-08-26T07:01:10.270Z',
+						sourceStartSeconds: 0,
+						sourceFinishSeconds: 7_005.047,
+						truncated: false,
+					}],
+					issues: [],
+					proposedState: [],
+				},
+			}],
+		};
+
+		const document = JSON.parse([...buildEtvPlayoutFiles([configured], guide).values()][0]!);
+
+		expect(document.items).toHaveLength(1);
+		expect(document.items[0]).toMatchObject({
+			start: '2026-08-26T07:00:00Z',
+			finish: '2026-08-26T07:01:10.27Z',
+			source: {
+				in_point_ms: 6_934_777,
+				out_point_ms: 7_005_047,
+			},
+		});
+	});
+
+	it('does not emit zero-length multipart fragments at an exact daily boundary', () => {
+		const configured = channel();
+		const guide: ScheduleGuide = {
+			timeZone: 'America/Los_Angeles',
+			startDate: '2026-08-25',
+			days: 2,
+			channels: [{
+				channelId: configured.id,
+				preview: {
+					channelId: configured.id,
+					timeZone: 'America/Los_Angeles',
+					startDate: '2026-08-25',
+					days: 2,
+					segments: [{
+						id: 'multipart-boundary',
+						role: 'primary',
+						channelId: configured.id,
+						scheduleLayerId: null,
+						templateId: randomUUID(),
+						slotId: randomUUID(),
+						programId: randomUUID(),
+						mediaItemId: randomUUID(),
+						title: 'Multipart Movie',
+						playbackPath: '/media/movie-cd1.mkv',
+						playbackParts: [
+							{ playbackPath: '/media/movie-cd1.mkv', durationSeconds: 3_600.001 },
+							{ playbackPath: '/media/movie-cd2.mkv', durationSeconds: 3_600.002 },
+							{ playbackPath: '/media/movie-cd3.mkv', durationSeconds: 60 },
+						],
+						start: '2026-08-26T04:59:59.997Z',
+						finish: '2026-08-26T07:01:00Z',
+						sourceStartSeconds: 0,
+						sourceFinishSeconds: 7_260.003,
+						truncated: false,
+					}],
+					issues: [],
+					proposedState: [],
+				},
+			}],
+		};
+
+		const documents = [...buildEtvPlayoutFiles([configured], guide).values()]
+			.map((content) => JSON.parse(content));
+		const items = documents.flatMap((document) => document.items);
+
+		expect(items.every((item) => Date.parse(item.finish) > Date.parse(item.start))).toBe(true);
+		expect(documents[1].items).toEqual([{
+			id: 'multipart-boundary:2026-08-26:2',
+			start: '2026-08-26T07:00:00Z',
+			finish: '2026-08-26T07:01:00Z',
+			source: {
+				source_type: 'local',
+				path: '/media/movie-cd3.mkv',
+			},
+		}]);
+	});
+
 	it('uses the configured local-day boundaries and leaves unscheduled time for worker filler', () => {
 		const configured = channel();
 		const guide: ScheduleGuide = {

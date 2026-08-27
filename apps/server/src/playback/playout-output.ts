@@ -40,31 +40,37 @@ function playoutItems(
 		return [];
 	}
 
-	const segmentDurationSeconds = elapsedMilliseconds(segmentStart, segmentFinish) / 1_000;
+	const segmentDurationMs = Math.round(elapsedMilliseconds(segmentStart, segmentFinish));
+	const sourceStartMs = Math.round(segment.sourceStartSeconds * 1_000);
 	const parts = (segment.playbackParts?.length ?? 0) > 0
-		? segment.playbackParts!
+		? segment.playbackParts!.map((part) => ({
+			playbackPath: part.playbackPath,
+			durationMs: Math.round(part.durationSeconds * 1_000),
+		}))
 		: [{
 			playbackPath: segment.playbackPath,
-			durationSeconds: Math.max(
-				segment.sourceFinishSeconds ?? 0,
-				segment.sourceStartSeconds + segmentDurationSeconds,
+			durationMs: Math.max(
+				Math.round((segment.sourceFinishSeconds ?? 0) * 1_000),
+				sourceStartMs + segmentDurationMs,
 			),
 		}];
-	const virtualStart = segment.sourceStartSeconds + elapsedMilliseconds(segmentStart, start) / 1_000;
-	const virtualFinish = virtualStart + elapsedMilliseconds(start, finish) / 1_000;
+	const virtualStartMs = sourceStartMs + Math.round(elapsedMilliseconds(segmentStart, start));
+	const virtualFinishMs = virtualStartMs + Math.round(elapsedMilliseconds(start, finish));
 	const output: EtvPlayoutItem[] = [];
-	let partStart = 0;
+	let partStartMs = 0;
 	for (const [index, part] of parts.entries()) {
-		const partFinish = partStart + part.durationSeconds;
-		const overlapStart = Math.max(virtualStart, partStart);
-		const overlapFinish = Math.min(virtualFinish, partFinish);
-		if (overlapStart < overlapFinish) {
-			const itemStart = start.add({ milliseconds: (overlapStart - virtualStart) * 1_000 });
-			const itemFinish = start.add({ milliseconds: (overlapFinish - virtualStart) * 1_000 });
-			const inPointMs = (overlapStart - partStart) * 1_000;
-			const outPointMs = overlapFinish < partFinish
+		const partFinishMs = partStartMs + part.durationMs;
+		const overlapStartMs = Math.max(virtualStartMs, partStartMs);
+		const overlapFinishMs = Math.min(virtualFinishMs, partFinishMs);
+		if (overlapStartMs < overlapFinishMs) {
+			const itemStartOffsetMs = overlapStartMs - virtualStartMs;
+			const itemFinishOffsetMs = overlapFinishMs - virtualStartMs;
+			const itemStart = start.add({ milliseconds: itemStartOffsetMs });
+			const itemFinish = start.add({ milliseconds: itemFinishOffsetMs });
+			const inPointMs = overlapStartMs - partStartMs;
+			const outPointMs = overlapFinishMs < partFinishMs
 				|| (parts.length === 1 && segment.sourceFinishSeconds !== null)
-				? (overlapFinish - partStart) * 1_000
+				? overlapFinishMs - partStartMs
 				: null;
 			output.push({
 				type: 'local',
@@ -72,12 +78,12 @@ function playoutItems(
 				start: itemStart.toString(),
 				finish: itemFinish.toString(),
 				path: part.playbackPath,
-				inPointMs: inPointMs === 0 ? null : Math.round(inPointMs),
-				outPointMs: outPointMs === null ? null : Math.round(outPointMs),
+				inPointMs: inPointMs === 0 ? null : inPointMs,
+				outPointMs,
 			});
 		}
-		partStart = partFinish;
-		if (partStart >= virtualFinish) {
+		partStartMs = partFinishMs;
+		if (partStartMs >= virtualFinishMs) {
 			break;
 		}
 	}
