@@ -150,8 +150,9 @@ part. This inventory is exposed for future playback configuration; playback does
 override subtitle tracks.
 
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured
-duration and usable video stream remains browsable, but scheduling excludes it and reports a scan
-diagnostic.
+duration of at most 366 days and a usable video stream remains browsable, but scheduling excludes it
+and reports a scan diagnostic. This bound also prevents corrupt probe output from overflowing
+scheduling arithmetic.
 
 Successful probes are cached using the file identity, size, modification time, and probe-contract
 version. Pending and failed probes are retried during startup backfill and later scans. Probe work is
@@ -172,22 +173,24 @@ Moirai normalizes values before persistence:
 
 Multipart suffixes using `disc`, `part`, `cd`, `dvd`, or `disk` form one logical item. A valid
 sequence starts at 1, is contiguous, contains at least two parts, has no duplicate part numbers, and
-is limited to 128 files. Valid parts contribute one aggregate scheduling duration and play in number
-order. Incomplete or ambiguous sequences remain browsable but are excluded from scheduling. IDs of
-absorbed physical members remain aliases so existing authored item references continue to resolve.
+is limited to 128 files. Valid parts contribute one aggregate scheduling duration, which must remain
+within the same 366-day bound, and play in number order. Incomplete, ambiguous, or overlong sequences
+remain browsable but are excluded from scheduling. IDs of absorbed physical members remain aliases so
+existing authored item references continue to resolve.
 
 A show folder is the structural identity of a series. Provider IDs from `tvshow.nfo` remain metadata;
 reusing one provider ID in separate folders produces a Status warning rather than merging the shows.
 
 Input limits protect parser, database, and guide memory:
 
-| Value                |          Limit |
-| -------------------- | -------------: |
-| NFO file             |          2 MiB |
-| Indexed scalar field | 512 characters |
-| Plot                 |         16 KiB |
-| Metadata list        |    128 entries |
-| XMLTV description    |          4 KiB |
+| Value                   |          Limit |
+| ----------------------- | -------------: |
+| NFO file                |          2 MiB |
+| Indexed scalar field    | 512 characters |
+| Plot                    |         16 KiB |
+| Metadata list           |    128 entries |
+| XMLTV description       |          4 KiB |
+| Measured media duration |       366 days |
 
 Oversized or invalid sidecars produce a scan diagnostic. The corresponding media item can still be
 indexed with filename-derived metadata.
@@ -455,6 +458,10 @@ Moirai serves the client-facing outputs directly:
 
 The Guide UI displays the copyable XMLTV URL derived from `MOIRAI_PUBLIC_URL`.
 
+Guide timeline and compact schedule-preview geometry use elapsed instants across each configured
+local date. Daylight-saving transitions therefore render 23-hour and 25-hour days at their actual
+width instead of assuming every local day lasts 24 hours.
+
 ### XMLTV
 
 The XMLTV document comes only from the committed rolling timeline. It includes every configured
@@ -602,6 +609,9 @@ Server logs are redacted, structured JSONL files beneath the persistent data dir
 | Retention           | 14 days |
 | File rotation       |  10 MiB |
 | Total retained size | 200 MiB |
+
+Log and artwork megabyte settings are accepted only when they convert to finite, positive,
+safe-integer byte counts. Invalid and overflowing values use their documented defaults.
 
 The Logs view provides bounded search, cursor pagination, live refresh, one-line request entries, and
 structured details on demand. It pairs request-start and request-complete records to show method,

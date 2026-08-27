@@ -56,7 +56,9 @@ function resolveFromProjectRoot(value: string): string {
 /** Parse a positive megabyte setting and convert it to bytes. */
 function megabytesFromEnvironment(value: string | undefined, fallback: number): number {
 	const parsed = Number(value ?? fallback);
-	return (Number.isFinite(parsed) && parsed > 0 ? parsed : fallback) * 1024 * 1024;
+	const megabytes = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+	const bytes = Math.round(megabytes * 1024 * 1024);
+	return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : fallback * 1024 * 1024;
 }
 
 /** Parse and bound an integer environment setting. */

@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import type { MediaSubtitleTrack, ScanIssue } from '@moirai/shared';
+import {
+	MAX_MEDIA_DURATION_MILLISECONDS,
+	type MediaSubtitleTrack,
+	type ScanIssue,
+} from '@moirai/shared';
 import type { DiscoveredItem } from '../repository/contracts.js';
 import { parseVideoFilename } from './video-filename.js';
 
@@ -42,6 +46,12 @@ export function collapseMultipartItems(
 				? 'incomplete'
 				: 'complete';
 		const allMeasured = members.every((item) => item.durationMilliseconds !== null);
+		const aggregateDurationMilliseconds = allMeasured
+			? members.reduce((total, item) => total + item.durationMilliseconds!, 0)
+			: null;
+		const aggregateDurationValid = aggregateDurationMilliseconds !== null
+			&& Number.isSafeInteger(aggregateDurationMilliseconds)
+			&& aggregateDurationMilliseconds <= MAX_MEDIA_DURATION_MILLISECONDS;
 		const parts = members.flatMap((item) => item.parts).sort((left, right) =>
 			left.number - right.number || left.relativePath.localeCompare(right.relativePath));
 		const logicalSubtitles = new Map<string, MediaSubtitleTrack>();
@@ -59,13 +69,15 @@ export function collapseMultipartItems(
 		representative.multipartStatus = status;
 		representative.parts = parts;
 		representative.subtitleTracks = [...logicalSubtitles.values()];
-		representative.durationMilliseconds = status === 'complete' && allMeasured
-			? members.reduce((total, item) => total + item.durationMilliseconds!, 0)
+		representative.durationMilliseconds = status === 'complete' && aggregateDurationValid
+			? aggregateDurationMilliseconds
 			: null;
-		representative.probeStatus = status === 'complete' && allMeasured ? 'complete' : 'failed';
-		representative.probeErrorCode = status === 'complete'
-			? members.find((item) => item.probeErrorCode)?.probeErrorCode ?? null
-			: `multipart-${status}`;
+		representative.probeStatus = status === 'complete' && aggregateDurationValid ? 'complete' : 'failed';
+		representative.probeErrorCode = status === 'complete' && !aggregateDurationValid
+			? 'multipart-duration-invalid'
+			: status === 'complete'
+				? members.find((item) => item.probeErrorCode)?.probeErrorCode ?? null
+				: `multipart-${status}`;
 		representative.technicalMetadata = {
 			...representative.technicalMetadata,
 			fileSizeBytes,
@@ -88,6 +100,14 @@ export function collapseMultipartItems(
 				message: status === 'ambiguous'
 					? 'Multipart numbering is duplicated or exceeds the 128-part limit.'
 					: 'Multipart numbering must contain a contiguous sequence beginning with part 1.',
+				severity: 'warning',
+			});
+		}
+		else if (!aggregateDurationValid) {
+			issues.push({
+				path: representative.relativePath,
+				code: 'multipart_duration_invalid',
+				message: 'Multipart duration is missing or exceeds the one-year scheduling limit.',
 				severity: 'warning',
 			});
 		}

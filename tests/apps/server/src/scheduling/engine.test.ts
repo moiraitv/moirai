@@ -9,7 +9,11 @@ import type {
 	SchedulingProgram,
 	SelectionStateRecord,
 } from '@moirai/shared';
-import { MAX_TIMELINE_SEGMENTS, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
+import {
+	MAX_MEDIA_DURATION_MILLISECONDS,
+	MAX_TIMELINE_SEGMENTS,
+	SECONDS_PER_SCHEDULING_DAY,
+} from '@moirai/shared';
 import {
 	generateTimeline,
 	TimelineMaterializationLimitError,
@@ -1006,6 +1010,19 @@ describe('schedule timeline engine', () => {
 		expect(first.issues.map((issue) => issue.code)).toContain('media-duration-missing');
 		expect(first.segments).toEqual(regenerated.segments);
 		expect(state).toEqual([]);
+	});
+
+	it('rejects catalog durations above the media scheduling limit', () => {
+		const invalid = media(1, MAX_MEDIA_DURATION_MILLISECONDS / 1_000 + 1);
+		const movies = contentProgram(10, 1);
+		const daily = template([{ programId: movies.id, startSeconds: 0 }]);
+
+		const result = generateTimeline(input([movies], [invalid], daily));
+
+		expect(result.segments.every((segment) => segment.mediaItemId === null)).toBe(true);
+		expect(result.issues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: 'media-duration-missing' }),
+		]));
 	});
 
 	it('reports invalid multipart sequences separately from ordinary missing durations', () => {

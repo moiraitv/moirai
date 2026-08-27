@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { RefreshCw } from '@lucide/vue';
 import type { TimelinePreview } from '@moirai/shared';
+import { guideSegmentPercent, guideWindowMilliseconds } from '../../guide-geometry';
 import { programColorStyle } from '../../program-colors';
 import { instantLabel } from '../../time-format';
 
@@ -12,6 +14,9 @@ const props = defineProps<{
 	error: string;
 }>();
 const emit = defineEmits<{ refresh: [] }>();
+const previewWindowMilliseconds = computed(() => props.preview
+	? guideWindowMilliseconds(props.preview.startDate, props.preview.days, props.preview.timeZone)
+	: 0);
 
 /** Return the user-facing label for time. */
 function timeLabel(value: string): string {
@@ -58,7 +63,11 @@ function timeRange(start: string, finish: string): string {
 				:class="[`role-${segment.role}`, { truncated: segment.truncated }]"
 				:style="{
 					...programColorStyle(segment.programId),
-					width: `${Math.max(0.3, ((Date.parse(segment.finish) - Date.parse(segment.start)) / (24 * 60 * 60 * 1000)) * 100)}%`,
+					width: `${guideSegmentPercent(
+						segment.start,
+						segment.finish,
+						previewWindowMilliseconds,
+					)}%`,
 				}"
 				:title="`${segment.title} · ${timeRange(segment.start, segment.finish)}`"
 				:aria-label="`${segment.title}, ${timeRange(segment.start, segment.finish)}`"

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	loadConfig,
 	bundledNextRoot,
@@ -8,6 +8,10 @@ import {
 	publicUrlStatus,
 	resolveTimeZone,
 } from '@server/config.js';
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 describe('time-zone configuration', () => {
 	it('accepts an explicit IANA time zone', () => {
@@ -62,6 +66,13 @@ describe('media probe configuration', () => {
 			mediaProbeConcurrency: 2,
 			mediaProbeTimeoutMs: 15_000,
 		});
+	});
+});
+
+describe('byte-limit configuration', () => {
+	it('falls back when a megabyte value would overflow finite integer bytes', () => {
+		vi.stubEnv('MOIRAI_LOG_MAX_MB', '1e308');
+		expect(loadConfig().logMaxBytes).toBe(200 * 1024 * 1024);
 	});
 });
 

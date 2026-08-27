@@ -8,6 +8,8 @@ import {
 
 /** Number of nominal wall-clock seconds represented by a daily template. */
 export const SECONDS_PER_SCHEDULING_DAY = 86_400;
+/** Longest physical or multipart media duration accepted for scheduling and playback. */
+export const MAX_MEDIA_DURATION_MILLISECONDS = 366 * SECONDS_PER_SCHEDULING_DAY * 1_000;
 /** Bound shared scheduling contracts resource use for timeline preview days. */
 export const MAX_TIMELINE_PREVIEW_DAYS = 14;
 /** Bound shared scheduling contracts resource use for timeline segments. */

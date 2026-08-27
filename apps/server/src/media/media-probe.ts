@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Logger } from 'pino';
+import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
 import { resourceErrorCode, type ResourcePressureCoordinator } from '../operations/resource-pressure.js';
 import { openSourceFile } from './source-file.js';
 
@@ -151,7 +152,11 @@ function durationMilliseconds(value: unknown): number | null {
 	}
 
 	const milliseconds = Math.round(seconds * 1_000);
-	return Number.isSafeInteger(milliseconds) && milliseconds > 0 ? milliseconds : null;
+	return Number.isSafeInteger(milliseconds)
+		&& milliseconds > 0
+		&& milliseconds <= MAX_MEDIA_DURATION_MILLISECONDS
+		? milliseconds
+		: null;
 }
 
 /** Normalize a positive integer stream dimension. */

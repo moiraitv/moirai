@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
 import {
 	MediaProbe,
 	MediaProbeError,
@@ -70,6 +71,14 @@ describe('media probe output', () => {
 		expect(() => parseMediaProbeOutput(JSON.stringify({
 			format: { duration: '10' },
 			streams: [{ codec_type: 'audio', codec_name: 'aac' }],
+		}), 1)).toThrow(MediaProbeError);
+	});
+
+	it('rejects measured durations beyond the scheduling limit', () => {
+		const durationSeconds = MAX_MEDIA_DURATION_MILLISECONDS / 1_000 + 1;
+		expect(() => parseMediaProbeOutput(JSON.stringify({
+			format: { duration: String(durationSeconds) },
+			streams: [{ codec_type: 'video', codec_name: 'h264' }],
 		}), 1)).toThrow(MediaProbeError);
 	});
 

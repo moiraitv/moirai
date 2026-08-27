@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
-import { MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
+import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
 import { MediaProbeError } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 
@@ -392,6 +392,32 @@ describe('discoverOnDisk', () => {
 		expect(result.items[0]?.subtitleTracks).toEqual([
 			expect.objectContaining({ language: 'en', isDefault: true, partNumber: null }),
 		]);
+	});
+
+	it('keeps an oversized multipart duration out of the scheduling catalog', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Long Film-cd1.mkv'), 'part one');
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Long Film-cd2.mkv'), 'part two');
+		const probeMedia = vi.fn().mockResolvedValue({
+			durationMilliseconds: Math.floor(MAX_MEDIA_DURATION_MILLISECONDS / 2) + 1,
+			fileSizeBytes: 8,
+			container: 'matroska',
+			streams: [],
+			resolution: { width: 1280, height: 720 },
+			tags: {},
+		});
+
+		const result = await discoverOnDisk(fixture, { probeMedia });
+
+		expect(result.items[0]).toMatchObject({
+			multipartStatus: 'complete',
+			durationMilliseconds: null,
+			probeStatus: 'failed',
+			probeErrorCode: 'multipart-duration-invalid',
+		});
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: 'multipart_duration_invalid',
+		}));
 	});
 
 	it('retains invalid multipart videos for browsing with an unschedulable duration', async () => {

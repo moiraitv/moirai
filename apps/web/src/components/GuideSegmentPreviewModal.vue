@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router';
 import { Asterisk, Clock3, Film, Folder, Layers3, ListVideo, X } from '@lucide/vue';
 import type { GuideSegmentDetail } from '@moirai/shared';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
+import { compactDurationLabel } from '../duration-format';
 import { instantLabel } from '../time-format';
 
 const props = defineProps<{
@@ -20,13 +21,7 @@ onMounted(() => dialog.value?.focus());
 
 /** Format elapsed seconds as a compact duration for a guide preview. */
 function durationLabel(seconds: number | null): string {
-	if (!seconds) {
-		return 'Duration unavailable';
-	}
-
-	const hours = Math.floor(seconds / 3_600);
-	const minutes = Math.round((seconds % 3_600) / 60);
-	return [hours ? `${hours}h` : '', minutes ? `${minutes}m` : ''].filter(Boolean).join(' ');
+	return compactDurationLabel(seconds, 'Duration unavailable');
 }
 
 /** Format one guide instant in the configured channel time zone. */

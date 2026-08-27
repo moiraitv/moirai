@@ -117,12 +117,17 @@
 	overflow: hidden;
 	border-bottom: 1px solid var(--line);
 	background-color: #091722;
-	background-image:
-		linear-gradient(to right, rgba(51, 72, 89, 0.24) 1px, transparent 1px),
-		linear-gradient(to right, rgba(71, 99, 119, 0.52) 1px, transparent 1px);
-	background-size:
-		var(--guide-hour-width) 100%,
-		var(--guide-day-width) 100%;
+	background-image: linear-gradient(to right, rgba(51, 72, 89, 0.24) 1px, transparent 1px);
+	background-size: var(--guide-hour-width) 100%;
+}
+
+.guide-day-boundary {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	z-index: 2;
+	border-left: 1px solid rgba(71, 99, 119, 0.52);
+	pointer-events: none;
 }
 
 .guide-empty-day {

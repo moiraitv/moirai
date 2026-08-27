@@ -23,6 +23,21 @@ export function shiftDateKey(value: string, amount: number): string {
 		.join('-');
 }
 
+/** Shift a local date by calendar months while clamping month-end overflow. */
+export function shiftCalendarMonths(value: Date, amount: number): Date {
+	const shifted = new Date(value);
+	const desiredDay = shifted.getDate();
+	shifted.setDate(1);
+	shifted.setMonth(shifted.getMonth() + amount);
+	const finalDay = new Date(
+		shifted.getFullYear(),
+		shifted.getMonth() + 1,
+		0,
+	).getDate();
+	shifted.setDate(Math.min(desiredDay, finalDay));
+	return shifted;
+}
+
 /** Format an ISO calendar date without allowing a local-zone day shift. */
 export function formatDateKey(
 	value: string,

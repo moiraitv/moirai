@@ -45,6 +45,7 @@ import {
 	templateSlotStyle,
 } from '../channel-schedule-display';
 import { dateKey } from '../date-key';
+import { guideSegmentPercent, guideWindowMilliseconds } from '../guide-geometry';
 import { programColorStyle } from '../program-colors';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
@@ -78,6 +79,9 @@ const quickEditingTemplateId = ref<string | null>(null);
 const saving = ref(false);
 const error = ref('');
 const preview = ref<TimelinePreview | null>(null);
+const previewWindowMilliseconds = computed(() => preview.value
+	? guideWindowMilliseconds(preview.value.startDate, preview.value.days, preview.value.timeZone)
+	: 0);
 const previewing = ref(false);
 const listGuideError = ref('');
 const guideExpanded = ref(false);
@@ -915,7 +919,11 @@ onBeforeUnmount(() => {
 									:class="`role-${segment.role}`"
 									:style="{
 										...programColorStyle(segment.programId),
-										width: `${Math.max(0.3, (Date.parse(segment.finish) - Date.parse(segment.start)) / 864000)}%`,
+										width: `${guideSegmentPercent(
+											segment.start,
+											segment.finish,
+											previewWindowMilliseconds,
+										)}%`,
 									}"
 									:title="`${segment.title}\n${segment.start}–${segment.finish}`"
 								>

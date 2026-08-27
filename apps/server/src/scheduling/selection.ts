@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
-import type {
-	ProgramConfig,
-	SchedulableMedia,
-	SchedulingCatalog,
-	SchedulingProgram,
-	SelectionStateRecord,
-	SelectionStateValue,
-	TimelineIssue,
+import {
+	MAX_MEDIA_DURATION_MILLISECONDS,
+	type ProgramConfig,
+	type SchedulableMedia,
+	type SchedulingCatalog,
+	type SchedulingProgram,
+	type SelectionStateRecord,
+	type SelectionStateValue,
+	type TimelineIssue,
 } from '@moirai/shared';
 import { stableJson, stableJsonFingerprint } from './stable-json.js';
 
@@ -45,6 +46,16 @@ export interface SelectionContext {
 /** Derive a repeatable numeric value from a string seed. */
 function deterministicNumber(value: string): number {
 	return Number.parseInt(createHash('sha256').update(value).digest('hex').slice(0, 12), 16);
+}
+
+/** Return whether a measured duration remains exact and within the playback scheduling limit. */
+function usableDurationSeconds(value: number | null): value is number {
+	if (value === null || !Number.isFinite(value) || value <= 0) {
+		return false;
+	}
+
+	const milliseconds = Math.round(value * 1_000);
+	return Number.isSafeInteger(milliseconds) && milliseconds <= MAX_MEDIA_DURATION_MILLISECONDS;
 }
 
 /** Deep-copy selection state before evaluating a scheduling branch. */
@@ -322,10 +333,10 @@ function candidatesFor(
 	const unavailableIds = new Set(unavailable.map((media) => media.id));
 	const candidates = matching.filter((media) => !unavailableIds.has(media.id));
 	const missingDuration = candidates.filter(
-		(media) => !media.durationSeconds || media.durationSeconds <= 0,
+		(media) => !usableDurationSeconds(media.durationSeconds),
 	);
 	const playable = candidates
-		.filter((media) => media.durationSeconds !== null && media.durationSeconds > 0)
+		.filter((media) => usableDurationSeconds(media.durationSeconds))
 		.sort(mediaOrder);
 	context.candidateCache.set(programId, {
 		playable,

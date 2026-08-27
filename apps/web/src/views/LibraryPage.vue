@@ -56,6 +56,7 @@ import StatusPill from '../components/StatusPill.vue';
 import { liveEvents } from '../live-events';
 import { isLibrarySourceUnavailable } from '../library-health';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../media-labels';
+import { shiftCalendarMonths } from '../date-key';
 import { useLibrariesStore } from '../stores/libraries';
 
 const route = useRoute();
@@ -324,14 +325,12 @@ function dateWindowBounds(key: string): Pick<MediaQuery, 'addedFrom' | 'addedBef
 		return { addedFrom: new Date(now.getFullYear(), now.getMonth(), 1).toISOString() };
 	}
 
-	const sixMonths = new Date(today);
-	sixMonths.setMonth(sixMonths.getMonth() - 6);
+	const sixMonths = shiftCalendarMonths(today, -6);
 	if (key === 'older') {
 		return { addedBefore: sixMonths.toISOString() };
 	}
 
-	const start = new Date(today);
-	start.setMonth(start.getMonth() - (key === 'three-months' ? 3 : 6));
+	const start = shiftCalendarMonths(today, key === 'three-months' ? -3 : -6);
 	return { addedFrom: start.toISOString() };
 }
 

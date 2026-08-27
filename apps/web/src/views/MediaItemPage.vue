@@ -24,6 +24,7 @@ import LoadingState from '../components/LoadingState.vue';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { errorMessage } from '../error-message';
 import { hideBrokenImage } from '../image-error';
+import { compactDurationLabel } from '../duration-format';
 
 const route = useRoute();
 const router = useRouter();
@@ -58,13 +59,7 @@ const hasCredits = computed(() =>
 
 /** Format media duration into a compact hours-and-minutes label. */
 function duration(value: number | null): string {
-	if (value === null) {
-		return 'Unknown runtime';
-	}
-
-	const hours = Math.floor(value / 3600);
-	const minutes = Math.round((value % 3600) / 60);
-	return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+	return compactDurationLabel(value, 'Unknown runtime');
 }
 
 /** Format byte length using an appropriate binary unit. */
