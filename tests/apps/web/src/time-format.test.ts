@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { instantLabel, scheduleClockLabel } from '@web/time-format';
+import { instantLabel, missingSinceLabel, scheduleClockLabel } from '@web/time-format';
 
 describe('time formatting', () => {
 	it('formats schedule seconds and preserves an authored day end when requested', () => {
@@ -21,5 +21,14 @@ describe('time formatting', () => {
 		}).format(new Date(value));
 
 		expect(instantLabel(value, options, 'America/Los_Angeles')).toBe(expected);
+	});
+
+	it('keeps recent missing durations compact before switching to a short date', () => {
+		const reference = new Date('2026-08-26T12:00:00.000Z');
+		expect(missingSinceLabel('2026-08-26T11:59:30.000Z', reference)).toBe('Missing just now');
+		expect(missingSinceLabel('2026-08-26T11:48:00.000Z', reference)).toBe('Missing for 12m');
+		expect(missingSinceLabel('2026-08-26T07:00:00.000Z', reference)).toBe('Missing for 5h');
+		expect(missingSinceLabel('2026-08-23T12:00:00.000Z', reference)).toBe('Missing for 3d');
+		expect(missingSinceLabel('2026-08-19T12:00:00.000Z', reference)).toMatch(/^Missing since /);
 	});
 });

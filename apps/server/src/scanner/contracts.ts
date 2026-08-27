@@ -28,6 +28,30 @@ export interface ScanContext {
 	onProgress: (progress: ScanProgress) => void;
 }
 
+/** One missing logical item and the physical source paths that previously composed it. */
+export interface MissingItemPresenceTarget {
+	itemId: string;
+	stableKey: string;
+	relativePaths: string[];
+}
+
+/** Provider result for one targeted missing-item presence check. */
+export interface MissingItemPresenceObservation {
+	itemId: string;
+	status: 'present' | 'absent' | 'inconclusive';
+}
+
+/** Source identity and bounded observations returned without performing full discovery. */
+export interface MissingItemPresenceCheck {
+	sourceIdentity: SourceIdentity;
+	observations: MissingItemPresenceObservation[];
+}
+
+/** Cancellation state supplied to a targeted provider presence check. */
+export interface PresenceCheckContext {
+	signal: AbortSignal;
+}
+
 /** Callbacks used by an optional provider-specific live change monitor. */
 export interface SourceWatcherCallbacks {
 	onChange: () => void;
@@ -49,6 +73,11 @@ export interface LibrarySourceAdapter {
 	validateConfig(config: unknown): Promise<void>;
 	configurationImpact(previous: unknown, next: unknown): SourceConfigurationImpact;
 	discover(library: Library, context: ScanContext): Promise<ScanDiscovery>;
+	checkPresence?(
+		library: Library,
+		targets: MissingItemPresenceTarget[],
+		context: PresenceCheckContext,
+	): Promise<MissingItemPresenceCheck>;
 	createWatcher?(
 		library: Library,
 		callbacks: SourceWatcherCallbacks,

@@ -901,7 +901,7 @@ const unsubscribe = liveEvents.subscribe((event) => {
 			void router.push('/libraries');
 		}
 		else {
-			scheduleLiveRefresh(false);
+			scheduleLiveRefresh(event.data.affectsProgramming === true);
 		}
 		return;
 	}

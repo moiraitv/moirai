@@ -19,7 +19,7 @@ export type ApiDescriptionDocument = Record<string, unknown>;
 /** Event names and operator-facing explanations included in AsyncAPI HTML. */
 const liveEventDescriptions = [
 	['system.ready', 'Confirms the connection and supplies its stable connection identifier.'],
-	['library.changed', 'Reports library configuration, watcher, or source-detection changes.'],
+	['library.changed', 'Reports library configuration, watcher, source-detection, or reconciliation changes.'],
 	['scan.changed', 'Reports scan lifecycle, progress, counts, and programming impact.'],
 	['channel.changed', 'Reports channel creation, updates, and deletion.'],
 	['playback.changed', 'Reports playback process and playout synchronization changes.'],

@@ -1,5 +1,11 @@
 import type { Logger } from 'pino';
-import type { Library, ScanProgress, ScanRun } from '@moirai/shared';
+import {
+	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
+	WATCHER_INTEGRITY_SCAN_INTERVAL_MINUTES,
+	type Library,
+	type ScanProgress,
+	type ScanRun,
+} from '@moirai/shared';
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import { Repository } from '../repository/index.js';
 import type { ResourcePressureCoordinator } from '../operations/resource-pressure.js';
@@ -15,7 +21,9 @@ import { LibrarySourceRegistry } from './source-registry.js';
 interface LibraryRuntime {
 	watcher?: SourceWatcher;
 	watcherDesired?: boolean;
-	interval?: NodeJS.Timeout;
+	timer?: NodeJS.Timeout;
+	integrityAnchorAt: number;
+	presenceAttemptedAt?: number;
 	debounce?: NodeJS.Timeout;
 	watcherRetry?: NodeJS.Timeout;
 	watcherRetryAttempts?: number;
@@ -28,9 +36,9 @@ export interface ScannerHealth {
 }
 
 /**
- * Coordinate one watcher and one coalesced, cancellable scan per library. The manager serializes
- * library lifecycle changes, owns scan progress and cancellation, and publishes source changes that
- * may affect programming.
+ * Coordinate provider watchers, completion-relative integrity scans, lightweight missing-item
+ * confirmation, and one coalesced cancellable full scan per library. The manager owns lifecycle,
+ * retry, progress, cancellation, and publication of source changes that may affect programming.
  */
 export class ScannerManager {
 	/** Minimum delay between live progress events from the same scan. */
@@ -39,6 +47,8 @@ export class ScannerManager {
 	private readonly libraryOperations = new Map<string, Promise<void>>();
 	private readonly activeScans = new Map<string, Promise<ScanRun>>();
 	private readonly scanControllers = new Map<string, AbortController>();
+	private readonly activePresenceChecks = new Map<string, Promise<void>>();
+	private readonly presenceControllers = new Map<string, AbortController>();
 	private readonly queuedTriggers = new Map<string, ScanRun['trigger']>();
 	private readonly stoppedLibraries = new Set<string>();
 	private readonly lastProgress = new Map<string, ScanProgress>();
@@ -148,13 +158,13 @@ export class ScannerManager {
 			return;
 		}
 
-		const runtime: LibraryRuntime = {};
+		const completedAt = library.lastScanCompletedAt
+			? Date.parse(library.lastScanCompletedAt)
+			: Number.NaN;
+		const runtime: LibraryRuntime = {
+			integrityAnchorAt: Number.isFinite(completedAt) ? completedAt : Date.now(),
+		};
 		runtime.watcherDesired = library.watcherEnabled && Boolean(adapter.createWatcher);
-		runtime.interval = setInterval(
-			() => this.launchScan(library.id, 'periodic'),
-			library.scanIntervalMinutes * 60_000,
-		);
-		runtime.interval.unref();
 		this.runtimes.set(library.id, runtime);
 		if (this.closing || this.stoppedLibraries.has(libraryId)) {
 			await this.stopLibraryRuntime(libraryId);
@@ -167,6 +177,7 @@ export class ScannerManager {
 		else {
 			await this.setWatcherStatus(library.id, 'stopped');
 		}
+		await this.scheduleNextWork(library.id);
 	}
 
 	/** Request a library scan and surface its current status. */
@@ -177,7 +188,9 @@ export class ScannerManager {
 
 		const active = this.activeScans.get(libraryId);
 		if (active) {
-			this.queuedTriggers.set(libraryId, trigger);
+			if (trigger !== 'periodic') {
+				this.queuedTriggers.set(libraryId, trigger);
+			}
 			return active;
 		}
 
@@ -190,14 +203,181 @@ export class ScannerManager {
 			if (this.scanControllers.get(libraryId) === controller) {
 				this.scanControllers.delete(libraryId);
 			}
+			const runtime = this.runtimes.get(libraryId);
+			if (runtime) {
+				runtime.integrityAnchorAt = Date.now();
+				delete runtime.presenceAttemptedAt;
+			}
 			const queued = this.queuedTriggers.get(libraryId);
 			if (queued && !this.stoppedLibraries.has(libraryId) && !this.closing) {
 				this.queuedTriggers.delete(libraryId);
 				this.launchScan(libraryId, queued);
 			}
+			else {
+				void this.scheduleNextWork(libraryId).catch(() => undefined);
+			}
 		});
 		this.activeScans.set(libraryId, operation);
 		return operation;
+	}
+
+	/** Schedule the earliest integrity scan or ordinary missing-item presence check. */
+	private async scheduleNextWork(libraryId: string): Promise<void> {
+		const runtime = this.runtimes.get(libraryId);
+		if (!runtime || this.closing || this.stoppedLibraries.has(libraryId)) {
+			return;
+		}
+
+		if (runtime.timer) {
+			clearTimeout(runtime.timer);
+			delete runtime.timer;
+		}
+		const library = await this.repository.getLibraryScanTarget(libraryId);
+		if (!library?.enabled || this.runtimes.get(libraryId) !== runtime) {
+			return;
+		}
+
+		const batch = await this.repository.getMissingItemPresenceBatch(libraryId);
+		const integrityIntervalMinutes = runtime.watcher
+			? WATCHER_INTEGRITY_SCAN_INTERVAL_MINUTES
+			: library.scanIntervalMinutes;
+		const integrityDueAt = runtime.integrityAnchorAt + integrityIntervalMinutes * 60_000;
+		const attemptedPresenceDueAt = runtime.presenceAttemptedAt === undefined
+			? 0
+			: runtime.presenceAttemptedAt + REMOVAL_CONFIRMATION_INTERVAL_MINUTES * 60_000;
+		const presenceDueAt = batch
+			? Math.max(Date.parse(batch.nextCheckAt), attemptedPresenceDueAt)
+			: Number.POSITIVE_INFINITY;
+		const dueAt = Math.min(integrityDueAt, presenceDueAt);
+		runtime.timer = setTimeout(() => {
+			delete runtime.timer;
+			void this.runScheduledWork(libraryId).catch(() => undefined);
+		}, Math.max(0, dueAt - Date.now()));
+		runtime.timer.unref();
+	}
+
+	/** Run due background work without queuing a periodic scan behind active work. */
+	private async runScheduledWork(libraryId: string): Promise<void> {
+		const runtime = this.runtimes.get(libraryId);
+		if (!runtime || this.closing || this.stoppedLibraries.has(libraryId)) {
+			return;
+		}
+
+		if (this.activeScans.has(libraryId) || this.activePresenceChecks.has(libraryId)) {
+			return;
+		}
+		const library = await this.repository.getLibraryScanTarget(libraryId);
+		if (!library?.enabled) {
+			return;
+		}
+
+		const batch = await this.repository.getMissingItemPresenceBatch(libraryId);
+		const integrityIntervalMinutes = runtime.watcher
+			? WATCHER_INTEGRITY_SCAN_INTERVAL_MINUTES
+			: library.scanIntervalMinutes;
+		const integrityDueAt = runtime.integrityAnchorAt + integrityIntervalMinutes * 60_000;
+		const attemptedPresenceDueAt = runtime.presenceAttemptedAt === undefined
+			? 0
+			: runtime.presenceAttemptedAt + REMOVAL_CONFIRMATION_INTERVAL_MINUTES * 60_000;
+		const presenceDueAt = batch
+			? Math.max(Date.parse(batch.nextCheckAt), attemptedPresenceDueAt)
+			: Number.POSITIVE_INFINITY;
+		const now = Date.now();
+		if (Math.min(integrityDueAt, presenceDueAt) > now) {
+			await this.scheduleNextWork(libraryId);
+			return;
+		}
+
+		if (integrityDueAt <= presenceDueAt) {
+			this.launchScan(libraryId, 'periodic');
+			return;
+		}
+
+		this.launchPresenceCheck(libraryId);
+	}
+
+	/** Start one path-only missing-item check and contain asynchronous failures. */
+	private launchPresenceCheck(libraryId: string): void {
+		if (this.activePresenceChecks.has(libraryId)) {
+			return;
+		}
+
+		const controller = new AbortController();
+		this.presenceControllers.set(libraryId, controller);
+		const runtime = this.runtimes.get(libraryId);
+		if (runtime) {
+			runtime.presenceAttemptedAt = Date.now();
+		}
+		const operation = this.performPresenceCheck(libraryId, controller.signal).finally(() => {
+			this.activePresenceChecks.delete(libraryId);
+			if (this.presenceControllers.get(libraryId) === controller) {
+				this.presenceControllers.delete(libraryId);
+			}
+			if (!this.activeScans.has(libraryId)) {
+				void this.scheduleNextWork(libraryId).catch(() => undefined);
+			}
+		});
+		this.activePresenceChecks.set(libraryId, operation);
+	}
+
+	/** Reconcile only current tombstone paths without creating a scan-history record. */
+	private async performPresenceCheck(libraryId: string, signal: AbortSignal): Promise<void> {
+		const [library, batch] = await Promise.all([
+			this.repository.getLibraryScanTarget(libraryId),
+			this.repository.getMissingItemPresenceBatch(libraryId),
+		]);
+		if (!library || !batch) {
+			return;
+		}
+
+		try {
+			const adapter = this.sources.require(library.sourceType);
+			if (!adapter.checkPresence) {
+				this.launchScan(libraryId, 'periodic');
+				return;
+			}
+
+			const checked = await adapter.checkPresence(library, batch.targets, { signal });
+			signal.throwIfAborted();
+			const reconciled = await this.repository.applyMissingItemPresence(
+				libraryId,
+				batch.revision,
+				checked.sourceIdentity,
+				checked.observations,
+			);
+			if (reconciled.removedItemIds.length > 0 && this.purgeRemovedArtwork) {
+				await this.purgeRemovedArtwork(libraryId, reconciled.removedItemIds).catch(() => undefined);
+			}
+			if (reconciled.removedItemIds.length > 0) {
+				this.repository.invalidateSchedulingCatalog();
+			}
+			if (reconciled.changed) {
+				this.events.publish({
+					type: 'library.changed',
+					data: {
+						libraryId,
+						change: 'reconciled',
+						affectsProgramming: reconciled.removedItemIds.length > 0,
+					},
+				});
+			}
+
+			const needsFullScan = !reconciled.applied
+				|| reconciled.presentItemIds.length > 0
+				|| checked.observations.some((entry) => entry.status === 'inconclusive');
+			if (needsFullScan) {
+				this.launchScan(libraryId, 'watcher');
+			}
+		}
+		catch (error) {
+			if (!signal.aborted) {
+				this.logger?.warn(
+					{ libraryId, error },
+					'Targeted missing-item presence check failed; starting a full scan',
+				);
+				this.launchScan(libraryId, 'periodic');
+			}
+		}
 	}
 
 	/** Run one discovery and reconciliation pass for a library. */
@@ -292,10 +472,12 @@ export class ScannerManager {
 		this.stoppedLibraries.add(libraryId);
 		this.queuedTriggers.delete(libraryId);
 		this.scanControllers.get(libraryId)?.abort();
+		this.presenceControllers.get(libraryId)?.abort();
 		const stopping = this.runLibraryOperation(libraryId, () => this.stopLibraryRuntime(libraryId));
 		const active = this.activeScans.get(libraryId);
+		const activePresence = this.activePresenceChecks.get(libraryId);
 		await this.waitForWork(
-			active ? [stopping, active] : [stopping],
+			[stopping, ...(active ? [active] : []), ...(activePresence ? [activePresence] : [])],
 			`library ${libraryId} shutdown`,
 		);
 		this.queuedTriggers.delete(libraryId);
@@ -308,8 +490,9 @@ export class ScannerManager {
 			return;
 		}
 
-		if (runtime.interval) {
-			clearInterval(runtime.interval);
+		this.runtimes.delete(libraryId);
+		if (runtime.timer) {
+			clearTimeout(runtime.timer);
 		}
 		if (runtime.debounce) {
 			clearTimeout(runtime.debounce);
@@ -317,7 +500,8 @@ export class ScannerManager {
 		if (runtime.watcherRetry) {
 			clearTimeout(runtime.watcherRetry);
 		}
-		this.runtimes.delete(libraryId);
+		this.presenceControllers.get(libraryId)?.abort();
+		await this.activePresenceChecks.get(libraryId)?.catch(() => undefined);
 		if (runtime.watcher) {
 			await this.closeWatcher(libraryId, runtime, runtime.watcher);
 		}
@@ -335,12 +519,16 @@ export class ScannerManager {
 		for (const controller of this.scanControllers.values()) {
 			controller.abort();
 		}
+		for (const controller of this.presenceControllers.values()) {
+			controller.abort();
+		}
 		const runtimeStops = [...this.runtimes.keys()].map((id) => this.stopLibraryRuntime(id));
 		await this.waitForWork(
 			[
 				...runtimeStops,
 				...this.libraryOperations.values(),
 				...this.activeScans.values(),
+				...this.activePresenceChecks.values(),
 			],
 			'scanner shutdown',
 		);
@@ -561,6 +749,7 @@ export class ScannerManager {
 			type: 'library.changed',
 			data: { libraryId, change: 'watcher-status', watcherStatus },
 		});
+		await this.scheduleNextWork(libraryId);
 	}
 
 	/** Record a watched source change, notify clients, and request a coalesced scan. */

@@ -21,3 +21,32 @@ export function instantLabel(
 ): string {
 	return new Intl.DateTimeFormat(undefined, { ...options, timeZone }).format(new Date(value));
 }
+
+/** Format how long an indexed item has been missing without producing a wide status label. */
+export function missingSinceLabel(value: string, reference = new Date()): string {
+	const elapsedMilliseconds = Math.max(0, reference.getTime() - Date.parse(value));
+	const elapsedMinutes = Math.floor(elapsedMilliseconds / 60_000);
+	if (elapsedMinutes < 1) {
+		return 'Missing just now';
+	}
+
+	if (elapsedMinutes < 60) {
+		return `Missing for ${elapsedMinutes}m`;
+	}
+
+	const elapsedHours = Math.floor(elapsedMinutes / 60);
+	if (elapsedHours < 24) {
+		return `Missing for ${elapsedHours}h`;
+	}
+
+	const elapsedDays = Math.floor(elapsedHours / 24);
+	if (elapsedDays < 7) {
+		return `Missing for ${elapsedDays}d`;
+	}
+
+	return `Missing since ${new Intl.DateTimeFormat(undefined, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric',
+	}).format(new Date(value))}`;
+}

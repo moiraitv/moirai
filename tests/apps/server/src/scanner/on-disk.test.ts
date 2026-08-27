@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
 import { MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
 import { MediaProbeError } from '@server/media/media-probe.js';
-import { discoverOnDisk } from '@server/scanner/on-disk.js';
+import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 
 const roots: string[] = [];
 async function library(typeKey = 'movies'): Promise<Library> {
@@ -41,6 +41,27 @@ afterEach(async () => {
 });
 
 describe('discoverOnDisk', () => {
+	it('checks only supplied missing-item paths and accepts any present multipart file', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Restored.mkv'), 'video');
+
+		const result = await checkOnDiskPresence(fixture.sourceConfig.scanRoot, [
+			{ itemId: 'restored', stableKey: 'restored', relativePaths: ['Restored.mkv'] },
+			{ itemId: 'missing', stableKey: 'missing', relativePaths: ['Missing.mkv'] },
+			{
+				itemId: 'multipart',
+				stableKey: 'multipart',
+				relativePaths: ['Missing Part 1.mkv', 'Restored.mkv'],
+			},
+		]);
+
+		expect(result.observations).toEqual([
+			{ itemId: 'restored', status: 'present' },
+			{ itemId: 'missing', status: 'absent' },
+			{ itemId: 'multipart', status: 'present' },
+		]);
+	});
+
 	it('processes duplicate filesystem entries only once', async () => {
 		const fixture = await library();
 		const mediaPath = path.join(fixture.sourceConfig.scanRoot, 'Duplicate.mp4');

@@ -8,5 +8,6 @@ export function affectsGuide(event: LiveEvent): boolean {
 		|| event.type === 'scheduling.changed'
 		|| event.type === 'timeline.changed'
 		|| (event.type === 'scan.changed' && event.data.affectsProgramming)
+		|| (event.type === 'library.changed' && event.data.affectsProgramming === true)
 	);
 }

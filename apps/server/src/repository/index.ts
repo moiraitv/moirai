@@ -48,6 +48,8 @@ export type {
 	MediaBrowseQuery,
 	MediaFileOwner,
 	MediaProbeCacheEntry,
+	MissingItemPresenceBatch,
+	ReconciledPresenceCheck,
 	MediaSourcePickerQuery,
 	ScanHistoryRetention,
 	ReconciledScan,

@@ -6,19 +6,22 @@ import {
 import type { MediaProbe } from '../media/media-probe.js';
 import type {
 	LibrarySourceAdapter,
+	MissingItemPresenceTarget,
+	PresenceCheckContext,
 	ScanContext,
 	ScanDiscovery,
 	SourceWatcher,
 	SourceWatcherCallbacks,
 } from './contracts.js';
 import { InvalidLibrarySourceConfigurationError } from './contracts.js';
-import { discoverOnDisk } from './on-disk.js';
+import { checkOnDiskPresence, discoverOnDisk } from './on-disk.js';
 import { createSourceWatcher } from './source-watcher.js';
 
 /**
  * Expose filesystem discovery and watching through the provider-neutral source adapter contract.
- * This adapter validates on-disk configuration, classifies path changes, and delegates bounded media
- * probing without making the scanner manager depend on filesystem details.
+ * This adapter validates on-disk configuration, classifies path changes, checks targeted file
+ * presence, and delegates bounded media probing without making the scanner manager depend on
+ * filesystem details.
  */
 export class OnDiskSourceAdapter implements LibrarySourceAdapter {
 	readonly sourceType = 'on-disk';
@@ -65,6 +68,15 @@ export class OnDiskSourceAdapter implements LibrarySourceAdapter {
 				}
 				: {}),
 		});
+	}
+
+	/** Check only the physical paths belonging to current missing-item tombstones. */
+	async checkPresence(
+		library: Library,
+		targets: MissingItemPresenceTarget[],
+		context: PresenceCheckContext,
+	) {
+		return checkOnDiskPresence(library.sourceConfig.scanRoot, targets, context.signal);
 	}
 
 	/** Monitor the configured directory using the platform filesystem watcher. */

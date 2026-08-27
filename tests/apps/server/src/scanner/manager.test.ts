@@ -1,11 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Library, ScanRun } from '@moirai/shared';
 import type { Repository } from '@server/repository/index.js';
 import type { LibrarySourceAdapter } from '@server/scanner/contracts.js';
 import { ScannerManager } from '@server/scanner/manager.js';
 import { LibrarySourceRegistry } from '@server/scanner/source-registry.js';
 
-const mocks = vi.hoisted(() => ({ discoverOnDisk: vi.fn(), createSourceWatcher: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+	discoverOnDisk: vi.fn(),
+	checkPresence: vi.fn(),
+	createSourceWatcher: vi.fn(),
+}));
 
 function sourceRegistry(watchable = true): LibrarySourceRegistry {
 	const adapter: LibrarySourceAdapter = {
@@ -13,6 +17,7 @@ function sourceRegistry(watchable = true): LibrarySourceRegistry {
 		validateConfig: vi.fn().mockResolvedValue(undefined),
 		configurationImpact: vi.fn().mockReturnValue('none'),
 		discover: (target, context) => mocks.discoverOnDisk(target, context),
+		checkPresence: (target, paths, context) => mocks.checkPresence(target, paths, context),
 		...(watchable
 			? {
 				createWatcher: (
@@ -65,7 +70,212 @@ const running: ScanRun = {
 describe('ScannerManager', () => {
 	beforeEach(() => {
 		mocks.discoverOnDisk.mockReset();
+		mocks.checkPresence.mockReset();
 		mocks.createSourceWatcher.mockReset();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('uses the fallback interval only while live watching is unavailable', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'));
+		const fallbackLibrary = { ...library, scanIntervalMinutes: 180 };
+		const completed = {
+			...running,
+			trigger: 'periodic' as const,
+			status: 'complete' as const,
+			completedAt: new Date().toISOString(),
+			removedItemIds: [],
+		};
+		const repository = {
+			getLibraryScanTarget: vi.fn().mockResolvedValue(fallbackLibrary),
+			getMissingItemPresenceBatch: vi.fn().mockResolvedValue(null),
+			setWatcherStatus: vi.fn().mockResolvedValue(undefined),
+			beginScan: vi.fn().mockResolvedValue({ ...running, trigger: 'periodic' }),
+			reconcileScan: vi.fn().mockResolvedValue(completed),
+			invalidateSchedulingCatalog: vi.fn(),
+		} as unknown as Repository;
+		mocks.discoverOnDisk.mockResolvedValue({
+			groups: [],
+			items: [],
+			issues: [],
+			traversalComplete: true,
+			sourceIdentity: { sourceType: 'on-disk', sourceKey: '/media', details: {} },
+			conflicts: [],
+		});
+		const manager = new ScannerManager(repository, { publish: vi.fn() }, sourceRegistry());
+
+		await manager.refreshLibrary(library.id);
+		await vi.advanceTimersByTimeAsync(179 * 60_000);
+		expect(repository.beginScan).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.waitFor(() => expect(repository.beginScan).toHaveBeenCalledOnce());
+
+		await manager.close();
+		vi.useRealTimers();
+	});
+
+	it('uses a daily integrity interval while the watcher is healthy', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'));
+		const watchedLibrary = { ...library, watcherEnabled: true, scanIntervalMinutes: 180 };
+		const completed = {
+			...running,
+			trigger: 'periodic' as const,
+			status: 'complete' as const,
+			completedAt: new Date().toISOString(),
+			removedItemIds: [],
+		};
+		const repository = {
+			getLibraryScanTarget: vi.fn().mockResolvedValue(watchedLibrary),
+			getMissingItemPresenceBatch: vi.fn().mockResolvedValue(null),
+			setWatcherStatus: vi.fn().mockResolvedValue(undefined),
+			beginScan: vi.fn().mockResolvedValue({ ...running, trigger: 'periodic' }),
+			reconcileScan: vi.fn().mockResolvedValue(completed),
+			invalidateSchedulingCatalog: vi.fn(),
+		} as unknown as Repository;
+		mocks.createSourceWatcher.mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
+		mocks.discoverOnDisk.mockResolvedValue({
+			groups: [],
+			items: [],
+			issues: [],
+			traversalComplete: true,
+			sourceIdentity: { sourceType: 'on-disk', sourceKey: '/media', details: {} },
+			conflicts: [],
+		});
+		const manager = new ScannerManager(repository, { publish: vi.fn() }, sourceRegistry());
+
+		await manager.refreshLibrary(library.id);
+		await vi.advanceTimersByTimeAsync(180 * 60_000);
+		expect(repository.beginScan).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1_260 * 60_000);
+		await vi.waitFor(() => expect(repository.beginScan).toHaveBeenCalledOnce());
+
+		await manager.close();
+		vi.useRealTimers();
+	});
+
+	it('checks only current missing paths after 30 minutes without creating a scan run', async () => {
+		vi.useFakeTimers();
+		const startedAt = new Date('2026-08-26T00:00:00.000Z');
+		vi.setSystemTime(startedAt);
+		const watchedLibrary = {
+			...library,
+			watcherEnabled: true,
+			scanIntervalMinutes: 180,
+			reconciliationStatus: 'observing-removals' as const,
+			pendingRemovalCount: 1,
+		};
+		const batch = {
+			revision: 'presence-revision',
+			nextCheckAt: new Date(startedAt.getTime() + 30 * 60_000).toISOString(),
+			targets: [{ itemId: 'missing', stableKey: 'movie', relativePaths: ['Movie.mkv'] }],
+		};
+		const repository = {
+			getLibraryScanTarget: vi.fn().mockResolvedValue(watchedLibrary),
+			getMissingItemPresenceBatch: vi.fn().mockResolvedValue(batch),
+			setWatcherStatus: vi.fn().mockResolvedValue(undefined),
+			applyMissingItemPresence: vi.fn().mockResolvedValue({
+				applied: true,
+				changed: true,
+				removedItemIds: [],
+				presentItemIds: [],
+				pendingRemovalCount: 1,
+			}),
+			beginScan: vi.fn(),
+			invalidateSchedulingCatalog: vi.fn(),
+		} as unknown as Repository;
+		mocks.createSourceWatcher.mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
+		mocks.checkPresence.mockResolvedValue({
+			sourceIdentity: { sourceType: 'on-disk', sourceKey: '/media', details: {} },
+			observations: [{ itemId: 'missing', status: 'absent' }],
+		});
+		const publish = vi.fn();
+		const manager = new ScannerManager(repository, { publish }, sourceRegistry());
+
+		await manager.refreshLibrary(library.id);
+		await vi.advanceTimersByTimeAsync(30 * 60_000);
+		await vi.waitFor(() => expect(mocks.checkPresence).toHaveBeenCalledOnce());
+		expect(mocks.checkPresence).toHaveBeenCalledWith(
+			expect.objectContaining({ id: library.id }),
+			batch.targets,
+			expect.objectContaining({ signal: expect.any(AbortSignal) }),
+		);
+		expect(repository.beginScan).not.toHaveBeenCalled();
+		expect(publish).toHaveBeenCalledWith({
+			type: 'library.changed',
+			data: {
+				libraryId: library.id,
+				change: 'reconciled',
+				affectsProgramming: false,
+			},
+		});
+
+		await manager.close();
+		vi.useRealTimers();
+	});
+
+	it('starts one normal scan when a targeted check finds a missing file again', async () => {
+		vi.useFakeTimers();
+		const startedAt = new Date('2026-08-26T00:00:00.000Z');
+		vi.setSystemTime(startedAt);
+		const watchedLibrary = {
+			...library,
+			watcherEnabled: true,
+			reconciliationStatus: 'observing-removals' as const,
+			pendingRemovalCount: 1,
+		};
+		const batch = {
+			revision: 'presence-revision',
+			nextCheckAt: new Date(startedAt.getTime() + 30 * 60_000).toISOString(),
+			targets: [{ itemId: 'missing', stableKey: 'movie', relativePaths: ['Movie.mkv'] }],
+		};
+		const completed = {
+			...running,
+			trigger: 'watcher' as const,
+			status: 'complete' as const,
+			completedAt: new Date().toISOString(),
+			removedItemIds: [],
+		};
+		const repository = {
+			getLibraryScanTarget: vi.fn().mockResolvedValue(watchedLibrary),
+			getMissingItemPresenceBatch: vi.fn().mockResolvedValue(batch),
+			setWatcherStatus: vi.fn().mockResolvedValue(undefined),
+			applyMissingItemPresence: vi.fn().mockResolvedValue({
+				applied: true,
+				changed: false,
+				removedItemIds: [],
+				presentItemIds: ['missing'],
+				pendingRemovalCount: 1,
+			}),
+			beginScan: vi.fn().mockResolvedValue({ ...running, trigger: 'watcher' }),
+			reconcileScan: vi.fn().mockResolvedValue(completed),
+			invalidateSchedulingCatalog: vi.fn(),
+		} as unknown as Repository;
+		mocks.createSourceWatcher.mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
+		mocks.checkPresence.mockResolvedValue({
+			sourceIdentity: { sourceType: 'on-disk', sourceKey: '/media', details: {} },
+			observations: [{ itemId: 'missing', status: 'present' }],
+		});
+		mocks.discoverOnDisk.mockResolvedValue({
+			groups: [],
+			items: [],
+			issues: [],
+			traversalComplete: true,
+			sourceIdentity: { sourceType: 'on-disk', sourceKey: '/media', details: {} },
+			conflicts: [],
+		});
+		const manager = new ScannerManager(repository, { publish: vi.fn() }, sourceRegistry());
+
+		await manager.refreshLibrary(library.id);
+		await vi.advanceTimersByTimeAsync(30 * 60_000);
+		await vi.waitFor(() => expect(repository.beginScan).toHaveBeenCalledOnce());
+		expect(repository.beginScan).toHaveBeenCalledWith(library.id, 'watcher');
+
+		await manager.close();
+		vi.useRealTimers();
 	});
 
 	it('falls back to periodic scans when watcher startup exhausts resources', async () => {
@@ -76,6 +286,7 @@ describe('ScannerManager', () => {
 		};
 		const repository = {
 			getLibraryScanTarget: vi.fn().mockResolvedValue(watchedLibrary),
+			getMissingItemPresenceBatch: vi.fn().mockResolvedValue(null),
 			setWatcherStatus: vi.fn().mockResolvedValue(undefined),
 		} as unknown as Repository;
 		mocks.createSourceWatcher.mockRejectedValue(
@@ -103,6 +314,7 @@ describe('ScannerManager', () => {
 		const unwatchedLibrary = { ...library, watcherEnabled: true };
 		const repository = {
 			getLibraryScanTarget: vi.fn().mockResolvedValue(unwatchedLibrary),
+			getMissingItemPresenceBatch: vi.fn().mockResolvedValue(null),
 			setWatcherStatus: vi.fn().mockResolvedValue(undefined),
 		} as unknown as Repository;
 		const manager = new ScannerManager(

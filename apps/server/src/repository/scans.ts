@@ -32,7 +32,10 @@ import type {
 	CatalogConflictObservation,
 	ScanHistoryRetention,
 	ReconciledScan,
+	MissingItemPresenceBatch,
+	ReconciledPresenceCheck,
 } from './contracts.js';
+import type { MissingItemPresenceObservation } from '../scanner/contracts.js';
 import { preserveGroupIdentities } from './scan-identities.js';
 
 /**
@@ -667,6 +670,177 @@ export abstract class ScanRepository {
 			candidateSummary: state.candidateSummary ?? null,
 			missingItems,
 		};
+	}
+
+	/** Return every physical path currently awaiting ordinary missing-item confirmation. */
+	async getMissingItemPresenceBatch(libraryId: string): Promise<MissingItemPresenceBatch | null> {
+		const [state] = await this.db
+			.select({
+				status: libraries.reconciliationStatus,
+				revision: libraries.reconciliationRevision,
+			})
+			.from(libraries)
+			.where(eq(libraries.id, libraryId));
+		if (state?.status !== 'observing-removals' || !state.revision) {
+			return null;
+		}
+
+		const rows = await this.db
+			.select({
+				itemId: mediaItems.id,
+				stableKey: mediaItems.stableKey,
+				relativePath: mediaItems.relativePath,
+				parts: mediaItems.parts,
+				firstMissingAt: mediaRemovalTombstones.firstMissingAt,
+				lastCountedAt: mediaRemovalTombstones.lastCountedAt,
+			})
+			.from(mediaRemovalTombstones)
+			.innerJoin(mediaItems, eq(mediaItems.id, mediaRemovalTombstones.itemId))
+			.where(eq(mediaRemovalTombstones.libraryId, libraryId));
+		if (rows.length === 0) {
+			return null;
+		}
+
+		const intervalMilliseconds = REMOVAL_CONFIRMATION_INTERVAL_MINUTES * 60_000;
+		const nextCheckAt = new Date(Math.min(...rows.map(
+			(row) => Date.parse(row.lastCountedAt ?? row.firstMissingAt) + intervalMilliseconds,
+		))).toISOString();
+		return {
+			revision: state.revision,
+			nextCheckAt,
+			targets: rows.map((row) => ({
+				itemId: row.itemId,
+				stableKey: row.stableKey,
+				relativePaths: [...new Set(
+					row.parts.length > 0
+						? row.parts.map((part) => part.relativePath)
+						: [row.relativePath],
+				)],
+			})),
+		};
+	}
+
+	/** Apply conclusive path-only observations when their reconciliation revision is still current. */
+	async applyMissingItemPresence(
+		libraryId: string,
+		revision: string,
+		sourceIdentity: SourceIdentity,
+		observations: MissingItemPresenceObservation[],
+	): Promise<ReconciledPresenceCheck> {
+		const timestamp = currentTimestamp();
+		const identityHash = sourceIdentityHash(sourceIdentity);
+		const observationByItem = new Map(observations.map((entry) => [entry.itemId, entry.status]));
+		const result = this.db.transaction((tx): ReconciledPresenceCheck => {
+			// Recheck source and reconciliation ownership inside the write transaction.
+			const [state] = tx
+				.select({
+					status: libraries.reconciliationStatus,
+					revision: libraries.reconciliationRevision,
+					warningCount: libraries.warningCount,
+				})
+				.from(libraries)
+				.where(eq(libraries.id, libraryId))
+				.all();
+			const tombstones = tx
+				.select()
+				.from(mediaRemovalTombstones)
+				.where(eq(mediaRemovalTombstones.libraryId, libraryId))
+				.all();
+			if (
+				state?.status !== 'observing-removals'
+				|| state.revision !== revision
+				|| tombstones.length === 0
+				|| tombstones.some((entry) => entry.sourceIdentityHash !== identityHash)
+			) {
+				return {
+					applied: false,
+					changed: false,
+					removedItemIds: [],
+					presentItemIds: [],
+					pendingRemovalCount: tombstones.length,
+				};
+			}
+
+			// Advance only conclusive absent observations that satisfy the safety interval.
+			const minimumObservationMs = REMOVAL_CONFIRMATION_INTERVAL_MINUTES * 60_000;
+			const presentItemIds: string[] = [];
+			const removableIds: string[] = [];
+			let changed = false;
+			for (const tombstone of tombstones) {
+				const observation = observationByItem.get(tombstone.itemId) ?? 'inconclusive';
+				if (observation === 'present') {
+					presentItemIds.push(tombstone.itemId);
+					continue;
+				}
+
+				if (observation !== 'absent') {
+					continue;
+				}
+
+				const enoughTimeElapsed = !tombstone.lastCountedAt
+					|| Date.parse(timestamp) - Date.parse(tombstone.lastCountedAt) >= minimumObservationMs;
+				const consecutiveObservations = enoughTimeElapsed
+					? tombstone.consecutiveObservations + 1
+					: tombstone.consecutiveObservations;
+				tx.update(mediaRemovalTombstones)
+					.set({
+						lastMissingAt: timestamp,
+						lastCountedAt: enoughTimeElapsed ? timestamp : tombstone.lastCountedAt,
+						consecutiveObservations,
+					})
+					.where(eq(mediaRemovalTombstones.itemId, tombstone.itemId))
+					.run();
+				changed ||= enoughTimeElapsed;
+				if (consecutiveObservations >= REMOVAL_CONFIRMATION_OBSERVATIONS) {
+					removableIds.push(tombstone.itemId);
+				}
+			}
+
+			// Delete confirmed items and move the library to its next reconciliation revision.
+			if (removableIds.length > 0) {
+				tx.delete(mediaItems).where(inArray(mediaItems.id, removableIds)).run();
+				tx.run(sql`DELETE FROM media_groups
+          WHERE library_id = ${libraryId}
+          AND NOT EXISTS (
+            SELECT 1 FROM media_items WHERE media_items.group_id = media_groups.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM media_groups AS child_groups
+            JOIN media_items AS child_items ON child_items.group_id = child_groups.id
+            WHERE child_groups.parent_id = media_groups.id
+          )`);
+			}
+
+			const pendingRemovalCount = tombstones.length - removableIds.length;
+			if (changed) {
+				tx.update(libraries)
+					.set({
+						reconciliationStatus: pendingRemovalCount === 0 ? 'idle' : 'observing-removals',
+						reconciliationRevision: pendingRemovalCount === 0 ? null : randomUUID(),
+						pendingRemovalCount,
+						lastIndexedChangeAt: removableIds.length > 0 ? timestamp : undefined,
+						warningCount: pendingRemovalCount === 0
+							? Math.max(0, state.warningCount - 1)
+							: state.warningCount,
+						updatedAt: timestamp,
+					})
+					.where(and(eq(libraries.id, libraryId), eq(libraries.reconciliationRevision, revision)))
+					.run();
+			}
+
+			return {
+				applied: true,
+				changed,
+				removedItemIds: removableIds,
+				presentItemIds,
+				pendingRemovalCount,
+			};
+		});
+		if (result.removedItemIds.length > 0) {
+			this.catalogChanged();
+		}
+
+		return result;
 	}
 
 	/** Apply operator-approved tombstones after validating their revision. */

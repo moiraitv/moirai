@@ -13,7 +13,7 @@ function event(value: Omit<LiveEvent, 'protocolVersion' | 'eventId' | 'occurredA
 }
 
 describe('guide live refresh', () => {
-	it('refreshes for programming-affecting scans but not watcher or playback status', () => {
+	it('refreshes for programming-affecting scans and reconciliations but not status changes', () => {
 		expect(
 			affectsGuide(
 				event({
@@ -34,6 +34,14 @@ describe('guide live refresh', () => {
 				}),
 			),
 		).toBe(true);
+		expect(affectsGuide(event({
+			type: 'library.changed',
+			data: {
+				libraryId: randomUUID(),
+				change: 'reconciled',
+				affectsProgramming: true,
+			},
+		}))).toBe(true);
 		expect(affectsGuide(event({
 			type: 'playback.changed',
 			data: { channelId: null, reason: 'settings-changed' },

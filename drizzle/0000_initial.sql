@@ -4,7 +4,7 @@ CREATE TABLE `libraries` (
   `type_key` text NOT NULL,
   `source_type` text NOT NULL,
   `source_config` text NOT NULL,
-  `scan_interval_minutes` integer DEFAULT 15 NOT NULL,
+  `scan_interval_minutes` integer DEFAULT 180 NOT NULL,
   `watcher_enabled` integer DEFAULT 1 NOT NULL,
   `enabled` integer DEFAULT 1 NOT NULL,
   `watcher_status` text DEFAULT 'stopped' NOT NULL,

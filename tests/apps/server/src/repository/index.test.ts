@@ -215,6 +215,178 @@ describe('Repository scan reconciliation', () => {
 		).toBe(true);
 	});
 
+	it('confirms only tombstoned physical paths without adding scan history', async () => {
+		vi.useFakeTimers();
+		const startedAt = new Date('2026-01-01T00:00:00.000Z');
+		vi.setSystemTime(startedAt);
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-presence-reconciliation-'));
+		const config = loadConfig({
+			dataDir: root,
+			databasePath: path.join(root, 'test.sqlite'),
+			migrationsDir: path.resolve('drizzle'),
+		});
+		const database = createDatabase(config.databasePath, config.migrationsDir);
+		cleanups.push(async () => {
+			database.close();
+			await rm(root, { recursive: true, force: true });
+		});
+		const repository = new Repository(database.db);
+		const library = await repository.createLibrary({
+			name: 'Targeted movies',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: root, playbackRoot: '/media' },
+			scanIntervalMinutes: 180,
+			watcherEnabled: true,
+			enabled: true,
+		});
+		const missing = {
+			...item(1),
+			multipartStatus: 'complete' as const,
+			parts: [
+				{
+					number: 1,
+					kind: 'part' as const,
+					relativePath: 'Movie 1/Movie 1 Part 1.mkv',
+					playbackPath: '/media/Movie 1/Movie 1 Part 1.mkv',
+					durationSeconds: 60,
+					subtitleTracks: [],
+				},
+				{
+					number: 2,
+					kind: 'part' as const,
+					relativePath: 'Movie 1/Movie 1 Part 2.mkv',
+					playbackPath: '/media/Movie 1/Movie 1 Part 2.mkv',
+					durationSeconds: 60,
+					subtitleTracks: [],
+				},
+			],
+		};
+		const retained = item(2);
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'initial'),
+			[],
+			[missing, retained],
+			[],
+			true,
+		);
+		vi.setSystemTime(new Date(startedAt.getTime() + 30 * 60_000));
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'watcher'),
+			[],
+			[retained],
+			[],
+			true,
+		);
+
+		let batch = await repository.getMissingItemPresenceBatch(library.id);
+		expect(batch?.targets).toEqual([{
+			itemId: missing.id,
+			stableKey: missing.stableKey,
+			relativePaths: missing.parts.map((part) => part.relativePath),
+		}]);
+		vi.setSystemTime(new Date(startedAt.getTime() + 60 * 60_000));
+		const second = await repository.applyMissingItemPresence(
+			library.id,
+			batch!.revision,
+			{
+				sourceType: 'on-disk',
+				sourceKey: root,
+				details: { canonicalRoot: root },
+			},
+			[{ itemId: missing.id, status: 'absent' }],
+		);
+		expect(second).toMatchObject({ changed: true, removedItemIds: [], pendingRemovalCount: 1 });
+
+		batch = await repository.getMissingItemPresenceBatch(library.id);
+		vi.setSystemTime(new Date(startedAt.getTime() + 90 * 60_000));
+		const third = await repository.applyMissingItemPresence(
+			library.id,
+			batch!.revision,
+			{
+				sourceType: 'on-disk',
+				sourceKey: root,
+				details: { canonicalRoot: root },
+			},
+			[{ itemId: missing.id, status: 'absent' }],
+		);
+		expect(third).toMatchObject({
+			changed: true,
+			removedItemIds: [missing.id],
+			pendingRemovalCount: 0,
+		});
+		expect(await repository.listScans(library.id)).toHaveLength(2);
+		expect(await repository.getLibrary(library.id)).toMatchObject({
+			itemCount: 1,
+			reconciliationStatus: 'idle',
+			pendingRemovalCount: 0,
+		});
+	});
+
+	it('preserves a tombstone when a targeted check finds its file present', async () => {
+		vi.useFakeTimers();
+		const startedAt = new Date('2026-01-01T00:00:00.000Z');
+		vi.setSystemTime(startedAt);
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-restored-presence-'));
+		const config = loadConfig({
+			dataDir: root,
+			databasePath: path.join(root, 'test.sqlite'),
+			migrationsDir: path.resolve('drizzle'),
+		});
+		const database = createDatabase(config.databasePath, config.migrationsDir);
+		cleanups.push(async () => {
+			database.close();
+			await rm(root, { recursive: true, force: true });
+		});
+		const repository = new Repository(database.db);
+		const library = await repository.createLibrary({
+			name: 'Restored movies',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: root, playbackRoot: null },
+			scanIntervalMinutes: 180,
+			watcherEnabled: true,
+			enabled: true,
+		});
+		const missing = item(1);
+		const retained = item(2);
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'initial'),
+			[],
+			[missing, retained],
+			[],
+			true,
+		);
+		vi.setSystemTime(new Date(startedAt.getTime() + 30 * 60_000));
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'watcher'),
+			[],
+			[retained],
+			[],
+			true,
+		);
+		const batch = await repository.getMissingItemPresenceBatch(library.id);
+		vi.setSystemTime(new Date(startedAt.getTime() + 60 * 60_000));
+
+		const result = await repository.applyMissingItemPresence(
+			library.id,
+			batch!.revision,
+			{ sourceType: 'on-disk', sourceKey: root, details: {} },
+			[{ itemId: missing.id, status: 'present' }],
+		);
+
+		expect(result).toMatchObject({
+			applied: true,
+			changed: false,
+			presentItemIds: [missing.id],
+			removedItemIds: [],
+		});
+		expect(await repository.getLibraryReconciliation(library.id)).toMatchObject({
+			status: 'observing-removals',
+			pendingRemovalCount: 1,
+		});
+	});
+
 	it('requires explicit reconciliation for an empty populated source', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-empty-reconciliation-'));
 		const config = loadConfig({

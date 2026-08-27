@@ -308,10 +308,31 @@
 
 .reconciliation-items article {
 	padding: 10px 12px;
-	display: flex;
-	justify-content: space-between;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(76px, 116px);
+	align-items: start;
 	gap: 16px;
 	border-bottom: 1px solid var(--line);
+}
+
+.reconciliation-item-detail {
+	min-width: 0;
+}
+
+.reconciliation-item-detail small {
+	overflow-wrap: anywhere;
+}
+
+.reconciliation-missing-label {
+	justify-self: end;
+	max-width: 116px;
+	font-size: 0.75rem;
+	line-height: 1.25;
+	text-align: right;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
 }
 
 .reconciliation-items article:last-of-type {

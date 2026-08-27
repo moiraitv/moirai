@@ -6,14 +6,22 @@ import type { Library } from '@moirai/shared';
 import type { MediaProbe } from '@server/media/media-probe.js';
 import { OnDiskSourceAdapter } from '@server/scanner/on-disk-adapter.js';
 
-const mocks = vi.hoisted(() => ({ discover: vi.fn(), createWatcher: vi.fn() }));
-vi.mock('@server/scanner/on-disk.js', () => ({ discoverOnDisk: mocks.discover }));
+const mocks = vi.hoisted(() => ({
+	checkPresence: vi.fn(),
+	discover: vi.fn(),
+	createWatcher: vi.fn(),
+}));
+vi.mock('@server/scanner/on-disk.js', () => ({
+	checkOnDiskPresence: mocks.checkPresence,
+	discoverOnDisk: mocks.discover,
+}));
 vi.mock('@server/scanner/source-watcher.js', () => ({ createSourceWatcher: mocks.createWatcher }));
 
 const roots: string[] = [];
 
 afterEach(async () => {
 	mocks.discover.mockReset();
+	mocks.checkPresence.mockReset();
 	mocks.createWatcher.mockReset();
 	await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -99,6 +107,25 @@ describe('OnDiskSourceAdapter', () => {
 				probeMedia: expect.any(Function),
 			}),
 		);
+	});
+
+	it('delegates targeted paths without invoking discovery or the media probe', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-adapter-'));
+		roots.push(root);
+		const probe = { concurrencyLimit: 3, probe: vi.fn() } as unknown as MediaProbe;
+		const adapter = new OnDiskSourceAdapter(probe);
+		const targets = [{ itemId: 'missing', stableKey: 'movie', relativePaths: ['Movie.mkv'] }];
+		const checked = {
+			sourceIdentity: { sourceType: 'on-disk', sourceKey: root, details: {} },
+			observations: [{ itemId: 'missing', status: 'absent' as const }],
+		};
+		mocks.checkPresence.mockResolvedValue(checked);
+		const signal = new AbortController().signal;
+
+		await expect(adapter.checkPresence(library(root), targets, { signal })).resolves.toBe(checked);
+		expect(mocks.checkPresence).toHaveBeenCalledWith(root, targets, signal);
+		expect(mocks.discover).not.toHaveBeenCalled();
+		expect(probe.probe).not.toHaveBeenCalled();
 	});
 
 	it('delegates optional live monitoring to the filesystem watcher', async () => {

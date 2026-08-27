@@ -289,7 +289,9 @@ export class TimelineMaterializer {
 	/** Mark timelines dirty when scheduling or playable catalog inputs change. */
 	handleEvent(event: LiveEvent): void {
 		const relevantScan = event.type === 'scan.changed' && event.data.affectsProgramming;
-		if (event.type === 'scheduling.changed' || relevantScan) {
+		const relevantReconciliation
+			= event.type === 'library.changed' && event.data.affectsProgramming;
+		if (event.type === 'scheduling.changed' || relevantScan || relevantReconciliation) {
 			this.dirty = true;
 			this.revision += 1;
 			void this.runNow().catch(() => undefined);

@@ -20,6 +20,7 @@ import type {
 	SourceIdentity,
 	TimelineIssue,
 } from '@moirai/shared';
+import { DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES } from '@moirai/shared';
 
 /** Shared creation and update columns used by mutable application records. */
 const timestamps = {
@@ -46,7 +47,9 @@ export const libraries = sqliteTable('libraries', {
 	sourceConfig: text('source_config', { mode: 'json' })
 		.$type<LibraryCreate['sourceConfig']>()
 		.notNull(),
-	scanIntervalMinutes: integer('scan_interval_minutes').notNull().default(15),
+	scanIntervalMinutes: integer('scan_interval_minutes')
+		.notNull()
+		.default(DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES),
 	watcherEnabled: integer('watcher_enabled', { mode: 'boolean' }).notNull().default(true),
 	enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
 	watcherStatus: text('watcher_status').notNull().default('stopped'),

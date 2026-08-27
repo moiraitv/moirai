@@ -45,7 +45,11 @@ import {
 	type ParsedVideoFilename,
 } from './video-filename.js';
 import { collapseMultipartItems } from './multipart.js';
-import type { ScanDiscovery } from './contracts.js';
+import type {
+	MissingItemPresenceCheck,
+	MissingItemPresenceTarget,
+	ScanDiscovery,
+} from './contracts.js';
 
 /** Cancellation and limit controls applied while walking a library. */
 interface DiscoveryOptions {
@@ -96,6 +100,48 @@ export async function identifyOnDiskSource(
 			inode: String(info.ino),
 		},
 	};
+}
+
+/** Check only previously indexed physical media paths without traversing or reading the source. */
+export async function checkOnDiskPresence(
+	scanRoot: string,
+	targets: MissingItemPresenceTarget[],
+	signal?: AbortSignal,
+): Promise<MissingItemPresenceCheck> {
+	const sourceIdentity = await identifyOnDiskSource(scanRoot, signal);
+	const observations = [] as MissingItemPresenceCheck['observations'];
+	for (const target of targets) {
+		let sawInconclusive = false;
+		let present = false;
+		for (const relativePath of target.relativePaths) {
+			throwIfCancelled(signal);
+			try {
+				const source = await openSourceFile(scanRoot, relativePath);
+				await source.handle.close();
+				present = true;
+				break;
+			}
+			catch (error) {
+				if (signal?.aborted) {
+					throw error;
+				}
+
+				if (
+					!(error instanceof SourceFileError)
+					|| !['missing', 'not-file', 'symlink'].includes(error.reason)
+				) {
+					sawInconclusive = true;
+				}
+			}
+		}
+
+		observations.push({
+			itemId: target.itemId,
+			status: present ? 'present' : sawInconclusive ? 'inconclusive' : 'absent',
+		});
+	}
+
+	return { sourceIdentity, observations };
 }
 
 /** Return the first readable non-symlink file from the candidates. */

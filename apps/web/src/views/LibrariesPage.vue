@@ -2,7 +2,11 @@
 import { onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { Film, FolderOpen, Music2, Plus, TvMinimal, Unplug } from '@lucide/vue';
-import type { Library, LibraryCreate } from '@moirai/shared';
+import {
+	DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
+	type Library,
+	type LibraryCreate,
+} from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
@@ -21,7 +25,7 @@ const form = reactive<LibraryCreate>({
 	typeKey: 'movies',
 	sourceType: 'on-disk',
 	sourceConfig: { scanRoot: '', playbackRoot: null },
-	scanIntervalMinutes: 15,
+	scanIntervalMinutes: DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
 	watcherEnabled: true,
 	enabled: true,
 });
@@ -104,9 +108,9 @@ onMounted(() => void librariesStore.load());
 			><input v-model="form.sourceConfig.playbackRoot" placeholder="/media/movies"
 			/></label>
 			<label
-			><span>Safety scan, minutes</span
+			><span>Fallback scan, minutes</span
 			><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080"
-			/></label>
+			/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
 			<label class="check"
 			><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label
 			>

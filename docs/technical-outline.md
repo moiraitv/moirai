@@ -96,10 +96,11 @@ It recursively discovers a public list of supported video extensions beneath a c
 root.
 
 The server registers library source adapters behind one scanner contract. Each adapter owns source
-configuration validation, identity, normalized discovery, and an optional live change watcher. The
-scanner manager owns provider-independent scheduling, cancellation, progress, retry, reconciliation,
-and source-health publication. Only the on-disk adapter is registered today; filesystem traversal,
-technical probing, and watcher creation remain contained within that adapter.
+configuration validation, identity, normalized discovery, optional targeted presence checks, and an
+optional live change watcher. The scanner manager owns provider-independent scheduling,
+cancellation, progress, retry, reconciliation, and source-health publication. Only the on-disk
+adapter is registered today; filesystem traversal, technical probing, path-only presence checks, and
+watcher creation remain contained within that adapter.
 
 Source identities use a provider type and stable provider-defined key, with diagnostics stored
 separately. For on-disk sources, the canonical root is the stable key while device and inode remain
@@ -229,15 +230,23 @@ Enabled libraries use live filesystem events as the primary change signal:
 
 - macOS uses one recursive FSEvents stream.
 - Other supported platforms use Chokidar.
-- A periodic scan, every 15 minutes by default, remains active as a safety net.
+- A full integrity scan runs daily while the watcher is healthy.
 
 Events are debounced into reconciliation scans. Unsupported filesystems and watcher resource errors
-switch the library to a visible periodic-scan fallback with exponential watcher retries. A manual
-scan is always available.
+switch the library to a visible periodic-scan fallback, every three hours by default, with
+exponential watcher retries. A manual scan is always available. Full background scans are scheduled
+from completion and are not queued behind an active scan.
 
 Only one scan per library runs at a time. Overlapping requests are coalesced and deduplicated.
 Traversal, probing, library deletion, and shutdown support cooperative cancellation. Watcher closure,
 queued library operations, and active scans share a bounded cancellation grace period.
+
+Ordinary missing items receive three healthy observations at least 30 minutes apart before removal.
+After the first full scan identifies a missing item, follow-up observations check only the physical
+paths stored for current tombstones. These checks verify source identity and file presence without
+traversing the library, parsing metadata, processing artwork, probing media, or adding scan-history
+records. A restored or inconclusive path requests a normal reconciliation scan. Large removals and
+source-identity changes continue to require explicit operator approval.
 
 ### Resource pressure
 
@@ -259,9 +268,10 @@ One incomplete network listing must not erase the catalog. When an indexed item 
 
 1. It becomes unavailable immediately.
 2. Moirai creates a tombstone bound to the accepted source root.
-3. Ordinary deletion requires three complete, healthy observations at least 15 minutes apart.
+3. Ordinary deletion requires three conclusive observations at least 30 minutes apart.
 4. A partial or failed scan breaks the confirmation streak.
-5. Reappearance clears the tombstone immediately.
+5. A targeted check that finds the file again requests a normal scan, which clears the tombstone and
+   refreshes its indexed metadata.
 
 Large changes require explicit review. This includes:
 

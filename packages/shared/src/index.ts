@@ -26,10 +26,14 @@ export const MEDIA_EXTENSIONS = [
 	'.ts',
 	'.webm',
 ] as const;
-/** Healthy scan observations required before an ordinary missing item is deleted. */
+/** Conclusive source observations required before an ordinary missing item is deleted. */
 export const REMOVAL_CONFIRMATION_OBSERVATIONS = 3;
-/** Minimum spacing between healthy observations that confirm a removal. */
-export const REMOVAL_CONFIRMATION_INTERVAL_MINUTES = 15;
+/** Minimum spacing between conclusive observations that confirm a removal. */
+export const REMOVAL_CONFIRMATION_INTERVAL_MINUTES = 30;
+/** Default interval for full scans while live source monitoring is unavailable. */
+export const DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES = 180;
+/** Daily full-scan interval used as an integrity check while live monitoring is healthy. */
+export const WATCHER_INTEGRITY_SCAN_INTERVAL_MINUTES = 1_440;
 /** Missing-item count above which a large change requires operator reconciliation. */
 export const MAJOR_REMOVAL_COUNT = 10;
 /** Missing-item ratio above which a large change requires operator reconciliation. */
@@ -68,7 +72,8 @@ export const libraryCreateSchema = z.object({
 	typeKey: libraryTypeSchema,
 	sourceType: sourceTypeSchema,
 	sourceConfig: onDiskSourceConfigSchema,
-	scanIntervalMinutes: z.number().int().min(1).max(10_080).default(15),
+	scanIntervalMinutes: z.number().int().min(1).max(10_080)
+		.default(DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES),
 	watcherEnabled: z.boolean().default(true),
 	enabled: z.boolean().default(true),
 });
@@ -204,12 +209,14 @@ export const libraryChangeSchema = z.enum([
 	'deleted',
 	'watcher-status',
 	'change-detected',
+	'reconciled',
 ]);
 /** Validate the library event data contract at runtime. */
 export const libraryEventDataSchema = z.object({
 	libraryId: idSchema,
 	change: libraryChangeSchema,
 	watcherStatus: watcherStatusSchema.optional(),
+	affectsProgramming: z.boolean().optional(),
 });
 /** Validate the scan event data contract at runtime. */
 export const scanEventDataSchema = z.object({

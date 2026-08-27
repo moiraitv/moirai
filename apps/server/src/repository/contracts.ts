@@ -11,6 +11,7 @@ import type {
 	TimelineIssue,
 	TimelineSegment,
 } from '@moirai/shared';
+import type { MissingItemPresenceTarget } from '../scanner/contracts.js';
 
 /** Filters, ordering, and paging accepted by catalog browsing. */
 export interface MediaBrowseQuery {
@@ -47,6 +48,22 @@ export interface ReconciledScan extends ScanRun {
 export interface ScanHistoryRetention {
 	scanDays: number;
 	scansPerLibrary: number;
+}
+
+/** Current ordinary-removal revision and its provider-facing targeted presence work. */
+export interface MissingItemPresenceBatch {
+	revision: string;
+	nextCheckAt: string;
+	targets: MissingItemPresenceTarget[];
+}
+
+/** Atomic result of applying a targeted presence observation to current tombstones. */
+export interface ReconciledPresenceCheck {
+	applied: boolean;
+	changed: boolean;
+	removedItemIds: string[];
+	presentItemIds: string[];
+	pendingRemovalCount: number;
 }
 
 /** Bounded catalog query used by program source pickers. */
