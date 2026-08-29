@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "24.x"
+    "node": ">=24.8 <25"
   },
   "workspaces": [
     "apps/*",
@@ -16,9 +16,10 @@
     "fsevents": true
   },
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
     "build": "npm run build -w @moirai/shared && npm run build -w @moirai/ersatztv-contract && npm run build -w @moirai/server && npm run build -w @moirai/web",
     "start": "npm run start -w @moirai/server",
+    "auth:reset": "node --env-file-if-exists=.env apps/server/dist/auth-reset.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

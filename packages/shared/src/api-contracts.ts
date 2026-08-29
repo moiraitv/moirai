@@ -458,10 +458,57 @@ export const appCapabilitiesSchema = z.object({
 	sourceTypes: z.array(z.string()),
 	mediaExtensions: z.array(z.string()),
 	etvContractRevision: z.string(),
-	authentication: z.literal('trusted-network'),
+	authentication: z.literal('session'),
 	timeZone: z.string(),
 	publicUrl: z.url(),
 	publicUrlStatus: z.enum(['configured', 'unreachable-default']),
+});
+
+/** Safe administrator identity returned after local or Logto authentication. */
+export const authenticationIdentitySchema = z.object({
+	id: z.uuid(),
+	provider: z.enum(['local', 'logto']),
+	displayName: z.string().min(1).max(200),
+	username: z.string().nullable(),
+});
+
+/** Current initialization and browser-session state. */
+export const authenticationStateSchema = z.object({
+	status: z.enum(['uninitialized', 'anonymous', 'authenticated']),
+	methods: z.object({
+		local: z.boolean(),
+		logto: z.boolean(),
+	}),
+	localUsername: z.string().nullable(),
+	identity: authenticationIdentitySchema.nullable(),
+	csrfToken: z.string().nullable(),
+});
+
+/** Local administrator username boundary applied before and after canonical normalization. */
+export const localAuthenticationUsernameSchema = z.string().trim().min(3).max(64);
+
+/** First local administrator credentials accepted before any identity exists. */
+export const localAuthenticationSetupSchema = z.object({
+	username: localAuthenticationUsernameSchema,
+	password: z.string().min(15).max(256),
+});
+
+/** Local credentials exchanged for one revocable browser session. */
+export const localAuthenticationLoginSchema = localAuthenticationSetupSchema;
+
+/** Existing or new local credentials changed by an authenticated administrator. */
+export const localAuthenticationCredentialsSchema = localAuthenticationSetupSchema.extend({
+	currentPassword: z.string().min(1).max(256).nullable(),
+});
+
+/** One-time operator recovery code and replacement local credentials. */
+export const localAuthenticationRecoverySchema = localAuthenticationSetupSchema.extend({
+	token: z.string().min(32).max(512),
+});
+
+/** Safe relative destination retained through a provider redirect. */
+export const authenticationReturnQuerySchema = z.object({
+	returnTo: z.string().max(2_048).optional(),
 });
 
 /** Lightweight process-liveness response. */

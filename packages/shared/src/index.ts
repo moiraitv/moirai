@@ -45,10 +45,33 @@ export interface AppCapabilities {
 	sourceTypes: string[];
 	mediaExtensions: string[];
 	etvContractRevision: string;
-	authentication: 'trusted-network';
+	authentication: 'session';
 	timeZone: string;
 	publicUrl: string;
 	publicUrlStatus: 'configured' | 'unreachable-default';
+}
+
+/** Authentication providers that can establish a full-access administrator session. */
+export type AuthenticationProvider = 'local' | 'logto';
+
+/** Safe administrator identity returned to the authenticated browser. */
+export interface AuthenticationIdentity {
+	id: string;
+	provider: AuthenticationProvider;
+	displayName: string;
+	username: string | null;
+}
+
+/** Current initialization, login-method, and administrator-session state. */
+export interface AuthenticationState {
+	status: 'uninitialized' | 'anonymous' | 'authenticated';
+	methods: {
+		local: boolean;
+		logto: boolean;
+	};
+	localUsername: string | null;
+	identity: AuthenticationIdentity | null;
+	csrfToken: string | null;
 }
 
 /** Validate the id contract at runtime. */
@@ -196,6 +219,8 @@ export type ScanIssue = z.infer<typeof scanIssueSchema>;
 
 /** Version of the bounded WebSocket event envelope shared with the SPA. */
 export const LIVE_EVENT_PROTOCOL_VERSION = 1 as const;
+/** Private-use WebSocket close code requesting reconnection after intentional session replacement. */
+export const LIVE_EVENT_SESSION_REPLACED_CLOSE_CODE = 4001 as const;
 /** Fields common to every versioned live-event variant. */
 const liveEventEnvelopeShape = {
 	protocolVersion: z.literal(LIVE_EVENT_PROTOCOL_VERSION),

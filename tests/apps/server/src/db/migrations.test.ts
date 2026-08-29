@@ -371,4 +371,49 @@ describe('database compatibility migrations', () => {
 		});
 		sqlite.close();
 	});
+
+	it('creates the final bounded local and OIDC authentication schema', async () => {
+		const sqlite = new Database(':memory:');
+		sqlite.pragma('foreign_keys = ON');
+		const migration = await readFile(path.resolve('drizzle/0016_authentication.sql'), 'utf8');
+		for (const statement of migration.split('--> statement-breakpoint')) {
+			if (statement.trim()) {
+				sqlite.exec(statement);
+			}
+		}
+
+		sqlite.prepare(
+			"INSERT INTO authentication_identities (id, provider, display_name, username, username_key, password_hash) VALUES ('local', 'local', 'Admin', 'Admin', 'admin', 'hash')",
+		).run();
+		expect(() => sqlite.prepare(
+			"INSERT INTO authentication_identities (id, provider, display_name, username, username_key, password_hash) VALUES ('other', 'local', 'Other', 'Other', 'other', 'hash')",
+		).run()).toThrow();
+		sqlite.prepare(
+			"INSERT INTO authentication_sessions VALUES ('token', 'local', 'csrf', NULL, NULL, NULL, 'now', 'now', 'later')",
+		).run();
+		sqlite.prepare(
+			"INSERT INTO authentication_oidc_transactions VALUES ('state', 'binding', 'verifier', 'nonce', '/', 3, 'later')",
+		).run();
+		sqlite.prepare(
+			'INSERT INTO authentication_oidc_logout_generation (id, generation) VALUES (1, 3)',
+		).run();
+		expect(() => sqlite.prepare(
+			'INSERT INTO authentication_oidc_logout_generation (id, generation) VALUES (2, 4)',
+		).run()).toThrow();
+		sqlite.prepare(
+			"INSERT INTO authentication_oidc_logout_tokens (token_hash, expires_at) VALUES ('hash', 'later')",
+		).run();
+		expect(sqlite.prepare(
+			`SELECT binding_hash AS bindingHash, logout_generation AS logoutGeneration
+				FROM authentication_oidc_transactions`,
+		).get()).toEqual({ bindingHash: 'binding', logoutGeneration: 3 });
+		expect(sqlite.prepare(
+			`SELECT provider_configuration_hash AS providerConfigurationHash
+				FROM authentication_sessions`,
+		).get()).toEqual({ providerConfigurationHash: null });
+		sqlite.prepare("DELETE FROM authentication_identities WHERE id = 'local'").run();
+		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM authentication_sessions').get())
+			.toEqual({ count: 0 });
+		sqlite.close();
+	});
 });

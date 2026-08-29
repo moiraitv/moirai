@@ -4,7 +4,9 @@ import {
 	loadConfig,
 	bundledNextRoot,
 	resolveNextDevelopmentRoots,
+	resolveManagementUrl,
 	resolvePublicUrl,
+	resolveTrustedProxies,
 	publicUrlStatus,
 	resolveTimeZone,
 } from '@server/config.js';
@@ -38,6 +40,31 @@ describe('public URL configuration', () => {
 		);
 	});
 
+	it('allows a management UI on another port of the public origin', () => {
+		expect(resolveManagementUrl(
+			'https://moirai.example.test:5173',
+			'https://moirai.example.test:3000',
+		)).toBe('https://moirai.example.test:5173');
+		expect(resolveManagementUrl(undefined, 'https://moirai.example.test')).toBe(
+			'https://moirai.example.test',
+		);
+
+		vi.stubEnv('MOIRAI_PUBLIC_URL', 'https://moirai.example.test:3000');
+		vi.stubEnv('MOIRAI_MANAGEMENT_URL', 'https://moirai.example.test:5173');
+		expect(loadConfig().managementUrl).toBe('https://moirai.example.test:5173');
+	});
+
+	it('rejects a management origin that cannot receive the public origin cookie', () => {
+		expect(() => resolveManagementUrl(
+			'https://attacker.example.test',
+			'https://moirai.example.test',
+		)).toThrow(/same scheme and hostname/);
+		expect(() => resolveManagementUrl(
+			'http://moirai.example.test',
+			'https://moirai.example.test',
+		)).toThrow(/same scheme and hostname/);
+	});
+
 	it('rejects non-HTTP URLs', () => {
 		expect(() => resolvePublicUrl('file:///tmp/moirai', 3000)).toThrow(/HTTP/);
 	});
@@ -55,7 +82,23 @@ describe('public URL configuration', () => {
 	it('identifies URLs that remote IPTV clients cannot reach', () => {
 		expect(publicUrlStatus('http://127.0.0.1:3000')).toBe('unreachable-default');
 		expect(publicUrlStatus('http://localhost:3000')).toBe('unreachable-default');
+		expect(publicUrlStatus('http://127.attacker.example:3000')).toBe('configured');
 		expect(publicUrlStatus('https://moirai.example.test')).toBe('configured');
+	});
+});
+
+describe('trusted proxy configuration', () => {
+	it('accepts explicit IPs, CIDRs, and named local-network groups', () => {
+		expect(resolveTrustedProxies('127.0.0.1, 10.0.0.0/8, uniquelocal')).toEqual([
+			'127.0.0.1',
+			'10.0.0.0/8',
+			'uniquelocal',
+		]);
+	});
+
+	it('rejects hostnames and invalid network prefixes', () => {
+		expect(() => resolveTrustedProxies('proxy.example.test')).toThrow(/IP addresses/);
+		expect(() => resolveTrustedProxies('10.0.0.0/64')).toThrow(/IP addresses/);
 	});
 });
 
@@ -73,6 +116,37 @@ describe('byte-limit configuration', () => {
 	it('falls back when a megabyte value would overflow finite integer bytes', () => {
 		vi.stubEnv('MOIRAI_LOG_MAX_MB', '1e308');
 		expect(loadConfig().logMaxBytes).toBe(200 * 1024 * 1024);
+	});
+});
+
+describe('Logto authentication configuration', () => {
+	it('requires an all-or-nothing traditional-web application configuration', () => {
+		vi.stubEnv('MOIRAI_LOGTO_ENDPOINT', 'https://tenant.logto.app');
+		expect(() => loadConfig()).toThrow(/configured together/);
+
+		vi.stubEnv('MOIRAI_LOGTO_APP_ID', 'application-id');
+		vi.stubEnv('MOIRAI_LOGTO_APP_SECRET', 'application-secret');
+		expect(loadConfig().logto).toEqual({
+			endpoint: 'https://tenant.logto.app',
+			appId: 'application-id',
+			appSecret: 'application-secret',
+		});
+	});
+
+	it('rejects insecure remote provider endpoints while allowing loopback development', () => {
+		vi.stubEnv('MOIRAI_LOGTO_APP_ID', 'application-id');
+		vi.stubEnv('MOIRAI_LOGTO_APP_SECRET', 'application-secret');
+		vi.stubEnv('MOIRAI_LOGTO_ENDPOINT', 'http://tenant.example.test');
+		expect(() => loadConfig()).toThrow(/HTTPS origin/);
+
+		vi.stubEnv('MOIRAI_LOGTO_ENDPOINT', 'http://127.0.0.1:3001');
+		expect(loadConfig().logto?.endpoint).toBe('http://127.0.0.1:3001');
+
+		vi.stubEnv('MOIRAI_LOGTO_ENDPOINT', 'http://[::1]:3001');
+		expect(loadConfig().logto?.endpoint).toBe('http://[::1]:3001');
+
+		vi.stubEnv('MOIRAI_LOGTO_ENDPOINT', 'http://127.attacker.example');
+		expect(() => loadConfig()).toThrow(/HTTPS origin/);
 	});
 });
 

@@ -112,10 +112,12 @@ export function registerChannelRoutes(
 	});
 	// Managed logo retrieval, validation, and removal.
 	app.get('/api/v1/channels/:id/logo', {
+		config: { authentication: 'public' },
 		schema: apiOperation({
 			operationId: 'getChannelLogo',
 			tags: ['Channel logos'],
 			summary: 'Read a managed channel logo',
+			authentication: 'public',
 			params: idParamsSchema,
 			response: { 200: responseContent('PNG channel logo', 'image/png', binaryBodySchema) },
 			errors: [400, 404, 500, 503],

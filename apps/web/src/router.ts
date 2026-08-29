@@ -10,11 +10,20 @@ import TemplatesPage from './views/TemplatesPage.vue';
 import ChannelSchedulesPage from './views/ChannelSchedulesPage.vue';
 import GuidePage from './views/GuidePage.vue';
 import LogsPage from './views/LogsPage.vue';
+import AuthenticationPage from './views/AuthenticationPage.vue';
+import AccountPage from './views/AccountPage.vue';
 
 /** Module-level router value for router. */
 export const router = createRouter({
 	history: createWebHistory(),
 	routes: [
+		{ path: '/login', component: AuthenticationPage, meta: { publicAuthentication: true } },
+		{ path: '/setup', component: AuthenticationPage, meta: { publicAuthentication: true } },
+		{
+			path: '/recover',
+			component: AuthenticationPage,
+			meta: { publicAuthentication: true, allowAuthenticated: true },
+		},
 		{ path: '/', component: DashboardPage },
 		{ path: '/guide', component: GuidePage },
 		{ path: '/libraries', component: LibrariesPage },
@@ -29,6 +38,7 @@ export const router = createRouter({
 		{ path: '/schedules/programs', component: ProgramsPage },
 		{ path: '/schedules/programs/:id', component: ProgramsPage },
 		{ path: '/settings', component: SettingsPage },
+		{ path: '/account', component: AccountPage },
 		{ path: '/logs', component: LogsPage },
 	],
 });

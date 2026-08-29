@@ -29,6 +29,8 @@ ENV NODE_ENV=production \
     MOIRAI_ETV_CHANNEL_PATH=/app/ersatztv-channel
 COPY --from=node-runtime /usr/local /usr/local
 WORKDIR /moirai
+COPY --from=build --chown=ersatztv:ersatztv /app/package.json ./package.json
+COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build --chown=ersatztv:ersatztv /app/node_modules ./node_modules
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/dist ./apps/server/dist

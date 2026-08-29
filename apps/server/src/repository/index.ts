@@ -25,6 +25,7 @@ import type {
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import { MediaCatalogRepository } from './catalog.js';
+import { AuthenticationRepository } from './authentication.js';
 import { ChannelRepository } from './channels.js';
 import { SchedulingRepository } from './scheduling.js';
 import { SettingsRepository } from './settings.js';
@@ -63,6 +64,8 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Authentication persistence exposed to the cross-cutting authentication service. */
+	readonly authentication: AuthenticationRepository;
 	private readonly catalog: MediaCatalogRepository;
 	private readonly channels: ChannelRepository;
 	private readonly scheduling: SchedulingRepository;
@@ -70,6 +73,7 @@ export class Repository extends LibraryRepository {
 
 	constructor(private readonly database: MoiraiDatabase) {
 		super(database);
+		this.authentication = new AuthenticationRepository(database);
 		this.catalog = new MediaCatalogRepository(database);
 		this.channels = new ChannelRepository(database);
 		this.scheduling = new SchedulingRepository(database);

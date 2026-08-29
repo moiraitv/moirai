@@ -5,6 +5,12 @@ describe('automatic request logging', () => {
 	it('suppresses the routine log-page reads including query variants', () => {
 		expect(suppressRoutineRequestLog('GET', '/api/v1/logs?limit=100')).toBe(true);
 		expect(suppressRoutineRequestLog('get', '/api/v1/logs/files')).toBe(true);
+		expect(
+			suppressRoutineRequestLog(
+				'GET',
+				'/api/v1/auth/logto/callback?code=temporary-code&state=temporary-state',
+			),
+		).toBe(true);
 	});
 
 	it('retains mutations, downloads, and unrelated API access records', () => {

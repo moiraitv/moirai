@@ -304,10 +304,12 @@ export function registerCatalogRoutes(
 	}, serveMediaPreview);
 	// Cached, resized artwork variants for catalog cards and detail views.
 	app.get('/api/v1/artwork/:kind/:id', {
+		config: { authentication: 'public' },
 		schema: apiOperation({
 			operationId: 'getArtwork',
 			tags: ['Catalog artwork'],
 			summary: 'Read a cached artwork variant',
+			authentication: 'public',
 			description: 'Returns a browser-compatible bounded image at 1x, 2x, or 3x display density.',
 			params: artworkParamsSchema,
 			querystring: artworkQuerySchema,

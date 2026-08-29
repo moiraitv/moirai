@@ -180,6 +180,7 @@ export function registerPlaybackRoutes(
 			operationId: 'getChannelPlaylist',
 			tags: ['IPTV delivery'],
 			summary: 'Download the IPTV channel playlist',
+			authentication: 'public',
 			response: { 200: responseContent('Extended M3U channel playlist', 'application/x-mpegurl', textBodySchema) },
 			errors: [500, 503],
 		}),
@@ -194,6 +195,7 @@ export function registerPlaybackRoutes(
 			operationId: 'getChannelMasterPlaylist',
 			tags: ['IPTV delivery'],
 			summary: 'Read a channel HLS master playlist',
+			authentication: 'public',
 			params: channelNumberParamsSchema,
 			response: { 200: responseContent('HLS master playlist', 'application/vnd.apple.mpegurl', textBodySchema) },
 			errors: [400, 404, 500, 503],
@@ -217,6 +219,7 @@ export function registerPlaybackRoutes(
 			operationId: 'getPlaybackSessionFile',
 			tags: ['IPTV delivery'],
 			summary: 'Read a generated HLS session file',
+			authentication: 'public',
 			description: 'Returns a playlist, WebVTT captions, or an MPEG-TS segment based on the validated filename.',
 			params: sessionFileParamsSchema,
 			response: {

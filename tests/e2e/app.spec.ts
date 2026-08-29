@@ -1,6 +1,11 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import {
+	authenticateAdministrator,
+	E2E_ADMIN_PASSWORD,
+	E2E_ADMIN_USERNAME,
+} from './authentication';
 
 const wideLogoSvg = Buffer.from(
 	'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#20c997"/></svg>',
@@ -9,6 +14,7 @@ const posterPng = await readFile(path.resolve('apps/web/src/assets/moirai-logo.p
 
 test('indexes a library and creates a channel', async ({ page }) => {
 	test.setTimeout(120_000);
+	const csrfToken = await authenticateAdministrator(page);
 	const runId = String(Date.now());
 	const libraryName = `E2E Cinema ${runId}`;
 	const channelName = `E2E Channel ${runId}`;
@@ -22,13 +28,18 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	);
 	await writeFile(path.join(mediaRoot, 'poster.png'), posterPng);
 
+	let releaseLibraries: (() => void) | undefined;
+	const librariesGate = new Promise<void>((resolve) => {
+		releaseLibraries = resolve;
+	});
 	await page.route('**/api/v1/libraries', async (route) => {
-		await new Promise((resolve) => setTimeout(resolve, 500));
+		await librariesGate;
 		await route.continue();
 	});
 	await page.goto('/libraries');
 	await expect(page.getByRole('status')).toContainText('Loading libraries');
 	await expect(page.getByText('Build your first library')).toBeHidden();
+	releaseLibraries?.();
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/libraries');
 	await page.getByRole('button', { name: 'Add library' }).click();
@@ -182,6 +193,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		'<episodedetails><title>First Contact</title><season>1</season><episode>1</episode><genre>Sci-Fi</genre><actor><name>Nova Performer</name></actor></episodedetails>',
 	);
 	const showLibraryResponse = await page.request.post('/api/v1/libraries', {
+		headers: { 'x-moirai-csrf': csrfToken },
 		data: {
 			name: `E2E Shows ${runId}`,
 			typeKey: 'shows',
@@ -319,7 +331,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const seasonProgramCard = page.locator('.schedule-resource-card').filter({
 		has: page.getByRole('heading', { name: seasonProgramName, exact: true }),
 	});
-	await expect(seasonProgramCard).toContainText('1 selected shows or seasons');
+	await expect(seasonProgramCard).toContainText('1 selected media groups');
 	await seasonProgramCard
 		.getByRole('link', { name: `Edit ${seasonProgramName}`, exact: true })
 		.click();
@@ -589,6 +601,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 });
 
 test('does not expose playback controls before playback settings load', async ({ page }) => {
+	await authenticateAdministrator(page);
 	let releaseSettings: (() => void) | undefined;
 	const settingsGate = new Promise<void>((resolve) => {
 		releaseSettings = resolve;
@@ -606,12 +619,13 @@ test('does not expose playback controls before playback settings load', async ({
 });
 
 test('uses an accessible navigation drawer on small screens', async ({ page }) => {
+	await authenticateAdministrator(page);
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');
 	const sidebar = page.locator('.sidebar');
 	await page.getByRole('button', { name: 'Open navigation' }).click();
 	await expect(sidebar).toHaveClass(/sidebar-open/);
-	await expect(page.getByRole('link', { name: 'Channels' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Channels', exact: true })).toBeVisible();
 	const guideLink = page.getByRole('link', { name: 'Guide', exact: true });
 	await expect(guideLink).toBeVisible();
 	await guideLink.click();
@@ -636,11 +650,17 @@ test('uses an accessible navigation drawer on small screens', async ({ page }) =
 	await page.getByRole('button', { name: 'Open navigation' }).click();
 	await page.keyboard.press('Escape');
 	await expect(sidebar).not.toHaveClass(/sidebar-open/);
+	await page.getByRole('button', { name: 'Open navigation' }).click();
+	await page.getByRole('link', { name: /Signed in via local/i }).click();
+	await expect(page).toHaveURL(/\/account$/);
+	await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
+	await expect(page.getByLabel('Username')).toHaveValue(E2E_ADMIN_USERNAME);
 });
 
 test('keeps catalog navigation sticky and synchronizes visible anchors with history', async ({
 	page,
 }) => {
+	const csrfToken = await authenticateAdministrator(page);
 	const runId = String(Date.now());
 	const libraryName = `E2E Anchors ${runId}`;
 	const mediaRoot = path.resolve(`test-results/runtime/anchors-${runId}`);
@@ -664,6 +684,7 @@ test('keeps catalog navigation sticky and synchronizes visible anchors with hist
 	);
 
 	const response = await page.request.post('/api/v1/libraries', {
+		headers: { 'x-moirai-csrf': csrfToken },
 		data: {
 			name: libraryName,
 			typeKey: 'movies',
@@ -754,4 +775,12 @@ test('keeps catalog navigation sticky and synchronizes visible anchors with hist
 			return Math.max(headerOffset, toolbarOffset);
 		})
 		.toBeLessThan(2);
+
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.getByRole('button', { name: 'Sign out' }).click();
+	await expect(page).toHaveURL(/\/login$/);
+	await page.getByLabel('Username').fill(E2E_ADMIN_USERNAME);
+	await page.getByLabel('Password').fill(E2E_ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page).toHaveURL(/\/$/);
 });

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ArtworkCache } from '../artwork/artwork-cache.js';
+import type { AuthenticationService } from '../auth/service.js';
 import type { ChannelLogoStore } from '../artwork/channel-logo-store.js';
 import type { AppConfig } from '../config.js';
 import type { EpgService } from '../guide/epg.js';
@@ -12,6 +13,7 @@ import type { ScannerManager } from '../scanner/manager.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import type { TimelineMaterializer } from '../scheduling/timeline-materializer.js';
 import { registerCatalogRoutes } from './catalog.js';
+import { registerAuthenticationRoutes } from './authentication.js';
 import { registerChannelRoutes } from './channels.js';
 import { registerGuideRoutes } from './guide.js';
 import { registerLibraryRoutes } from './libraries.js';
@@ -22,6 +24,7 @@ import { registerSystemRoutes } from './system.js';
 /** Services captured by HTTP handlers after route registration. */
 export interface HttpRouteDependencies {
 	config: AppConfig;
+	authentication: AuthenticationService;
 	repository: Repository;
 	scanner: ScannerManager;
 	playback: PlaybackEngine;
@@ -40,6 +43,7 @@ export function registerHttpRoutes(
 	app: FastifyInstance,
 	dependencies: HttpRouteDependencies,
 ): void {
+	registerAuthenticationRoutes(app, dependencies.config, dependencies.authentication);
 	registerSystemRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);

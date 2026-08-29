@@ -2,7 +2,10 @@ import Fastify from 'fastify';
 import swagger from '@fastify/swagger';
 import websocket from '@fastify/websocket';
 import scalarApiReference from '@scalar/fastify-api-reference';
-import { liveEventSchema } from '@moirai/shared';
+import {
+	LIVE_EVENT_SESSION_REPLACED_CLOSE_CODE,
+	liveEventSchema,
+} from '@moirai/shared';
 import {
 	createJsonSchemaTransform,
 	createJsonSchemaTransformObject,
@@ -15,6 +18,9 @@ import { responseSerializerCompiler } from './routes/contracts.js';
 
 /** JSON-like object used for generated interface-description documents. */
 export type ApiDescriptionDocument = Record<string, unknown>;
+
+/** HTTP methods whose authenticated requests require the session synchronizer token. */
+const csrfProtectedMethods = new Set(['delete', 'patch', 'post', 'put']);
 
 /** Event names and operator-facing explanations included in AsyncAPI HTML. */
 const liveEventDescriptions = [
@@ -38,6 +44,40 @@ function documentationDependencies(): HttpRouteDependencies {
 	return dependency as HttpRouteDependencies;
 }
 
+/**
+ * Add the CSRF header scheme and rejection response to every authenticated unsafe operation in
+ * generated OpenAPI.
+ */
+function documentCsrfProtection(document: ApiDescriptionDocument): void {
+	const paths = document.paths as Record<string, Record<string, {
+		responses?: Record<string, unknown>;
+		security?: Array<Record<string, unknown>>;
+	}>> | undefined;
+	if (!paths) {
+		return;
+	}
+
+	for (const path of Object.values(paths)) {
+		for (const [method, operation] of Object.entries(path)) {
+			if (!csrfProtectedMethods.has(method)) {
+				continue;
+			}
+
+			const cookieRequirement = operation.security?.find((requirement) =>
+				Object.hasOwn(requirement, 'cookieAuth'));
+			if (cookieRequirement) {
+				cookieRequirement.csrfToken = [];
+				if (operation.responses && operation.responses['403'] === undefined) {
+					operation.responses['403'] = {
+						...(operation.responses['401'] as Record<string, unknown>),
+						description: 'Origin or CSRF validation failed',
+					};
+				}
+			}
+		}
+	}
+}
+
 /** Generate OpenAPI from the same Fastify route registrations used in production. */
 export async function createOpenApiDocument(): Promise<ApiDescriptionDocument> {
 	const app = Fastify({ logger: false });
@@ -57,14 +97,35 @@ export async function createOpenApiDocument(): Promise<ApiDescriptionDocument> {
 				title: 'Moirai HTTP API',
 				description: [
 					'Moirai manages media libraries, reusable scheduling rules, channel timelines,',
-					'and IPTV playback on a trusted network.',
+					'and IPTV playback through an authenticated administrator API.',
 					'',
-					'The API currently has no authentication. Do not expose it to an untrusted network.',
+					'IPTV delivery, XMLTV, health checks, and feed artwork remain public.',
 				].join('\n'),
 				version: '0.1.0',
 			},
 			servers: [{ url: '/', description: 'Same origin as the Moirai server' }],
+			components: {
+				securitySchemes: {
+					cookieAuth: {
+						type: 'apiKey',
+						in: 'cookie',
+						name: 'moirai_session',
+						description: 'Opaque administrator session established by local or Logto sign-in.',
+					},
+					csrfToken: {
+						type: 'apiKey',
+						in: 'header',
+						name: 'X-Moirai-CSRF',
+						description: [
+							'Session synchronizer token returned by the authentication-session response.',
+							'Required with the session cookie for authenticated POST, PUT, PATCH, and',
+							'DELETE operations.',
+						].join(' '),
+					},
+				},
+			},
 			tags: [
+				{ name: 'Authentication', description: 'Administrator initialization and sessions.' },
 				{ name: 'System', description: 'Liveness, readiness, capabilities, and live status.' },
 				{ name: 'Logs', description: 'Bounded operational log browsing and downloads.' },
 				{ name: 'Libraries', description: 'Media source configuration.' },
@@ -92,7 +153,9 @@ export async function createOpenApiDocument(): Promise<ApiDescriptionDocument> {
 
 	try {
 		await app.ready();
-		return app.swagger() as ApiDescriptionDocument;
+		const document = app.swagger() as ApiDescriptionDocument;
+		documentCsrfProtection(document);
+		return document;
 	}
 	finally {
 		await app.close();
@@ -115,6 +178,14 @@ export function createAsyncApiDocument(): ApiDescriptionDocument {
 			version: '0.1.0',
 			description: [
 				'Bounded server-to-client status events sent by Moirai.',
+				'Browser upgrades require the configured application origin, and each connection ends',
+				'with policy code 1008 when its administrator session is revoked or expires.',
+				'Clients must stop reconnecting until they authenticate again after that policy close.',
+				`Intentional credential replacement closes with code ${LIVE_EVENT_SESSION_REPLACED_CLOSE_CODE}`,
+				'and requests a reconnect with the replacement cookie.',
+				'Browser clients probe HTTP session state after abnormal closure and stop retrying when',
+				'the authenticated upgrade was rejected. An inconclusive probe has a five-second',
+				'deadline before transport reconnection resumes.',
 				'Clients must recover authoritative state through the HTTP API after reconnecting.',
 			].join(' '),
 		},
@@ -124,7 +195,8 @@ export function createAsyncApiDocument(): ApiDescriptionDocument {
 				host: '{host}',
 				pathname: '/api/v1/events',
 				protocol: 'ws',
-				description: 'Moirai WebSocket endpoint on the same host as the HTTP API.',
+				description: 'Same-origin Moirai WebSocket endpoint on the HTTP API host.',
+				security: [{ $ref: '#/components/securitySchemes/cookieAuth' }],
 				variables: {
 					host: { default: '127.0.0.1:3000', description: 'Moirai HTTP host and port.' },
 				},
@@ -148,6 +220,14 @@ export function createAsyncApiDocument(): ApiDescriptionDocument {
 			},
 		},
 		components: {
+			securitySchemes: {
+				cookieAuth: {
+					type: 'httpApiKey',
+					name: 'moirai_session',
+					in: 'cookie',
+					description: 'Revocable administrator session cookie governing connection lifetime.',
+				},
+			},
 			messages: {
 				liveEvent: {
 					name: 'LiveEvent',

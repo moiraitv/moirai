@@ -1,0 +1,112 @@
+.authentication-shell {
+	min-height: 100vh;
+	display: grid;
+	place-items: center;
+	padding: 32px 20px;
+	background:
+		radial-gradient(circle at 20% 10%, rgba(22, 214, 164, 0.13), transparent 34%), var(--bg);
+}
+
+.authentication-card {
+	width: min(100%, 480px);
+	display: grid;
+	gap: 20px;
+}
+
+.authentication-heading {
+	display: grid;
+	justify-items: center;
+	gap: 8px;
+	text-align: center;
+}
+
+.authentication-heading img {
+	width: 58px;
+	height: 58px;
+	object-fit: contain;
+}
+
+.authentication-heading h1 {
+	margin: 0;
+}
+
+.authentication-form {
+	margin: 0;
+}
+
+.authentication-form .form-actions {
+	justify-content: center;
+}
+
+.authentication-provider {
+	display: grid;
+	gap: 12px;
+	text-align: center;
+	color: var(--muted);
+}
+
+.authentication-provider .button {
+	justify-content: center;
+}
+
+.sidebar-footer {
+	margin-top: 14px;
+	margin-inline: -16px;
+	padding: 14px 20px 0;
+	border-top: 1px solid var(--line);
+}
+
+.sidebar-account {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.sidebar-account-link {
+	min-width: 0;
+	flex: 1;
+	padding: 7px 6px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	border-radius: 7px;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-account-link:hover,
+.sidebar-account-link.router-link-active {
+	color: #f7fafc;
+	background: rgba(16, 35, 49, 0.78);
+}
+
+.sidebar-account-link span {
+	min-width: 0;
+	flex: 1;
+	display: grid;
+	gap: 2px;
+}
+
+.sidebar-account-link small,
+.sidebar-account-link strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sidebar-account-link small {
+	color: var(--muted);
+	text-transform: capitalize;
+}
+
+.sidebar-account-link > svg {
+	flex: 0 0 auto;
+	color: var(--muted);
+}
+
+.account-layout {
+	width: min(100%, 720px);
+}
+
+.account-panel {
+	margin: 0;
+}

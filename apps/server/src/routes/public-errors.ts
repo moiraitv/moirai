@@ -179,6 +179,16 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
+	if (normalized.statusCode === 413 && normalized.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+		return response(
+			requestId,
+			413,
+			'payload_too_large',
+			'Request body exceeds the permitted size',
+			true,
+		);
+	}
+
 	// Preserve safe framework-authored client errors and hide every unexpected failure.
 	if (
 		normalized.expose === true
@@ -186,12 +196,17 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		&& normalized.statusCode >= 400
 		&& normalized.statusCode < 500
 	) {
+		const publicCode = normalized.code?.match(/^[a-z][a-z0-9_]{1,63}$/u)
+			? normalized.code
+			: normalized.statusCode === 404 ? 'not_found' : 'request_failed';
 		return response(
 			requestId,
 			normalized.statusCode,
-			normalized.statusCode === 404 ? 'not_found' : 'request_failed',
+			publicCode,
 			normalized.message,
 			true,
+			undefined,
+			normalized.statusCode === 429 ? '900' : undefined,
 		);
 	}
 

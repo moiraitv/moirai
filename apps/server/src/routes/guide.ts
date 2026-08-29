@@ -180,6 +180,7 @@ export function registerGuideRoutes(
 			operationId: 'getXmltvGuide',
 			tags: ['IPTV delivery'],
 			summary: 'Download the XMLTV guide',
+			authentication: 'public',
 			response: {
 				200: responseContent('XMLTV guide', 'application/xml', textBodySchema),
 				304: emptyResponseSchema,

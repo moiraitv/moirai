@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { authenticateAdministrator } from './authentication';
 
 test('keeps log rows compact and opens structured details on demand', async ({ page }) => {
+	await authenticateAdministrator(page);
 	const firstEntry = {
 		id: 'log-entry-one',
 		time: '2026-08-25T15:24:31.000Z',

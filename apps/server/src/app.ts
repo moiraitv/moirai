@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
-import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
+import formbody from '@fastify/formbody';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
@@ -7,6 +8,9 @@ import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } 
 import { validatorCompiler } from 'fastify-type-provider-zod';
 import { CHANNEL_LOGO_MAX_BYTES } from '@moirai/shared';
 import { ArtworkCache } from './artwork/artwork-cache.js';
+import { registerAuthenticationGuard } from './auth/http.js';
+import { LogtoAuthenticationProvider } from './auth/logto-provider.js';
+import { AuthenticationService } from './auth/service.js';
 import { ChannelLogoStore } from './artwork/channel-logo-store.js';
 import type { AppConfig } from './config.js';
 import type { MoiraiDatabase } from './db/index.js';
@@ -33,6 +37,7 @@ import { responseSerializerCompiler } from './routes/contracts.js';
 
 /** Long-lived services owned by one Fastify application instance. */
 export interface AppServices {
+	authentication: AuthenticationService;
 	repository: Repository;
 	scanner: ScannerManager;
 	playback: PlaybackEngine;
@@ -65,6 +70,7 @@ export async function buildApp(
 	);
 	const app = Fastify({
 		loggerInstance: logs.logger as FastifyBaseLogger,
+		trustProxy: config.trustedProxies.length > 0 ? config.trustedProxies : false,
 		logController: new LogController({
 			disableRequestLogging: (request) =>
 				suppressRoutineRequestLog(request.method, request.url),
@@ -72,7 +78,18 @@ export async function buildApp(
 	});
 
 	const repository = new Repository(db);
-	const events = new LiveEventHub();
+	const authentication = new AuthenticationService(
+		repository,
+		config,
+		logs.logger as FastifyBaseLogger,
+		config.logto ? new LogtoAuthenticationProvider(config.logto) : null,
+	);
+	const events = new LiveEventHub((tokenHash) => authentication.sessionExpiry(tokenHash));
+	const unsubscribeSessionRevocations = authentication.subscribeSessionRevocations(
+		(tokenHashes, reason) => reason === 'replaced'
+			? events.replaceSessions(tokenHashes)
+			: events.revokeSessions(tokenHashes),
+	);
 	const resourcePressure = new ResourcePressureCoordinator(logs.logger);
 
 	// Construct catalog, scanning, and media-inspection services.
@@ -211,16 +228,27 @@ export async function buildApp(
 
 	await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
 	await app.register(sensible);
-	await app.register(cors, { origin: config.host === '127.0.0.1' ? true : false });
+	await app.register(cookie);
+	await app.register(formbody);
+	registerAuthenticationGuard(app, authentication, config);
 
 	// Start and stop background services with the HTTP application lifecycle.
 	app.addHook('onReady', async () => {
+		await authentication.start();
+		if (!(await repository.authentication.initialized())) {
+			logs.logger.warn(
+				{ setupUrl: `${config.managementUrl}/setup` },
+				'Authentication is uninitialized; the first visitor can claim administrator access',
+			);
+		}
 		timelineMaterializer.start();
 		playout.start();
 		await playback.start();
 		maintenance.start();
 	});
 	app.addHook('onClose', async () => {
+		authentication.close();
+		unsubscribeSessionRevocations();
 		unsubscribeMaterializer();
 		unsubscribeEpg();
 		unsubscribePlayout();
@@ -250,6 +278,7 @@ export async function buildApp(
 	// Register API domains after their shared dependencies are ready.
 	registerHttpRoutes(app, {
 		config,
+		authentication,
 		repository,
 		scanner,
 		playback,
@@ -280,6 +309,7 @@ export async function buildApp(
 	return {
 		app,
 		services: {
+			authentication,
 			repository,
 			scanner,
 			playback,

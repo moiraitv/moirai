@@ -455,6 +455,7 @@ Moirai serves the client-facing outputs directly:
 | `GET /iptv/channels.m3u`          | IPTV channel playlist          |
 | `GET /epg.xml`                    | XMLTV electronic program guide |
 | Per-channel HLS URLs from the M3U | Live channel playback          |
+| Feed channel logos and artwork    | Images referenced by M3U/XMLTV |
 
 The Guide UI displays copyable channel-playlist and XMLTV URLs derived from `MOIRAI_PUBLIC_URL`.
 
@@ -564,6 +565,16 @@ Fastify exposes a versioned `/api/v1` JSON API. Zod schemas validate domain inpu
 Expected failures use safe, consistent error bodies. Unexpected failures return a generic message and
 request ID; complete diagnostics remain in server logs.
 
+Management routes require one opaque administrator-session cookie by default. Explicit public
+exceptions cover authentication entry points, health probes, IPTV delivery, XMLTV, and the bounded
+logo and artwork resources referenced by those feeds. Playback status, client identities, logs,
+media previews, management reads and writes, and the live-event WebSocket require authentication.
+The API does not grant cross-origin browser access. Unsafe requests additionally require an allowed
+application origin and the authenticated session's `X-Moirai-CSRF` synchronizer token. The generated
+OpenAPI security requirements identify both the session cookie and this header on protected writes,
+and protected operations document the `401` and applicable `403` failures enforced by the shared
+guard.
+
 The same route registrations generate an OpenAPI 3.1 contract for every HTTP operation, including
 XMLTV, M3U, HLS, artwork, media preview, and log downloads. The versioned `/api/v1/events` payload
 union generates a separate AsyncAPI 3.1 contract. `npm run docs:api` validates both contracts and
@@ -590,6 +601,7 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - reusable Programs and daily Templates;
 - layered Channel Schedules;
 - channel and dedicated EPG guide views;
+- administrator account and local fallback credential management;
 - playback, status, and log views.
 
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
@@ -613,9 +625,18 @@ limits are 4096 pixels per edge and 10 MiB encoded output; source selection is l
 - scheduling and committed timeline changes;
 - playback changes.
 
-Events are hints, not the source of truth. The SPA reconnects with backoff and reloads authoritative
-REST state after connection. Events are not replayed. Slow clients are disconnected, payload sizes
-are bounded, and concurrent live connections are capped.
+Events are hints, not the source of truth. The SPA reconnects transient failures with backoff and
+reloads authoritative REST state after connection. Events are not replayed. Slow clients are
+disconnected, payload sizes are bounded, and concurrent live connections are capped. Browser upgrade
+origins are validated, and each connection closes with policy code `1008` when its associated
+administrator session is revoked or expires. The SPA treats that closure as terminal, clears its
+authenticated state, and returns to sign-in instead of reconnecting with stale credentials.
+Credential replacement gives the initiating connection private-use close code `4001` so it
+reconnects with the replacement cookie, while other sessions revoked by that change receive terminal
+`1008`. A local session reaching its previously known deadline is revalidated against its sliding
+database expiry before the socket closes. An abnormal connection failure first checks the public
+session-state endpoint, so a rejected authenticated upgrade ends stale UI state instead of entering
+an unbounded reconnect cycle.
 
 Guide consumers coalesce refreshes for reconnects, channel presentation, scheduling, committed
 timeline, and programming-affecting scan events. Watcher-status and playback-session noise does not
@@ -648,8 +669,59 @@ directory.
 
 ## Security and deployment assumptions
 
-The initial deployment trusts its network and has no login. Development binds to loopback. Do not
-expose Moirai directly to an untrusted network; use firewall or reverse-proxy controls.
+The first visitor initializes full administrator access with either a singleton local account or a
+configured Logto traditional-web application. An OIDC-first installation can add local fallback
+credentials later. Anonymous local registration closes atomically after either method initializes
+the installation. Until that happens, the instance is intentionally claimable; development binds to
+loopback and operators must not expose a new deployment before initialization.
+
+Local passwords are 15 to 256 characters and use salted Argon2id hashes. Authored username spelling
+is retained separately from its NFKC-normalized, case-insensitive comparison key. Random local
+session tokens are stored only as hashes, expire after 30 inactive days, and travel in HttpOnly,
+SameSite cookies that become Secure under HTTPS. Active local sessions retain their unpredictable
+bearer while extending the durable and browser inactivity deadlines at most once per day.
+Credential changes do not alias the revoked bearer to its replacement; the browser fences overlapping
+requests so their stale failures cannot discard the replacement response. Credential changes and
+operator-issued, single-use recovery codes atomically persist replacement credentials and their new
+session while revoking prior local sessions. Local login and ordinary credential replacement compare
+the exact password-hash version that was verified inside the same SQLite transaction, so an
+overlapping reset cannot leave access authenticated by superseded credentials. Concurrent attempts to
+add the singleton local fallback return a controlled conflict without revoking the losing OIDC
+session; recovery authority can still replace the winner. Recovery validates its unpredictable
+operator token before admitting memory-hard password work, then consumes that authority atomically.
+Login and recovery attempts are throttled per client so a guessed username cannot lock out other
+addresses, while current-password verification is bounded per identity. Concurrent memory-hard
+password work cannot exceed the native worker-pool capacity. Session persistence retains at most 32
+sessions per identity and 1,024 across the installation, evicting and disconnecting the oldest when a
+new session crosses either limit. Public resources bypass session resolution. Reverse proxies must be
+explicitly trusted by IP or CIDR before forwarded client addresses affect authentication throttles.
+Management and authentication-sensitive responses prohibit shared caching, and browser responses
+deny framing to prevent UI redressing from another origin.
+
+Recovery remains reachable from an authenticated browser so a Logto administrator can replace lost
+local credentials. Its single-use token stays in the URL fragment until the initial session-state
+request succeeds, preventing a transient bootstrap failure from destroying the reloadable recovery
+link.
+
+Logto uses discovery plus Authorization Code flow with PKCE, state, nonce, and a short-lived HttpOnly
+browser-binding cookie. Provider subjects are scoped by issuer, provider logout hints are encrypted,
+and validated back-channel logout tokens revoke a named provider session or fall back to all sessions
+for a subject. Each authorization start captures a durable generation so its callback is rejected when
+crossed by logout, while bounded, expiring token fingerprints make provider retries idempotent. OIDC
+starts are rate-limited per client, callback exchanges and logout verification each have an
+eight-operation concurrency cap, expired redirect state is pruned on insertion, and at most 256 live
+transactions are retained globally. Logto-backed Moirai sessions have an absolute 24-hour lifetime
+and cannot slide beyond it. They are bound to a hash of the provider endpoint and application ID, so
+disabling Logto or changing that application configuration revokes them at the next server start;
+rotating only the application secret does not. Any identity accepted by the configured Logto
+application receives the same full access; Moirai has no roles or variable permissions.
+
+The public URL remains the OIDC callback and media-delivery origin. A separate management URL owns
+browser-facing setup, recovery, callback-return, and post-logout links. It may select another port on
+the same scheme and hostname so split Vite development reaches the browser UI without changing cookie
+scope or enabling an open redirect. The recovery command uses a bounded Vite-specific probe when no
+management variable was supplied. Non-loopback development origins bind Vite externally while its
+host allowlist remains restricted to the configured management hostname.
 
 External channel logos must be credential-free HTTP(S) URLs no longer than 2048 characters. Unsafe
 stored values are omitted from generated output. Channel numbers cannot be relative path segments
@@ -665,7 +737,7 @@ integrated playback worker runs inside the same container and must see each conf
 
 The current architecture deliberately does not provide:
 
-- authentication or multi-user authorization;
+- roles or variable administrator permissions;
 - media-server providers such as Jellyfin, Emby, or Plex;
 - template rotations and seasonal rule types beyond the current predicate stack;
 - a network or replicated SQLite deployment;

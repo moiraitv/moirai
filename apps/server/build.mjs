@@ -6,6 +6,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 
 await build({
 	entryPoints: {
+		'auth-reset': path.join(directory, 'src/auth-reset.ts'),
 		main: path.join(directory, 'src/main.ts'),
 		worker: path.join(directory, 'src/scheduling/worker.ts'),
 	},

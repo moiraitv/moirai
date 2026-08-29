@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import {
 	CalendarDays,
 	CalendarRange,
@@ -13,6 +13,7 @@ import {
 	FileText,
 	LayoutGrid,
 	Library,
+	LogOut,
 	Menu,
 	RefreshCw,
 	Settings,
@@ -25,10 +26,13 @@ import { api } from './api';
 import { liveEvents } from './live-events';
 import { useLibrariesStore } from './stores/libraries';
 import { useChannelsStore } from './stores/channels';
+import { useAuthenticationStore } from './stores/authentication';
 
 const route = useRoute();
+const router = useRouter();
 const libraryStore = useLibrariesStore();
 const channelsStore = useChannelsStore();
+const authentication = useAuthenticationStore();
 const { libraries, loaded } = storeToRefs(libraryStore);
 const { publicUrlStatus } = storeToRefs(channelsStore);
 const drawerOpen = ref(false);
@@ -71,6 +75,24 @@ function closeDrawer(): void {
 	drawerOpen.value = false;
 }
 
+/** Load authenticated shell data only after an administrator session exists. */
+function loadAdministrativeState(): void {
+	void libraryStore.load();
+	void channelsStore.loadCapabilities().catch(() => undefined);
+	void loadPlaybackState();
+}
+
+/** Revoke the current local session and continue through provider logout when available. */
+async function logout(): Promise<void> {
+	const redirectUrl = await authentication.logout();
+	if (redirectUrl) {
+		window.location.assign(redirectUrl);
+		return;
+	}
+
+	await router.replace('/login');
+}
+
 /** Close the mobile navigation drawer when Escape is pressed. */
 function handleKeydown(event: KeyboardEvent): void {
 	if (event.key === 'Escape') {
@@ -100,10 +122,18 @@ watch(
 );
 onMounted(() => {
 	window.addEventListener('keydown', handleKeydown);
-	void libraryStore.load();
-	void channelsStore.loadCapabilities().catch(() => undefined);
-	void loadPlaybackState();
+	if (authentication.authenticated) {
+		loadAdministrativeState();
+	}
 });
+watch(
+	() => authentication.authenticated,
+	(value) => {
+		if (value) {
+			loadAdministrativeState();
+		}
+	},
+);
 onUnmounted(() => {
 	window.removeEventListener('keydown', handleKeydown);
 	unsubscribe();
@@ -111,7 +141,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div class="app-shell">
+	<RouterView v-if="!authentication.authenticated" />
+	<div v-else class="app-shell">
 		<header class="mobile-header">
 			<RouterLink class="mobile-brand" to="/" aria-label="Moirai home">
 				<img :src="logoUrl" alt="" />
@@ -247,6 +278,20 @@ onUnmounted(() => {
 				>
 				<ChevronRight :size="17" />
 			</RouterLink>
+			<footer class="sidebar-footer">
+				<div class="sidebar-account">
+					<RouterLink class="sidebar-account-link" to="/account">
+						<span>
+							<small>Signed in via {{ authentication.state?.identity?.provider }}</small>
+							<strong>{{ authentication.state?.identity?.displayName }}</strong>
+						</span>
+						<ChevronRight :size="16" />
+					</RouterLink>
+					<button class="icon-button" aria-label="Sign out" @click="logout">
+						<LogOut :size="17" />
+					</button>
+				</div>
+			</footer>
 		</aside>
 
 		<main class="app-content">

@@ -1,6 +1,7 @@
 import type {
 	ApiErrorBody,
 	AppCapabilities,
+	AuthenticationState,
 	Channel,
 	ChannelCreate,
 	PlaybackEngineStatus,
@@ -38,6 +39,45 @@ import type {
 	LogPage,
 	DataConflictReport,
 } from '@moirai/shared';
+
+/** Current synchronizer token sent with unsafe administrator requests. */
+let csrfToken: string | null = null;
+/** Callback notified after an authenticated API request loses its session. */
+let unauthorizedListener: (() => void) | null = null;
+/** Generation used to ignore authentication failures from superseded browser-session traffic. */
+let authenticationGeneration = 0;
+/** Number of session-changing requests whose replacement cookie has not settled yet. */
+let activeAuthenticationTransitions = 0;
+
+/** Update the synchronizer token after authentication state changes. */
+export function setApiCsrfToken(value: string | null): void {
+	csrfToken = value;
+}
+
+/** Observe session expiry without coupling the HTTP client to the router or Pinia. */
+export function onApiUnauthorized(listener: (() => void) | null): void {
+	unauthorizedListener = listener;
+}
+
+/**
+ * Fence requests overlapping a browser-session replacement so their stale failures cannot clear
+ * the newly issued authenticated state. The returned callback must run exactly once when settled.
+ */
+export function beginApiAuthenticationTransition(): () => void {
+	authenticationGeneration += 1;
+	activeAuthenticationTransitions += 1;
+	let finished = false;
+
+	return () => {
+		if (finished) {
+			return;
+		}
+
+		finished = true;
+		activeAuthenticationTransitions -= 1;
+		authenticationGeneration += 1;
+	};
+}
 import type {
 	HardwareAccelerationPrediction,
 	HardwareAccelerationPredictionRequest,
@@ -90,12 +130,29 @@ export class ApiError extends Error {
 
 /** Send an API request and parse its JSON response or throw a typed API error. */
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+	const requestAuthenticationGeneration = authenticationGeneration;
+	const method = init?.method?.toUpperCase() ?? 'GET';
+	const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method);
 	const response = await fetch(url, {
 		...init,
-		headers: { 'Content-Type': 'application/json', ...init?.headers },
+		credentials: 'same-origin',
+		headers: {
+			'Content-Type': 'application/json',
+			...(unsafe && csrfToken ? { 'X-Moirai-CSRF': csrfToken } : {}),
+			...init?.headers,
+		},
 	});
 	if (!response.ok) {
-		throw new ApiError((await response.json()) as ApiErrorBody, response.status);
+		const body = (await response.json()) as ApiErrorBody;
+		if (
+			response.status === 401
+			&& body.code === 'authentication_required'
+			&& activeAuthenticationTransitions === 0
+			&& requestAuthenticationGeneration === authenticationGeneration
+		) {
+			unauthorizedListener?.();
+		}
+		throw new ApiError(body, response.status);
 	}
 
 	if (response.status === 204) {
@@ -107,12 +164,24 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 /** Upload a managed channel logo and return its internal URI. */
 async function uploadChannelLogo(id: string, image: Blob): Promise<Channel> {
+	const requestAuthenticationGeneration = authenticationGeneration;
 	const response = await fetch(`/api/v1/channels/${id}/logo`, {
 		method: 'PUT',
-		headers: { 'Content-Type': 'image/png' },
+		headers: {
+			'Content-Type': 'image/png',
+			...(csrfToken ? { 'X-Moirai-CSRF': csrfToken } : {}),
+		},
+		credentials: 'same-origin',
 		body: image,
 	});
 	if (!response.ok) {
+		if (
+			response.status === 401
+			&& activeAuthenticationTransitions === 0
+			&& requestAuthenticationGeneration === authenticationGeneration
+		) {
+			unauthorizedListener?.();
+		}
 		throw new ApiError((await response.json()) as ApiErrorBody, response.status);
 	}
 
@@ -121,6 +190,37 @@ async function uploadChannelLogo(id: string, image: Blob): Promise<Channel> {
 
 /** Module-level api value for api. */
 export const api = {
+	authenticationState: (signal?: AbortSignal) => request<AuthenticationState>(
+		'/api/v1/auth/session',
+		{ cache: 'no-store', signal: signal ?? null },
+	),
+	setupAuthentication: (body: { username: string; password: string }) =>
+		request<AuthenticationState>('/api/v1/auth/setup', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
+	login: (body: { username: string; password: string }) =>
+		request<AuthenticationState>('/api/v1/auth/login', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
+	saveLocalCredentials: (body: {
+		username: string;
+		password: string;
+		currentPassword: string | null;
+	}) => request<AuthenticationState>('/api/v1/auth/local-credentials', {
+		method: 'PUT',
+		body: JSON.stringify(body),
+	}),
+	recoverAuthentication: (body: { token: string; username: string; password: string }) =>
+		request<AuthenticationState>('/api/v1/auth/recover', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
+	logout: () =>
+		request<{ redirectUrl: string | null }>('/api/v1/auth/logout', {
+			method: 'POST',
+		}),
 	capabilities: () => request<AppCapabilities>('/api/v1/capabilities'),
 	dataConflicts: () => request<DataConflictReport>('/api/v1/status/conflicts'),
 	logs: (query: LogQuery = {}) => {

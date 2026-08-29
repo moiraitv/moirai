@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { LIVE_EVENT_SESSION_REPLACED_CLOSE_CODE } from '@moirai/shared';
 import {
 	createAsyncApiDocument,
 	createOpenApiDocument,
@@ -11,6 +12,8 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'applyChannelMaterialization',
 	'browseLibraryMedia',
 	'cancelLibraryScan',
+	'completeLogtoAuthentication',
+	'connectLiveEvents',
 	'createChannel',
 	'createLibrary',
 	'createProgram',
@@ -22,6 +25,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'deleteProgram',
 	'deleteScheduleTemplate',
 	'downloadLogFile',
+	'getAuthenticationSession',
 	'getArtwork',
 	'getCapabilities',
 	'getChannelLogo',
@@ -54,12 +58,16 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'listPrograms',
 	'listScheduleTemplates',
 	'listTimelineMaterializations',
+	'loginLocalAuthentication',
+	'logoutAuthenticationSession',
 	'predictHardwareAcceleration',
 	'previewChannelTimeline',
 	'previewDraftChannelSchedule',
 	'previewDraftTemplate',
 	'previewMediaItem',
 	'putChannelLogo',
+	'receiveLogtoBackchannelLogout',
+	'recoverLocalAuthentication',
 	'reconcileLibrary',
 	'resolveMediaGroupSelection',
 	'resolveMediaSelection',
@@ -67,12 +75,15 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'searchMediaSourceOptions',
 	'setChannelSchedule',
 	'setTemplateAssignments',
+	'setupLocalAuthentication',
+	'startLogtoAuthentication',
 	'startLibraryScan',
 	'updateChannel',
 	'updateLibrary',
 	'updatePlaybackSettings',
 	'updateProgram',
 	'updateScheduleTemplate',
+	'saveLocalAuthenticationCredentials',
 ].sort();
 
 const EXPECTED_EVENT_TYPES = [
@@ -90,6 +101,7 @@ type OpenApiOperation = {
 	tags?: string[];
 	summary?: string;
 	responses?: Record<string, unknown>;
+	security?: Array<Record<string, unknown>>;
 };
 
 let openapi: ApiDescriptionDocument;
@@ -107,6 +119,16 @@ function httpOperations(document: ApiDescriptionDocument): OpenApiOperation[] {
 			.map(([, operation]) => operation));
 }
 
+function httpOperation(document: ApiDescriptionDocument, operationId: string): OpenApiOperation {
+	const operation = httpOperations(document)
+		.find((candidate) => candidate.operationId === operationId);
+	if (!operation) {
+		throw new Error(`Missing generated operation ${operationId}`);
+	}
+
+	return operation;
+}
+
 describe('generated interface documentation', () => {
 	it('documents every registered HTTP operation with stable metadata', () => {
 		expect(openapi.openapi).toBe('3.1.0');
@@ -122,9 +144,48 @@ describe('generated interface documentation', () => {
 		}
 	});
 
+	it('documents synchronizer-token authentication for protected unsafe operations', () => {
+		const components = openapi.components as {
+			securitySchemes: Record<string, Record<string, unknown>>;
+		};
+		expect(components.securitySchemes.csrfToken).toMatchObject({
+			type: 'apiKey',
+			in: 'header',
+			name: 'X-Moirai-CSRF',
+		});
+		expect(httpOperation(openapi, 'updateChannel').security)
+			.toEqual([{ cookieAuth: [], csrfToken: [] }]);
+		expect(httpOperation(openapi, 'listChannels').security)
+			.toEqual([{ cookieAuth: [] }]);
+		expect(httpOperation(openapi, 'loginLocalAuthentication').security).toEqual([]);
+		expect(httpOperation(openapi, 'connectLiveEvents').responses).toHaveProperty('403');
+	});
+
+	it('documents centrally enforced authentication failures', () => {
+		const unsafeMethods = new Set(['delete', 'patch', 'post', 'put']);
+		const paths = openapi.paths as Record<string, Record<string, OpenApiOperation>>;
+		for (const path of Object.values(paths)) {
+			for (const [method, operation] of Object.entries(path)) {
+				const protectedOperation = operation.security?.some((requirement) =>
+					Object.hasOwn(requirement, 'cookieAuth'));
+				if (!protectedOperation) {
+					continue;
+				}
+
+				expect(operation.responses).toHaveProperty('401');
+				if (unsafeMethods.has(method)) {
+					expect(operation.responses).toHaveProperty('403');
+				}
+			}
+		}
+	});
+
 	it('documents the shared live-event union in AsyncAPI', () => {
 		const asyncapi = createAsyncApiDocument();
 		expect(asyncapi.asyncapi).toBe('3.1.0');
+		expect((asyncapi.info as { description: string }).description).toContain('policy code 1008');
+		expect((asyncapi.info as { description: string }).description)
+			.toContain(`code ${LIVE_EVENT_SESSION_REPLACED_CLOSE_CODE}`);
 
 		const components = asyncapi.components as Record<string, Record<string, Record<string, unknown>>>;
 		const payload = components.messages!.liveEvent!.payload as {

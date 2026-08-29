@@ -5,7 +5,7 @@ import { $ZodType, safeParse } from 'zod/v4/core';
 import { apiErrorBodySchema } from '@moirai/shared/api-contracts';
 
 /** HTTP status codes represented by the stable JSON error envelope. */
-export type DocumentedErrorStatus = 400 | 403 | 404 | 409 | 416 | 422 | 500 | 503;
+export type DocumentedErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 416 | 422 | 429 | 500 | 503;
 
 /** Descriptive fields and contracts used by one generated API operation. */
 interface ApiOperationContract {
@@ -21,6 +21,7 @@ interface ApiOperationContract {
 	headers?: z.ZodType;
 	consumes?: string[];
 	produces?: string[];
+	authentication?: 'public' | 'required';
 }
 
 /** UUID path parameter shared by resource routes. */
@@ -64,11 +65,19 @@ export function apiOperation(contract: ApiOperationContract): FastifySchema {
 			apiErrorBodySchema,
 		);
 	}
+	if (contract.authentication !== 'public' && response[401] === undefined) {
+		response[401] = responseContent(
+			'Administrator authentication is required',
+			'application/json',
+			apiErrorBodySchema,
+		);
+	}
 
 	return {
 		operationId: contract.operationId,
 		tags: contract.tags,
 		summary: contract.summary,
+		security: contract.authentication === 'public' ? [] : [{ cookieAuth: [] }],
 		...(contract.description ? { description: contract.description } : {}),
 		...(contract.params ? { params: contract.params } : {}),
 		...(contract.querystring ? { querystring: contract.querystring } : {}),

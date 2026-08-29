@@ -4,6 +4,11 @@
 
 - Keep changes focused on the requested behavior. Preserve unrelated behavior, public interfaces, configuration, and manually maintained documentation unless the task requires changing them.
 - Follow the repository's existing conventions where they are established. Prefer shared public constants and documented contracts over duplicated values or assumptions.
+- Before designing substantial new functionality, identify plausible maintained libraries that could
+  provide the required behavior and surface strong candidates early. Compare their feature and
+  security fit, maintenance status, integration and operational costs, and the custom work that would
+  remain; recommend adoption when it is a better fit, but do not add a dependency solely to avoid a
+  focused implementation that better matches the repository's constraints.
 - Always use braces around control-flow bodies, including single-statement `if`, `else`, loop, and similar blocks.
 - Put `else` on a new line after the preceding closing brace; do not use `} else {`.
 - Use tab indentation for JavaScript, TypeScript, Vue, and CSS source. Follow a StandardJS-inspired style with Stroustrup braces while retaining and enforcing semicolons.

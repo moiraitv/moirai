@@ -44,6 +44,18 @@ describe('public error policy', () => {
 		expect(JSON.stringify(mapped.body)).not.toContain('/Volumes/Private');
 	});
 
+	it('preserves Fastify request-body limits as a safe client error', () => {
+		const error = Object.assign(new Error('Request body is too large'), {
+			statusCode: 413,
+			code: 'FST_ERR_CTP_BODY_TOO_LARGE',
+		});
+		expect(publicError(error, REQUEST_ID)).toMatchObject({
+			statusCode: 413,
+			body: { code: 'payload_too_large', requestId: REQUEST_ID },
+			expected: true,
+		});
+	});
+
 	it('returns bounded validation issues without input values', () => {
 		const parsed = z.object({ count: z.number().int().positive() }).safeParse({ count: -4 });
 		expect(parsed.success).toBe(false);

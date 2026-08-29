@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
 	ChannelCreate,
 	ChannelScheduleLayer,
@@ -594,3 +594,122 @@ export const settings = sqliteTable('settings', {
 		.notNull()
 		.default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * Stores the durable marker that closes unauthenticated first-run registration after either a local
+ * or provider identity successfully initializes the installation.
+ */
+export const authenticationInitialization = sqliteTable(
+	'authentication_initialization',
+	{
+		id: integer('id').primaryKey(),
+		method: text('method').$type<'local' | 'logto'>().notNull(),
+		initializedAt: text('initialized_at').notNull(),
+	},
+	(table) => [
+		check('authentication_initialization_singleton', sql`${table.id} = 1`),
+		check(
+			'authentication_initialization_method',
+			sql`${table.method} IN ('local', 'logto')`,
+		),
+	],
+);
+
+/** Full-access administrator identities established locally or by an external provider. */
+export const authenticationIdentities = sqliteTable(
+	'authentication_identities',
+	{
+		id: text('id').primaryKey(),
+		provider: text('provider').$type<'local' | 'logto'>().notNull(),
+		providerIssuer: text('provider_issuer'),
+		providerSubject: text('provider_subject'),
+		displayName: text('display_name').notNull(),
+		username: text('username'),
+		usernameKey: text('username_key'),
+		passwordHash: text('password_hash'),
+		...timestamps,
+	},
+	(table) => [
+		uniqueIndex('authentication_identity_provider_subject').on(
+			table.provider,
+			table.providerIssuer,
+			table.providerSubject,
+		),
+		uniqueIndex('authentication_identity_username_key').on(table.usernameKey),
+		uniqueIndex('authentication_single_local_identity')
+			.on(table.provider)
+			.where(sql`${table.provider} = 'local'`),
+		check(
+			'authentication_identity_provider',
+			sql`${table.provider} IN ('local', 'logto')`,
+		),
+	],
+);
+
+/** Revocable browser sessions stored by token hash rather than by bearer token. */
+export const authenticationSessions = sqliteTable(
+	'authentication_sessions',
+	{
+		tokenHash: text('token_hash').primaryKey(),
+		identityId: text('identity_id')
+			.notNull()
+			.references(() => authenticationIdentities.id, { onDelete: 'cascade' }),
+		csrfToken: text('csrf_token').notNull(),
+		providerSessionId: text('provider_session_id'),
+		providerLogoutHint: text('provider_logout_hint'),
+		providerConfigurationHash: text('provider_configuration_hash'),
+		createdAt: text('created_at').notNull(),
+		lastSeenAt: text('last_seen_at').notNull(),
+		expiresAt: text('expires_at').notNull(),
+	},
+	(table) => [
+		index('authentication_sessions_identity_idx').on(table.identityId),
+		index('authentication_sessions_provider_sid_idx').on(table.providerSessionId),
+		index('authentication_sessions_expiry_idx').on(table.expiresAt),
+	],
+);
+
+/** Short-lived, single-use state retained while a browser completes an OIDC redirect. */
+export const authenticationOidcTransactions = sqliteTable(
+	'authentication_oidc_transactions',
+	{
+		stateHash: text('state_hash').primaryKey(),
+		bindingHash: text('binding_hash').notNull(),
+		codeVerifier: text('code_verifier').notNull(),
+		nonce: text('nonce').notNull(),
+		returnTo: text('return_to').notNull(),
+		logoutGeneration: integer('logout_generation').notNull().default(0),
+		expiresAt: text('expires_at').notNull(),
+	},
+	(table) => [index('authentication_oidc_expiry_idx').on(table.expiresAt)],
+);
+
+/** Monotonic boundary used to reject OIDC callbacks crossed by a provider logout event. */
+export const authenticationOidcLogoutGeneration = sqliteTable(
+	'authentication_oidc_logout_generation',
+	{
+		id: integer('id').primaryKey(),
+		generation: integer('generation').notNull(),
+	},
+);
+
+/** Hashed, expiring provider logout identifiers retained to make delivery idempotent. */
+export const authenticationOidcLogoutTokens = sqliteTable(
+	'authentication_oidc_logout_tokens',
+	{
+		tokenHash: text('token_hash').primaryKey(),
+		expiresAt: text('expires_at').notNull(),
+	},
+	(table) => [index('authentication_oidc_logout_expiry_idx').on(table.expiresAt)],
+);
+
+/** Hashed operator-issued codes that can create or recover the singleton local account. */
+export const authenticationRecoveryTokens = sqliteTable(
+	'authentication_recovery_tokens',
+	{
+		tokenHash: text('token_hash').primaryKey(),
+		createdAt: text('created_at').notNull(),
+		expiresAt: text('expires_at').notNull(),
+	},
+	(table) => [index('authentication_recovery_expiry_idx').on(table.expiresAt)],
+);

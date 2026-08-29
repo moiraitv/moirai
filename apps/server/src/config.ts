@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { isIP } from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -12,7 +13,9 @@ export const bundledNextRoot = path.join(projectRoot, 'vendor', 'ersatztv-next')
 export interface AppConfig {
 	host: string;
 	port: number;
+	trustedProxies: string[];
 	publicUrl: string;
+	managementUrl: string;
 	logLevel: string;
 	logDir: string;
 	logRetentionDays: number;
@@ -43,10 +46,21 @@ export interface AppConfig {
 	webDistDir: string;
 	migrationsDir: string;
 	timeZone: string;
+	logto: LogtoConfig | null;
+}
+
+/** Logto traditional-web application settings used by the OIDC provider adapter. */
+export interface LogtoConfig {
+	endpoint: string;
+	appId: string;
+	appSecret: string;
 }
 
 /** Public URL plus whether remote clients can reach the configured host. */
 export type PublicUrlStatus = 'configured' | 'unreachable-default';
+
+/** Symbolic proxy-address groups accepted by Fastify's proxy address resolver. */
+const TRUSTED_PROXY_GROUPS = new Set(['loopback', 'linklocal', 'uniquelocal']);
 
 /** Resolve a configured relative path from the project root. */
 function resolveFromProjectRoot(value: string): string {
@@ -75,6 +89,47 @@ function integerFromEnvironment(
 	}
 
 	return parsed;
+}
+
+/** Return whether a literal hostname identifies localhost or an IP in the loopback ranges. */
+export function isLoopbackHostname(value: string): boolean {
+	const hostname = value.toLowerCase().replace(/^\[|\]$/gu, '');
+	if (hostname === 'localhost' || hostname === '::1') {
+		return true;
+	}
+
+	return isIP(hostname) === 4 && hostname.split('.', 1)[0] === '127';
+}
+
+/** Parse explicit proxy IPs, CIDRs, or named local-network groups used to trust forwarded clients. */
+export function resolveTrustedProxies(value?: string): string[] {
+	if (!value?.trim()) {
+		return [];
+	}
+
+	const proxies = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+	for (const proxy of proxies) {
+		if (TRUSTED_PROXY_GROUPS.has(proxy)) {
+			continue;
+		}
+
+		const [address, prefix, ...remainder] = proxy.split('/');
+		const family = isIP(address ?? '');
+		const maximumPrefix = family === 4 ? 32 : 128;
+		if (
+			family === 0
+			|| remainder.length > 0
+			|| (prefix !== undefined
+				&& (!/^\d+$/u.test(prefix) || Number(prefix) > maximumPrefix))
+		) {
+			throw new Error(
+				'MOIRAI_TRUST_PROXY must contain comma-separated IP addresses, CIDRs, or '
+				+ 'loopback, linklocal, and uniquelocal groups',
+			);
+		}
+	}
+
+	return [...new Set(proxies)];
 }
 
 /** Return explicit and pinned checkouts that may contain a development engine. */
@@ -115,9 +170,8 @@ export function resolveTimeZone(value?: string): string {
 	return candidate;
 }
 
-/** Normalize the public HTTP(S) origin used in generated client URLs. */
-export function resolvePublicUrl(value: string | undefined, port: number): string {
-	const candidate = value?.trim() || `http://127.0.0.1:${port}`;
+/** Parse one HTTP(S) origin without permitting URL components that alter request routing. */
+function resolveHttpOrigin(candidate: string, name: string): string {
 	const parsed = new URL(candidate);
 	if (
 		!['http:', 'https:'].includes(parsed.protocol)
@@ -128,21 +182,44 @@ export function resolvePublicUrl(value: string | undefined, port: number): strin
 		|| parsed.hash
 	) {
 		throw new Error(
-			'MOIRAI_PUBLIC_URL must be an HTTP(S) origin without credentials, a path, a query, or a fragment',
+			`${name} must be an HTTP(S) origin without credentials, a path, a query, or a fragment`,
 		);
 	}
 
 	return parsed.origin;
 }
 
+/** Normalize the public HTTP(S) origin used in generated client URLs. */
+export function resolvePublicUrl(value: string | undefined, port: number): string {
+	return resolveHttpOrigin(value?.trim() || `http://127.0.0.1:${port}`, 'MOIRAI_PUBLIC_URL');
+}
+
+/**
+ * Normalize the browser UI origin while retaining the public origin's cookie-compatible scheme and
+ * hostname. Development may use a distinct port for Vite.
+ */
+export function resolveManagementUrl(value: string | undefined, publicUrl: string): string {
+	const resolved = resolveHttpOrigin(value?.trim() || publicUrl, 'MOIRAI_MANAGEMENT_URL');
+	const management = new URL(resolved);
+	const publicOrigin = new URL(publicUrl);
+	if (
+		management.protocol !== publicOrigin.protocol
+		|| management.hostname !== publicOrigin.hostname
+	) {
+		throw new Error(
+			'MOIRAI_MANAGEMENT_URL must use the same scheme and hostname as MOIRAI_PUBLIC_URL',
+		);
+	}
+
+	return resolved;
+}
+
 /** Flag URL hosts that cannot be reached by a separate IPTV client. */
 export function publicUrlStatus(value: string): PublicUrlStatus {
 	const hostname = new URL(value).hostname.toLowerCase();
 	if (
-		hostname === 'localhost'
-		|| hostname === '::1'
+		isLoopbackHostname(hostname)
 		|| hostname === '0.0.0.0'
-		|| hostname.startsWith('127.')
 	) {
 		return 'unreachable-default';
 	}
@@ -150,15 +227,57 @@ export function publicUrlStatus(value: string): PublicUrlStatus {
 	return 'configured';
 }
 
+/** Validate an optional all-or-nothing Logto OIDC configuration. */
+function resolveLogtoConfig(overrides?: LogtoConfig | null): LogtoConfig | null {
+	if (overrides !== undefined) {
+		return overrides;
+	}
+
+	const endpoint = process.env.MOIRAI_LOGTO_ENDPOINT?.trim();
+	const appId = process.env.MOIRAI_LOGTO_APP_ID?.trim();
+	const appSecret = process.env.MOIRAI_LOGTO_APP_SECRET?.trim();
+	if (!endpoint && !appId && !appSecret) {
+		return null;
+	}
+	if (!endpoint || !appId || !appSecret) {
+		throw new Error(
+			'MOIRAI_LOGTO_ENDPOINT, MOIRAI_LOGTO_APP_ID, and MOIRAI_LOGTO_APP_SECRET must be configured together',
+		);
+	}
+
+	const parsed = new URL(endpoint);
+	const isLoopback = isLoopbackHostname(parsed.hostname);
+	if ((parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback))
+		|| parsed.username
+		|| parsed.password
+		|| parsed.pathname !== '/'
+		|| parsed.search
+		|| parsed.hash) {
+		throw new Error(
+			'MOIRAI_LOGTO_ENDPOINT must be an HTTPS origin or loopback HTTP origin without credentials, path, query, or fragment',
+		);
+	}
+
+	return { endpoint: parsed.href.replace(/\/+$/u, ''), appId, appSecret };
+}
+
 /** Read environment settings and explicit overrides into validated runtime configuration. */
 export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 	const dataDir
 		= overrides.dataDir ?? resolveFromProjectRoot(process.env.MOIRAI_DATA_DIR ?? './data');
 	const port = overrides.port ?? Number(process.env.MOIRAI_PORT ?? 3000);
+	const publicUrl = resolvePublicUrl(overrides.publicUrl ?? process.env.MOIRAI_PUBLIC_URL, port);
+	const managementUrl = resolveManagementUrl(
+		overrides.managementUrl ?? process.env.MOIRAI_MANAGEMENT_URL,
+		publicUrl,
+	);
 	return {
 		host: overrides.host ?? process.env.MOIRAI_HOST ?? '127.0.0.1',
 		port,
-		publicUrl: resolvePublicUrl(overrides.publicUrl ?? process.env.MOIRAI_PUBLIC_URL, port),
+		trustedProxies: overrides.trustedProxies
+			?? resolveTrustedProxies(process.env.MOIRAI_TRUST_PROXY),
+		publicUrl,
+		managementUrl,
 		logLevel: overrides.logLevel ?? process.env.MOIRAI_LOG_LEVEL ?? 'info',
 		dataDir,
 		logDir: overrides.logDir
@@ -291,5 +410,6 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 		webDistDir: overrides.webDistDir ?? resolveFromProjectRoot('apps/web/dist'),
 		migrationsDir: overrides.migrationsDir ?? resolveFromProjectRoot('drizzle'),
 		timeZone: resolveTimeZone(overrides.timeZone ?? process.env.MOIRAI_TIME_ZONE),
+		logto: resolveLogtoConfig(overrides.logto),
 	};
 }

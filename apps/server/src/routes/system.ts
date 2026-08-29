@@ -11,6 +11,7 @@ import {
 	readinessSchema,
 } from '@moirai/shared/api-contracts';
 import type { AppConfig } from '../config.js';
+import { authenticatedSession } from '../auth/http.js';
 import { publicUrlStatus } from '../config.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { LogService } from '../operations/log-service.js';
@@ -50,38 +51,50 @@ export function registerSystemRoutes(
 	app: FastifyInstance,
 	{ config, events, logs, health, repository, scanner }: SystemRouteDependencies,
 ): void {
-	app.get('/api/v1/events', {
-		websocket: true,
+	app.route({
+		method: 'GET',
+		url: '/api/v1/events',
 		schema: apiOperation({
 			operationId: 'connectLiveEvents',
 			tags: ['System'],
 			summary: 'Connect to live status events',
 			description: 'Upgrades to WebSocket. Message payloads are defined by the generated AsyncAPI contract.',
 			response: { 101: responseContent('WebSocket connection established', 'application/octet-stream', emptyResponseSchema) },
+			errors: [400, 403, 500, 503],
 		}),
-	}, (socket) => events.attach(socket));
+		handler: async () => {
+			throw app.httpErrors.badRequest('WebSocket upgrade is required');
+		},
+		wsHandler: (socket, request) => events.attach(socket, authenticatedSession(request)),
+	});
 	app.get('/api/v1/health', {
+		config: { authentication: 'public' },
 		schema: apiOperation({
 			operationId: 'getHealth',
 			tags: ['System'],
 			summary: 'Check process liveness',
+			authentication: 'public',
 			description: 'Compatibility alias for the lightweight liveness check.',
 			response: { 200: responseContent('Process is alive', 'application/json', livenessSchema) },
 		}),
 	}, async () => ({ status: 'ok' }));
 	app.get('/api/v1/health/live', {
+		config: { authentication: 'public' },
 		schema: apiOperation({
 			operationId: 'getLiveness',
 			tags: ['System'],
 			summary: 'Check process liveness',
+			authentication: 'public',
 			response: { 200: responseContent('Process is alive', 'application/json', livenessSchema) },
 		}),
 	}, async () => ({ status: 'ok' }));
 	app.get('/api/v1/health/ready', {
+		config: { authentication: 'public' },
 		schema: apiOperation({
 			operationId: 'getReadiness',
 			tags: ['System'],
 			summary: 'Check service readiness',
+			authentication: 'public',
 			description: 'Reports essential failures separately from non-blocking degraded services.',
 			response: {
 				200: responseContent('Essential services are ready', 'application/json', readinessSchema),
@@ -105,7 +118,7 @@ export function registerSystemRoutes(
 		sourceTypes: scanner.sourceTypes,
 		mediaExtensions: MEDIA_EXTENSIONS,
 		etvContractRevision: ETV_CONTRACT_REVISION,
-		authentication: 'trusted-network',
+		authentication: 'session',
 		timeZone: config.timeZone,
 		publicUrl: config.publicUrl,
 		publicUrlStatus: publicUrlStatus(config.publicUrl),

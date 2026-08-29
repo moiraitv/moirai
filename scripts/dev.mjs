@@ -29,6 +29,22 @@ const restartDebounceMs = 100;
 const apiReadyTimeoutMs = 15_000;
 /** Healthy runtime required before crash backoff resets. */
 const apiStableWindowMs = 30_000;
+/** Vite port used to derive the browser return origin when development has split servers. */
+const developmentWebPort = Number(process.env.MOIRAI_WEB_PORT ?? 5173);
+
+/** Derive Vite's origin from the public hostname while allowing an explicit development override. */
+function developmentManagementUrl() {
+	if (process.env.MOIRAI_MANAGEMENT_URL?.trim()) {
+		return process.env.MOIRAI_MANAGEMENT_URL.trim();
+	}
+
+	const apiPort = Number(process.env.MOIRAI_PORT ?? 3000);
+	const publicUrl = new URL(
+		process.env.MOIRAI_PUBLIC_URL?.trim() || `http://127.0.0.1:${apiPort}`,
+	);
+	publicUrl.port = String(developmentWebPort);
+	return publicUrl.origin;
+}
 
 let apiChild;
 let webChild;
@@ -92,7 +108,11 @@ function scheduleApiCrashRestart(reason) {
 function startApi() {
 	const active = spawn(process.execPath, ['dist/main.js'], {
 		cwd: serverRoot,
-		env: { ...process.env, MOIRAI_DEV_WATCH: '1' },
+		env: {
+			...process.env,
+			MOIRAI_DEV_WATCH: '1',
+			...(!serverOnly ? { MOIRAI_MANAGEMENT_URL: developmentManagementUrl() } : {}),
+		},
 		stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
 	});
 	apiChild = active;
@@ -149,7 +169,10 @@ async function buildApi() {
 function startWeb() {
 	webChild = spawn(process.execPath, [path.join(repositoryRoot, 'node_modules/vite/bin/vite.js')], {
 		cwd: webRoot,
-		env: process.env,
+		env: {
+			...process.env,
+			MOIRAI_MANAGEMENT_URL: developmentManagementUrl(),
+		},
 		stdio: 'inherit',
 	});
 	webChild.once('exit', (code, signal) => {

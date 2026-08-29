@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { RawData, WebSocket } from 'ws';
+import type { InjectOptions } from 'light-my-request';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -14,8 +15,12 @@ import {
 	type LiveEvent,
 } from '@moirai/shared';
 import { buildApp } from '@server/app.js';
+import { hashToken } from '@server/auth/crypto.js';
+import { AuthenticationRequestError, OIDC_SESSION_TTL_MS } from '@server/auth/service.js';
 import { loadConfig } from '@server/config.js';
 import { createDatabase } from '@server/db/index.js';
+import { authenticationSessions } from '@server/db/schema.js';
+import { Repository } from '@server/repository/index.js';
 
 const transparentPng = await sharp({
 	create: { width: 1, height: 1, channels: 4, background: '#00000000' },
@@ -61,32 +66,474 @@ function nextLiveEvent(
 	});
 }
 
-async function fixture() {
+async function fixture(options: {
+	authenticated?: boolean;
+	host?: string;
+	managementUrl?: string;
+	serveWeb?: boolean;
+	sessionAgeMs?: number;
+	trustedProxies?: string[];
+} = {}) {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-api-'));
+	const webDistDir = path.join(root, 'web');
+	if (options.serveWeb) {
+		await mkdir(webDistDir, { recursive: true });
+		await writeFile(path.join(webDistDir, 'index.html'), '<!doctype html><title>Moirai</title>');
+	}
+
 	const config = loadConfig({
 		dataDir: root,
 		databasePath: path.join(root, 'test.sqlite'),
 		migrationsDir: path.resolve('drizzle'),
 		logLevel: 'silent',
 		publicUrl: 'https://moirai.example.test',
+		...(options.managementUrl ? { managementUrl: options.managementUrl } : {}),
+		...(options.host ? { host: options.host } : {}),
+		...(options.trustedProxies ? { trustedProxies: options.trustedProxies } : {}),
+		...(options.serveWeb ? { webDistDir } : {}),
 		playbackEnginePath: process.execPath,
 		ffprobePath: path.resolve('tests/fixtures/fake-ffprobe.mjs'),
 	});
 	const database = createDatabase(config.databasePath, config.migrationsDir);
+	const sessionToken = randomUUID();
+	const csrfToken = `${randomUUID()}${randomUUID()}`;
+	if (options.authenticated !== false) {
+		const repository = new Repository(database.db);
+		const nowMs = Date.now();
+		const createdAt = new Date(nowMs - (options.sessionAgeMs ?? 0)).toISOString();
+		const identity = await repository.authentication.claimInitialLocalIdentity({
+			username: 'test-admin',
+			usernameKey: 'test-admin',
+			passwordHash: 'test-only',
+			displayName: 'Test admin',
+		}, createdAt);
+		if (!identity) {
+			throw new Error('Unable to initialize authenticated API fixture');
+		}
+		await database.db.insert(authenticationSessions).values({
+			tokenHash: hashToken(sessionToken),
+			identityId: identity.id,
+			csrfToken,
+			providerSessionId: null,
+			providerLogoutHint: null,
+			providerConfigurationHash: null,
+			createdAt,
+			lastSeenAt: createdAt,
+			expiresAt: new Date(nowMs + 60_000).toISOString(),
+		});
+	}
 	const built = await buildApp(config, database.db);
+	const app = options.authenticated === false ? built.app : new Proxy(built.app, {
+		get(target, property) {
+			if (property === 'inject') {
+				return (input: string | Record<string, unknown>) => {
+					const request: InjectOptions = typeof input === 'string'
+						? { url: input }
+						: input as unknown as InjectOptions;
+					const headers = {
+						cookie: `moirai_session=${sessionToken}`,
+						'x-moirai-csrf': csrfToken,
+						...request.headers,
+					};
+					return target.inject({ ...request, headers });
+				};
+			}
+			if (property === 'injectWS') {
+				return (pathValue: string) => target.injectWS(pathValue, {
+					headers: { cookie: `moirai_session=${sessionToken}` },
+				});
+			}
+
+			const value = Reflect.get(target, property);
+			return typeof value === 'function' ? value.bind(target) : value;
+		},
+	}) as typeof built.app;
 	cleanups.push(async () => {
 		await built.services.scanner.close();
 		await built.app.close();
 		database.close();
 		await rm(root, { recursive: true, force: true });
 	});
-	return { ...built, root };
+	return { ...built, app, rawApp: built.app, database, root, sessionToken };
 }
 afterEach(async () => {
+	vi.useRealTimers();
 	await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
 describe('API', () => {
+	it('protects management data while leaving health and IPTV delivery public', async () => {
+		const { app } = await fixture({ authenticated: false });
+		expect([200, 503]).toContain(
+			(await app.inject({ url: '/api/v1/health/ready' })).statusCode,
+		);
+		expect((await app.inject({ url: '/iptv/channels.m3u' })).statusCode).toBe(200);
+		expect((await app.inject({ url: '/epg.xml' })).statusCode).toBe(200);
+		expect((await app.inject({ url: `/api/v1/artwork/items/${randomUUID()}` })).statusCode)
+			.toBe(404);
+		expect((await app.inject({ url: `/api/v1/channels/${randomUUID()}/logo` })).statusCode)
+			.toBe(404);
+
+		const playback = await app.inject({ url: '/api/v1/playback/status' });
+		expect(playback.statusCode).toBe(401);
+		expect(playback.json()).toMatchObject({ code: 'authentication_required' });
+		const capabilities = await app.inject({ url: '/api/v1/capabilities' });
+		expect(capabilities.statusCode).toBe(401);
+		expect(capabilities.json()).toMatchObject({ code: 'authentication_required' });
+	});
+
+	it('protects canonically matched API routes with an encoded prefix', async () => {
+		const { app } = await fixture({ authenticated: false });
+
+		const protectedResponse = await app.inject({ url: '/%61pi/v1/playback/status' });
+		const publicResponse = await app.inject({ url: '/%61pi/v1/health/live' });
+
+		expect(protectedResponse.statusCode).toBe(401);
+		expect(protectedResponse.json()).toMatchObject({ code: 'authentication_required' });
+		expect(publicResponse.statusCode).toBe(200);
+	});
+
+	it('denies framing and prevents authentication-sensitive responses from being cached', async () => {
+		const { app, rawApp } = await fixture({ serveWeb: true });
+		const protectedResponse = await app.inject('/api/v1/playback/settings');
+		const rejectedResponse = await rawApp.inject('/api/v1/playback/settings');
+		const publicResponse = await rawApp.inject('/api/v1/health/live');
+		const browserResponse = await rawApp.inject('/login');
+
+		for (const response of [
+			protectedResponse,
+			rejectedResponse,
+			publicResponse,
+			browserResponse,
+		]) {
+			expect(response.headers['content-security-policy']).toBe("frame-ancestors 'none'");
+			expect(response.headers['x-frame-options']).toBe('DENY');
+		}
+		expect(browserResponse.statusCode).toBe(200);
+		expect(protectedResponse.headers['cache-control']).toBe('private, no-store');
+		expect(rejectedResponse.headers['cache-control']).toBe('private, no-store');
+		expect(publicResponse.headers['cache-control']).toBeUndefined();
+	});
+
+	it('omits cross-origin grants while rejecting unsafe requests from a foreign origin', async () => {
+		const { app } = await fixture();
+		const read = await app.inject({
+			url: '/api/v1/auth/session',
+			headers: { origin: 'https://attacker.example.test' },
+		});
+		expect(read.statusCode).toBe(200);
+		expect(read.headers['access-control-allow-origin']).toBeUndefined();
+
+		const write = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { origin: 'https://attacker.example.test' },
+			payload: { maxActiveSessions: 5 },
+		});
+		expect(write.statusCode).toBe(403);
+		expect(write.json()).toMatchObject({ code: 'csrf_rejected' });
+	});
+
+	it('allows development requests between supported loopback host spellings', async () => {
+		const { app } = await fixture({ host: 'localhost' });
+		const response = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { origin: 'http://127.0.0.2:5173' },
+			payload: { maxActiveSessions: 5 },
+		});
+
+		expect(response.statusCode).toBe(200);
+	});
+
+	it('allows protected browser requests from the configured management origin', async () => {
+		const { app } = await fixture({
+			host: '0.0.0.0',
+			managementUrl: 'https://moirai.example.test:5173',
+		});
+		const response = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { origin: 'https://moirai.example.test:5173' },
+			payload: { maxActiveSessions: 5 },
+		});
+
+		expect(response.statusCode).toBe(200);
+	});
+
+	it('skips session persistence work for public resources but resolves the session endpoint', async () => {
+		const { app, services } = await fixture();
+		const resolveSession = vi.spyOn(services.authentication, 'resolveRequestSession');
+
+		expect((await app.inject({
+			url: `/api/v1/artwork/items/${randomUUID()}`,
+		})).statusCode).toBe(404);
+		expect(resolveSession).not.toHaveBeenCalled();
+
+		const session = await app.inject('/api/v1/auth/session');
+		expect(session.json()).toMatchObject({
+			status: 'authenticated',
+		});
+		expect(session.headers['set-cookie']).toBeUndefined();
+		expect(resolveSession).toHaveBeenCalledTimes(1);
+	});
+
+	it('refreshes the stable browser cookie when active session lifetime extends', async () => {
+		const { app, services, sessionToken } = await fixture({
+			sessionAgeMs: 25 * 60 * 60 * 1_000,
+		});
+		const response = await app.inject('/api/v1/auth/session');
+		const cookie = String(response.headers['set-cookie']);
+		const refreshedToken = /^moirai_session=([^;]+)/u.exec(cookie)?.[1];
+
+		expect(response.statusCode).toBe(200);
+		expect(refreshedToken).toBe(sessionToken);
+		expect(cookie).toContain('Max-Age=2592000');
+		expect(await services.authentication.resolveSession(sessionToken)).not.toBeNull();
+
+		const overlapping = await app.inject('/api/v1/auth/session');
+		expect(overlapping.statusCode).toBe(200);
+		expect(overlapping.json()).toMatchObject({ status: 'authenticated' });
+		expect(overlapping.headers['set-cookie']).toBeUndefined();
+	});
+
+	it('suppresses a renewal cookie that was superseded before the response', async () => {
+		const { app, services } = await fixture({
+			sessionAgeMs: 25 * 60 * 60 * 1_000,
+		});
+		vi.spyOn(services.authentication, 'sessionTokenIsActive').mockResolvedValue(false);
+
+		const response = await app.inject('/api/v1/auth/session');
+
+		expect(response.statusCode).toBe(200);
+		expect(response.headers['set-cookie']).toBeUndefined();
+	});
+
+	it('rejects an overlapping predecessor cookie after credential rotation', async () => {
+		const { rawApp, database } = await fixture({ authenticated: false });
+		const setup = await rawApp.inject({
+			method: 'POST',
+			url: '/api/v1/auth/setup',
+			payload: {
+				username: 'Local Admin',
+				password: 'a sufficiently long password',
+			},
+		});
+		const predecessorCookie = String(setup.headers['set-cookie']).split(';', 1)[0];
+		const csrfToken = setup.json().csrfToken as string;
+		const staleActivity = new Date(Date.now() - 25 * 60 * 60 * 1_000).toISOString();
+		database.sqlite.prepare(
+			'UPDATE authentication_sessions SET last_seen_at = ?',
+		).run(staleActivity);
+		const rotation = await rawApp.inject({
+			method: 'PUT',
+			url: '/api/v1/auth/local-credentials',
+			headers: {
+				cookie: predecessorCookie,
+				'x-moirai-csrf': csrfToken,
+			},
+			payload: {
+				username: 'Local Admin',
+				password: 'a replacement sufficiently long password',
+				currentPassword: 'a sufficiently long password',
+			},
+		});
+		const overlapping = await rawApp.inject({
+			url: '/api/v1/auth/session',
+			headers: { cookie: predecessorCookie },
+		});
+
+		expect(rotation.statusCode).toBe(200);
+		expect(overlapping.statusCode).toBe(200);
+		expect(overlapping.json()).toMatchObject({ status: 'anonymous' });
+		expect(overlapping.headers['set-cookie']).toBeUndefined();
+	});
+
+	it('binds the Logto callback to a short-lived initiating-browser cookie', async () => {
+		const { rawApp, services } = await fixture({
+			authenticated: false,
+			managementUrl: 'https://moirai.example.test:5173',
+		});
+		vi.spyOn(services.authentication, 'beginLogto').mockResolvedValue({
+			url: 'https://tenant.logto.app/oidc/auth?state=provider-state',
+			bindingToken: 'browser-binding',
+		});
+		const start = await rawApp.inject('/api/v1/auth/logto/start');
+		const bindingCookie = String(start.headers['set-cookie']);
+		expect(start.headers['cache-control']).toBe('private, no-store');
+		expect(bindingCookie).toContain('moirai_oidc_binding=browser-binding');
+		expect(bindingCookie).toContain('HttpOnly');
+		expect(bindingCookie).toContain('SameSite=Lax');
+		expect(bindingCookie).toContain('Path=/api/v1/auth/logto/callback');
+
+		const complete = vi.spyOn(services.authentication, 'completeLogto')
+			.mockRejectedValue(new Error('Stop after verifying route binding'));
+		const callback = await rawApp.inject({
+			url: '/api/v1/auth/logto/callback?state=provider-state&code=provider-code',
+			headers: { cookie: 'moirai_oidc_binding=browser-binding' },
+		});
+		expect(callback.statusCode).toBe(302);
+		expect(complete).toHaveBeenCalledWith(
+			expect.stringContaining('state=provider-state'),
+			'provider-state',
+			'browser-binding',
+		);
+		expect(callback.headers.location).toBe(
+			'https://moirai.example.test:5173/login?error=oidc',
+		);
+		expect(callback.headers['cache-control']).toBe('private, no-store');
+
+		const oversizedLogout = await rawApp.inject({
+			method: 'POST',
+			url: '/api/v1/auth/logto/backchannel-logout',
+			headers: { 'content-type': 'application/x-www-form-urlencoded' },
+			payload: `logout_token=${'a'.repeat(35 * 1_024)}`,
+		});
+		expect(oversizedLogout.statusCode).toBe(413);
+	});
+
+	it('returns a successful Logto callback to the browser management origin', async () => {
+		const { rawApp, services } = await fixture({
+			authenticated: false,
+			managementUrl: 'https://moirai.example.test:5173',
+		});
+		const issued = await services.authentication.setupLocal({
+			username: 'Local Admin',
+			password: 'a sufficiently long password',
+		}, '127.0.0.1');
+		issued.record.expiresAt = new Date(Date.now() + OIDC_SESSION_TTL_MS).toISOString();
+		vi.spyOn(services.authentication, 'completeLogto').mockResolvedValue({
+			session: issued,
+			returnTo: '/channels',
+		});
+
+		const callback = await rawApp.inject({
+			url: '/api/v1/auth/logto/callback?state=provider-state&code=provider-code',
+			headers: { cookie: 'moirai_oidc_binding=browser-binding' },
+		});
+
+		expect(callback.statusCode).toBe(302);
+		expect(callback.headers.location).toBe('https://moirai.example.test:5173/channels');
+		expect(callback.headers['cache-control']).toBe('private, no-store');
+		expect(String(callback.headers['set-cookie'])).toContain('moirai_session=');
+		expect(String(callback.headers['set-cookie'])).toContain('Max-Age=86400');
+	});
+
+	it('rejects usernames that exceed the contract after compatibility normalization', async () => {
+		const { app } = await fixture({ authenticated: false });
+		const rejected = await app.inject({
+			method: 'POST',
+			url: '/api/v1/auth/setup',
+			payload: {
+				username: '\uFDFA'.repeat(64),
+				password: 'a sufficiently long password',
+			},
+		});
+		expect(rejected.statusCode).toBe(400);
+		expect(rejected.json()).toMatchObject({ code: 'validation_error' });
+
+		const accepted = await app.inject({
+			method: 'POST',
+			url: '/api/v1/auth/setup',
+			payload: {
+				username: 'Local Admin',
+				password: 'a sufficiently long password',
+			},
+		});
+		expect(accepted.statusCode).toBe(201);
+	});
+
+	it('uses a forwarded client address only when its immediate proxy is trusted', async () => {
+		const { rawApp, services } = await fixture({
+			authenticated: false,
+			trustedProxies: ['10.0.0.10'],
+		});
+		const login = vi.spyOn(services.authentication, 'loginLocal').mockRejectedValue(
+			new AuthenticationRequestError('Invalid username or password', 401, 'invalid_credentials'),
+		);
+
+		const response = await rawApp.inject({
+			method: 'POST',
+			url: '/api/v1/auth/login',
+			remoteAddress: '10.0.0.10',
+			headers: { 'x-forwarded-for': '198.51.100.7' },
+			payload: { username: 'Administrator', password: 'a long local password' },
+		});
+		expect(response.statusCode).toBe(401);
+		expect(login).toHaveBeenCalledWith(
+			{ username: 'Administrator', password: 'a long local password' },
+			'198.51.100.7',
+		);
+
+		login.mockClear();
+		await rawApp.inject({
+			method: 'POST',
+			url: '/api/v1/auth/login',
+			remoteAddress: '10.0.0.11',
+			headers: { 'x-forwarded-for': '198.51.100.8' },
+			payload: { username: 'Administrator', password: 'a long local password' },
+		});
+		expect(login).toHaveBeenCalledWith(
+			{ username: 'Administrator', password: 'a long local password' },
+			'10.0.0.11',
+		);
+	});
+
+	it('initializes local access once and enforces CSRF on management writes', async () => {
+		const { app } = await fixture({ authenticated: false });
+		const initial = await app.inject({ url: '/api/v1/auth/session' });
+		expect(initial.json()).toMatchObject({
+			status: 'uninitialized',
+			methods: { local: false, logto: false },
+		});
+
+		const setup = await app.inject({
+			method: 'POST',
+			url: '/api/v1/auth/setup',
+			payload: { username: 'Administrator', password: 'a long local password' },
+		});
+		expect(setup.statusCode).toBe(201);
+		expect(setup.json()).toMatchObject({
+			status: 'authenticated',
+			localUsername: 'Administrator',
+		});
+		const cookie = setup.headers['set-cookie'];
+		expect(cookie).toContain('HttpOnly');
+		expect(cookie).toContain('SameSite=Lax');
+		expect(setup.headers['cache-control']).toBe('private, no-store');
+		const cookieHeader = String(cookie).split(';', 1)[0];
+		const csrfToken = setup.json().csrfToken as string;
+
+		const repeated = await app.inject({
+			method: 'POST',
+			url: '/api/v1/auth/setup',
+			payload: { username: 'Other', password: 'another long password' },
+		});
+		expect(repeated.statusCode).toBe(409);
+		const anonymousState = await app.inject({ url: '/api/v1/auth/session' });
+		expect(anonymousState.json()).toMatchObject({
+			status: 'anonymous',
+			localUsername: null,
+		});
+
+		const missingCsrf = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { cookie: cookieHeader },
+			payload: { maxActiveSessions: 4 },
+		});
+		expect(missingCsrf.statusCode).toBe(403);
+		expect(missingCsrf.json()).toMatchObject({ code: 'csrf_rejected' });
+
+		const authenticated = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { cookie: cookieHeader, 'x-moirai-csrf': csrfToken },
+			payload: { maxActiveSessions: 5 },
+		});
+		expect(authenticated.statusCode).toBe(200);
+	});
+
 	it('returns safe snapshot details for channel-scoped guide segments', async () => {
 		const { app, services } = await fixture();
 		const channelId = randomUUID();
@@ -321,6 +768,42 @@ describe('API', () => {
 			data: { change: 'watcher-status', watcherStatus: 'ready' },
 		});
 		socket.close();
+	});
+
+	it('rejects WebSocket upgrades from a foreign browser origin', async () => {
+		const { rawApp, sessionToken } = await fixture();
+		const response = await rawApp.inject({
+			url: '/api/v1/events',
+			headers: {
+				connection: 'upgrade',
+				upgrade: 'websocket',
+				origin: 'https://attacker.example.test',
+				cookie: `moirai_session=${sessionToken}`,
+			},
+		});
+
+		expect(response.statusCode).toBe(403);
+		expect(response.json()).toMatchObject({ code: 'csrf_rejected' });
+	});
+
+	it('closes an established WebSocket when its authentication session is revoked', async () => {
+		const { app, services, sessionToken } = await fixture();
+		await app.ready();
+		const socket = await app.injectWS('/api/v1/events');
+		const closed = new Promise<{ code: number; reason: string }>((resolve) => {
+			socket.once('close', (code, reason) => resolve({ code, reason: reason.toString() }));
+		});
+		const sessionRecord = await services.authentication.resolveSession(sessionToken);
+		if (!sessionRecord) {
+			throw new Error('Expected authenticated WebSocket fixture session');
+		}
+
+		await services.authentication.logout(sessionRecord);
+
+		await expect(closed).resolves.toEqual({
+			code: 1008,
+			reason: 'Authentication session ended',
+		});
 	});
 
 	it('serves the prior cached version when changed artwork is temporarily unavailable', async () => {
