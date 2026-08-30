@@ -62,6 +62,23 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.status-watcher')).toContainText('ready');
 	await expect(page.locator('.library-status-panel')).toContainText('Indexed');
 	await expect(page.getByRole('button', { name: 'B', exact: true })).toHaveClass(/active/);
+	const syncButton = page.getByRole('button', { name: 'Sync library' });
+	const settingsButton = page.getByRole('button', { name: 'Library settings' });
+	const libraryHeaderSearch = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });
+	const syncBounds = await syncButton.boundingBox();
+	const settingsBounds = await settingsButton.boundingBox();
+	const searchBounds = await libraryHeaderSearch.boundingBox();
+	expect(syncBounds!.x).toBeLessThan(settingsBounds!.x);
+	expect(settingsBounds!.x).toBeLessThan(searchBounds!.x);
+	expect(Math.abs(settingsBounds!.y + settingsBounds!.height / 2 - (searchBounds!.y + searchBounds!.height / 2))).toBeLessThan(2);
+	await settingsButton.click();
+	const librarySettings = page.getByRole('dialog', { name: `Library settings for ${libraryName}` });
+	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
+	const deleteLibrary = librarySettings.getByRole('button', { name: 'Remove library permanently' });
+	await expect(deleteLibrary).toBeDisabled();
+	await librarySettings.getByLabel(new RegExp(`Type ${libraryName} to confirm`)).fill(libraryName);
+	await expect(deleteLibrary).toBeEnabled();
+	await librarySettings.getByRole('button', { name: 'Cancel' }).click();
 	const movieLibraryUrl = page.url();
 
 	await page.getByRole('button', { name: /Sort by: Title/ }).click();
@@ -407,22 +424,20 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Source type').selectOption('library-query');
 	await page.getByLabel('Name').fill(`${programName} Follow-up`);
 	await page.locator('.program-editor-actions button[type="submit"]').click();
-	const programCard = page.locator('.schedule-resource-card').filter({
-		has: page.getByRole('heading', { name: programName, exact: true }),
+	const programCard = page.locator('.program-row').filter({
+		has: page.getByRole('link', { name: programName, exact: true }),
 	});
-	const seasonProgramCard = page.locator('.schedule-resource-card').filter({
-		has: page.getByRole('heading', { name: seasonProgramName, exact: true }),
+	const seasonProgramCard = page.locator('.program-row').filter({
+		has: page.getByRole('link', { name: seasonProgramName, exact: true }),
 	});
 	await expect(seasonProgramCard).toContainText('1 selected media groups');
-	await seasonProgramCard
-		.getByRole('link', { name: `Edit ${seasonProgramName}`, exact: true })
-		.click();
+	await seasonProgramCard.getByRole('link', { name: seasonProgramName, exact: true }).click();
 	await page.getByRole('button', { name: 'Review selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
 	await page.getByRole('button', { name: 'Done' }).click();
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await expect(programCard).toContainText(`1 selected from ${libraryName}`);
-	await programCard.getByRole('link', { name: `Edit ${programName}`, exact: true }).click();
+	await programCard.getByRole('link', { name: programName, exact: true }).click();
 	await page.getByRole('button', { name: 'Review selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText(
 		'Broadcast Fixture',

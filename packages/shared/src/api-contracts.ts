@@ -598,6 +598,13 @@ export const schedulingProgramStatusSchema = z.object({
 	sourceLabel: z.string(),
 	indexedItemCount: z.number().int().nonnegative(),
 	availableItemCount: z.number().int().nonnegative(),
+	previewItems: z.array(mediaItemSchema.pick({
+		id: true,
+		title: true,
+		year: true,
+		artworkUrl: true,
+		availability: true,
+	})).max(12),
 });
 
 /** Scheduling editor overview assembled from authored configuration and catalog health. */

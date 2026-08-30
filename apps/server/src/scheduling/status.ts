@@ -7,6 +7,9 @@ import type {
 	SchedulingProgramStatus,
 } from '@moirai/shared';
 
+/** Maximum media entries embedded in one program overview row. */
+const PROGRAM_PREVIEW_ITEM_LIMIT = 12;
+
 /** Check whether one indexed group descends from another. */
 function descendantOf(
 	groupId: string | null,
@@ -177,6 +180,13 @@ function contentStatus(
 		sourceLabel: contentLabel(program.config, catalog),
 		indexedItemCount: matches.length,
 		availableItemCount: available.length,
+		previewItems: matches.slice(0, PROGRAM_PREVIEW_ITEM_LIMIT).map((media) => ({
+			id: media.id,
+			title: media.title,
+			year: media.year,
+			artworkUrl: media.artworkUrl,
+			availability: media.availability,
+		})),
 	};
 }
 
@@ -218,6 +228,7 @@ export function schedulingProgramStatuses(
 					sourceLabel: 'Missing program',
 					indexedItemCount: 0,
 					availableItemCount: 0,
+					previewItems: [],
 				};
 			}
 
@@ -233,6 +244,7 @@ export function schedulingProgramStatuses(
 			sourceLabel: `${program.config.entries.length} step sequence`,
 			indexedItemCount: children.reduce((sum, child) => sum + child.indexedItemCount, 0),
 			availableItemCount: children.reduce((sum, child) => sum + child.availableItemCount, 0),
+			previewItems: [],
 		};
 		resolved.set(program.id, status);
 		return status;

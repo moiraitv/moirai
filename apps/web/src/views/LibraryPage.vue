@@ -24,10 +24,9 @@ import {
 	Filter,
 	Layers3,
 	ListPlus,
-	MoreHorizontal,
 	RefreshCw,
 	Search,
-	Trash2,
+	Settings,
 	Unplug,
 	X,
 	Zap,
@@ -51,6 +50,7 @@ import { activeCatalogAnchor, breadcrumbTargetTrail } from '../catalog-navigatio
 import LoadingState from '../components/LoadingState.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
 import LibraryMediaCard from '../components/library/LibraryMediaCard.vue';
+import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
 import {
 	emptyLibraryFilterDraft,
 	type LibraryFilterDraft,
@@ -114,7 +114,7 @@ const message = ref('');
 const initialLoading = ref(true);
 const mediaLoading = ref(false);
 const loadError = ref('');
-const showMenu = ref(false);
+const showSettings = ref(false);
 const showSort = ref(false);
 const showFilter = ref(false);
 const showReconciliation = ref(false);
@@ -747,7 +747,6 @@ async function loadInitial(): Promise<void> {
 
 /** Request a library scan and surface its current status. */
 async function scan(): Promise<void> {
-	showMenu.value = false;
 	await api.scanLibrary(id.value);
 	message.value = 'Scan queued';
 	window.setTimeout(() => void loadLibrary(), 1200);
@@ -904,21 +903,23 @@ function handleKeydown(event: KeyboardEvent): void {
 		searchInput.value?.focus();
 	}
 	if (event.key === 'Escape') {
-		showMenu.value = false;
+		showSettings.value = false;
 		showSort.value = false;
 		showFilter.value = false;
 		showReconciliation.value = false;
 	}
 }
 
-/** Confirm and remove the current library. */
-async function remove(): Promise<void> {
-	showMenu.value = false;
-	if (!confirm('Remove this library and its index? Media files will not be changed.')) {
-		return;
-	}
+/** Apply an updated library returned by the settings workflow. */
+async function finishSettings(updated: Library): Promise<void> {
+	library.value = updated;
+	showSettings.value = false;
+	message.value = 'Library settings saved. Sync the library to apply source changes to the index.';
+	await librariesStore.load();
+}
 
-	await api.deleteLibrary(id.value);
+/** Refresh shared state and leave the deleted library route. */
+async function finishDeletion(): Promise<void> {
 	await librariesStore.load();
 	await router.push('/libraries');
 }
@@ -1079,28 +1080,13 @@ onUnmounted(() => {
 				<p class="eyebrow">Libraries</p>
 				<div class="title-row">
 					<h1>{{ library.name }}</h1>
-					<div class="action-menu">
-						<button
-							class="square-button"
-							aria-label="Library actions"
-							:aria-expanded="showMenu"
-							@click="showMenu = !showMenu"
-						>
-							<MoreHorizontal :size="20" />
-						</button>
-						<div v-if="showMenu" class="action-popover">
-							<button @click="scan"><RefreshCw :size="16" />Scan now</button>
-							<span class="source-path" :title="library.sourceConfig.scanRoot">{{
-								library.sourceConfig.scanRoot
-							}}</span>
-							<button class="danger-action" @click="remove">
-								<Trash2 :size="16" />Remove library
-							</button>
-						</div>
+					<div class="library-title-actions">
+						<button class="square-button library-header-icon-button" aria-label="Sync library" :disabled="isScanRunning()" @click="scan"><RefreshCw :size="20" :class="{ spinning: isScanRunning() }" /></button>
 					</div>
 				</div>
 			</div>
 			<div class="library-header-tools">
+				<button class="square-button library-header-icon-button" aria-label="Library settings" @click="showSettings = true"><Settings :size="20" /></button>
 				<label class="search-control">
 					<Search :size="19" />
 					<span class="sr-only">Search {{ library.name }}</span>
@@ -1292,6 +1278,7 @@ onUnmounted(() => {
 		<details class="diagnostics"><summary>Scan history</summary><article v-for="run in scans" :key="run.id"><StatusPill :value="run.status" /><span>{{ new Date(run.startedAt).toLocaleString() }}</span><span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span><ul v-if="run.issues.length"><li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">{{ issue.code }} — {{ issue.path ?? issue.message }}</li></ul></article></details>
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
+		<LibrarySettingsModal v-if="showSettings" :library="library" @close="showSettings = false" @saved="finishSettings" @deleted="finishDeletion" />
 		<LibraryFilterModal v-if="showFilter" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
 		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />

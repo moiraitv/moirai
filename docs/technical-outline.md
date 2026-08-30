@@ -118,6 +118,10 @@ Source media is managed outside Moirai. Moirai indexes files but does not add or
 Preview, artwork, and playout resource resolution are still filesystem-backed. Supporting a remote
 adapter will require a separate resource-access boundary in addition to implementing its scanner.
 
+The library settings dialog edits the library identity, scan and playback roots, scan cadence,
+watcher state, and scheduling enablement. Deleting a library requires exact-name confirmation and
+removes Moirai's configuration and index without changing source media files.
+
 ### Metadata and playback facts
 
 Kodi-compatible movie, episode, show, and music-video NFO files provide descriptive metadata:
@@ -379,6 +383,11 @@ programs, while shuffle and random programs compare additions as an unordered se
 Selection strategies include sequential, deterministic shuffle without repeats, and deterministic
 random selection. Persistent selection state remains separate from configuration, allowing a daily
 slot to resume tomorrow instead of restarting.
+
+The Programs catalog is searchable and filterable by content or sequence type. Content rows expose
+a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows
+show their authored child-program entries. Preview data is included in the scheduling status contract
+without exposing playback paths or the full scheduling catalog.
 
 Standalone program and template editors use document-scrolling page surfaces, while editors opened
 inside another scheduling workflow remain modal. Client-authored scheduling identifiers retain UUID

@@ -581,6 +581,15 @@ export interface SchedulingCatalog {
 /** Shared wire contract for scheduling program health. */
 export type SchedulingProgramHealth = 'ready' | 'degraded' | 'unavailable' | 'missing' | 'empty';
 
+/** Compact indexed media entry used by program catalog carousels. */
+export interface SchedulingProgramPreviewItem {
+	id: string;
+	title: string;
+	year: number | null;
+	artworkUrl: string | null;
+	availability: MediaAvailability;
+}
+
 /** Shared wire contract for scheduling program status. */
 export interface SchedulingProgramStatus {
 	programId: string;
@@ -588,6 +597,7 @@ export interface SchedulingProgramStatus {
 	sourceLabel: string;
 	indexedItemCount: number;
 	availableItemCount: number;
+	previewItems: SchedulingProgramPreviewItem[];
 }
 
 /** Shared wire contract for scheduling overview. */

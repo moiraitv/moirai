@@ -66,6 +66,22 @@ describe('scheduling program status', () => {
 		expect(schedulingProgramStatuses([program], missingCatalog)[0]?.health).toBe('missing');
 	});
 
+	it('includes unavailable indexed matches in bounded program previews', () => {
+		const fixture = catalog('unconfirmed');
+		fixture.media = Array.from({ length: 14 }, (_, index) => ({
+			...fixture.media[0]!,
+			id: `00000000-0000-4000-8000-${String(index + 10).padStart(12, '0')}`,
+			title: `Film ${index + 1}`,
+		}));
+
+		const status = schedulingProgramStatuses([program], fixture)[0]!;
+		expect(status.previewItems).toHaveLength(12);
+		expect(status.previewItems[0]).toMatchObject({
+			title: 'Film 1',
+			availability: 'unconfirmed',
+		});
+	});
+
 	it('reports a partially missing explicit collection as degraded', () => {
 		const fixture = catalog('available');
 		const collection: SchedulingProgram = {

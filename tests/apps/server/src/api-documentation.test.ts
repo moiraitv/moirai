@@ -9,6 +9,7 @@ import {
 } from '@server/api-documentation.js';
 
 const EXPECTED_HTTP_OPERATIONS = [
+	'addLibraryItemsToProgram',
 	'applyChannelMaterialization',
 	'browseLibraryMedia',
 	'cancelLibraryScan',

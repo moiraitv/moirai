@@ -8,6 +8,7 @@ import type {
 	PlaybackSettings,
 	Library,
 	LibraryCreate,
+	LibraryUpdate,
 	LibraryReconciliation,
 	ReconciliationAction,
 	GenreMatch,
@@ -247,6 +248,8 @@ export const api = {
 	library: (id: string) => request<Library>(`/api/v1/libraries/${id}`),
 	createLibrary: (body: LibraryCreate) =>
 		request<Library>('/api/v1/libraries', { method: 'POST', body: JSON.stringify(body) }),
+	updateLibrary: (id: string, body: LibraryUpdate) =>
+		request<Library>(`/api/v1/libraries/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 	deleteLibrary: (id: string) => request<void>(`/api/v1/libraries/${id}`, { method: 'DELETE' }),
 	scanLibrary: (id: string) =>
 		request<{ status: string }>(`/api/v1/libraries/${id}/scans`, { method: 'POST' }),

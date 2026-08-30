@@ -25,7 +25,7 @@
 
 .title-row {
 	display: flex;
-	align-items: center;
+	align-items: baseline;
 	gap: 10px;
 }
 
@@ -35,6 +35,12 @@
 	border: 1px solid var(--line);
 	color: var(--muted-strong);
 	background: rgba(9, 20, 31, 0.8);
+}
+
+.library-header-icon-button {
+	border-color: transparent;
+	background: transparent;
+	box-shadow: none;
 }
 
 .action-menu {
@@ -945,6 +951,66 @@ a.media-card {
 	background: rgba(7, 18, 28, 0.97);
 	box-shadow: 0 -8px 24px rgba(2, 8, 12, 0.34);
 	font-size: 0.74rem;
+}
+
+.library-title-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.library-settings-modal {
+	width: min(760px, 100%);
+}
+
+.library-settings-fields {
+	margin-top: 22px;
+}
+
+.library-settings-checks {
+	display: grid;
+	align-content: center;
+	gap: 10px;
+}
+
+.library-settings-note {
+	margin: 14px 0 0;
+	color: var(--muted);
+	font-size: 0.82rem;
+	line-height: 1.5;
+}
+
+.library-danger-zone {
+	margin-top: 26px;
+	padding: 18px;
+	border: 1px solid rgba(239, 83, 104, 0.55);
+	border-radius: 11px;
+	background: rgba(91, 24, 34, 0.2);
+}
+
+.library-danger-heading {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	color: #ff8292;
+}
+
+.library-danger-heading h3,
+.library-danger-heading p {
+	margin: 0;
+}
+
+.library-danger-heading p {
+	margin-top: 6px;
+	color: #d6adb3;
+	font-size: 0.82rem;
+	line-height: 1.45;
+}
+
+.library-danger-zone > label {
+	margin: 16px 0 12px;
+	display: grid;
+	gap: 7px;
 }
 
 .catalog-footer > :last-child {
