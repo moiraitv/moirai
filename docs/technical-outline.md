@@ -249,7 +249,9 @@ After the first full scan identifies a missing item, follow-up observations chec
 paths stored for current tombstones. These checks verify source identity and file presence without
 traversing the library, parsing metadata, processing artwork, probing media, or adding scan-history
 records. A restored or inconclusive path requests a normal reconciliation scan. Large removals and
-source-identity changes continue to require explicit operator approval.
+source-identity changes continue to require explicit operator approval. Large removals also receive
+heal-only path checks: files found present return to scheduling immediately, while absent files are
+never advanced toward deletion and remain protected behind operator approval.
 
 ### Resource pressure
 
@@ -281,6 +283,10 @@ Large changes require explicit review. This includes:
 - more than 10 missing items and more than 20% of the prior index;
 - an empty result from a previously populated library;
 - a configured scan-root change.
+
+For a large removal, 30-minute targeted checks restore any suspect item whose physical path is
+present without traversing the source, refreshing metadata, or probing media. Items that remain
+absent still require explicit approval and are never deleted by these heal-only checks.
 
 Candidate roots are inspected without mixing their entries into the accepted index. Acceptance is
 bound to the reviewed root and manifest, so a stale confirmation cannot approve different content.

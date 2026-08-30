@@ -387,6 +387,116 @@ describe('Repository scan reconciliation', () => {
 		});
 	});
 
+	it('heals present items without approving absent items from a major removal', async () => {
+		vi.useFakeTimers();
+		const startedAt = new Date('2026-01-01T00:00:00.000Z');
+		vi.setSystemTime(startedAt);
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-major-removal-healing-'));
+		const config = loadConfig({
+			dataDir: root,
+			databasePath: path.join(root, 'test.sqlite'),
+			migrationsDir: path.resolve('drizzle'),
+		});
+		const database = createDatabase(config.databasePath, config.migrationsDir);
+		cleanups.push(async () => {
+			database.close();
+			await rm(root, { recursive: true, force: true });
+		});
+		const repository = new Repository(database.db);
+		const library = await repository.createLibrary({
+			name: 'Major removal movies',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: root, playbackRoot: null },
+			scanIntervalMinutes: 180,
+			watcherEnabled: true,
+			enabled: true,
+		});
+		const restored = item(1);
+		const absent = item(2);
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'initial'),
+			[],
+			[restored, absent],
+			[],
+			true,
+		);
+		vi.setSystemTime(new Date(startedAt.getTime() + 30 * 60_000));
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'watcher'),
+			[],
+			[],
+			[],
+			true,
+		);
+		const batch = await repository.getMissingItemPresenceBatch(library.id);
+		expect(batch).toMatchObject({ mode: 'heal-only' });
+		expect(batch?.targets).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					itemId: restored.id,
+					relativePaths: [restored.relativePath],
+				}),
+				expect.objectContaining({
+					itemId: absent.id,
+					relativePaths: [absent.relativePath],
+				}),
+			]),
+		);
+		vi.setSystemTime(new Date(startedAt.getTime() + 60 * 60_000));
+
+		const result = await repository.applyMissingItemPresence(
+			library.id,
+			batch!.revision,
+			{ sourceType: 'on-disk', sourceKey: root, details: {} },
+			[
+				{ itemId: restored.id, status: 'present' },
+				{ itemId: absent.id, status: 'absent' },
+			],
+		);
+
+		expect(result).toMatchObject({
+			applied: true,
+			changed: true,
+			presentItemIds: [restored.id],
+			restoredItemIds: [restored.id],
+			removedItemIds: [],
+			pendingRemovalCount: 1,
+		});
+		expect(await repository.listMediaItemsByIds(library.id, [restored.id, absent.id]))
+			.toMatchObject([
+				{ id: restored.id, availability: 'available' },
+				{ id: absent.id, availability: 'unconfirmed' },
+			]);
+		expect(await repository.getLibraryReconciliation(library.id)).toMatchObject({
+			status: 'removal-approval-required',
+			pendingRemovalCount: 1,
+			missingItems: [{ id: absent.id, consecutiveObservations: 1 }],
+		});
+		const remainingBatch = await repository.getMissingItemPresenceBatch(library.id);
+		expect(remainingBatch).toMatchObject({
+			mode: 'heal-only',
+			targets: [{ itemId: absent.id }],
+		});
+		vi.setSystemTime(new Date(startedAt.getTime() + 90 * 60_000));
+		const stillAbsent = await repository.applyMissingItemPresence(
+			library.id,
+			remainingBatch!.revision,
+			{ sourceType: 'on-disk', sourceKey: root, details: {} },
+			[{ itemId: absent.id, status: 'absent' }],
+		);
+		expect(stillAbsent).toMatchObject({
+			changed: false,
+			removedItemIds: [],
+			restoredItemIds: [],
+			pendingRemovalCount: 1,
+		});
+		expect(await repository.getLibraryReconciliation(library.id)).toMatchObject({
+			status: 'removal-approval-required',
+			missingItems: [{ id: absent.id, consecutiveObservations: 1 }],
+		});
+	});
+
 	it('requires explicit reconciliation for an empty populated source', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-empty-reconciliation-'));
 		const config = loadConfig({

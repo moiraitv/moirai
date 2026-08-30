@@ -672,7 +672,7 @@ export abstract class ScanRepository {
 		};
 	}
 
-	/** Return every physical path currently awaiting ordinary missing-item confirmation. */
+	/** Return physical paths awaiting ordinary confirmation or major-removal healing. */
 	async getMissingItemPresenceBatch(libraryId: string): Promise<MissingItemPresenceBatch | null> {
 		const [state] = await this.db
 			.select({
@@ -681,7 +681,10 @@ export abstract class ScanRepository {
 			})
 			.from(libraries)
 			.where(eq(libraries.id, libraryId));
-		if (state?.status !== 'observing-removals' || !state.revision) {
+		if (
+			!state?.revision
+			|| !['observing-removals', 'removal-approval-required'].includes(state.status)
+		) {
 			return null;
 		}
 
@@ -708,6 +711,7 @@ export abstract class ScanRepository {
 		return {
 			revision: state.revision,
 			nextCheckAt,
+			mode: state.status === 'removal-approval-required' ? 'heal-only' : 'confirmation',
 			targets: rows.map((row) => ({
 				itemId: row.itemId,
 				stableKey: row.stableKey,
@@ -720,7 +724,7 @@ export abstract class ScanRepository {
 		};
 	}
 
-	/** Apply conclusive path-only observations when their reconciliation revision is still current. */
+	/** Apply path-only healing or ordinary confirmation against the current reconciliation revision. */
 	async applyMissingItemPresence(
 		libraryId: string,
 		revision: string,
@@ -747,7 +751,8 @@ export abstract class ScanRepository {
 				.where(eq(mediaRemovalTombstones.libraryId, libraryId))
 				.all();
 			if (
-				state?.status !== 'observing-removals'
+				!state
+				|| !['observing-removals', 'removal-approval-required'].includes(state.status)
 				|| state.revision !== revision
 				|| tombstones.length === 0
 				|| tombstones.some((entry) => entry.sourceIdentityHash !== identityHash)
@@ -757,11 +762,13 @@ export abstract class ScanRepository {
 					changed: false,
 					removedItemIds: [],
 					presentItemIds: [],
+					restoredItemIds: [],
 					pendingRemovalCount: tombstones.length,
 				};
 			}
 
-			// Advance only conclusive absent observations that satisfy the safety interval.
+			// Restore present major-removal items and advance only ordinary absent observations.
+			const healOnly = state.status === 'removal-approval-required';
 			const minimumObservationMs = REMOVAL_CONFIRMATION_INTERVAL_MINUTES * 60_000;
 			const presentItemIds: string[] = [];
 			const removableIds: string[] = [];
@@ -773,7 +780,7 @@ export abstract class ScanRepository {
 					continue;
 				}
 
-				if (observation !== 'absent') {
+				if (observation !== 'absent' || healOnly) {
 					continue;
 				}
 
@@ -795,6 +802,16 @@ export abstract class ScanRepository {
 					removableIds.push(tombstone.itemId);
 				}
 			}
+			if (healOnly && presentItemIds.length > 0) {
+				tx.update(mediaItems)
+					.set({ availability: 'available', lastObservedAt: timestamp, updatedAt: timestamp })
+					.where(inArray(mediaItems.id, presentItemIds))
+					.run();
+				tx.delete(mediaRemovalTombstones)
+					.where(inArray(mediaRemovalTombstones.itemId, presentItemIds))
+					.run();
+				changed = true;
+			}
 
 			// Delete confirmed items and move the library to its next reconciliation revision.
 			if (removableIds.length > 0) {
@@ -811,14 +828,21 @@ export abstract class ScanRepository {
           )`);
 			}
 
-			const pendingRemovalCount = tombstones.length - removableIds.length;
+			const restoredCount = healOnly ? presentItemIds.length : 0;
+			const pendingRemovalCount = tombstones.length - removableIds.length - restoredCount;
 			if (changed) {
 				tx.update(libraries)
 					.set({
-						reconciliationStatus: pendingRemovalCount === 0 ? 'idle' : 'observing-removals',
+						reconciliationStatus: pendingRemovalCount === 0
+							? 'idle'
+							: healOnly
+								? 'removal-approval-required'
+								: 'observing-removals',
 						reconciliationRevision: pendingRemovalCount === 0 ? null : randomUUID(),
 						pendingRemovalCount,
-						lastIndexedChangeAt: removableIds.length > 0 ? timestamp : undefined,
+						lastIndexedChangeAt: removableIds.length > 0 || restoredCount > 0
+							? timestamp
+							: undefined,
 						warningCount: pendingRemovalCount === 0
 							? Math.max(0, state.warningCount - 1)
 							: state.warningCount,
@@ -833,10 +857,11 @@ export abstract class ScanRepository {
 				changed,
 				removedItemIds: removableIds,
 				presentItemIds,
+				restoredItemIds: healOnly ? presentItemIds : [],
 				pendingRemovalCount,
 			};
 		});
-		if (result.removedItemIds.length > 0) {
+		if (result.removedItemIds.length > 0 || result.restoredItemIds.length > 0) {
 			this.catalogChanged();
 		}
 

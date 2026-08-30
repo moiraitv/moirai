@@ -221,7 +221,7 @@ export class ScannerManager {
 		return operation;
 	}
 
-	/** Schedule the earliest integrity scan or ordinary missing-item presence check. */
+	/** Schedule the earliest integrity scan or targeted missing-item presence check. */
 	private async scheduleNextWork(libraryId: string): Promise<void> {
 		const runtime = this.runtimes.get(libraryId);
 		if (!runtime || this.closing || this.stoppedLibraries.has(libraryId)) {
@@ -348,7 +348,7 @@ export class ScannerManager {
 			if (reconciled.removedItemIds.length > 0 && this.purgeRemovedArtwork) {
 				await this.purgeRemovedArtwork(libraryId, reconciled.removedItemIds).catch(() => undefined);
 			}
-			if (reconciled.removedItemIds.length > 0) {
+			if (reconciled.removedItemIds.length > 0 || reconciled.restoredItemIds.length > 0) {
 				this.repository.invalidateSchedulingCatalog();
 			}
 			if (reconciled.changed) {
@@ -357,14 +357,20 @@ export class ScannerManager {
 					data: {
 						libraryId,
 						change: 'reconciled',
-						affectsProgramming: reconciled.removedItemIds.length > 0,
+						affectsProgramming: reconciled.removedItemIds.length > 0
+							|| reconciled.restoredItemIds.length > 0,
 					},
 				});
 			}
 
 			const needsFullScan = !reconciled.applied
-				|| reconciled.presentItemIds.length > 0
-				|| checked.observations.some((entry) => entry.status === 'inconclusive');
+				|| (
+					batch.mode === 'confirmation'
+					&& (
+						reconciled.presentItemIds.length > 0
+						|| checked.observations.some((entry) => entry.status === 'inconclusive')
+					)
+				);
 			if (needsFullScan) {
 				this.launchScan(libraryId, 'watcher');
 			}

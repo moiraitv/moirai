@@ -57,10 +57,11 @@ export interface ScanHistoryRetention {
 	scansPerLibrary: number;
 }
 
-/** Current ordinary-removal revision and its provider-facing targeted presence work. */
+/** Current removal revision and its provider-facing targeted presence work. */
 export interface MissingItemPresenceBatch {
 	revision: string;
 	nextCheckAt: string;
+	mode: 'confirmation' | 'heal-only';
 	targets: MissingItemPresenceTarget[];
 }
 
@@ -70,6 +71,7 @@ export interface ReconciledPresenceCheck {
 	changed: boolean;
 	removedItemIds: string[];
 	presentItemIds: string[];
+	restoredItemIds: string[];
 	pendingRemovalCount: number;
 }
 
