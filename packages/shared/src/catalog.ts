@@ -99,6 +99,8 @@ export const mediaSortSchema = z.enum(['title', 'date-added', 'genre']);
 export const sortDirectionSchema = z.enum(['asc', 'desc']);
 /** Validate the genre match contract at runtime. */
 export const genreMatchSchema = z.enum(['any', 'all']);
+/** Maximum number of genre requirements and exclusions accepted by one catalog query. */
+export const MAX_MEDIA_GENRE_RULES = 100;
 /** Shared wire contract for media sort. */
 export type MediaSort = z.infer<typeof mediaSortSchema>;
 /** Shared wire contract for sort direction. */
@@ -160,11 +162,12 @@ export interface MediaSourcePickerResult {
 	pagination: MediaBrowseResult['pagination'];
 }
 
-/** One normalized genre and its indexed item count. */
+/** One normalized genre with its inclusion count and optional exclusion-action count. */
 export interface MediaGenreFacet {
 	key: string;
 	name: string;
 	count: number;
+	excludeCount: number | null;
 }
 
 /** Credited person associated with an indexed media item. */

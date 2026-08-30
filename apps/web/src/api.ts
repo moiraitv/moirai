@@ -96,9 +96,17 @@ export interface MediaQuery {
 	addedFrom?: string | undefined;
 	addedBefore?: string | undefined;
 	genres?: string[] | undefined;
+	excludedGenres?: string[] | undefined;
 	genreMatch?: GenreMatch | undefined;
 	actor?: string | undefined;
 	director?: string | undefined;
+}
+
+/** Genre rules used to request contextual facet-action counts. */
+export interface MediaGenreFacetQuery {
+	genres?: string[] | undefined;
+	excludedGenres?: string[] | undefined;
+	genreMatch?: GenreMatch | undefined;
 }
 
 /** Search and paging controls for a program source picker. */
@@ -270,7 +278,28 @@ export const api = {
 		}
 		return request<MediaBrowseResult>(`/api/v1/libraries/${id}/media?${params}`);
 	},
-	mediaGenres: (id: string) => request<MediaGenreFacet[]>(`/api/v1/libraries/${id}/media-genres`),
+	mediaGenres: (id: string, query: MediaGenreFacetQuery = {}, signal?: AbortSignal) => {
+		const params = new URLSearchParams();
+		for (const [key, value] of Object.entries(query)) {
+			if (value === undefined || (Array.isArray(value) && value.length === 0)) {
+				continue;
+			}
+
+			if (Array.isArray(value)) {
+				for (const entry of value) {
+					params.append(key, entry);
+				}
+			}
+			else {
+				params.set(key, value);
+			}
+		}
+		const serialized = params.toString();
+		const suffix = serialized ? `?${serialized}` : '';
+		return request<MediaGenreFacet[]>(`/api/v1/libraries/${id}/media-genres${suffix}`, {
+			signal: signal ?? null,
+		});
+	},
 	mediaSourceOptions: (id: string, query: MediaSourcePickerQuery) => {
 		const params = new URLSearchParams();
 		for (const [key, value] of Object.entries(query)) {

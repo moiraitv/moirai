@@ -5,6 +5,7 @@ import {
 	genreMatchSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	MAX_EXPLICIT_MEDIA_ITEMS,
+	MAX_MEDIA_GENRE_RULES,
 	mediaSortSchema,
 	sortDirectionSchema,
 } from '@moirai/shared';
@@ -38,6 +39,46 @@ import {
 /** Cache policy for immutable artwork URLs that include a source version. */
 const VERSIONED_ARTWORK_CACHE_CONTROL = 'private, max-age=31536000, immutable';
 
+/** Bounded, deduplicated genre keys accepted from repeated query parameters. */
+const genreKeysQuerySchema = z
+	.union([
+		z.string().trim().min(1).max(120),
+		z.array(z.string().trim().min(1).max(120)).max(MAX_MEDIA_GENRE_RULES),
+	])
+	.default([])
+	.transform((value) => [...new Set(Array.isArray(value) ? value : [value])]);
+
+/** Reject contradictory or unsupported combinations of genre rules. */
+function validateGenreRules(
+	value: { genres: string[]; excludedGenres: string[]; genreMatch: 'any' | 'all' },
+	context: z.RefinementCtx,
+): void {
+	if (value.genres.length + value.excludedGenres.length > MAX_MEDIA_GENRE_RULES) {
+		context.addIssue({
+			code: 'custom',
+			path: ['genres'],
+			message: `A query can contain at most ${MAX_MEDIA_GENRE_RULES} genre rules`,
+		});
+	}
+
+	if (value.genreMatch === 'any' && value.excludedGenres.length > 0) {
+		context.addIssue({
+			code: 'custom',
+			path: ['excludedGenres'],
+			message: 'Excluded genres require Match all',
+		});
+	}
+
+	const included = new Set(value.genres);
+	if (value.excludedGenres.some((genre) => included.has(genre))) {
+		context.addIssue({
+			code: 'custom',
+			path: ['excludedGenres'],
+			message: 'A genre cannot be both required and excluded',
+		});
+	}
+}
+
 /** Filters, sorting, and pagination accepted by catalog browsing. */
 const mediaBrowseQuerySchema = z.object({
 	parentId: z.uuid().optional(),
@@ -50,14 +91,19 @@ const mediaBrowseQuerySchema = z.object({
 	releaseYearTo: z.coerce.number().int().min(1800).max(2200).optional(),
 	addedFrom: z.iso.datetime({ offset: true }).optional(),
 	addedBefore: z.iso.datetime({ offset: true }).optional(),
-	genres: z
-		.union([z.string(), z.array(z.string())])
-		.default([])
-		.transform((value) => (Array.isArray(value) ? value : value ? [value] : [])),
-	genreMatch: genreMatchSchema.default('any'),
+	genres: genreKeysQuerySchema,
+	excludedGenres: genreKeysQuerySchema,
+	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
 	director: z.string().trim().max(120).default(''),
-});
+}).superRefine(validateGenreRules);
+
+/** Genre rules used to calculate contextual Match all facet-action counts. */
+const mediaGenreFacetQuerySchema = z.object({
+	genres: genreKeysQuerySchema,
+	excludedGenres: genreKeysQuerySchema,
+	genreMatch: genreMatchSchema.default('any'),
+}).superRefine(validateGenreRules);
 
 /** Bounded search accepted by scheduling media-source pickers. */
 const mediaSourceOptionsQuerySchema = z.object({
@@ -123,11 +169,19 @@ export function registerCatalogRoutes(
 			tags: ['Catalog'],
 			summary: 'List indexed library genres',
 			params: idParamsSchema,
+			querystring: mediaGenreFacetQuerySchema,
 			response: { 200: responseContent('Normalized genre facets', 'application/json', z.array(mediaGenreFacetSchema)) },
 			errors: [400, 404, 500, 503],
 		}),
-	}, async (request) =>
-		repository.listMediaGenres(parseId(request)));
+	}, async (request) => {
+		const query = mediaGenreFacetQuerySchema.parse(request.query);
+		return repository.listMediaGenres(
+			parseId(request),
+			query.genreMatch === 'all'
+				? { genres: query.genres, excludedGenres: query.excludedGenres }
+				: null,
+		);
+	});
 	// Bounded source-picker searches for program editing.
 	app.get('/api/v1/libraries/:id/media-source-options', {
 		schema: apiOperation({

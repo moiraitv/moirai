@@ -34,6 +34,7 @@ import { listDataConflicts } from './conflicts.js';
 import type {
 	MediaBrowseQuery,
 	MediaFileOwner,
+	MediaGenreFacetSelection,
 	MediaProbeCacheEntry,
 	MediaSourcePickerQuery,
 	TimelineCommit,
@@ -112,9 +113,12 @@ export class Repository extends LibraryRepository {
 		return this.catalog.browseMediaSourceOptions(libraryId, query);
 	}
 
-	/** List normalized genre facets present in one library. */
-	async listMediaGenres(libraryId: string): Promise<MediaGenreFacet[]> {
-		return this.catalog.listMediaGenres(libraryId);
+	/** List genre facets with optional counts for required and disallowed Match all actions. */
+	async listMediaGenres(
+		libraryId: string,
+		selection: MediaGenreFacetSelection | null = null,
+	): Promise<MediaGenreFacet[]> {
+		return this.catalog.listMediaGenres(libraryId, selection);
 	}
 
 	/** Collect the stable identifiers for list media items by. */

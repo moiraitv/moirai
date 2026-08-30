@@ -24,7 +24,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await writeFile(path.join(mediaRoot, 'Broadcast.mp4'), 'fixture');
 	await writeFile(
 		path.join(mediaRoot, 'Broadcast.nfo'),
-		'<movie><title>Broadcast Fixture</title><year>2026</year><genre>Sci-Fi</genre><director>Jane Director</director><actor><name>Ada Actor</name><role>Host</role></actor></movie>',
+		'<movie><title>Broadcast Fixture</title><year>2026</year><genre>Sci-Fi</genre><genre>Drama</genre><director>Jane Director</director><actor><name>Ada Actor</name><role>Host</role></actor></movie>',
+	);
+	await writeFile(path.join(mediaRoot, 'Companion.mp4'), 'fixture');
+	await writeFile(
+		path.join(mediaRoot, 'Companion.nfo'),
+		'<movie><title>Companion Fixture</title><year>2025</year><genre>Drama</genre></movie>',
 	);
 	await writeFile(path.join(mediaRoot, 'poster.png'), posterPng);
 
@@ -51,7 +56,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		.locator('.library-grid')
 		.getByRole('link', { name: new RegExp(libraryName) });
 	await expect(libraryCard).toBeVisible();
-	await expect(libraryCard).toContainText('1 indexed');
+	await expect(libraryCard).toContainText('2 indexed');
 	await libraryCard.click();
 	await expect(page.locator('.library-status-panel')).toContainText('Watcher');
 	await expect(page.locator('.status-watcher')).toContainText('ready');
@@ -67,17 +72,87 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page).not.toHaveURL(/dateWindow=/);
 	await page.goBack();
 	await expect(page).not.toHaveURL(/sort=/);
+	/** Wait for contextual facet counts matching the current required and disallowed rules. */
+	function waitForGenreFacets(
+		included: string[],
+		excluded: string[] = [],
+	): ReturnType<typeof page.waitForResponse> {
+		return page.waitForResponse((response) => {
+			const url = new URL(response.url());
+			return url.pathname.endsWith('/media-genres')
+				&& url.searchParams.get('genreMatch') === 'all'
+				&& url.searchParams.getAll('genres').toSorted().join() === included.toSorted().join()
+				&& url.searchParams.getAll('excludedGenres').toSorted().join() === excluded.toSorted().join();
+		});
+	}
 
 	await page.getByRole('button', { name: 'Filter' }).click();
 	await expect(page.getByRole('heading', { name: 'Filter media' })).toBeVisible();
+	await expect(page.getByText('Narrow down your results using the filters below.')).toBeVisible();
+	await expect(page.getByRole('radio', { name: /Match all/ })).toBeChecked();
+	await page.getByLabel('Actor').fill('Discarded draft');
+	await page.getByRole('button', { name: 'Cancel' }).click();
+	const initialGenreFacets = waitForGenreFacets([]);
+	await page.getByRole('button', { name: 'Filter' }).click();
+	await initialGenreFacets;
+	await expect(page.getByLabel('Actor')).toHaveValue('');
 	await page.getByLabel('Actor').fill('Ada');
+	const dramaRule = page.getByRole('group', { name: 'Drama rule' });
+	const scienceFictionRule = page.getByRole('group', { name: 'Science Fiction rule' });
+	await expect(dramaRule.getByRole('button', { name: /Require Drama, 2 matching/ })).toBeVisible();
+	await expect(dramaRule.getByRole('button', { name: /Disallow Drama, 0 matching/ })).toBeVisible();
+	const requiredScienceFiction = waitForGenreFacets(['science-fiction']);
+	await scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }).click();
+	await requiredScienceFiction;
+	await expect(page.getByText('Updating genre counts…')).toBeHidden();
+	await expect(dramaRule.getByRole('button', { name: /Require Drama, 1 matching/ })).toBeVisible();
+	const excludedDrama = waitForGenreFacets(['science-fiction'], ['drama']);
+	await dramaRule.getByRole('button', { name: /Disallow Drama/ }).click();
+	await excludedDrama;
+	await expect(dramaRule.getByRole('button', { name: /Disallow Drama, 0 matching/ }))
+		.toHaveAttribute('aria-pressed', 'true');
+	await page.getByRole('button', { name: 'Apply filters' }).click();
+	await expect(page).toHaveURL(/genre=science-fiction/);
+	await expect(page).toHaveURL(/excludeGenre=drama/);
+	await expect(page).not.toHaveURL(/genreMatch=/);
+	await expect(page.getByText('No matching media')).toBeVisible();
+	const restoredExcludedGenres = waitForGenreFacets(['science-fiction'], ['drama']);
+	await page.getByRole('button', { name: /Filter/ }).click();
+	await restoredExcludedGenres;
+	await page.getByRole('radio', { name: /Match any/ }).check();
+	await expect(page.getByRole('checkbox', { name: /Science Fiction 1/ })).toBeChecked();
+	await expect(page.getByRole('checkbox', { name: /Drama 2/ })).not.toBeChecked();
+	const refreshedContextualGenres = waitForGenreFacets(['science-fiction']);
+	await page.getByRole('radio', { name: /Match all/ }).check();
+	await refreshedContextualGenres;
+	await expect(dramaRule.getByRole('button', { name: /Disallow Drama/ }))
+		.toHaveAttribute('aria-pressed', 'false');
+	const neutralGenres = waitForGenreFacets([]);
+	await scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }).click();
+	await neutralGenres;
+	await expect(scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }))
+		.toHaveAttribute('aria-pressed', 'false');
+	const restoredScienceFiction = waitForGenreFacets(['science-fiction']);
+	await scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }).click();
+	await restoredScienceFiction;
+	const requiredDrama = waitForGenreFacets(['science-fiction', 'drama']);
+	await dramaRule.getByRole('button', { name: /Require Drama/ }).click();
+	await requiredDrama;
 	await page.getByRole('button', { name: 'Apply filters' }).click();
 	await expect(page).toHaveURL(/actor=Ada/);
+	await expect(page).toHaveURL(/genre=/);
+	await expect(page).not.toHaveURL(/excludeGenre=/);
+	await expect(page).not.toHaveURL(/genreMatch=/);
 
 	const mediaCard = page.locator('.media-card').filter({ hasText: 'Broadcast Fixture' });
 	await expect(mediaCard).toBeVisible();
-	await page.goBack();
+	await page.getByRole('button', { name: /Filter/ }).click();
+	await page.getByRole('button', { name: 'Clear all' }).click();
+	await expect(page.getByLabel('Actor')).toHaveValue('');
+	await expect(page).toHaveURL(/actor=Ada/);
+	await page.getByRole('button', { name: 'Apply filters' }).click();
 	await expect(page).not.toHaveURL(/actor=/);
+	await expect(page).not.toHaveURL(/genre=/);
 	await expect(mediaCard).toContainText('2026');
 	await expect(mediaCard).not.toContainText(/S\d+E\d+/);
 

@@ -13,6 +13,7 @@ import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata
 import type {
 	MediaBrowseQuery,
 	MediaFileOwner,
+	MediaGenreFacetSelection,
 	MediaProbeCacheEntry,
 	MediaSourcePickerQuery,
 } from './contracts.js';
@@ -87,7 +88,8 @@ export class MediaCatalogRepository {
 			|| query.releaseYearTo !== null
 			|| query.addedFrom
 			|| query.addedBefore
-			|| query.genres.length,
+			|| query.genres.length
+			|| query.excludedGenres.length,
 		);
 		const flattenHierarchy = hasFilters || query.sort !== 'title';
 		if (!flattenHierarchy) {
@@ -146,6 +148,13 @@ export class MediaCatalogRepository {
 				);
 				conditionParams.push(...query.genres);
 			}
+		}
+		if (query.excludedGenres.length > 0) {
+			const placeholders = query.excludedGenres.map(() => '?').join(', ');
+			conditions.push(
+				`NOT EXISTS (SELECT 1 FROM media_item_genres eg WHERE eg.item_id = i.id AND eg.genre_key IN (${placeholders}))`,
+			);
+			conditionParams.push(...query.excludedGenres);
 		}
 		for (const [type, value] of [
 			['actor', query.actor],
@@ -383,6 +392,7 @@ export class MediaCatalogRepository {
 				addedFrom: null,
 				addedBefore: null,
 				genres: [],
+				excludedGenres: [],
 				genreMatch: 'any',
 				actor: '',
 				director: '',
@@ -742,9 +752,12 @@ export class MediaCatalogRepository {
 		});
 	}
 
-	/** List normalized genre facets present in one library. */
-	async listMediaGenres(libraryId: string): Promise<MediaGenreFacet[]> {
-		return this.assets.listMediaGenres(libraryId);
+	/** List genre facets with optional counts for required and disallowed Match all actions. */
+	async listMediaGenres(
+		libraryId: string,
+		selection: MediaGenreFacetSelection | null = null,
+	): Promise<MediaGenreFacet[]> {
+		return this.assets.listMediaGenres(libraryId, selection);
 	}
 
 	/** Collect the stable identifiers for list media items by. */

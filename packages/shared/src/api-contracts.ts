@@ -240,11 +240,12 @@ export const mediaSourcePickerResultSchema = z.object({
 	pagination: paginationSchema,
 });
 
-/** Normalized genre facet and its indexed media count. */
+/** Normalized genre facet with inclusion and optional exclusion-action counts. */
 export const mediaGenreFacetSchema = z.object({
 	key: z.string(),
 	name: z.string(),
 	count: z.number().int().nonnegative(),
+	excludeCount: z.number().int().nonnegative().nullable(),
 });
 
 /** Reusable rule that defines eligible media and selection behavior. */

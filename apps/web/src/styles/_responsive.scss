@@ -485,15 +485,48 @@
 		display: flex;
 	}
 
-	.filter-grid,
-	.genre-choices,
 	.media-detail-hero,
 	.detail-panels {
 		grid-template-columns: 1fr;
 	}
 
-	.filter-grid .wide-field {
-		grid-column: auto;
+	.modal.filter-modal {
+		max-height: calc(100vh - 12px);
+	}
+
+	.filter-modal-header {
+		padding: 22px 20px 18px;
+	}
+
+	.filter-modal-header p:last-child {
+		margin-top: 14px;
+	}
+
+	.filter-modal-body {
+		padding: 0 20px 24px;
+	}
+
+	.filter-grid,
+	.filter-people-grid,
+	.filter-genres-header {
+		grid-template-columns: 1fr;
+	}
+
+	.filter-release-field {
+		width: 100%;
+	}
+
+	.filter-genres-header {
+		align-items: start;
+	}
+
+	.genre-choices {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		background: rgba(7, 19, 30, 0.58);
+	}
+
+	.filter-modal-footer {
+		padding: 14px 20px;
 	}
 
 	.detail-poster {
@@ -810,6 +843,34 @@
 }
 
 @media (max-width: 440px) {
+	.filter-release-inputs,
+	.genre-match,
+	.genre-choices {
+		grid-template-columns: 1fr;
+	}
+
+	.genre-choices label,
+	.genre-choice-row {
+		min-height: 50px;
+		padding-inline: 10px;
+	}
+
+	.filter-modal-footer {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.filter-modal-footer .button,
+	.filter-modal-footer .filter-apply {
+		width: 100%;
+		min-width: 0;
+	}
+
+	.filter-modal-footer .filter-apply {
+		grid-column: 1 / -1;
+		grid-row: 1;
+	}
+
 	.program-type-grid {
 		grid-template-columns: 1fr;
 	}

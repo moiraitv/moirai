@@ -608,6 +608,10 @@ Route state preserves sorting, filters, hierarchy, pagination, and within-page c
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
 returns to a page; initial empty collections have explicit loading states.
 
+The library filter defaults to Match all, where each genre can be neutral, required, or explicitly
+disallowed. Its contextual facets predict the result of either action. Match any retains simple
+inclusion checkboxes and static library totals.
+
 Media preview supports `GET`, `HEAD`, and one HTTP range, which permits scrubbing when the browser
 supports the source container and codecs. Moirai does not transcode preview files.
 

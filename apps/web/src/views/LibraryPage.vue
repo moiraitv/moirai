@@ -36,7 +36,6 @@ import {
 	Zap,
 } from '@lucide/vue';
 import type {
-	GenreMatch,
 	Library,
 	MediaBrowseResult,
 	MediaGenreFacet,
@@ -51,6 +50,10 @@ import { api, type MediaQuery } from '../api';
 import { activeCatalogAnchor, breadcrumbTargetTrail } from '../catalog-navigation';
 import LoadingState from '../components/LoadingState.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
+import {
+	emptyLibraryFilterDraft,
+	type LibraryFilterDraft,
+} from '../components/library/library-filter';
 import LibraryReconciliationModal from '../components/library/LibraryReconciliationModal.vue';
 import StatusPill from '../components/StatusPill.vue';
 import { liveEvents } from '../live-events';
@@ -120,30 +123,7 @@ const activeScrollAnchor = ref('');
 /** Breadcrumb entry stored in route state for hierarchical catalog browsing. */
 type CatalogScrollBehavior = 'auto' | 'smooth';
 
-/** Scan-history row with its issue summary decoded for display. */
-interface FilterDraft {
-	name: string;
-	releaseFrom: string;
-	releaseTo: string;
-	addedFrom: string;
-	addedTo: string;
-	genres: string[];
-	genreMatch: GenreMatch;
-	actor: string;
-	director: string;
-}
-
-const filterDraft = reactive<FilterDraft>({
-	name: '',
-	releaseFrom: '',
-	releaseTo: '',
-	addedFrom: '',
-	addedTo: '',
-	genres: [],
-	genreMatch: 'any',
-	actor: '',
-	director: '',
-});
+const filterDraft = reactive<LibraryFilterDraft>(emptyLibraryFilterDraft());
 
 /** Read one string value from the current route query. */
 function queryString(key: string): string {
@@ -211,7 +191,7 @@ const activeFilterCount = computed(
 			queryString('q'),
 			queryString('releaseFrom') || queryString('releaseTo'),
 			queryString('addedFrom') || queryString('addedTo') || dateWindow.value,
-			queryStrings('genre').length ? 'genre' : '',
+			queryStrings('genre').length || queryStrings('excludeGenre').length ? 'genre' : '',
 			queryString('actor'),
 			queryString('director'),
 		].filter(Boolean).length,
@@ -351,7 +331,8 @@ function currentMediaQuery(): MediaQuery {
 		addedFrom: windowBounds.addedFrom ?? localDay(queryString('addedFrom')),
 		addedBefore: windowBounds.addedBefore ?? localDay(queryString('addedTo'), true),
 		genres: queryStrings('genre'),
-		genreMatch: queryString('genreMatch') === 'all' ? 'all' : 'any',
+		excludedGenres: queryStrings('excludeGenre'),
+		genreMatch: queryString('genreMatch') === 'any' ? 'any' : 'all',
 		actor: queryString('actor') || undefined,
 		director: queryString('director') || undefined,
 	};
@@ -795,45 +776,32 @@ function openFilters(): void {
 	filterDraft.addedFrom = queryString('addedFrom');
 	filterDraft.addedTo = queryString('addedTo');
 	filterDraft.genres = queryStrings('genre');
-	filterDraft.genreMatch = queryString('genreMatch') === 'all' ? 'all' : 'any';
+	filterDraft.excludedGenres = queryStrings('excludeGenre');
+	filterDraft.genreMatch = queryString('genreMatch') === 'any' ? 'any' : 'all';
 	filterDraft.actor = queryString('actor');
 	filterDraft.director = queryString('director');
 	showFilter.value = true;
 }
 
 /** Write the filter draft into route state and return to the first page. */
-async function applyFilters(): Promise<void> {
+async function applyFilters(draft: LibraryFilterDraft): Promise<void> {
 	showFilter.value = false;
-	searchText.value = filterDraft.name;
+	searchText.value = draft.name;
 	await navigate({
-		q: filterDraft.name || undefined,
-		releaseFrom: filterDraft.releaseFrom || undefined,
-		releaseTo: filterDraft.releaseTo || undefined,
-		addedFrom: filterDraft.addedFrom || undefined,
-		addedTo: filterDraft.addedTo || undefined,
+		q: draft.name || undefined,
+		releaseFrom: draft.releaseFrom || undefined,
+		releaseTo: draft.releaseTo || undefined,
+		addedFrom: draft.addedFrom || undefined,
+		addedTo: draft.addedTo || undefined,
 		dateWindow: undefined,
-		genre: filterDraft.genres.length ? filterDraft.genres : undefined,
-		genreMatch: filterDraft.genres.length && filterDraft.genreMatch === 'all' ? 'all' : undefined,
-		actor: filterDraft.actor || undefined,
-		director: filterDraft.director || undefined,
+		genre: draft.genres.length ? draft.genres : undefined,
+		excludeGenre: draft.excludedGenres.length ? draft.excludedGenres : undefined,
+		genreMatch: (draft.genres.length || draft.excludedGenres.length)
+			&& draft.genreMatch === 'any' ? 'any' : undefined,
+		actor: draft.actor || undefined,
+		director: draft.director || undefined,
 		page: undefined,
 	});
-}
-
-/** Reset every catalog filter and write the cleared state back to the route. */
-async function clearFilters(): Promise<void> {
-	Object.assign(filterDraft, {
-		name: '',
-		releaseFrom: '',
-		releaseTo: '',
-		addedFrom: '',
-		addedTo: '',
-		genres: [],
-		genreMatch: 'any',
-		actor: '',
-		director: '',
-	});
-	await applyFilters();
 }
 
 /** Handle the search shortcut and close transient controls with Escape. */
@@ -1162,6 +1130,6 @@ onUnmounted(() => {
 		<details class="diagnostics"><summary>Scan history</summary><article v-for="run in scans" :key="run.id"><StatusPill :value="run.status" /><span>{{ new Date(run.startedAt).toLocaleString() }}</span><span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span><ul v-if="run.issues.length"><li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">{{ issue.code }} — {{ issue.path ?? issue.message }}</li></ul></article></details>
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
-		<LibraryFilterModal v-if="showFilter" :draft="filterDraft" :genres="genres" @update:draft="Object.assign(filterDraft, $event)" @apply="applyFilters" @clear="clearFilters" @close="showFilter = false" />
+		<LibraryFilterModal v-if="showFilter" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 	</section>
 </template>

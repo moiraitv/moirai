@@ -623,6 +623,45 @@ describe('Repository scan reconciliation', () => {
 			[],
 			true,
 		);
+		expect(await repository.listMediaGenres(library.id)).toEqual([
+			{ key: 'drama', name: 'Drama', count: 2, excludeCount: null },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: null },
+		]);
+		expect(await repository.listMediaGenres(library.id, {
+			genres: [],
+			excludedGenres: [],
+		})).toEqual([
+			{ key: 'drama', name: 'Drama', count: 2, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+		]);
+		expect(await repository.listMediaGenres(library.id, {
+			genres: ['science-fiction'],
+			excludedGenres: [],
+		})).toEqual([
+			{ key: 'drama', name: 'Drama', count: 1, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+		]);
+		expect(await repository.listMediaGenres(library.id, {
+			genres: ['drama', 'science-fiction'],
+			excludedGenres: [],
+		})).toEqual([
+			{ key: 'drama', name: 'Drama', count: 1, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+		]);
+		expect(await repository.listMediaGenres(library.id, {
+			genres: [],
+			excludedGenres: ['science-fiction'],
+		})).toEqual([
+			{ key: 'drama', name: 'Drama', count: 1, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+		]);
+		expect(await repository.listMediaGenres(library.id, {
+			genres: ['missing'],
+			excludedGenres: [],
+		})).toEqual([
+			{ key: 'drama', name: 'Drama', count: 0, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 0, excludeCount: 0 },
+		]);
 		const baseQuery = {
 			parentId: null,
 			page: 1,
@@ -635,6 +674,7 @@ describe('Repository scan reconciliation', () => {
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
+			excludedGenres: [],
 			genreMatch: 'any' as const,
 			actor: '',
 			director: '',
@@ -665,6 +705,14 @@ describe('Repository scan reconciliation', () => {
 			actor: 'Ada',
 		});
 		expect(actorResult.items.map((entry) => entry.title)).toEqual(['Alpha']);
+		const excludedGenreResult = await repository.browseMedia(library.id, {
+			...baseQuery,
+			pageSize: 10,
+			genres: ['drama'],
+			excludedGenres: ['science-fiction'],
+			genreMatch: 'all',
+		});
+		expect(excludedGenreResult.items.map((entry) => entry.title)).toEqual(['Beta']);
 		expect(actorResult.items[0]).toMatchObject({
 			availability: 'available',
 			lastObservedAt: expect.any(String),

@@ -12,59 +12,6 @@
 	color: var(--danger);
 }
 
-.filter-modal {
-	width: min(760px, 100%);
-}
-
-.filter-grid {
-	margin: 20px 0 0;
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 14px;
-}
-
-.filter-grid label,
-.genre-choices label,
-.genre-match label {
-	color: var(--muted-strong);
-	font-size: 0.76rem;
-}
-
-.filter-grid label {
-	display: grid;
-	gap: 7px;
-}
-
-.filter-grid .wide-field {
-	grid-column: 1 / -1;
-}
-
-.genre-match {
-	margin-bottom: 14px;
-	display: flex;
-	gap: 18px;
-}
-
-.genre-match label,
-.genre-choices label {
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	gap: 7px;
-}
-
-.genre-choices {
-	max-height: 220px;
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 9px 14px;
-	overflow-y: auto;
-}
-
-.genre-choices small {
-	margin-left: auto;
-}
-
 .media-detail-page {
 	width: 100%;
 	max-width: 1480px;

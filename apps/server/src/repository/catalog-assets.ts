@@ -15,7 +15,11 @@ import {
 	mediaItemPeople,
 	mediaItems,
 } from '../db/schema.js';
-import type { MediaFileOwner, MediaProbeCacheEntry } from './contracts.js';
+import type {
+	MediaFileOwner,
+	MediaGenreFacetSelection,
+	MediaProbeCacheEntry,
+} from './contracts.js';
 import {
 	cacheVersion,
 	mappedGroup,
@@ -27,6 +31,27 @@ import {
 	technicalCodecs,
 } from './catalog-records.js';
 import type { RawGroupRow, RawItemRow } from './catalog-records.js';
+
+/** SQL and bound values for one dynamic genre-key set CTE. */
+interface GenreSetCte {
+	sql: string;
+	params: string[];
+}
+
+/** Build a parameterized SQLite CTE for a possibly empty set of genre keys. */
+function genreSetCte(name: string, values: string[]): GenreSetCte {
+	if (values.length === 0) {
+		return {
+			sql: `${name}(genre_key) AS (SELECT CAST(NULL AS TEXT) WHERE 0)`,
+			params: [],
+		};
+	}
+
+	return {
+		sql: `${name}(genre_key) AS (VALUES ${values.map(() => '(?)').join(', ')})`,
+		params: values,
+	};
+}
 
 /**
  * Own catalog lookups that do not participate in paginated browsing. This repository resolves
@@ -98,13 +123,102 @@ export class CatalogAssetsRepository {
 		return new Set(rows.map((row) => row.id));
 	}
 
-	/** List normalized genre facets present in one library. */
-	async listMediaGenres(libraryId: string): Promise<MediaGenreFacet[]> {
+	/**
+	 * List every normalized genre in one library. A contextual selection returns the result counts
+	 * for making each genre required or disallowed while treating that genre's prior rule as neutral.
+	 */
+	async listMediaGenres(
+		libraryId: string,
+		selection: MediaGenreFacetSelection | null = null,
+	): Promise<MediaGenreFacet[]> {
+		if (!selection) {
+			return this.db.$client
+				.prepare(
+					'SELECT genre_key AS key, genre_name AS name, COUNT(*) AS count, NULL AS excludeCount FROM media_item_genres WHERE library_id = ? GROUP BY genre_key, genre_name ORDER BY genre_name COLLATE NOCASE',
+				)
+				.all(libraryId) as MediaGenreFacet[];
+		}
+
+		const genres = [...new Set(selection.genres)];
+		const excludedGenres = [...new Set(selection.excludedGenres)];
+		const required = genreSetCte('required_genres', genres);
+		const excluded = genreSetCte('excluded_genres', excludedGenres);
 		return this.db.$client
 			.prepare(
-				'SELECT genre_key AS key, genre_name AS name, COUNT(*) AS count FROM media_item_genres WHERE library_id = ? GROUP BY genre_key, genre_name ORDER BY genre_name COLLATE NOCASE',
+				`WITH ${required.sql}, ${excluded.sql},
+				item_stats AS (
+					SELECT items.id,
+						COUNT(DISTINCT CASE WHEN required_genres.genre_key IS NOT NULL THEN memberships.genre_key END) AS required_count,
+						COUNT(DISTINCT CASE WHEN excluded_genres.genre_key IS NOT NULL THEN memberships.genre_key END) AS excluded_count
+					FROM media_items items
+					LEFT JOIN media_item_genres memberships ON memberships.item_id = items.id
+					LEFT JOIN required_genres ON required_genres.genre_key = memberships.genre_key
+					LEFT JOIN excluded_genres ON excluded_genres.genre_key = memberships.genre_key
+					WHERE items.library_id = ?
+					GROUP BY items.id
+				),
+				facets AS (
+					SELECT genre_key, genre_name
+					FROM media_item_genres
+					WHERE library_id = ?
+					GROUP BY genre_key, genre_name
+				),
+				current_eligible AS (
+					SELECT id FROM item_stats
+					WHERE required_count = ${genres.length} AND excluded_count = 0
+				),
+				current_total AS (
+					SELECT COUNT(*) AS count FROM current_eligible
+				),
+				current_counts AS (
+					SELECT memberships.genre_key, COUNT(*) AS count
+					FROM current_eligible
+					JOIN media_item_genres memberships ON memberships.item_id = current_eligible.id
+					GROUP BY memberships.genre_key
+				),
+				include_counts AS (
+					SELECT memberships.genre_key, COUNT(*) AS count
+					FROM item_stats
+					JOIN media_item_genres memberships ON memberships.item_id = item_stats.id
+					LEFT JOIN excluded_genres ON excluded_genres.genre_key = memberships.genre_key
+					WHERE item_stats.required_count = ${genres.length}
+						AND (
+							item_stats.excluded_count = 0
+							OR (excluded_genres.genre_key IS NOT NULL AND item_stats.excluded_count = 1)
+						)
+					GROUP BY memberships.genre_key
+				),
+				included_exclude_counts AS (
+					SELECT required_genres.genre_key, COUNT(item_stats.id) AS count
+					FROM required_genres
+					JOIN item_stats
+						ON item_stats.required_count = ${genres.length - 1}
+						AND item_stats.excluded_count = 0
+					WHERE NOT EXISTS (
+						SELECT 1 FROM media_item_genres membership
+						WHERE membership.item_id = item_stats.id
+							AND membership.genre_key = required_genres.genre_key
+					)
+					GROUP BY required_genres.genre_key
+				)
+				SELECT facets.genre_key AS key, facets.genre_name AS name,
+					COALESCE(include_counts.count, 0) AS count,
+					CASE
+						WHEN required_genres.genre_key IS NOT NULL
+							THEN COALESCE(included_exclude_counts.count, 0)
+						WHEN excluded_genres.genre_key IS NOT NULL THEN current_total.count
+						ELSE current_total.count - COALESCE(current_counts.count, 0)
+					END AS excludeCount
+				FROM facets
+				LEFT JOIN include_counts ON include_counts.genre_key = facets.genre_key
+				LEFT JOIN current_counts ON current_counts.genre_key = facets.genre_key
+				LEFT JOIN included_exclude_counts ON included_exclude_counts.genre_key = facets.genre_key
+				LEFT JOIN required_genres ON required_genres.genre_key = facets.genre_key
+				LEFT JOIN excluded_genres ON excluded_genres.genre_key = facets.genre_key
+				CROSS JOIN current_total
+				ORDER BY facets.genre_name COLLATE NOCASE`,
 			)
-			.all(libraryId) as MediaGenreFacet[];
+			.all(...required.params, ...excluded.params, libraryId, libraryId) as MediaGenreFacet[];
 	}
 
 	/** Return selected media items in the caller's requested order. */

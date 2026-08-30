@@ -11,6 +11,7 @@ import {
 	effectiveChannelTvgId,
 	libraryCreateSchema,
 	liveEventSchema,
+	MAX_MEDIA_GENRE_RULES,
 	SECONDS_PER_SCHEDULING_DAY,
 	type LiveEvent,
 } from '@moirai/shared';
@@ -746,6 +747,68 @@ describe('API', () => {
 			entries: [],
 			pagination: { page: 1, pageSize: 25, totalEntries: 0, totalPages: 1 },
 		});
+	});
+
+	it('passes deduplicated Match all selections to contextual genre facets', async () => {
+		const { app, services } = await fixture();
+		const libraryId = randomUUID();
+		const listMediaGenres = vi.spyOn(services.repository, 'listMediaGenres').mockResolvedValue([
+			{ key: 'drama', name: 'Drama', count: 4, excludeCount: 7 },
+		]);
+
+		const response = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media-genres?genreMatch=all&genres=drama&genres=science-fiction&genres=drama&excludedGenres=comedy`,
+		});
+
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toEqual([
+			{ key: 'drama', name: 'Drama', count: 4, excludeCount: 7 },
+		]);
+		expect(listMediaGenres).toHaveBeenCalledWith(libraryId, {
+			genres: ['drama', 'science-fiction'],
+			excludedGenres: ['comedy'],
+		});
+
+		const contradictory = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media-genres?genreMatch=all&genres=drama&excludedGenres=drama`,
+		});
+		expect(contradictory.statusCode).toBe(400);
+
+		const unsupported = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media-genres?genreMatch=any&excludedGenres=drama`,
+		});
+		expect(unsupported.statusCode).toBe(400);
+		const contradictoryBrowse = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media?genres=drama&excludedGenres=drama`,
+		});
+		expect(contradictoryBrowse.statusCode).toBe(400);
+
+		const browseMedia = vi.spyOn(services.repository, 'browseMedia');
+		const defaultBrowse = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media`,
+		});
+		expect(defaultBrowse.statusCode).toBe(200);
+		expect(browseMedia).toHaveBeenCalledWith(libraryId, expect.objectContaining({
+			genres: [],
+			excludedGenres: [],
+			genreMatch: 'all',
+		}));
+	});
+
+	it('rejects genre queries that exceed the shared rule limit', async () => {
+		const { app } = await fixture();
+		const libraryId = randomUUID();
+		const params = new URLSearchParams({ genreMatch: 'all' });
+		for (let index = 0; index < MAX_MEDIA_GENRE_RULES; index += 1) {
+			params.append('genres', `included-${index}`);
+		}
+		params.append('excludedGenres', 'one-too-many');
+
+		const response = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media-genres?${params.toString()}`,
+		});
+
+		expect(response.statusCode).toBe(400);
 	});
 
 	it('streams versioned events over the shared WebSocket endpoint', async () => {

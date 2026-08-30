@@ -26,9 +26,16 @@ export interface MediaBrowseQuery {
 	addedFrom: string | null;
 	addedBefore: string | null;
 	genres: string[];
+	excludedGenres: string[];
 	genreMatch: 'any' | 'all';
 	actor: string;
 	director: string;
+}
+
+/** Required and disallowed genre rules used to predict Match all facet actions. */
+export interface MediaGenreFacetSelection {
+	genres: string[];
+	excludedGenres: string[];
 }
 
 /** Source location needed to resolve a playable media file. */
