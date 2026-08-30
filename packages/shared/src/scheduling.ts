@@ -5,6 +5,7 @@ import {
 	canonicalNumberSet,
 	canonicalStringSet,
 } from './normalization.js';
+import { catalogProgramItemQuerySchema } from './catalog.js';
 
 /** Number of nominal wall-clock seconds represented by a daily template. */
 export const SECONDS_PER_SCHEDULING_DAY = 86_400;
@@ -18,8 +19,14 @@ export const MAX_TIMELINE_SEGMENTS = 5_000;
 export const MAX_GUIDE_TIMELINE_SEGMENTS = 20_000;
 /** Number of committed days exposed through the XMLTV guide. */
 export const XMLTV_EPG_DAYS = 14;
-/** Bound shared scheduling contracts resource use for explicit media items. */
-export const MAX_EXPLICIT_MEDIA_ITEMS = 500;
+/** Default configured capacity for explicit media-item collections. */
+export const DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS = 500;
+/** Absolute contract ceiling for configured explicit media-item collections. */
+export const MAX_EXPLICIT_MEDIA_ITEMS = 5_000;
+/** Number of new items an existing program may accept without explicit confirmation. */
+export const PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD = 5;
+/** SHA-256 token binding a program-addition confirmation to its ordered item identifiers. */
+export const programItemAdditionConfirmationTokenSchema = z.string().regex(/^[a-f0-9]{64}$/);
 /** Bound shared scheduling contracts resource use for explicit media groups. */
 export const MAX_EXPLICIT_MEDIA_GROUPS = 100;
 /** Bound shared scheduling contracts resource use for channel schedule layers. */
@@ -137,11 +144,51 @@ export type ProgramCreate = z.infer<typeof programCreateSchema>;
 /** Shared wire contract for program update. */
 export type ProgramUpdate = z.infer<typeof programUpdateSchema>;
 
+/** Validate a library-page request that creates or extends a selected-items program. */
+export const programItemAdditionSchema = z.object({
+	destination: z.discriminatedUnion('type', [
+		z.object({ type: z.literal('existing'), programId: z.uuid() }),
+		z.object({
+			type: z.literal('new'),
+			name: z.string().trim().min(1).max(120),
+			strategy: selectionStrategySchema,
+		}),
+	]),
+	selection: z.discriminatedUnion('type', [
+		z.object({
+			type: z.literal('items'),
+			itemIds: z.array(z.uuid()).min(1).max(MAX_EXPLICIT_MEDIA_ITEMS)
+				.refine((ids) => new Set(ids).size === ids.length, 'Selected media must be unique'),
+		}),
+		z.object({ type: z.literal('query'), query: catalogProgramItemQuerySchema }),
+	]),
+	confirmedAdditionToken: programItemAdditionConfirmationTokenSchema.optional(),
+}).superRefine((input, context) => {
+	if (input.destination.type === 'new' && input.confirmedAdditionToken !== undefined) {
+		context.addIssue({
+			code: 'custom',
+			path: ['confirmedAdditionToken'],
+			message: 'New programs do not accept an addition confirmation',
+		});
+	}
+});
+/** Shared request for creating or extending a selected-items program. */
+export type ProgramItemAddition = z.infer<typeof programItemAdditionSchema>;
+
 /** Shared wire contract for scheduling program. */
 export interface SchedulingProgram extends ProgramCreate {
 	id: string;
 	createdAt: string;
 	updatedAt: string;
+}
+
+/** Result of adding an explicit or filtered library selection to a program. */
+export interface ProgramItemAdditionResult {
+	program: SchedulingProgram;
+	created: boolean;
+	matchedItemCount: number;
+	addedItemCount: number;
+	alreadySelectedCount: number;
 }
 
 /** Validate the filler selection policy contract at runtime. */

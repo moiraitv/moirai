@@ -1,4 +1,5 @@
 import type {
+	CatalogProgramItemQuery,
 	MediaBrowseResult,
 	MediaGenreFacet,
 	MediaGroup,
@@ -8,6 +9,7 @@ import type {
 	MediaSourcePickerEntry,
 	MediaSourcePickerResult,
 } from '@moirai/shared';
+import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
 import type {
@@ -16,6 +18,7 @@ import type {
 	MediaGenreFacetSelection,
 	MediaProbeCacheEntry,
 	MediaSourcePickerQuery,
+	ProgramItemSelection,
 } from './contracts.js';
 import { CatalogAssetsRepository } from './catalog-assets.js';
 import {
@@ -25,6 +28,13 @@ import {
 import type { RawGroupRow, RawItemRow } from './catalog-records.js';
 
 export { artworkUrl, cacheVersion, decodedMetadata } from './catalog-records.js';
+
+/** Parameterized SQL fragments shared by flattened browsing and bulk program selection. */
+interface FilteredItemScope {
+	scopeCte: string;
+	where: string;
+	params: Array<string | number>;
+}
 
 /** Escape user text before placing it inside a SQL `LIKE` pattern. */
 function escapeLike(value: string): string {
@@ -58,61 +68,20 @@ export class MediaCatalogRepository {
 		this.assets = new CatalogAssetsRepository(db);
 	}
 
-	/** Return cached probe facts for every indexed item in one library. */
-	async listMediaProbeCache(libraryId: string): Promise<MediaProbeCacheEntry[]> {
-		return this.assets.listMediaProbeCache(libraryId);
-	}
-
-	/** Return whether a library contains media without a successful technical probe. */
-	async libraryNeedsMediaProbe(libraryId: string): Promise<boolean> {
-		return this.assets.libraryNeedsMediaProbe(libraryId);
-	}
-
-	/** Collect the stable identifiers for existing artwork owner. */
-	async existingArtworkOwnerIds(
+	/** Build one recursive, parameterized item scope from the shared catalog filter contract. */
+	private filteredItemScope(
 		libraryId: string,
-		kind: 'items' | 'groups',
-		ids: string[],
-	): Promise<Set<string>> {
-		return this.assets.existingArtworkOwnerIds(libraryId, kind, ids);
-	}
-
-	/** Browse a library with stable, URL-addressable sorting, filtering, and pagination. */
-	async browseMedia(libraryId: string, query: MediaBrowseQuery): Promise<MediaBrowseResult> {
-		// Preserve hierarchy only for the unfiltered title view.
-		const hasFilters = Boolean(
-			query.name
-			|| query.actor
-			|| query.director
-			|| query.releaseYearFrom !== null
-			|| query.releaseYearTo !== null
-			|| query.addedFrom
-			|| query.addedBefore
-			|| query.genres.length
-			|| query.excludedGenres.length,
-		);
-		const flattenHierarchy = hasFilters || query.sort !== 'title';
-		if (!flattenHierarchy) {
-			return this.browseHierarchy(libraryId, query);
-		}
-
-		// Build a parameterized flattened scope and its requested filters.
+		query: CatalogProgramItemQuery,
+	): FilteredItemScope {
 		const scopeParams: Array<string | number> = [];
 		let scopeCte = '';
 		const conditions = ['i.library_id = ?'];
 		const conditionParams: Array<string | number> = [libraryId];
-		if (query.parentId && flattenHierarchy) {
+		if (query.parentId) {
 			scopeCte
 				= 'WITH RECURSIVE scope(id) AS (SELECT ? UNION ALL SELECT g.id FROM media_groups g JOIN scope s ON g.parent_id = s.id) ';
 			scopeParams.push(query.parentId);
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
-		}
-		else if (query.parentId) {
-			conditions.push('i.group_id = ?');
-			conditionParams.push(query.parentId);
-		}
-		else if (!flattenHierarchy) {
-			conditions.push('i.group_id IS NULL');
 		}
 		if (query.name) {
 			conditions.push("i.title LIKE ? ESCAPE '\\' COLLATE NOCASE");
@@ -167,8 +136,54 @@ export class MediaCatalogRepository {
 				conditionParams.push(type, `%${escapeLike(normalizeSearchText(value))}%`);
 			}
 		}
-		const where = conditions.join(' AND ');
-		const allParams = [...scopeParams, ...conditionParams];
+
+		return {
+			scopeCte,
+			where: conditions.join(' AND '),
+			params: [...scopeParams, ...conditionParams],
+		};
+	}
+
+	/** Return cached probe facts for every indexed item in one library. */
+	async listMediaProbeCache(libraryId: string): Promise<MediaProbeCacheEntry[]> {
+		return this.assets.listMediaProbeCache(libraryId);
+	}
+
+	/** Return whether a library contains media without a successful technical probe. */
+	async libraryNeedsMediaProbe(libraryId: string): Promise<boolean> {
+		return this.assets.libraryNeedsMediaProbe(libraryId);
+	}
+
+	/** Collect the stable identifiers for existing artwork owner. */
+	async existingArtworkOwnerIds(
+		libraryId: string,
+		kind: 'items' | 'groups',
+		ids: string[],
+	): Promise<Set<string>> {
+		return this.assets.existingArtworkOwnerIds(libraryId, kind, ids);
+	}
+
+	/** Browse a library with stable, URL-addressable sorting, filtering, and pagination. */
+	async browseMedia(libraryId: string, query: MediaBrowseQuery): Promise<MediaBrowseResult> {
+		// Preserve hierarchy only for the unfiltered title view.
+		const hasFilters = Boolean(
+			query.name
+			|| query.actor
+			|| query.director
+			|| query.releaseYearFrom !== null
+			|| query.releaseYearTo !== null
+			|| query.addedFrom
+			|| query.addedBefore
+			|| query.genres.length
+			|| query.excludedGenres.length,
+		);
+		const flattenHierarchy = hasFilters || query.sort !== 'title';
+		if (!flattenHierarchy) {
+			return this.browseHierarchy(libraryId, query);
+		}
+
+		// Build a parameterized flattened scope and its requested filters.
+		const { scopeCte, where, params: allParams } = this.filteredItemScope(libraryId, query);
 		let navigation: MediaBrowseResult['navigation'] = [];
 		let totalEntries = 0;
 
@@ -258,6 +273,37 @@ export class MediaCatalogRepository {
 			},
 			navigation,
 		};
+	}
+
+	/** Resolve a recursive filtered item set in stable catalog order with one overflow sentinel. */
+	resolveProgramItemSelection(
+		libraryId: string,
+		query: CatalogProgramItemQuery,
+		maxItemCount = DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	): ProgramItemSelection {
+		const { scopeCte, where, params } = this.filteredItemScope(libraryId, query);
+		const selectionWhere = query.sort === 'genre'
+			? `${where} AND EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id)`
+			: where;
+		const matchedItemCount = (
+			this.db.$client
+				.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${selectionWhere}`)
+				.get(...params) as { count: number }
+		).count;
+		const direction = query.direction.toUpperCase();
+		const genreAggregate = query.direction === 'asc' ? 'MIN' : 'MAX';
+		const order = query.sort === 'date-added'
+			? `i.date_added_at ${direction}, i.sort_title COLLATE NOCASE ASC, i.id ASC`
+			: query.sort === 'genre'
+				? `(SELECT ${genreAggregate}(sg.genre_name) FROM media_item_genres sg WHERE sg.item_id = i.id) COLLATE NOCASE ${direction}, i.sort_title COLLATE NOCASE ASC, i.id ASC`
+				: `CASE WHEN i.title_bucket = '#' THEN 0 ELSE 1 END ${query.direction === 'asc' ? 'ASC' : 'DESC'}, i.sort_title COLLATE NOCASE ${direction}, i.id ${direction}`;
+		const rows = this.db.$client
+			.prepare(
+				`${scopeCte}SELECT i.id FROM media_items i WHERE ${selectionWhere} ORDER BY ${order} LIMIT ?`,
+			)
+			.all(...params, maxItemCount + 1) as Array<{ id: string }>;
+
+		return { itemIds: rows.map((row) => row.id), matchedItemCount };
 	}
 
 	/** Browse one hierarchical catalog level with stable filtering and pagination. */

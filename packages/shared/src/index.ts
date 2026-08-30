@@ -49,6 +49,7 @@ export interface AppCapabilities {
 	timeZone: string;
 	publicUrl: string;
 	publicUrlStatus: 'configured' | 'unreachable-default';
+	maxExplicitMediaItems: number;
 }
 
 /** Authentication providers that can establish a full-access administrator session. */

@@ -19,6 +19,8 @@ import type {
 	MediaSort,
 	MediaSourcePickerResult,
 	ProgramCreate,
+	ProgramItemAddition,
+	ProgramItemAdditionResult,
 	ProgramUpdate,
 	ScheduleGuide,
 	GuideSegmentDetail,
@@ -322,6 +324,11 @@ export const api = {
 			body: JSON.stringify({ groupIds }),
 		}),
 	mediaItem: (id: string) => request<MediaItemDetail>(`/api/v1/media/${id}`),
+	addLibraryItemsToProgram: (id: string, body: ProgramItemAddition) =>
+		request<ProgramItemAdditionResult>(`/api/v1/libraries/${id}/program-items`, {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
 	channels: () => request<Channel[]>('/api/v1/channels'),
 	createChannel: (body: ChannelCreate) =>
 		request<Channel>('/api/v1/channels', { method: 'POST', body: JSON.stringify(body) }),

@@ -8,6 +8,7 @@ import {
 	MAX_MEDIA_GENRE_RULES,
 	mediaSortSchema,
 	sortDirectionSchema,
+	validateMediaGenreRules,
 } from '@moirai/shared';
 import {
 	mediaBrowseResultSchema,
@@ -48,37 +49,6 @@ const genreKeysQuerySchema = z
 	.default([])
 	.transform((value) => [...new Set(Array.isArray(value) ? value : [value])]);
 
-/** Reject contradictory or unsupported combinations of genre rules. */
-function validateGenreRules(
-	value: { genres: string[]; excludedGenres: string[]; genreMatch: 'any' | 'all' },
-	context: z.RefinementCtx,
-): void {
-	if (value.genres.length + value.excludedGenres.length > MAX_MEDIA_GENRE_RULES) {
-		context.addIssue({
-			code: 'custom',
-			path: ['genres'],
-			message: `A query can contain at most ${MAX_MEDIA_GENRE_RULES} genre rules`,
-		});
-	}
-
-	if (value.genreMatch === 'any' && value.excludedGenres.length > 0) {
-		context.addIssue({
-			code: 'custom',
-			path: ['excludedGenres'],
-			message: 'Excluded genres require Match all',
-		});
-	}
-
-	const included = new Set(value.genres);
-	if (value.excludedGenres.some((genre) => included.has(genre))) {
-		context.addIssue({
-			code: 'custom',
-			path: ['excludedGenres'],
-			message: 'A genre cannot be both required and excluded',
-		});
-	}
-}
-
 /** Filters, sorting, and pagination accepted by catalog browsing. */
 const mediaBrowseQuerySchema = z.object({
 	parentId: z.uuid().optional(),
@@ -96,14 +66,14 @@ const mediaBrowseQuerySchema = z.object({
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
 	director: z.string().trim().max(120).default(''),
-}).superRefine(validateGenreRules);
+}).superRefine(validateMediaGenreRules);
 
 /** Genre rules used to calculate contextual Match all facet-action counts. */
 const mediaGenreFacetQuerySchema = z.object({
 	genres: genreKeysQuerySchema,
 	excludedGenres: genreKeysQuerySchema,
 	genreMatch: genreMatchSchema.default('any'),
-}).superRefine(validateGenreRules);
+}).superRefine(validateMediaGenreRules);
 
 /** Bounded search accepted by scheduling media-source pickers. */
 const mediaSourceOptionsQuerySchema = z.object({

@@ -101,12 +101,72 @@ export const sortDirectionSchema = z.enum(['asc', 'desc']);
 export const genreMatchSchema = z.enum(['any', 'all']);
 /** Maximum number of genre requirements and exclusions accepted by one catalog query. */
 export const MAX_MEDIA_GENRE_RULES = 100;
+
+/** Validate and deduplicate authored catalog genre keys while preserving their first-seen order. */
+const catalogGenreKeysSchema = z.array(z.string().trim().min(1).max(120))
+	.max(MAX_MEDIA_GENRE_RULES)
+	.default([])
+	.transform((values) => [...new Set(values)]);
+
+/** Required and disallowed genre keys accepted by catalog filtering contracts. */
+export interface MediaGenreRules {
+	genres: string[];
+	excludedGenres: string[];
+	genreMatch: 'any' | 'all';
+}
+
+/** Report contradictory or over-sized genre rules at their shared contract boundary. */
+export function validateMediaGenreRules(value: MediaGenreRules, context: z.RefinementCtx): void {
+	if (value.genres.length + value.excludedGenres.length > MAX_MEDIA_GENRE_RULES) {
+		context.addIssue({
+			code: 'custom',
+			path: ['genres'],
+			message: `A query can contain at most ${MAX_MEDIA_GENRE_RULES} genre rules`,
+		});
+	}
+
+	if (value.genreMatch === 'any' && value.excludedGenres.length > 0) {
+		context.addIssue({
+			code: 'custom',
+			path: ['excludedGenres'],
+			message: 'Excluded genres require Match all',
+		});
+	}
+
+	const included = new Set(value.genres);
+	if (value.excludedGenres.some((genre) => included.has(genre))) {
+		context.addIssue({
+			code: 'custom',
+			path: ['excludedGenres'],
+			message: 'A genre cannot be both required and excluded',
+		});
+	}
+}
+
+/** Validate a recursive catalog query used to select items for an explicit program. */
+export const catalogProgramItemQuerySchema = z.object({
+	parentId: z.uuid().nullable().default(null),
+	sort: mediaSortSchema.default('title'),
+	direction: sortDirectionSchema.default('asc'),
+	name: z.string().trim().max(120).default(''),
+	releaseYearFrom: z.number().int().min(1800).max(2200).nullable().default(null),
+	releaseYearTo: z.number().int().min(1800).max(2200).nullable().default(null),
+	addedFrom: z.iso.datetime({ offset: true }).nullable().default(null),
+	addedBefore: z.iso.datetime({ offset: true }).nullable().default(null),
+	genres: catalogGenreKeysSchema,
+	excludedGenres: catalogGenreKeysSchema,
+	genreMatch: genreMatchSchema.default('all'),
+	actor: z.string().trim().max(120).default(''),
+	director: z.string().trim().max(120).default(''),
+}).superRefine(validateMediaGenreRules);
 /** Shared wire contract for media sort. */
 export type MediaSort = z.infer<typeof mediaSortSchema>;
 /** Shared wire contract for sort direction. */
 export type SortDirection = z.infer<typeof sortDirectionSchema>;
 /** Shared wire contract for genre match. */
 export type GenreMatch = z.infer<typeof genreMatchSchema>;
+/** Shared wire contract for recursively selecting catalog items. */
+export type CatalogProgramItemQuery = z.infer<typeof catalogProgramItemQuerySchema>;
 
 /** One item or hierarchy group returned by catalog browsing. */
 export interface MediaBrowseEntry {

@@ -357,11 +357,24 @@ Channel
 A program separates content eligibility from selection behavior. Content sources include:
 
 - one media item;
-- a hand-picked library collection of up to 500 items;
+- a hand-picked library collection bounded by the configured item limit;
 - one show or season;
 - a bounded set of shows or seasons;
 - a library query;
 - a counted, repeating sequence of other programs.
+
+Library catalog pages can add one page-local selection or every recursively matching filtered item
+to a selected-items program. The same action is available from media details. A destination can be
+an existing selected-items program for that library or a newly named program with sequential,
+shuffle, or random ordering. The server canonicalizes and deduplicates item references, appends them
+atomically, and rejects the whole request when the resulting collection would exceed the configured
+limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 500 and may be set from 1 through the 5,000-item
+contract ceiling.
+Adding more than five genuinely new items to an existing program requires confirmation of the
+server-calculated addition. Duplicate references do not count toward that threshold, new programs
+do not require confirmation, and a changed item set invalidates a stale confirmation without
+mutating the program. Reordering the same additions also invalidates confirmation for sequential
+programs, while shuffle and random programs compare additions as an unordered set.
 
 Selection strategies include sequential, deterministic shuffle without repeats, and deterministic
 random selection. Persistent selection state remains separate from configuration, allowing a daily

@@ -13,7 +13,7 @@ const wideLogoSvg = Buffer.from(
 const posterPng = await readFile(path.resolve('apps/web/src/assets/moirai-logo.png'));
 
 test('indexes a library and creates a channel', async ({ page }) => {
-	test.setTimeout(120_000);
+	test.setTimeout(180_000);
 	const csrfToken = await authenticateAdministrator(page);
 	const runId = String(Date.now());
 	const libraryName = `E2E Cinema ${runId}`;
@@ -62,6 +62,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.status-watcher')).toContainText('ready');
 	await expect(page.locator('.library-status-panel')).toContainText('Indexed');
 	await expect(page.getByRole('button', { name: 'B', exact: true })).toHaveClass(/active/);
+	const movieLibraryUrl = page.url();
 
 	await page.getByRole('button', { name: /Sort by: Title/ }).click();
 	await page.getByRole('button', { name: 'Date Added', exact: true }).click();
@@ -421,6 +422,86 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		'Broadcast Fixture',
 	);
 	await page.getByRole('button', { name: 'Done' }).click();
+
+	await page.goto(movieLibraryUrl);
+	await page.getByRole('button', { name: 'Select items' }).click();
+	await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Add selected' })).toBeDisabled();
+	await expect(page.getByRole('toolbar', { name: 'Item selection' })).toHaveCSS('position', 'sticky');
+	await expect(page.locator('.catalog-footer')).toHaveCSS('position', 'sticky');
+	await page.getByRole('button', { name: 'Select Companion Fixture' }).click();
+	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Add selected' })).toBeEnabled();
+	const librarySearch = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });
+	await librarySearch.fill('Broadcast');
+	await expect(page.getByText('0 selected', { exact: true })).toBeVisible();
+	await librarySearch.fill('Companion');
+	await page.getByRole('button', { name: 'Select Companion Fixture' }).click();
+	await page.getByRole('button', { name: 'Add selected' }).click();
+	const addToProgram = page.getByRole('dialog', { name: 'Add to program' });
+	await expect(addToProgram).toBeVisible();
+	await addToProgram.getByRole('radio', { name: new RegExp(programName) }).check();
+	let additionAttempts = 0;
+	await page.route('**/api/v1/libraries/*/program-items', async (route) => {
+		additionAttempts += 1;
+		if (additionAttempts === 1) {
+			await route.fulfill({
+				status: 409,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					code: 'program_item_confirmation_required',
+					message: 'Confirm this program addition',
+					details: {
+						addedItemCount: 6,
+						alreadySelectedCount: 1,
+						confirmationToken: 'a'.repeat(64),
+						items: Array.from({ length: 6 }, (_, index) => ({
+							id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+							title: `Carousel Fixture ${index + 1}`,
+							year: 2026,
+							artworkUrl: null,
+						})),
+					},
+					requestId: 'e2e-confirmation',
+				}),
+			});
+			return;
+		}
+
+		const payload = route.request().postDataJSON() as Record<string, unknown>;
+		delete payload.confirmedAdditionToken;
+		const response = await route.fetch({ postData: JSON.stringify(payload) });
+		await route.fulfill({ response });
+	});
+	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
+	const additionConfirmation = page.getByRole('alertdialog', { name: 'Confirm addition' });
+	await expect(additionConfirmation.getByRole('article')).toHaveCount(6);
+	await expect(additionConfirmation.getByText('Carousel Fixture 1')).toBeVisible();
+	await expect(additionConfirmation).toContainText('1 item is already selected and will be skipped.');
+	await additionConfirmation.getByRole('button', { name: 'Add items' }).click();
+	await expect(page.getByRole('status')).toContainText(`1 added to ${programName}`);
+	await page.unroute('**/api/v1/libraries/*/program-items');
+	await page.getByRole('button', { name: 'Dismiss' }).click();
+
+	await page.getByRole('button', { name: 'Select items' }).click();
+	await page.getByRole('button', { name: 'Add all' }).click();
+	await expect(addToProgram.getByRole('radio', { name: new RegExp(programName) })).toBeChecked();
+	await addToProgram.getByRole('radio', { name: /Create a new program/ }).check();
+	const filteredProgramName = `Z E2E Filtered Picks ${runId}`;
+	await addToProgram.getByLabel('Program name').fill(filteredProgramName);
+	await addToProgram.getByLabel('Playback order').selectOption('shuffle');
+	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
+	await expect(page.getByRole('status')).toContainText(`1 added to ${filteredProgramName}`);
+	await page.getByRole('button', { name: 'Dismiss' }).click();
+
+	await page.locator('.media-card').filter({ hasText: 'Companion Fixture' }).click();
+	await page.getByRole('button', { name: 'Add to program' }).click();
+	await expect(addToProgram.getByRole('radio', { name: new RegExp(filteredProgramName) }))
+		.toBeChecked();
+	await addToProgram.getByRole('radio', { name: new RegExp(programName) }).check();
+	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
+	await expect(page.getByRole('status')).toContainText(`Already selected in ${programName}`);
+	await page.getByRole('button', { name: 'Dismiss' }).click();
 
 	let templateName = `E2E Daily ${runId}`;
 	let timelinePreviewRequests = 0;

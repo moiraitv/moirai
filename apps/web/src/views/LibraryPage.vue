@@ -11,31 +11,29 @@ import {
 	type ComponentPublicInstance,
 } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
-import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { errorMessage } from '../error-message';
-import { hideBrokenImage } from '../image-error';
 import {
 	ArrowDownAZ,
 	ArrowUpAZ,
 	AlertTriangle,
-	Asterisk,
-	Check,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	CircleCheck,
-	CircleHelp,
 	Clock3,
 	Filter,
 	Layers3,
+	ListPlus,
 	MoreHorizontal,
 	RefreshCw,
 	Search,
 	Trash2,
 	Unplug,
+	X,
 	Zap,
 } from '@lucide/vue';
 import type {
+	CatalogProgramItemQuery,
 	Library,
 	MediaBrowseResult,
 	MediaGenreFacet,
@@ -45,20 +43,24 @@ import type {
 	ScanRun,
 	LibraryReconciliation,
 	ReconciliationAction,
+	ProgramItemAddition,
+	ProgramItemAdditionResult,
 } from '@moirai/shared';
 import { api, type MediaQuery } from '../api';
 import { activeCatalogAnchor, breadcrumbTargetTrail } from '../catalog-navigation';
 import LoadingState from '../components/LoadingState.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
+import LibraryMediaCard from '../components/library/LibraryMediaCard.vue';
 import {
 	emptyLibraryFilterDraft,
 	type LibraryFilterDraft,
 } from '../components/library/library-filter';
 import LibraryReconciliationModal from '../components/library/LibraryReconciliationModal.vue';
 import StatusPill from '../components/StatusPill.vue';
+import AddItemsToProgramModal from '../components/programs/AddItemsToProgramModal.vue';
+import ProgramAdditionToast from '../components/programs/ProgramAdditionToast.vue';
 import { liveEvents } from '../live-events';
 import { isLibrarySourceUnavailable } from '../library-health';
-import { mediaGroupSubtitle, mediaItemSubtitle } from '../media-labels';
 import { shiftCalendarMonths } from '../date-key';
 import { useLibrariesStore } from '../stores/libraries';
 
@@ -104,6 +106,7 @@ const searchInput = ref<HTMLInputElement>();
 const libraryPage = ref<HTMLElement>();
 const libraryHeader = ref<HTMLElement>();
 const catalogToolbar = ref<HTMLElement>();
+const catalogSelectionToolbar = ref<HTMLElement>();
 const catalogResults = ref<HTMLElement>();
 const navigationScroller = ref<HTMLElement>();
 const searchText = ref(queryString('q'));
@@ -115,6 +118,10 @@ const showMenu = ref(false);
 const showSort = ref(false);
 const showFilter = ref(false);
 const showReconciliation = ref(false);
+const selectionMode = ref(false);
+const selectedItemIds = ref<string[]>([]);
+const programSelection = ref<ProgramItemAddition['selection'] | null>(null);
+const programAdditionResult = ref<ProgramItemAdditionResult | null>(null);
 const reconciliationBusy = ref(false);
 const alphabet = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const anchorElements = new Map<string, HTMLElement>();
@@ -152,6 +159,13 @@ const parentId = computed(() => queryString('parent') || undefined);
 const dateWindow = computed(() => queryString('dateWindow'));
 const routeAnchor = computed(() => queryString('anchor'));
 const entries = computed(() => browse.value?.entries ?? []);
+const pageItemIds = computed(() => [
+	...new Set(entries.value.flatMap((entry) => entry.item ? [entry.item.id] : [])),
+]);
+const selectedItemIdSet = computed(() => new Set(selectedItemIds.value));
+const allPageItemsSelected = computed(() =>
+	pageItemIds.value.length > 0
+	&& pageItemIds.value.every((itemId) => selectedItemIdSet.value.has(itemId)));
 const pagination = computed(() => browse.value?.pagination);
 const trail = computed<Array<{ id?: string; title: string }>>(() => {
 	try {
@@ -338,6 +352,69 @@ function currentMediaQuery(): MediaQuery {
 	};
 }
 
+/** Build the recursive catalog selection represented by the current library route. */
+function currentProgramItemQuery(): CatalogProgramItemQuery {
+	const query = currentMediaQuery();
+	return {
+		parentId: query.parentId ?? null,
+		sort: query.sort,
+		direction: query.direction,
+		name: query.name ?? '',
+		releaseYearFrom: query.releaseYearFrom ?? null,
+		releaseYearTo: query.releaseYearTo ?? null,
+		addedFrom: query.addedFrom ?? null,
+		addedBefore: query.addedBefore ?? null,
+		genres: query.genres ?? [],
+		excludedGenres: query.excludedGenres ?? [],
+		genreMatch: query.genreMatch ?? 'all',
+		actor: query.actor ?? '',
+		director: query.director ?? '',
+	};
+}
+
+/** Enter page-local item selection without retaining an earlier catalog page. */
+function beginSelection(): void {
+	selectedItemIds.value = [];
+	selectionMode.value = true;
+}
+
+/** Leave selection mode and discard its page-local identifiers. */
+function cancelSelection(): void {
+	selectedItemIds.value = [];
+	selectionMode.value = false;
+}
+
+/** Toggle one item in the current page-local selection. */
+function toggleSelectedItem(itemId: string): void {
+	selectedItemIds.value = selectedItemIdSet.value.has(itemId)
+		? selectedItemIds.value.filter((candidate) => candidate !== itemId)
+		: [...selectedItemIds.value, itemId];
+}
+
+/** Select or clear every item card on the current catalog page. */
+function togglePageSelection(): void {
+	selectedItemIds.value = allPageItemsSelected.value ? [] : [...pageItemIds.value];
+}
+
+/** Open the destination dialog for the explicitly selected item cards. */
+function addSelectedItems(): void {
+	if (selectedItemIds.value.length > 0) {
+		programSelection.value = { type: 'items', itemIds: [...selectedItemIds.value] };
+	}
+}
+
+/** Open the destination dialog for every recursive item matching the current catalog state. */
+function addAllMatchingItems(): void {
+	programSelection.value = { type: 'query', query: currentProgramItemQuery() };
+}
+
+/** Close selection UI and retain an accessible link to the changed program. */
+function finishProgramAddition(result: ProgramItemAdditionResult): void {
+	programSelection.value = null;
+	programAdditionResult.value = result;
+	cancelSelection();
+}
+
 /** Create a stable signature for route-driven catalog state. */
 function mediaStateSignature(): string {
 	return JSON.stringify(
@@ -405,6 +482,7 @@ function stickyBoundary(): number {
 		(Number.isFinite(applicationOffset) ? applicationOffset : 0)
 		+ libraryHeader.value.offsetHeight
 		+ catalogToolbar.value.offsetHeight
+		+ (catalogSelectionToolbar.value?.offsetHeight ?? 0)
 	);
 }
 
@@ -421,6 +499,10 @@ function updateStickyMetrics(): void {
 	libraryPage.value.style.setProperty(
 		'--catalog-toolbar-height',
 		`${catalogToolbar.value.offsetHeight}px`,
+	);
+	libraryPage.value.style.setProperty(
+		'--catalog-selection-toolbar-height',
+		`${catalogSelectionToolbar.value?.offsetHeight ?? 0}px`,
 	);
 	scheduleAnchorUpdate();
 }
@@ -560,6 +642,9 @@ function observeStickyElements(): void {
 	resizeObserver = new ResizeObserver(updateStickyMetrics);
 	resizeObserver.observe(libraryHeader.value);
 	resizeObserver.observe(catalogToolbar.value);
+	if (catalogSelectionToolbar.value) {
+		resizeObserver.observe(catalogSelectionToolbar.value);
+	}
 	updateStickyMetrics();
 }
 
@@ -623,11 +708,19 @@ async function loadLibrary(): Promise<void> {
 	}
 }
 
-/** Load the catalog page represented by the current route filters and navigation state. */
-async function loadMedia(): Promise<void> {
+/** Load the routed catalog page, optionally retaining selected items that remain visible. */
+async function loadMedia(preserveSelection = false): Promise<void> {
+	if (!preserveSelection) {
+		selectedItemIds.value = [];
+	}
 	mediaLoading.value = true;
 	try {
 		browse.value = await api.media(id.value, currentMediaQuery());
+		if (preserveSelection) {
+			const visibleItemIds = new Set(pageItemIds.value);
+			selectedItemIds.value = selectedItemIds.value.filter((itemId) =>
+				visibleItemIds.has(itemId));
+		}
 	}
 	finally {
 		mediaLoading.value = false;
@@ -843,7 +936,7 @@ function scheduleLiveRefresh(includeMedia: boolean): void {
 		refreshMediaAfterEvent = false;
 		await loadLibrary();
 		if (refreshMedia) {
-			await loadMedia();
+			await loadMedia(true);
 			await settleCatalogPosition('auto', false);
 		}
 	}, 100);
@@ -894,6 +987,13 @@ const unsubscribe = liveEvents.subscribe((event) => {
 
 let loadedMediaState = mediaStateSignature();
 watch(
+	selectionMode,
+	async () => {
+		await nextTick();
+		observeStickyElements();
+	},
+);
+watch(
 	() => route.fullPath,
 	async () => {
 		searchText.value = queryString('q');
@@ -934,6 +1034,11 @@ watch(searchText, (value) => {
 	);
 });
 watch(id, () => {
+	// Discard actions captured for the previous library before loading the new route.
+	selectionMode.value = false;
+	selectedItemIds.value = [];
+	programSelection.value = null;
+	programAdditionResult.value = null;
 	loadedMediaState = mediaStateSignature();
 	void loadInitial();
 });
@@ -1101,21 +1206,78 @@ onUnmounted(() => {
 				</div>
 			</div>
 			<button class="toolbar-button" :class="{ active: activeFilterCount > 0 }" @click="openFilters"><Filter :size="16" /> Filter <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
+			<button
+				type="button"
+				class="toolbar-button catalog-selection-toggle"
+				:class="{ active: selectionMode }"
+				:aria-pressed="selectionMode"
+				@click="selectionMode ? cancelSelection() : beginSelection()"
+			>
+				<X v-if="selectionMode" :size="16" />
+				<ListPlus v-else :size="16" />
+				{{ selectionMode ? 'Cancel' : 'Select items' }}
+			</button>
 		</div>
+		<Transition
+			name="catalog-selection"
+			@after-enter="observeStickyElements"
+			@after-leave="observeStickyElements"
+		>
+			<div
+				v-if="selectionMode"
+				ref="catalogSelectionToolbar"
+				class="catalog-selection-toolbar"
+				role="toolbar"
+				aria-label="Item selection"
+			>
+				<div class="catalog-selection-primary">
+					<strong>{{ selectedItemIds.length }} selected</strong>
+					<button
+						type="button"
+						class="toolbar-button catalog-selection-action"
+						:disabled="selectedItemIds.length === 0"
+						@click="addSelectedItems"
+					>
+						<ListPlus :size="15" /> Add selected
+					</button>
+					<button
+						type="button"
+						class="toolbar-button catalog-selection-action"
+						:disabled="mediaLoading || !browse || entries.length === 0"
+						@click="addAllMatchingItems"
+					>
+						<Layers3 :size="15" /> Add all
+					</button>
+				</div>
+				<button
+					type="button"
+					class="toolbar-button catalog-selection-page-action"
+					:disabled="pageItemIds.length === 0"
+					@click="togglePageSelection"
+				>
+					{{ allPageItemsSelected ? 'Clear page' : 'Select page' }}
+				</button>
+			</div>
+		</Transition>
 
 		<section ref="catalogResults" class="catalog-results" :class="{ loading: mediaLoading }" aria-live="polite">
 			<LoadingState v-if="mediaLoading && !browse" label="Loading media…" />
 			<div v-else-if="entries.length" class="media-grid">
 				<template v-for="(entry, index) in entries" :key="entry.key">
 					<h2 v-if="entry.sectionLabel && isAnchorStart(index)" :ref="(element) => setAnchorElement(entry.navigationKey, element)" class="genre-heading catalog-anchor" :data-catalog-anchor="entry.navigationKey">{{ entry.sectionLabel }}</h2>
-					<button v-if="entry.group" :ref="(element) => setEntryAnchor(index, entry.navigationKey, element)" type="button" class="media-card" :class="{ 'catalog-anchor': isAnchorStart(index) && !entry.sectionLabel }" :data-catalog-anchor="isAnchorStart(index) && !entry.sectionLabel ? entry.navigationKey : undefined" @click="enter(entry.group)">
-						<span class="poster"><Asterisk class="poster-placeholder" :size="38" /><img v-if="entry.group.artworkUrl" :src="artworkVariantUrl(entry.group.artworkUrl, 'card')" :srcset="artworkSrcset(entry.group.artworkUrl, 'card')" :alt="`${entry.group.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" /></span>
-						<span class="media-card-copy"><span class="media-card-title">{{ entry.group.title }}</span><span class="media-card-subtitle">{{ mediaGroupSubtitle(library.typeKey, entry.group) || entry.group.kind }}</span><MoreHorizontal class="card-menu-icon" :size="16" /></span>
-					</button>
-					<RouterLink v-else-if="entry.item" :ref="(element) => setEntryAnchor(index, entry.navigationKey, element)" class="media-card" :class="{ 'catalog-anchor': isAnchorStart(index) && !entry.sectionLabel }" :data-catalog-anchor="isAnchorStart(index) && !entry.sectionLabel ? entry.navigationKey : undefined" :to="`/libraries/${library.id}/items/${entry.item.id}`">
-						<span class="poster"><Asterisk class="poster-placeholder" :size="38" /><img v-if="entry.item.artworkUrl" :src="artworkVariantUrl(entry.item.artworkUrl, 'card')" :srcset="artworkSrcset(entry.item.artworkUrl, 'card')" :alt="`${entry.item.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" /></span>
-						<span class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(library.typeKey, entry.item) || entry.item.kind }}</span><small v-if="entry.item.availability !== 'available'" class="availability-warning">Temporarily unavailable</small><MoreHorizontal class="card-menu-icon" :size="16" /><span class="metadata-indicator" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="11" /><Check v-else :size="10" /></span></span>
-					</RouterLink>
+					<LibraryMediaCard
+						:ref="(element) => setEntryAnchor(index, entry.navigationKey, element)"
+						class="media-card"
+						:class="{ 'catalog-anchor': isAnchorStart(index) && !entry.sectionLabel }"
+						:data-catalog-anchor="isAnchorStart(index) && !entry.sectionLabel ? entry.navigationKey : undefined"
+						:entry="entry"
+						:library-id="library.id"
+						:library-type="library.typeKey"
+						:selection-mode="selectionMode"
+						:selected="entry.item ? selectedItemIdSet.has(entry.item.id) : false"
+						@enter="enter"
+						@toggle="toggleSelectedItem"
+					/>
 				</template>
 			</div>
 			<div v-else class="empty-state"><h3>No matching media</h3><p>Try changing the search or filters, or scan the library again.</p></div>
@@ -1131,5 +1293,7 @@ onUnmounted(() => {
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
 		<LibraryFilterModal v-if="showFilter" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
+		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
+		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />
 	</section>
 </template>

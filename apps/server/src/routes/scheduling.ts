@@ -5,6 +5,8 @@ import {
 	channelScheduleConfigSchema,
 	channelScheduleDraftPreviewSchema,
 	MAX_TIMELINE_PREVIEW_DAYS,
+	programItemAdditionSchema,
+	type ProgramConfig,
 	programCreateSchema,
 	programUpdateSchema,
 	scheduleTemplateCreateSchema,
@@ -13,9 +15,12 @@ import {
 	timelineDraftPreviewSchema,
 } from '@moirai/shared';
 import {
+	apiErrorBodySchema,
 	channelScheduleSchema,
+	programItemAdditionConfirmationErrorSchema,
 	scheduleTemplateSchema,
 	schedulingOverviewSchema,
+	programItemAdditionResultSchema,
 	schedulingProgramSchema,
 	timelinePreviewSchema,
 } from '@moirai/shared/api-contracts';
@@ -38,6 +43,13 @@ const timelinePreviewQuerySchema = z.object({
 	startDate: z.iso.date().optional(),
 	days: z.coerce.number().int().min(1).max(MAX_TIMELINE_PREVIEW_DAYS).default(7),
 });
+
+/** Return the explicit item count when a program owns a concrete media collection. */
+function explicitItemCount(config: ProgramConfig | undefined): number | null {
+	return config?.type === 'content' && config.source.type === 'collection'
+		? config.source.itemIds.length
+		: null;
+}
 
 /** Services required by program, template, preview, and assignment routes. */
 interface SchedulingRouteDependencies {
@@ -72,12 +84,155 @@ export function registerSchedulingRoutes(
 			errors: [400, 409, 500, 503],
 		}),
 	}, async (request, reply) => {
-		const program = await repository.createProgram(programCreateSchema.parse(request.body));
+		const input = programCreateSchema.parse(request.body);
+		const itemCount = explicitItemCount(input.config);
+		if (itemCount !== null && itemCount > config.maxExplicitMediaItems) {
+			throw app.httpErrors.conflict(
+				`The program exceeds the configured ${config.maxExplicitMediaItems.toLocaleString()}-item limit`,
+			);
+		}
+
+		const program = await repository.createProgram(input);
 		events.publish({
 			type: 'scheduling.changed',
 			data: { entity: 'program', change: 'created', id: program.id },
 		});
 		return reply.status(201).send(program);
+	});
+	app.post('/api/v1/libraries/:id/program-items', {
+		schema: apiOperation({
+			operationId: 'addLibraryItemsToProgram',
+			tags: ['Programs'],
+			summary: 'Add library items to a selected-items program',
+			params: idParamsSchema,
+			body: programItemAdditionSchema,
+			response: {
+				200: responseContent('Updated selected-items program', 'application/json', programItemAdditionResultSchema),
+				201: responseContent('Created selected-items program', 'application/json', programItemAdditionResultSchema),
+				409: responseContent(
+					'Program addition needs confirmation or conflicts with current state',
+					'application/json',
+					z.union([programItemAdditionConfirmationErrorSchema, apiErrorBodySchema]),
+				),
+			},
+			errors: [400, 404, 500, 503],
+		}),
+	}, async (request, reply) => {
+		const libraryId = parseId(request);
+		const input = programItemAdditionSchema.parse(request.body);
+		if (!(await repository.getLibrary(libraryId))) {
+			throw app.httpErrors.notFound('Library not found');
+		}
+
+		let itemIds: string[];
+		let matchedItemCount: number;
+
+		// Resolve authored IDs or the recursive catalog query to current canonical items.
+		if (input.selection.type === 'items') {
+			const items = await repository.listMediaItemsByIds(libraryId, input.selection.itemIds);
+			if (items.length !== input.selection.itemIds.length) {
+				throw app.httpErrors.badRequest('Every selected item must belong to this library');
+			}
+
+			itemIds = [...new Set(items.map((item) => item.id))];
+			matchedItemCount = itemIds.length;
+		}
+		else {
+			const selection = repository.resolveProgramItemSelection(
+				libraryId,
+				input.selection.query,
+				config.maxExplicitMediaItems,
+			);
+			itemIds = selection.itemIds;
+			matchedItemCount = selection.matchedItemCount;
+		}
+
+		if (matchedItemCount === 0) {
+			throw app.httpErrors.badRequest('No indexed items match this selection');
+		}
+		if (matchedItemCount > config.maxExplicitMediaItems) {
+			throw app.httpErrors.conflict(
+				`${matchedItemCount.toLocaleString()} matching items exceed the ${config.maxExplicitMediaItems.toLocaleString()}-item program limit`,
+			);
+		}
+
+		// Create a new program or atomically append to the compatible destination.
+		if (input.destination.type === 'new') {
+			const program = await repository.createProgram({
+				name: input.destination.name,
+				config: {
+					type: 'content',
+					source: { type: 'collection', libraryId, itemIds },
+					strategy: input.destination.strategy,
+				},
+			});
+			repository.invalidateSchedulingCatalog();
+			events.publish({
+				type: 'scheduling.changed',
+				data: { entity: 'program', change: 'created', id: program.id },
+			});
+			return reply.status(201).send({
+				program,
+				created: true,
+				matchedItemCount,
+				addedItemCount: itemIds.length,
+				alreadySelectedCount: 0,
+			});
+		}
+
+		const result = repository.appendProgramItems(
+			input.destination.programId,
+			libraryId,
+			itemIds,
+			input.confirmedAdditionToken,
+			config.maxExplicitMediaItems,
+		);
+		if (result.status === 'not-found') {
+			throw app.httpErrors.notFound('Program not found');
+		}
+		if (result.status === 'incompatible') {
+			throw app.httpErrors.conflict(
+				'The destination must be a selected-items program from this library',
+			);
+		}
+		if (result.status === 'capacity') {
+			throw app.httpErrors.conflict(
+				`${result.addedItemCount.toLocaleString()} new items cannot fit in the program's ${result.remainingItemCount.toLocaleString()} remaining slots`,
+			);
+		}
+		if (result.status === 'confirmation-required') {
+			const items = await repository.listMediaItemsByIds(libraryId, result.addedItemIds);
+			return reply.status(409).send({
+				code: 'program_item_confirmation_required',
+				message: 'Confirm this program addition',
+				details: {
+					addedItemCount: result.addedItemCount,
+					alreadySelectedCount: result.alreadySelectedCount,
+					confirmationToken: result.confirmationToken,
+					items: items.map((item) => ({
+						id: item.id,
+						title: item.title,
+						year: item.year,
+						artworkUrl: item.artworkUrl,
+					})),
+				},
+				requestId: request.id,
+			});
+		}
+
+		if (result.changed) {
+			events.publish({
+				type: 'scheduling.changed',
+				data: { entity: 'program', change: 'updated', id: result.program.id },
+			});
+		}
+		return {
+			program: result.program,
+			created: false,
+			matchedItemCount,
+			addedItemCount: result.addedItemCount,
+			alreadySelectedCount: result.alreadySelectedCount,
+		};
 	});
 	app.get('/api/v1/programs/:id', {
 		schema: apiOperation({
@@ -107,9 +262,17 @@ export function registerSchedulingRoutes(
 			errors: [400, 404, 409, 500, 503],
 		}),
 	}, async (request) => {
+		const input = programUpdateSchema.parse(request.body);
+		const itemCount = explicitItemCount(input.config);
+		if (itemCount !== null && itemCount > config.maxExplicitMediaItems) {
+			throw app.httpErrors.conflict(
+				`The program exceeds the configured ${config.maxExplicitMediaItems.toLocaleString()}-item limit`,
+			);
+		}
+
 		const program = await repository.updateProgram(
 			parseId(request),
-			programUpdateSchema.parse(request.body),
+			input,
 		);
 		if (!program) {
 			throw app.httpErrors.notFound('Program not found');

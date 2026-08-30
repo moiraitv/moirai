@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS, MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
 import {
 	loadConfig,
 	bundledNextRoot,
@@ -109,6 +110,16 @@ describe('media probe configuration', () => {
 			mediaProbeConcurrency: 2,
 			mediaProbeTimeoutMs: 15_000,
 		});
+	});
+});
+
+describe('explicit media collection configuration', () => {
+	it('defaults, overrides, and bounds the selected-items program capacity', () => {
+		expect(loadConfig().maxExplicitMediaItems).toBe(DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS);
+		vi.stubEnv('MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS', '750');
+		expect(loadConfig().maxExplicitMediaItems).toBe(750);
+		vi.stubEnv('MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS', String(MAX_EXPLICIT_MEDIA_ITEMS + 1));
+		expect(() => loadConfig()).toThrow(/MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS/);
 	});
 });
 

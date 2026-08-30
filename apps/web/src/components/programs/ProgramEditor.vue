@@ -10,7 +10,6 @@ import {
 } from '@lucide/vue';
 import {
 	MAX_EXPLICIT_MEDIA_GROUPS,
-	MAX_EXPLICIT_MEDIA_ITEMS,
 	type MediaGroup,
 	type MediaItem,
 	type MediaSourcePickerEntry,
@@ -24,6 +23,7 @@ import { cloneContractValue } from '../../reactive-clone';
 import LoadingState from '../../components/LoadingState.vue';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import { useLibrariesStore } from '../../stores/libraries';
+import { useChannelsStore } from '../../stores/channels';
 import { useSchedulingStore } from '../../stores/scheduling';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
@@ -47,7 +47,12 @@ const route = useRoute();
 const router = useRouter();
 const scheduling = useSchedulingStore();
 const librariesStore = useLibrariesStore();
-const initialLoading = ref(!(scheduling.loaded && librariesStore.loaded));
+const channelsStore = useChannelsStore();
+const initialLoading = ref(!(
+	scheduling.loaded
+	&& librariesStore.loaded
+	&& channelsStore.capabilitiesLoaded
+));
 const saving = ref(false);
 const error = ref('');
 const sourceEntries = ref<MediaSourcePickerEntry[]>([]);
@@ -93,7 +98,7 @@ const selectingGroups = computed(() => form.sourceType === 'group-collection');
 const selectionCount = computed(() =>
 	selectingGroups.value ? form.selectedGroupIds.length : form.selectedItemIds.length);
 const selectionLimit = computed(() =>
-	selectingGroups.value ? MAX_EXPLICIT_MEDIA_GROUPS : MAX_EXPLICIT_MEDIA_ITEMS);
+	selectingGroups.value ? MAX_EXPLICIT_MEDIA_GROUPS : channelsStore.maxExplicitMediaItems);
 const selectionLoading = computed(() =>
 	selectingGroups.value ? selectedGroupsLoading.value : selectedItemsLoading.value);
 const selectionLoaded = computed(() =>
@@ -388,8 +393,8 @@ function toggleSelectedItem(item: MediaItem): void {
 		return;
 	}
 
-	if (form.selectedItemIds.length >= MAX_EXPLICIT_MEDIA_ITEMS) {
-		error.value = `A collection can contain at most ${MAX_EXPLICIT_MEDIA_ITEMS} items.`;
+	if (form.selectedItemIds.length >= channelsStore.maxExplicitMediaItems) {
+		error.value = `A collection can contain at most ${channelsStore.maxExplicitMediaItems} items.`;
 		return;
 	}
 
@@ -725,7 +730,13 @@ watch(
 onMounted(async () => {
 	document.addEventListener('keydown', handleSelectionDrawerKeydown);
 	try {
-		await Promise.all([scheduling.load(), librariesStore.load()]);
+		await Promise.all([
+			scheduling.load(),
+			librariesStore.load(),
+			channelsStore.capabilitiesLoaded
+				? Promise.resolve()
+				: channelsStore.loadCapabilities(),
+		]);
 		resetForm(programs.value.find((program) => program.id === editingId.value));
 		await Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	}
@@ -955,7 +966,7 @@ onBeforeUnmount(() => {
 													{{
 														form.sourceType === 'group-collection'
 															? MAX_EXPLICIT_MEDIA_GROUPS
-															: MAX_EXPLICIT_MEDIA_ITEMS
+															: channelsStore.maxExplicitMediaItems
 													}}</small
 												>
 											</div>

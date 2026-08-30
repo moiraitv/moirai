@@ -122,6 +122,7 @@ export function registerSystemRoutes(
 		timeZone: config.timeZone,
 		publicUrl: config.publicUrl,
 		publicUrlStatus: publicUrlStatus(config.publicUrl),
+		maxExplicitMediaItems: config.maxExplicitMediaItems,
 	}));
 	app.get('/api/v1/status/conflicts', {
 		schema: apiOperation({

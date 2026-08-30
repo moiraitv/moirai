@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { asc, eq, inArray } from 'drizzle-orm';
 import type {
 	ChannelSchedule,
@@ -13,6 +13,8 @@ import type {
 import {
 	canonicalIdentityKey,
 	channelScheduleConfigSchema,
+	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	programConfigSchema,
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
@@ -21,6 +23,7 @@ import {
 	channelScheduleLayers,
 	channelSchedules,
 	materializedTimelineSegments,
+	mediaItemAliases,
 	scheduleBoundaries,
 	scheduleSlots,
 	scheduleTemplates,
@@ -38,7 +41,19 @@ import {
 	ResourceIdentityConflictError,
 	SchedulingIdentityConflictError,
 } from './resource-identity.js';
+import type { ProgramItemAppendResult } from './contracts.js';
 import { currentTimestamp } from '../time.js';
+
+/** Bind a confirmation to ordered identifiers or their canonical set according to playback semantics. */
+function programItemAdditionConfirmationToken(itemIds: string[], orderSensitive: boolean): string {
+	const comparisonMode = orderSensitive ? 'ordered' : 'set';
+	const confirmationIds = orderSensitive ? itemIds : [...itemIds].sort();
+	return createHash('sha256')
+		.update(
+			`moirai-program-item-addition-v1\0${comparisonMode}\0${JSON.stringify(confirmationIds)}`,
+		)
+		.digest('hex');
+}
 
 /**
  * Own authored programs, templates, and layered channel schedule configuration. This repository
@@ -132,6 +147,128 @@ export class SchedulingConfigurationRepository {
 			.set({ name: updated.name, nameKey, config: updated.config, updatedAt: updated.updatedAt })
 			.where(eq(schedulingPrograms.id, id));
 		return updated;
+	}
+
+	/** Atomically append canonical items to a compatible same-library collection program. */
+	appendProgramItems(
+		id: string,
+		libraryId: string,
+		itemIds: string[],
+		confirmedAdditionToken?: string,
+		maxItemCount = DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	): ProgramItemAppendResult {
+		return this.db.transaction((tx): ProgramItemAppendResult => {
+			const [row] = tx.select().from(schedulingPrograms)
+				.where(eq(schedulingPrograms.id, id)).limit(1).all();
+			if (!row) {
+				return { status: 'not-found' };
+			}
+
+			const config = programConfigSchema.parse(row.config);
+			if (
+				config.type !== 'content'
+				|| config.source.type !== 'collection'
+				|| config.source.libraryId !== libraryId
+			) {
+				return { status: 'incompatible' };
+			}
+
+			// Resolve absorbed multipart identifiers before comparing or rewriting the collection.
+			const authoredCurrentIds = config.source.itemIds;
+			const candidateIds = [...new Set([...authoredCurrentIds, ...itemIds])];
+			const aliases = candidateIds.length > 0
+				? tx.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
+					.from(mediaItemAliases)
+					.where(inArray(mediaItemAliases.aliasId, candidateIds)).all()
+				: [];
+			const aliasMap = new Map(aliases.map((alias) => [alias.aliasId, alias.itemId]));
+			/** Resolve one stored or incoming compatibility identifier to its current item. */
+			function canonicalId(itemId: string): string {
+				return aliasMap.get(itemId) ?? itemId;
+			}
+
+			const currentIds = [...new Set(authoredCurrentIds.map(canonicalId))];
+			const incomingIds = [...new Set(itemIds.map(canonicalId))];
+			const current = new Set(currentIds);
+			const additions = incomingIds.filter((itemId) => !current.has(itemId));
+			const confirmationToken = programItemAdditionConfirmationToken(
+				additions,
+				config.strategy.type === 'sequential',
+			);
+			const alreadySelectedCount = incomingIds.length - additions.length;
+			const remainingItemCount = maxItemCount - currentIds.length;
+			const normalizedCurrent = currentIds.length !== authoredCurrentIds.length
+				|| currentIds.some((itemId, index) => itemId !== authoredCurrentIds[index]);
+			if (additions.length > remainingItemCount) {
+				return {
+					status: 'capacity',
+					addedItemCount: additions.length,
+					alreadySelectedCount,
+					remainingItemCount,
+				};
+			}
+			if (
+				confirmedAdditionToken !== undefined
+				&& confirmedAdditionToken !== confirmationToken
+			) {
+				return {
+					status: 'confirmation-required',
+					addedItemCount: additions.length,
+					addedItemIds: additions,
+					alreadySelectedCount,
+					confirmationToken,
+				};
+			}
+			if (
+				additions.length > PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD
+				&& confirmedAdditionToken === undefined
+			) {
+				return {
+					status: 'confirmation-required',
+					addedItemCount: additions.length,
+					addedItemIds: additions,
+					alreadySelectedCount,
+					confirmationToken,
+				};
+			}
+			if (additions.length === 0 && !normalizedCurrent) {
+				return {
+					status: 'updated',
+					program: {
+						id: row.id,
+						name: row.name,
+						config,
+						createdAt: row.createdAt,
+						updatedAt: row.updatedAt,
+					},
+					changed: false,
+					addedItemCount: 0,
+					alreadySelectedCount,
+				};
+			}
+
+			const timestamp = currentTimestamp();
+			const updated: SchedulingProgram = {
+				id: row.id,
+				name: row.name,
+				config: {
+					...config,
+					source: { ...config.source, itemIds: [...currentIds, ...additions] },
+				},
+				createdAt: row.createdAt,
+				updatedAt: timestamp,
+			};
+			tx.update(schedulingPrograms)
+				.set({ config: updated.config, updatedAt: timestamp })
+				.where(eq(schedulingPrograms.id, id)).run();
+			return {
+				status: 'updated',
+				program: updated,
+				changed: true,
+				addedItemCount: additions.length,
+				alreadySelectedCount,
+			};
+		});
 	}
 
 	/** Delete a program only when no sequence, slot, or filler configuration references it. */

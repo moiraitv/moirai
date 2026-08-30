@@ -12,19 +12,22 @@ import {
 	FolderOpen,
 	Gauge,
 	HardDrive,
+	ListPlus,
 	Play,
 	Star,
 	Users,
 	Video,
 	X,
 } from '@lucide/vue';
-import type { MediaItemDetail } from '@moirai/shared';
+import type { MediaItemDetail, ProgramItemAdditionResult } from '@moirai/shared';
 import { api } from '../api';
 import LoadingState from '../components/LoadingState.vue';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { errorMessage } from '../error-message';
 import { hideBrokenImage } from '../image-error';
 import { compactDurationLabel } from '../duration-format';
+import AddItemsToProgramModal from '../components/programs/AddItemsToProgramModal.vue';
+import ProgramAdditionToast from '../components/programs/ProgramAdditionToast.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -38,6 +41,8 @@ const playerDialog = ref<HTMLElement>();
 const playButton = ref<HTMLButtonElement>();
 const showAllCredits = ref(false);
 const copyStatus = ref('');
+const addToProgramOpen = ref(false);
+const programAdditionResult = ref<ProgramItemAdditionResult | null>(null);
 const id = computed(() => String(route.params.id));
 const previewUrl = computed(() => `/api/v1/media/${encodeURIComponent(id.value)}/preview`);
 const visibleActors = computed(() => {
@@ -124,6 +129,12 @@ function closePlayer(): void {
 	void nextTick(() => playButton.value?.focus());
 }
 
+/** Close the destination dialog and report the selected-items program that changed. */
+function finishProgramAddition(result: ProgramItemAdditionResult): void {
+	addToProgramOpen.value = false;
+	programAdditionResult.value = result;
+}
+
 /** Translate browser media failures into safe, actionable preview messages. */
 function handlePlayerError(): void {
 	const code = player.value?.error?.code;
@@ -150,6 +161,8 @@ async function load(): Promise<void> {
 
 watch(id, () => {
 	closePlayer();
+	addToProgramOpen.value = false;
+	programAdditionResult.value = null;
 	void load();
 });
 onMounted(() => void load());
@@ -184,6 +197,10 @@ onUnmounted(closePlayer);
 					<button ref="playButton" class="button primary detail-play" @click="openPlayer">
 						<Play :size="19" fill="currentColor" />
 						Play preview
+					</button>
+					<button class="button secondary" @click="addToProgramOpen = true">
+						<ListPlus :size="19" />
+						Add to program
 					</button>
 				</div>
 			</div>
@@ -367,6 +384,14 @@ onUnmounted(closePlayer);
 			</article>
 		</div>
 		<p class="visually-hidden" aria-live="polite">{{ copyStatus }}</p>
+		<AddItemsToProgramModal
+			v-if="addToProgramOpen"
+			:library-id="item.libraryId"
+			:selection="{ type: 'items', itemIds: [item.id] }"
+			@added="finishProgramAddition"
+			@close="addToProgramOpen = false"
+		/>
+		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />
 	</section>
 
 	<Teleport to="body">

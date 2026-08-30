@@ -19,6 +19,8 @@ import {
 } from './index.js';
 import {
 	channelScheduleConfigSchema,
+	MAX_EXPLICIT_MEDIA_ITEMS,
+	programItemAdditionConfirmationTokenSchema,
 	programCreateSchema,
 	scheduleTemplateCreateSchema,
 } from './scheduling.js';
@@ -255,6 +257,41 @@ export const schedulingProgramSchema = programCreateSchema.extend({
 	updatedAt: isoDateSchema,
 });
 
+/** Result of adding library items to a new or existing selected-items program. */
+export const programItemAdditionResultSchema = z.object({
+	program: schedulingProgramSchema,
+	created: z.boolean(),
+	matchedItemCount: z.number().int().nonnegative(),
+	addedItemCount: z.number().int().nonnegative(),
+	alreadySelectedCount: z.number().int().nonnegative(),
+});
+
+/** Compact media preview displayed while confirming a large program addition. */
+export const programItemAdditionConfirmationItemSchema = mediaItemSchema.pick({
+	id: true,
+	title: true,
+	year: true,
+	artworkUrl: true,
+});
+/** Compact media preview displayed while confirming a large program addition. */
+export type ProgramItemAdditionConfirmationItem = z.infer<
+	typeof programItemAdditionConfirmationItemSchema
+>;
+
+/** Exact current addition and media previews returned when confirmation is required. */
+export const programItemAdditionConfirmationDetailsSchema = z.object({
+	addedItemCount: z.number().int().nonnegative(),
+	alreadySelectedCount: z.number().int().nonnegative(),
+	confirmationToken: programItemAdditionConfirmationTokenSchema,
+	items: z.array(programItemAdditionConfirmationItemSchema).max(MAX_EXPLICIT_MEDIA_ITEMS),
+});
+
+/** Stable conflict response requesting confirmation of a large existing-program addition. */
+export const programItemAdditionConfirmationErrorSchema = apiErrorBodySchema.extend({
+	code: z.literal('program_item_confirmation_required'),
+	details: programItemAdditionConfirmationDetailsSchema,
+});
+
 /** Reusable nominal-day schedule structure. */
 export const scheduleTemplateSchema = scheduleTemplateCreateSchema.extend({
 	id: idSchema,
@@ -463,6 +500,7 @@ export const appCapabilitiesSchema = z.object({
 	timeZone: z.string(),
 	publicUrl: z.url(),
 	publicUrlStatus: z.enum(['configured', 'unreachable-default']),
+	maxExplicitMediaItems: z.number().int().positive().max(MAX_EXPLICIT_MEDIA_ITEMS),
 });
 
 /** Safe administrator identity returned after local or Logto authentication. */

@@ -2,6 +2,10 @@ import { existsSync } from 'node:fs';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
+import {
+	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	MAX_EXPLICIT_MEDIA_ITEMS,
+} from '@moirai/shared';
 
 /** Repository root used to resolve development-friendly relative defaults. */
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
@@ -34,6 +38,7 @@ export interface AppConfig {
 	mediaProbeTimeoutMs: number;
 	schedulingWorkerCount: number;
 	schedulingWorkerQueueLimit: number;
+	maxExplicitMediaItems: number;
 	scanCancellationGraceMs: number;
 	shutdownDeadlineMs: number;
 	channelLogoDir: string;
@@ -359,6 +364,14 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 				1,
 				256,
 				'MOIRAI_SCHEDULING_WORKER_QUEUE',
+			),
+		maxExplicitMediaItems: overrides.maxExplicitMediaItems
+			?? integerFromEnvironment(
+				process.env.MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS,
+				DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+				1,
+				MAX_EXPLICIT_MEDIA_ITEMS,
+				'MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS',
 			),
 		scanCancellationGraceMs: overrides.scanCancellationGraceMs
 			?? integerFromEnvironment(

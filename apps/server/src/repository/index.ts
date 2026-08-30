@@ -14,6 +14,7 @@ import type {
 	PlaybackSettings,
 	ProgramCreate,
 	ProgramUpdate,
+	CatalogProgramItemQuery,
 	ScheduleTemplate,
 	ScheduleTemplateCreate,
 	ScheduleTemplateUpdate,
@@ -37,6 +38,8 @@ import type {
 	MediaGenreFacetSelection,
 	MediaProbeCacheEntry,
 	MediaSourcePickerQuery,
+	ProgramItemAppendResult,
+	ProgramItemSelection,
 	TimelineCommit,
 	TimelineMaterializationRecord,
 	MaterializedSegmentRecord,
@@ -103,6 +106,15 @@ export class Repository extends LibraryRepository {
 	/** Delegate a catalog browse query to the focused catalog repository. */
 	async browseMedia(libraryId: string, query: MediaBrowseQuery): Promise<MediaBrowseResult> {
 		return this.catalog.browseMedia(libraryId, query);
+	}
+
+	/** Resolve recursive filtered media identifiers for a selected-items program operation. */
+	resolveProgramItemSelection(
+		libraryId: string,
+		query: CatalogProgramItemQuery,
+		maxItemCount?: number,
+	): ProgramItemSelection {
+		return this.catalog.resolveProgramItemSelection(libraryId, query, maxItemCount);
 	}
 
 	/** Return bounded media choices for the program source picker. */
@@ -209,6 +221,28 @@ export class Repository extends LibraryRepository {
 	/** Replace a program configuration while preserving its identity. */
 	async updateProgram(id: string, input: ProgramUpdate): Promise<SchedulingProgram | null> {
 		return this.scheduling.updateProgram(id, input);
+	}
+
+	/** Append canonical item identifiers to one compatible selected-items program atomically. */
+	appendProgramItems(
+		id: string,
+		libraryId: string,
+		itemIds: string[],
+		confirmedAdditionToken?: string,
+		maxItemCount?: number,
+	): ProgramItemAppendResult {
+		const result = this.scheduling.appendProgramItems(
+			id,
+			libraryId,
+			itemIds,
+			confirmedAdditionToken,
+			maxItemCount,
+		);
+		if (result.status === 'updated' && result.changed) {
+			this.scheduling.invalidateSchedulingCatalog();
+		}
+
+		return result;
 	}
 
 	/** Delete a program when no scheduling configuration references it. */

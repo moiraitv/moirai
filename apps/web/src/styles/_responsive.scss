@@ -53,12 +53,36 @@
 	}
 
 	.catalog-toolbar {
-		grid-template-columns: auto 1fr auto;
+		grid-template-columns: repeat(3, auto);
 	}
 
 	.alphabet-filter {
 		grid-column: 1 / -1;
 		grid-row: 2;
+	}
+
+	.catalog-selection-toolbar {
+		align-items: center;
+	}
+
+	.catalog-selection-primary {
+		justify-content: flex-start;
+	}
+}
+
+@media (max-width: 620px) {
+	.catalog-selection-toolbar {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.catalog-selection-page-action {
+		align-self: flex-start;
+	}
+
+	.catalog-selection-enter-active,
+	.catalog-selection-leave-active {
+		max-height: 104px;
 	}
 }
 

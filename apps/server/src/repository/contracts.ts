@@ -1,12 +1,13 @@
 import type {
+	CatalogProgramItemQuery,
 	ChannelTimelineMaterializationStatus,
 	MediaExternalId,
 	MediaPart,
-	MediaSort,
 	MediaSubtitleTrack,
 	MultipartStatus,
 	ScanRun,
 	SchedulableMedia,
+	SchedulingProgram,
 	SelectionStateRecord,
 	TimelineIssue,
 	TimelineSegment,
@@ -14,23 +15,41 @@ import type {
 import type { MissingItemPresenceTarget } from '../scanner/contracts.js';
 
 /** Filters, ordering, and paging accepted by catalog browsing. */
-export interface MediaBrowseQuery {
-	parentId: string | null;
+export interface MediaBrowseQuery extends CatalogProgramItemQuery {
 	page: number;
 	pageSize: number;
-	sort: MediaSort;
-	direction: 'asc' | 'desc';
-	name: string;
-	releaseYearFrom: number | null;
-	releaseYearTo: number | null;
-	addedFrom: string | null;
-	addedBefore: string | null;
-	genres: string[];
-	excludedGenres: string[];
-	genreMatch: 'any' | 'all';
-	actor: string;
-	director: string;
 }
+
+/** Bounded item identifiers and exact match count resolved from a recursive catalog query. */
+export interface ProgramItemSelection {
+	itemIds: string[];
+	matchedItemCount: number;
+}
+
+/** Atomic outcome from appending canonical item identifiers to a selected-items program. */
+export type ProgramItemAppendResult
+	= | {
+		status: 'updated';
+		program: SchedulingProgram;
+		changed: boolean;
+		addedItemCount: number;
+		alreadySelectedCount: number;
+	}
+	| { status: 'not-found' }
+	| { status: 'incompatible' }
+	| {
+		status: 'confirmation-required';
+		addedItemCount: number;
+		addedItemIds: string[];
+		alreadySelectedCount: number;
+		confirmationToken: string;
+	}
+	| {
+		status: 'capacity';
+		addedItemCount: number;
+		alreadySelectedCount: number;
+		remainingItemCount: number;
+	};
 
 /** Required and disallowed genre rules used to predict Match all facet actions. */
 export interface MediaGenreFacetSelection {

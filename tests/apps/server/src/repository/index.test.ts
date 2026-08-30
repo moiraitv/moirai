@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 	type LibraryCreate,
@@ -85,9 +86,29 @@ describe('Repository scan reconciliation', () => {
 			watcherEnabled: false,
 			enabled: true,
 		});
+		const absorbed = item(1);
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'initial'),
+			[],
+			[absorbed],
+			[],
+			true,
+		);
+		const selectedProgram = await repository.createProgram({
+			name: 'Pre-absorption selection',
+			config: {
+				type: 'content',
+				source: {
+					type: 'collection',
+					libraryId: library.id,
+					itemIds: [absorbed.id],
+				},
+				strategy: { type: 'sequential' },
+			},
+		});
 		const logical = {
-			...item(1),
-			aliasIds: [randomUUID()],
+			...item(2),
+			aliasIds: [absorbed.id],
 			multipartStatus: 'complete' as const,
 		};
 
@@ -102,6 +123,18 @@ describe('Repository scan reconciliation', () => {
 		expect(await repository.getMediaItem(logical.aliasIds[0]!)).toMatchObject({
 			id: logical.id,
 			multipartStatus: 'complete',
+		});
+		const addition = repository.appendProgramItems(
+			selectedProgram.id,
+			library.id,
+			[logical.id],
+		);
+		expect(addition).toMatchObject({
+			status: 'updated',
+			changed: true,
+			addedItemCount: 0,
+			alreadySelectedCount: 1,
+			program: { config: { source: { itemIds: [logical.id] } } },
 		});
 	});
 
@@ -823,6 +856,40 @@ describe('Repository scan reconciliation', () => {
 			genreMatch: 'all',
 		});
 		expect(excludedGenreResult.items.map((entry) => entry.title)).toEqual(['Beta']);
+		const programSelection = repository.resolveProgramItemSelection(library.id, {
+			...baseQuery,
+			sort: 'genre',
+			genres: ['drama'],
+			genreMatch: 'all',
+		});
+		expect(programSelection).toEqual({
+			itemIds: [alpha.id, beta.id],
+			matchedItemCount: 2,
+		});
+		const selectedProgram = await repository.createProgram({
+			name: 'Selected films',
+			config: {
+				type: 'content',
+				source: { type: 'collection', libraryId: library.id, itemIds: [alpha.id] },
+				strategy: { type: 'shuffle', seed: 'stable' },
+			},
+		});
+		const appended = repository.appendProgramItems(
+			selectedProgram.id,
+			library.id,
+			programSelection.itemIds,
+		);
+		expect(appended).toMatchObject({
+			status: 'updated',
+			addedItemCount: 1,
+			alreadySelectedCount: 1,
+			program: {
+				config: {
+					source: { itemIds: [alpha.id, beta.id] },
+					strategy: { type: 'shuffle', seed: 'stable' },
+				},
+			},
+		});
 		expect(actorResult.items[0]).toMatchObject({
 			availability: 'available',
 			lastObservedAt: expect.any(String),
@@ -936,6 +1003,22 @@ describe('Repository scan reconciliation', () => {
 			[],
 			true,
 		);
+		const recursiveSelection = repository.resolveProgramItemSelection(library.id, {
+			parentId: showId,
+			sort: 'title',
+			direction: 'asc',
+			name: '',
+			releaseYearFrom: null,
+			releaseYearTo: null,
+			addedFrom: null,
+			addedBefore: null,
+			genres: [],
+			excludedGenres: [],
+			genreMatch: 'all',
+			actor: '',
+			director: '',
+		});
+		expect(recursiveSelection).toEqual({ itemIds: [episode.id], matchedItemCount: 1 });
 
 		const rootGroups = await repository.browseMediaSourceOptions(library.id, {
 			target: 'groups',
@@ -1032,6 +1115,143 @@ describe('Repository scheduling catalog', () => {
 					},
 				})),
 		);
+		const confirmationProgram = await repository.createProgram({
+			name: 'Confirmation collection',
+			config: {
+				type: 'content',
+				source: {
+					type: 'collection',
+					libraryId: library.id,
+					itemIds: [items[0]!.id],
+				},
+				strategy: { type: 'sequential' },
+			},
+		});
+		const capacity = repository.appendProgramItems(
+			programs[0]!.id,
+			library.id,
+			items.slice(400, 501).map((entry) => entry.id),
+		);
+		expect(capacity).toEqual({
+			status: 'capacity',
+			addedItemCount: 101,
+			alreadySelectedCount: 0,
+			remainingItemCount: 100,
+		});
+		const unchangedProgram = await repository.getProgram(programs[0]!.id);
+		expect(unchangedProgram?.config).toEqual(programs[0]!.config);
+
+		const confirmationItemIds = items
+			.slice(0, PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2)
+			.map((entry) => entry.id);
+		const confirmation = repository.appendProgramItems(
+			confirmationProgram.id,
+			library.id,
+			confirmationItemIds,
+		);
+		expect(confirmation.status).toBe('confirmation-required');
+		if (confirmation.status !== 'confirmation-required') {
+			throw new Error('Expected a program-item confirmation challenge');
+		}
+		expect(confirmation).toMatchObject({
+			status: 'confirmation-required',
+			addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
+			addedItemIds: confirmationItemIds.slice(1),
+			alreadySelectedCount: 1,
+		});
+		expect(confirmation.confirmationToken).toMatch(/^[a-f0-9]{64}$/);
+		expect((await repository.getProgram(confirmationProgram.id))?.config)
+			.toEqual(confirmationProgram.config);
+
+		const reorderedConfirmationItemIds = [
+			confirmationItemIds[0]!,
+			...confirmationItemIds.slice(1).reverse(),
+		];
+		const reorderedSequentialConfirmation = repository.appendProgramItems(
+			confirmationProgram.id,
+			library.id,
+			reorderedConfirmationItemIds,
+			confirmation.confirmationToken,
+		);
+		expect(reorderedSequentialConfirmation).toMatchObject({
+			status: 'confirmation-required',
+			addedItemIds: reorderedConfirmationItemIds.slice(1),
+		});
+		if (reorderedSequentialConfirmation.status !== 'confirmation-required') {
+			throw new Error('Expected sequential item reordering to invalidate confirmation');
+		}
+		expect(reorderedSequentialConfirmation.confirmationToken)
+			.not.toBe(confirmation.confirmationToken);
+
+		const changedConfirmationItemIds = [
+			...confirmationItemIds.slice(0, -1),
+			items[PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2]!.id,
+		];
+		const staleConfirmation = repository.appendProgramItems(
+			confirmationProgram.id,
+			library.id,
+			changedConfirmationItemIds,
+			confirmation.confirmationToken,
+		);
+		expect(staleConfirmation).toMatchObject({
+			status: 'confirmation-required',
+			addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
+			addedItemIds: changedConfirmationItemIds.slice(1),
+			alreadySelectedCount: 1,
+		});
+		if (staleConfirmation.status !== 'confirmation-required') {
+			throw new Error('Expected changed identifiers to invalidate confirmation');
+		}
+		expect(staleConfirmation.confirmationToken).not.toBe(confirmation.confirmationToken);
+		expect((await repository.getProgram(confirmationProgram.id))?.config)
+			.toEqual(confirmationProgram.config);
+
+		const confirmed = repository.appendProgramItems(
+			confirmationProgram.id,
+			library.id,
+			confirmationItemIds,
+			confirmation.confirmationToken,
+		);
+		expect(confirmed).toMatchObject({
+			status: 'updated',
+			addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
+			alreadySelectedCount: 1,
+			program: { config: { source: { itemIds: confirmationItemIds } } },
+		});
+
+		for (const strategyType of ['shuffle', 'random'] as const) {
+			const unorderedProgram = await repository.createProgram({
+				name: `${strategyType} confirmation collection`,
+				config: {
+					type: 'content',
+					source: {
+						type: 'collection',
+						libraryId: library.id,
+						itemIds: [confirmationItemIds[0]!],
+					},
+					strategy: { type: strategyType, seed: '' },
+				},
+			});
+			const unorderedConfirmation = repository.appendProgramItems(
+				unorderedProgram.id,
+				library.id,
+				confirmationItemIds,
+			);
+			if (unorderedConfirmation.status !== 'confirmation-required') {
+				throw new Error(`Expected a ${strategyType} program confirmation challenge`);
+			}
+
+			const reorderedConfirmation = repository.appendProgramItems(
+				unorderedProgram.id,
+				library.id,
+				reorderedConfirmationItemIds,
+				unorderedConfirmation.confirmationToken,
+			);
+			expect(reorderedConfirmation).toMatchObject({
+				status: 'updated',
+				program: { config: { source: { itemIds: reorderedConfirmationItemIds } } },
+			});
+		}
 
 		const catalog = await repository.getSchedulingCatalog(programs, programs.map((program) => program.id));
 

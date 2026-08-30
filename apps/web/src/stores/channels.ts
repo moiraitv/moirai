@@ -1,6 +1,10 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import type { Channel, ScheduleGuide } from '@moirai/shared';
+import {
+	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	type Channel,
+	type ScheduleGuide,
+} from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
 
@@ -13,6 +17,7 @@ export const useChannelsStore = defineStore('channels', () => {
 	const timeZone = ref('UTC');
 	const publicUrl = ref('');
 	const publicUrlStatus = ref<'configured' | 'unreachable-default'>('configured');
+	const maxExplicitMediaItems = ref(DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS);
 	const capabilitiesLoaded = ref(false);
 	const guide = ref<ScheduleGuide | null>(null);
 	const guideWeekStart = ref('');
@@ -67,6 +72,7 @@ export const useChannelsStore = defineStore('channels', () => {
 			timeZone.value = result.timeZone;
 			publicUrl.value = result.publicUrl;
 			publicUrlStatus.value = result.publicUrlStatus;
+			maxExplicitMediaItems.value = result.maxExplicitMediaItems;
 			capabilitiesLoaded.value = true;
 			error.value = '';
 		}
@@ -121,6 +127,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		timeZone,
 		publicUrl,
 		publicUrlStatus,
+		maxExplicitMediaItems,
 		capabilitiesLoaded,
 		guide,
 		guideWeekStart,

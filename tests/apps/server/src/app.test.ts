@@ -12,6 +12,7 @@ import {
 	libraryCreateSchema,
 	liveEventSchema,
 	MAX_MEDIA_GENRE_RULES,
+	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	SECONDS_PER_SCHEDULING_DAY,
 	type LiveEvent,
 } from '@moirai/shared';
@@ -1441,33 +1442,33 @@ describe('API', () => {
 				watcherEnabled: false,
 			}),
 		);
-		const itemId = randomUUID();
-		await services.repository.reconcileScan(
-			await services.repository.beginScan(library.id, 'initial'),
-			[],
-			[
-				{
-					id: itemId,
+		const scheduledItems = Array.from(
+			{ length: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2 },
+			(_, index) => {
+				const number = index + 1;
+				const title = number === 1 ? 'Scheduled Film' : `Scheduled Film ${number}`;
+				return {
+					id: randomUUID(),
 					aliasIds: [],
 					groupId: null,
-					stableKey: 'scheduled-film',
-					kind: 'movie',
-					title: 'Scheduled Film',
-					sortTitle: 'Scheduled Film',
-					relativePath: 'Scheduled Film.mkv',
-					playbackPath: '/media/Scheduled Film.mkv',
-					nfoRelativePath: 'Scheduled Film.nfo',
+					stableKey: `scheduled-film-${number}`,
+					kind: 'movie' as const,
+					title,
+					sortTitle: title,
+					relativePath: `${title}.mkv`,
+					playbackPath: `/media/${title}.mkv`,
+					nfoRelativePath: `${title}.nfo`,
 					plot: null,
 					year: 2026,
 					durationMilliseconds: 3_600_000,
-					probeFingerprint: 'scheduled-film-probe',
-					probeStatus: 'complete',
+					probeFingerprint: `scheduled-film-${number}-probe`,
+					probeStatus: 'complete' as const,
 					probeUpdatedAt: '2026-08-24T00:00:00.000Z',
 					probeErrorCode: null,
 					technicalMetadata: {
 						fileSizeBytes: 1,
 						container: 'matroska',
-						streams: [{ type: 'video', codec: 'h264', width: 1920, height: 1080 }],
+						streams: [{ type: 'video' as const, codec: 'h264', width: 1920, height: 1080 }],
 						resolution: { width: 1920, height: 1080 },
 					},
 					seasonNumber: null,
@@ -1478,19 +1479,25 @@ describe('API', () => {
 					trackNumber: null,
 					discNumber: null,
 					artists: [],
-					multipartStatus: 'none',
+					multipartStatus: 'none' as const,
 					parts: [],
 					subtitleTracks: [],
-					metadataStatus: 'complete',
+					metadataStatus: 'complete' as const,
 					metadata: {},
 					artworkRelativePath: null,
-					fingerprint: 'scheduled-film-v1',
+					fingerprint: `scheduled-film-${number}-v1`,
 					fileModifiedAt: '2026-01-01T00:00:00.000Z',
 					titleBucket: 'S',
 					genres: [],
 					people: [],
-				},
-			],
+				};
+			},
+		);
+		const itemId = scheduledItems[0]!.id;
+		await services.repository.reconcileScan(
+			await services.repository.beginScan(library.id, 'initial'),
+			[],
+			scheduledItems,
 			[],
 			true,
 		);
@@ -1508,20 +1515,111 @@ describe('API', () => {
 				payload: channelCreateSchema.parse({ number: 'schedule', name: 'Schedule Channel' }),
 			})
 		).json();
-		const program = (
-			await app.inject({
-				method: 'POST',
-				url: '/api/v1/programs',
-				payload: {
+		const confirmationProgram = await services.repository.createProgram({
+			name: 'Confirm scheduled films',
+			config: {
+				type: 'content',
+				source: { type: 'collection', libraryId: library.id, itemIds: [itemId] },
+				strategy: { type: 'sequential' },
+			},
+		});
+		const confirmationPayload = {
+			destination: { type: 'existing' as const, programId: confirmationProgram.id },
+			selection: { type: 'query' as const, query: { name: 'Scheduled' } },
+		};
+		const confirmation = await app.inject({
+			method: 'POST',
+			url: `/api/v1/libraries/${library.id}/program-items`,
+			payload: confirmationPayload,
+		});
+		expect(confirmation.statusCode).toBe(409);
+		const confirmationBody = confirmation.json();
+		expect(confirmationBody).toMatchObject({
+			code: 'program_item_confirmation_required',
+			details: {
+				addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
+				alreadySelectedCount: 1,
+			},
+		});
+		expect(confirmationBody.details.confirmationToken).toMatch(/^[a-f0-9]{64}$/);
+		expect(confirmationBody.details.items).toHaveLength(
+			PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
+		);
+		expect(confirmationBody.details.items[0]).toMatchObject({
+			title: 'Scheduled Film 2',
+			year: 2026,
+		});
+		expect((await services.repository.getProgram(confirmationProgram.id))?.config)
+			.toEqual(confirmationProgram.config);
+		const confirmedAddition = await app.inject({
+			method: 'POST',
+			url: `/api/v1/libraries/${library.id}/program-items`,
+			payload: {
+				...confirmationPayload,
+				confirmedAdditionToken: confirmationBody.details.confirmationToken,
+			},
+		});
+		expect(confirmedAddition.statusCode).toBe(200);
+		expect(confirmedAddition.json()).toMatchObject({
+			created: false,
+			matchedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2,
+			addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
+			alreadySelectedCount: 1,
+		});
+		const supersededConfirmation = await app.inject({
+			method: 'POST',
+			url: `/api/v1/libraries/${library.id}/program-items`,
+			payload: {
+				...confirmationPayload,
+				confirmedAdditionToken: confirmationBody.details.confirmationToken,
+			},
+		});
+		expect(supersededConfirmation.statusCode).toBe(409);
+		expect(supersededConfirmation.json()).toMatchObject({
+			code: 'program_item_confirmation_required',
+			details: {
+				addedItemCount: 0,
+				alreadySelectedCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2,
+			},
+		});
+		const programAddition = await app.inject({
+			method: 'POST',
+			url: `/api/v1/libraries/${library.id}/program-items`,
+			payload: {
+				destination: {
+					type: 'new',
 					name: 'All Day Film',
-					config: {
-						type: 'content',
-						source: { type: 'collection', libraryId: library.id, itemIds: [itemId] },
-						strategy: { type: 'sequential' },
-					},
+					strategy: { type: 'sequential' },
 				},
-			})
-		).json();
+				selection: {
+					type: 'query',
+					query: { name: 'Scheduled' },
+				},
+			},
+		});
+		expect(programAddition.statusCode).toBe(201);
+		expect(programAddition.json()).toMatchObject({
+			created: true,
+			matchedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2,
+			addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 2,
+			alreadySelectedCount: 0,
+		});
+		const program = programAddition.json().program;
+		const duplicateAddition = await app.inject({
+			method: 'POST',
+			url: `/api/v1/libraries/${library.id}/program-items`,
+			payload: {
+				destination: { type: 'existing', programId: program.id },
+				selection: { type: 'items', itemIds: [itemId] },
+			},
+		});
+		expect(duplicateAddition.statusCode).toBe(200);
+		expect(duplicateAddition.json()).toMatchObject({
+			created: false,
+			matchedItemCount: 1,
+			addedItemCount: 0,
+			alreadySelectedCount: 1,
+		});
 		const slotId = randomUUID();
 		const template = (
 			await app.inject({

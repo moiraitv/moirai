@@ -1,0 +1,317 @@
+.modal.program-item-modal {
+	width: min(620px, 100%);
+	max-height: calc(100vh - 32px);
+	padding: 0;
+	overflow-y: auto;
+}
+
+.program-item-modal-header {
+	padding: 26px 28px 20px;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+	border-bottom: 1px solid var(--line);
+}
+
+.program-item-modal-header h2,
+.program-item-modal-header p {
+	margin: 0;
+}
+
+.program-item-modal-header h2 {
+	margin-top: 5px;
+}
+
+.program-item-modal-header p:last-child {
+	margin-top: 8px;
+	color: var(--muted);
+	font-size: 0.82rem;
+}
+
+.program-item-modal-body {
+	padding: 24px 28px 28px;
+}
+
+.program-item-modal-load-error {
+	padding: 24px 28px 28px;
+}
+
+.program-destination-options {
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 9px;
+	border: 0;
+}
+
+.program-destination-options legend {
+	margin-bottom: 10px;
+	font-weight: 700;
+}
+
+.program-destination-options label {
+	min-width: 0;
+	padding: 13px 14px;
+	cursor: pointer;
+	display: grid;
+	grid-template-columns: auto auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 11px;
+	border: 1px solid var(--line-bright);
+	border-radius: 10px;
+	background: rgba(7, 18, 28, 0.55);
+}
+
+.program-destination-options label.selected {
+	border-color: rgba(37, 199, 156, 0.7);
+	background: rgba(20, 113, 91, 0.18);
+}
+
+.program-destination-options label:has(input:disabled) {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+.program-destination-options input {
+	width: 17px;
+	height: 17px;
+	min-height: 0;
+	margin: 0;
+	accent-color: var(--accent);
+}
+
+.program-destination-options label > span:not(.program-destination-icon) {
+	min-width: 0;
+	display: grid;
+	gap: 3px;
+}
+
+.program-destination-options strong,
+.program-destination-options small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.program-destination-options small {
+	color: var(--muted);
+	font-size: 0.72rem;
+}
+
+.program-destination-icon {
+	width: 34px;
+	height: 34px;
+	display: grid;
+	place-items: center;
+	border-radius: 8px;
+	color: var(--accent);
+	background: rgba(37, 199, 156, 0.1);
+}
+
+.program-create-fields {
+	margin-top: 18px;
+	display: grid;
+	grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr);
+	gap: 14px;
+}
+
+.program-create-fields label {
+	display: grid;
+	gap: 7px;
+	font-size: 0.78rem;
+	font-weight: 650;
+}
+
+.program-item-modal-footer {
+	margin-top: 24px;
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+.program-addition-confirmation-backdrop {
+	z-index: 60;
+	background: rgba(2, 7, 12, 0.86);
+}
+
+.modal.program-addition-confirmation-modal {
+	width: min(460px, 100%);
+	padding: 0;
+	overflow: hidden;
+	border-color: rgba(37, 199, 156, 0.55);
+	background: linear-gradient(150deg, #102532, #091721 72%);
+	box-shadow: 0 34px 110px rgba(0, 0, 0, 0.78);
+}
+
+.program-addition-confirmation-header {
+	padding: 24px 26px 19px;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	border-bottom: 1px solid rgba(58, 88, 106, 0.58);
+}
+
+.program-addition-confirmation-header h2,
+.program-addition-confirmation-header p {
+	margin: 0;
+}
+
+.program-addition-confirmation-header h2 {
+	margin-top: 4px;
+	font-size: 1.35rem;
+}
+
+.program-addition-confirmation-icon {
+	width: 44px;
+	height: 44px;
+	display: grid;
+	place-items: center;
+	border: 1px solid rgba(37, 199, 156, 0.42);
+	border-radius: 11px;
+	color: #7ce7c8;
+	background: rgba(20, 113, 91, 0.24);
+}
+
+.program-addition-confirmation-body {
+	padding: 24px 26px;
+}
+
+.program-addition-confirmation-body > p {
+	margin: 18px 0 0;
+	color: #d7e0e7;
+	line-height: 1.55;
+}
+
+.program-addition-carousel-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+}
+
+.program-addition-carousel-heading p {
+	margin: 0;
+	color: #d7e0e7;
+	font-size: 0.8rem;
+	font-weight: 650;
+}
+
+.program-addition-carousel-heading > div {
+	display: flex;
+	gap: 6px;
+}
+
+.program-addition-carousel-heading button {
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	cursor: pointer;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line-bright);
+	border-radius: 8px;
+	color: #cbd6de;
+	background: rgba(7, 18, 28, 0.72);
+}
+
+.program-addition-carousel {
+	margin-top: 12px;
+	padding: 3px 2px 9px;
+	display: grid;
+	grid-auto-columns: 112px;
+	grid-auto-flow: column;
+	gap: 10px;
+	overflow-x: auto;
+	overscroll-behavior-inline: contain;
+	scroll-snap-type: inline mandatory;
+	scrollbar-width: thin;
+}
+
+.program-addition-carousel-card {
+	min-width: 0;
+	display: grid;
+	align-content: start;
+	gap: 5px;
+	scroll-snap-align: start;
+}
+
+.program-addition-carousel-card > span {
+	position: relative;
+	aspect-ratio: 2 / 3;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border: 1px solid rgba(67, 91, 108, 0.72);
+	border-radius: 8px;
+	color: #536473;
+	background: linear-gradient(150deg, #132735, #09131d);
+}
+
+.program-addition-carousel-card img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.program-addition-carousel-card strong,
+.program-addition-carousel-card small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.program-addition-carousel-card strong {
+	color: #dbe4eb;
+	font-size: 0.72rem;
+}
+
+.program-addition-carousel-card small {
+	color: var(--muted);
+	font-size: 0.66rem;
+}
+
+.program-addition-carousel-empty {
+	width: 100%;
+	margin: 0;
+	padding: 20px;
+	grid-column: 1 / -1;
+	color: var(--muted);
+	font-size: 0.78rem;
+}
+
+.program-addition-confirmation-body .program-addition-confirmation-note {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid rgba(58, 88, 106, 0.42);
+	color: var(--muted);
+	font-size: 0.78rem;
+}
+
+.program-addition-confirmation-footer {
+	padding: 18px 26px 24px;
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+	border-top: 1px solid rgba(58, 88, 106, 0.58);
+	background: rgba(4, 13, 20, 0.35);
+}
+
+@media (max-width: 560px) {
+	.program-item-modal-header,
+	.program-item-modal-body {
+		padding-inline: 20px;
+	}
+
+	.program-create-fields {
+		grid-template-columns: 1fr;
+	}
+
+	.program-addition-confirmation-header,
+	.program-addition-confirmation-body,
+	.program-addition-confirmation-footer {
+		padding-inline: 20px;
+	}
+}
