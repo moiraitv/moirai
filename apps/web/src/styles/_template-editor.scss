@@ -722,11 +722,11 @@
 	font-weight: 500;
 }
 
-.modal-backdrop.nested-modal-backdrop {
+.moirai-dialog-backdrop.nested-modal-backdrop {
 	z-index: 70;
 }
 
-.modal.scheduling-workspace-modal {
+.moirai-dialog.scheduling-workspace-modal {
 	width: min(1400px, calc(100vw - 32px));
 	height: calc(100vh - 40px);
 	max-height: calc(100vh - 40px);
@@ -739,7 +739,7 @@
 	background: #07131d;
 }
 
-.modal.channel-schedule-modal {
+.moirai-dialog.channel-schedule-modal {
 	width: min(1180px, calc(100vw - 32px));
 	grid-template-rows: auto auto minmax(0, 1fr) auto;
 }

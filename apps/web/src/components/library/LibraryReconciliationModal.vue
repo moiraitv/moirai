@@ -8,8 +8,8 @@ const emit = defineEmits<{ close: []; scan: []; reconcile: [action: Reconciliati
 </script>
 
 <template>
-	<div class="modal-backdrop" @click.self="emit('close')">
-		<section class="modal reconciliation-modal">
+	<div class="moirai-dialog-backdrop" @click.self="emit('close')">
+		<section class="moirai-dialog reconciliation-modal">
 			<header class="modal-heading"><div><p class="eyebrow">Library safety</p><h2>Review index reconciliation</h2></div><button type="button" class="icon-button" aria-label="Close reconciliation review" @click="emit('close')"><X :size="20" /></button></header>
 			<div v-if="reconciliation.candidateSummary" class="candidate-summary"><div><span>Candidate media</span><strong>{{ reconciliation.candidateSummary.discoveredCount }}</strong></div><div><span>New paths</span><strong>{{ reconciliation.candidateSummary.addedCount }}</strong></div><div><span>Missing paths</span><strong>{{ reconciliation.candidateSummary.missingCount }}</strong></div></div>
 			<p v-if="reconciliation.candidateSourceConfig" class="candidate-path">Candidate root <strong>{{ reconciliation.candidateSourceConfig.scanRoot }}</strong></p>

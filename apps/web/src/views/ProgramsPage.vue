@@ -69,7 +69,7 @@ onMounted(async () => {
 <template>
 	<section class="programs-page">
 		<PageHeader
-			v-if="!embedded"
+			v-if="!embedded && !editorOpen"
 			eyebrow="Reusable content rules"
 			title="Programs"
 			description="Programs define how eligible media is selected and arranged. Reuse them across multiple schedules and channels."
@@ -87,12 +87,12 @@ onMounted(async () => {
 			><Plus :size="18" />New program</RouterLink
 			>
 		</PageHeader>
-		<p v-if="!embedded && (error || scheduling.error)" class="notice error">
+		<p v-if="!embedded && !editorOpen && (error || scheduling.error)" class="notice error">
 			{{ error || scheduling.error }}
 		</p>
 
 		<section
-			v-if="!embedded && programHelpVisible"
+			v-if="!embedded && !editorOpen && programHelpVisible"
 			class="programs-intro dismissible-help-panel"
 			aria-labelledby="programs-intro-title"
 		>
@@ -131,8 +131,8 @@ onMounted(async () => {
 			</div>
 		</section>
 
-		<LoadingState v-if="!embedded && initialLoading" label="Loading programs…" />
-		<template v-else-if="!embedded && scheduling.loaded">
+		<LoadingState v-if="!embedded && !editorOpen && initialLoading" label="Loading programs…" />
+		<template v-else-if="!embedded && !editorOpen && scheduling.loaded">
 			<div v-if="programs.length" class="schedule-card-grid programs-resource-grid">
 				<article v-for="program in programs" :key="program.id" class="schedule-resource-card">
 					<div>
@@ -181,7 +181,7 @@ onMounted(async () => {
 			</div>
 		</template>
 
-		<aside v-if="!embedded" class="programs-tip">
+		<aside v-if="!embedded && !editorOpen" class="programs-tip">
 			<div><Lightbulb :size="21" /></div>
 			<p>
 				<strong>Tip</strong>

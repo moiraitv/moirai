@@ -397,7 +397,7 @@ onUnmounted(closePlayer);
 	<Teleport to="body">
 		<div
 			v-if="showPlayer && item"
-			class="modal-backdrop media-preview-backdrop"
+			class="moirai-dialog-backdrop media-preview-backdrop"
 			@click.self="closePlayer"
 		>
 			<section

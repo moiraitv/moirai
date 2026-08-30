@@ -49,10 +49,10 @@ onMounted(async () => {
 
 <template>
 	<Teleport to="body">
-		<div class="modal-backdrop program-addition-confirmation-backdrop" @click.self="cancel">
+		<div class="moirai-dialog-backdrop program-addition-confirmation-backdrop" @click.self="cancel">
 			<section
 				ref="dialog"
-				class="modal program-addition-confirmation-modal"
+				class="moirai-dialog program-addition-confirmation-modal"
 				role="alertdialog"
 				aria-modal="true"
 				aria-labelledby="program-addition-confirmation-title"

@@ -183,7 +183,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByText('No channels configured')).toBeHidden();
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/channels');
+	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await page.getByRole('button', { name: 'New channel' }).click();
+	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await page.getByLabel('Number').fill(runId.slice(-8));
 	await page.getByLabel('Name').fill(channelName);
 	await page.getByRole('button', { name: 'Save changes' }).click();
@@ -308,7 +310,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(programHelpHeading).toBeVisible();
 
 	const programName = `E2E Movie Picks ${runId}`;
+	await page.setViewportSize({ width: 768, height: 1024 });
+	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await page.getByRole('link', { name: 'New program' }).click();
+	await expect(page.getByRole('dialog')).toBeVisible();
+	await page.setViewportSize({ width: 1440, height: 900 });
 	const programTypes = page.getByRole('radiogroup', { name: 'Program type' });
 	await expect(programTypes).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Content/ })).toBeChecked();
@@ -510,8 +516,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			timelinePreviewRequests += 1;
 		}
 	});
-	await page.goto('/schedules/templates/new');
+	await page.setViewportSize({ width: 768, height: 1024 });
+	await page.goto('/schedules/templates');
+	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
+	await page.getByRole('link', { name: 'New template' }).click();
 	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
+	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByLabel('Template name').fill(templateName);
 	await expect(page.getByLabel('Preview as channel')).toHaveCount(0);
 	await expect(page.getByLabel('Preview date')).toHaveCount(0);

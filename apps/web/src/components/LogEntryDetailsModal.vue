@@ -80,10 +80,10 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 
 <template>
 	<Teleport to="body">
-		<div class="modal-backdrop log-detail-backdrop" role="presentation" @mousedown.self="emit('close')">
+		<div class="moirai-dialog-backdrop log-detail-backdrop" role="presentation" @mousedown.self="emit('close')">
 			<section
 				ref="dialog"
-				class="modal log-detail-modal"
+				class="moirai-dialog log-detail-modal"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="log-detail-title"

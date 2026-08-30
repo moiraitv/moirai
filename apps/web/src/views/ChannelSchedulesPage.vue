@@ -30,6 +30,7 @@ import {
 } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
+import { randomUuid } from '../random-uuid';
 import LoadingState from '../components/LoadingState.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
 import ChannelSchedulesAbout from '../components/schedules/ChannelSchedulesAbout.vue';
@@ -258,7 +259,7 @@ function addLayer(): void {
 	}
 
 	const layer: ChannelScheduleLayer = {
-		id: crypto.randomUUID(),
+		id: randomUuid(),
 		templateId: templates.value[0]!.id,
 		predicate: {
 			type: 'all',
@@ -551,11 +552,11 @@ onBeforeUnmount(() => {
 		<Teleport to="body">
 			<div
 				v-if="editing && !initialLoading"
-				class="modal-backdrop"
+				class="moirai-dialog-backdrop"
 				@click.self="router.push('/schedules/channels')"
 			>
 				<div
-					class="modal scheduling-workspace-modal channel-schedule-modal"
+					class="moirai-dialog scheduling-workspace-modal channel-schedule-modal"
 					role="dialog"
 					aria-modal="true"
 					aria-label="Channel schedule editor"
@@ -974,12 +975,14 @@ onBeforeUnmount(() => {
 			</div>
 		</Teleport>
 
-		<TemplatesPage
-			v-if="quickEditingTemplateId"
-			embedded
-			:template-id="quickEditingTemplateId"
-			@close="quickEditingTemplateId = null"
-			@saved="finishTemplateEdit"
-		/>
+		<Teleport to="body">
+			<TemplatesPage
+				v-if="quickEditingTemplateId"
+				embedded
+				:template-id="quickEditingTemplateId"
+				@close="quickEditingTemplateId = null"
+				@saved="finishTemplateEdit"
+			/>
+		</Teleport>
 	</section>
 </template>

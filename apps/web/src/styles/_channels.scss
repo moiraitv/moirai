@@ -173,7 +173,7 @@
 	font-size: 0.68rem;
 }
 
-.modal-backdrop {
+.moirai-dialog-backdrop {
 	position: fixed;
 	inset: 0;
 	z-index: 40;
@@ -184,11 +184,11 @@
 	backdrop-filter: blur(8px);
 }
 
-body:has(.modal-backdrop) {
+body:has(.moirai-dialog-backdrop) {
 	overflow: hidden;
 }
 
-.modal {
+.moirai-dialog {
 	width: min(820px, 100%);
 	max-height: calc(100vh - 32px);
 	padding: 24px;
@@ -222,11 +222,11 @@ legend {
 	font-weight: 700;
 }
 
-.modal .form-grid {
+.moirai-dialog .form-grid {
 	margin-bottom: 0;
 }
 
-.modal .form-actions {
+.moirai-dialog .form-actions {
 	justify-content: flex-end;
 }
 

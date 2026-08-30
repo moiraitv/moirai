@@ -164,9 +164,9 @@ onUnmounted(() => genreCountsController?.abort());
 </script>
 
 <template>
-	<div class="modal-backdrop" @click.self="emit('close')" @keydown.esc.stop.prevent="emit('close')">
+	<div class="moirai-dialog-backdrop" @click.self="emit('close')" @keydown.esc.stop.prevent="emit('close')">
 		<form
-			class="modal filter-modal"
+			class="moirai-dialog filter-modal"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="library-filter-title"

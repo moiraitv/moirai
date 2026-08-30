@@ -180,7 +180,7 @@ onMounted(async () => {
 <template>
 	<section class="templates-page">
 		<PageHeader
-			v-if="!embedded"
+			v-if="!embedded && !editing"
 			eyebrow="Daily schedule structures"
 			title="Templates"
 			description="Allocate programs across a nominal day, then preview duration-aware resolution."
@@ -198,7 +198,7 @@ onMounted(async () => {
 			><Plus :size="18" />New template</RouterLink
 			>
 		</PageHeader>
-		<p v-if="!embedded && (error || scheduling.error)" class="notice error">
+		<p v-if="!embedded && !editing && (error || scheduling.error)" class="notice error">
 			{{ error || scheduling.error }}
 		</p>
 
@@ -251,9 +251,9 @@ onMounted(async () => {
 			</div>
 		</section>
 
-		<LoadingState v-if="!embedded && initialLoading" label="Loading templates…" />
+		<LoadingState v-if="!embedded && !editing && initialLoading" label="Loading templates…" />
 
-		<template v-else-if="!embedded && scheduling.loaded">
+		<template v-else-if="!embedded && !editing && scheduling.loaded">
 			<section class="templates-catalog" aria-labelledby="your-templates-title">
 				<h2 id="your-templates-title">Your templates</h2>
 				<div class="templates-catalog-toolbar">

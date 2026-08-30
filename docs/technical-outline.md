@@ -380,6 +380,11 @@ Selection strategies include sequential, deterministic shuffle without repeats, 
 random selection. Persistent selection state remains separate from configuration, allowing a daily
 slot to resume tomorrow instead of restarting.
 
+Standalone program and template editors use document-scrolling page surfaces, while editors opened
+inside another scheduling workflow remain modal. Client-authored scheduling identifiers retain UUID
+v4 generation on non-secure LAN origins where the browser does not expose `crypto.randomUUID()`.
+Dialog class names avoid generic content-blocker selectors used by Safari extensions.
+
 For example:
 
 ```text

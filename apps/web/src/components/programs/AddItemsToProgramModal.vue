@@ -263,10 +263,10 @@ onMounted(async () => {
 </script>
 
 <template>
-	<div class="modal-backdrop program-item-modal-backdrop" @click.self="close">
+	<div class="moirai-dialog-backdrop program-item-modal-backdrop" @click.self="close">
 		<section
 			ref="dialog"
-			class="modal program-item-modal"
+			class="moirai-dialog program-item-modal"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="program-item-modal-title"

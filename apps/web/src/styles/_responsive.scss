@@ -1,4 +1,32 @@
+body:has(.standalone-editor-backdrop) {
+	overflow: auto;
+}
+
+.standalone-editor-backdrop {
+	position: static;
+	inset: auto;
+	width: 100%;
+	min-height: 0;
+	padding: 0;
+	display: block;
+	background: transparent;
+	backdrop-filter: none;
+}
+
+.standalone-editor-backdrop > .moirai-dialog {
+	width: 100%;
+	height: auto;
+	max-height: none;
+	overflow: visible;
+}
+
+.standalone-editor-backdrop .program-editor-scroll,
+.standalone-editor-backdrop .scheduling-workspace-scroll {
+	overflow: visible;
+}
+
 @media (max-width: 1220px) {
+
 	.programs-intro,
 	.templates-intro {
 		grid-template-columns: 1fr;
@@ -514,7 +542,7 @@
 		grid-template-columns: 1fr;
 	}
 
-	.modal.filter-modal {
+	.moirai-dialog.filter-modal {
 		max-height: calc(100vh - 12px);
 	}
 
@@ -652,11 +680,11 @@
 		grid-column: auto;
 	}
 
-	.modal-backdrop {
+	.moirai-dialog-backdrop {
 		padding: 6px;
 	}
 
-	.modal {
+	.moirai-dialog {
 		max-height: calc(100vh - 12px);
 		padding: 12px;
 	}
@@ -666,12 +694,12 @@
 		gap: 16px;
 	}
 
-	.modal.schedule-editor-modal {
+	.moirai-dialog.schedule-editor-modal {
 		height: calc(100vh - 12px);
 		padding: 0;
 	}
 
-	.modal.scheduling-workspace-modal {
+	.moirai-dialog.scheduling-workspace-modal {
 		width: 100%;
 		height: calc(100vh - 12px);
 		max-height: calc(100vh - 12px);
@@ -779,7 +807,7 @@
 		width: 100%;
 	}
 
-	.modal fieldset {
+	.moirai-dialog fieldset {
 		padding: 10px;
 	}
 

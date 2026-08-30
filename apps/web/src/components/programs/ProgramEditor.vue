@@ -27,6 +27,7 @@ import { useChannelsStore } from '../../stores/channels';
 import { useSchedulingStore } from '../../stores/scheduling';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
+import { randomUuid } from '../../random-uuid';
 import MediaSelectionDrawer from './MediaSelectionDrawer.vue';
 import ProgramTypeRail from './ProgramTypeRail.vue';
 import SelectionStrategyEditor from './SelectionStrategyEditor.vue';
@@ -514,7 +515,7 @@ function changeSourceLibrary(): void {
 }
 
 /** Reset source-specific state and load choices valid for the newly selected source type. */
-function changeSourceType(): void {
+async function changeSourceType(): Promise<void> {
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	const previousLibraryId = form.libraryId;
@@ -529,6 +530,7 @@ function changeSourceType(): void {
 	sourceParentId.value = undefined;
 	sourcePage.value = 1;
 	sourceSearch.value = '';
+	await nextTick();
 	if (!sourceLibraries.value.some((library) => library.id === form.libraryId)) {
 		form.libraryId = sourceLibraries.value[0]?.id ?? '';
 	}
@@ -608,7 +610,7 @@ function changeSourcePage(page: number): void {
 function addSequenceEntry(): void {
 	const candidate = programs.value.find((program) => program.id !== editingId.value);
 	if (candidate) {
-		form.entries.push({ id: crypto.randomUUID(), programId: candidate.id, count: 1 });
+		form.entries.push({ id: randomUuid(), programId: candidate.id, count: 1 });
 	}
 }
 
@@ -755,13 +757,23 @@ onBeforeUnmount(() => {
 <template>
 	<section>
 		<div
-			v-if="editorOpen && !initialLoading"
-			class="modal-backdrop"
-			:class="{ 'nested-modal-backdrop': embedded }"
+			v-if="editorOpen && initialLoading"
+			class="moirai-dialog-backdrop"
+			:class="{ 'nested-modal-backdrop': embedded, 'standalone-editor-backdrop': !embedded }"
+			@click.self="closeEditor"
+		>
+			<div class="moirai-dialog schedule-editor-modal" role="dialog" aria-modal="true" aria-label="Program editor">
+				<LoadingState label="Loading program editor…" />
+			</div>
+		</div>
+		<div
+			v-else-if="editorOpen"
+			class="moirai-dialog-backdrop"
+			:class="{ 'nested-modal-backdrop': embedded, 'standalone-editor-backdrop': !embedded }"
 			@click.self="closeEditor"
 		>
 			<form
-				class="modal schedule-editor-modal"
+				class="moirai-dialog schedule-editor-modal"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="program-editor-title"

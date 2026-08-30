@@ -733,8 +733,8 @@ onBeforeUnmount(() => {
 				<p>Create a channel, tune normalization, and stream it directly from Moirai.</p>
 			</div>
 		</template>
-		<div v-if="showForm" class="modal-backdrop" @click.self="closeForm">
-			<form class="modal" @submit.prevent="save">
+		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">
+			<form class="moirai-dialog" @submit.prevent="save">
 				<div class="modal-heading">
 					<div>
 						<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>

@@ -1,4 +1,4 @@
-.modal.program-item-modal {
+.moirai-dialog.program-item-modal {
 	width: min(620px, 100%);
 	max-height: calc(100vh - 32px);
 	padding: 0;
@@ -135,7 +135,7 @@
 	background: rgba(2, 7, 12, 0.86);
 }
 
-.modal.program-addition-confirmation-modal {
+.moirai-dialog.program-addition-confirmation-modal {
 	width: min(460px, 100%);
 	padding: 0;
 	overflow: hidden;

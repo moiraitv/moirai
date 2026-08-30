@@ -65,13 +65,13 @@ const roleLabel = computed(() => {
 
 <template>
 	<div
-		class="modal-backdrop guide-preview-backdrop"
+		class="moirai-dialog-backdrop guide-preview-backdrop"
 		role="presentation"
 		@mousedown.self="emit('close')"
 	>
 		<section
 			ref="dialog"
-			class="modal guide-preview-modal"
+			class="moirai-dialog guide-preview-modal"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="guide-preview-title"

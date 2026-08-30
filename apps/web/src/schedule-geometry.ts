@@ -4,6 +4,7 @@ import {
 	type ScheduleSlot,
 	type ScheduleTemplateCreate,
 } from '@moirai/shared';
+import { randomUuid } from './random-uuid';
 
 /** Factory used to assign identities when a slot is split. */
 export type IdFactory = () => string;
@@ -88,7 +89,7 @@ export function midpointSlotPlacement(
 export function rebuildBoundaries(
 	slots: ScheduleSlot[],
 	boundaries: ScheduleBoundary[],
-	createId: IdFactory = () => crypto.randomUUID(),
+	createId: IdFactory = randomUuid,
 ): ScheduleBoundary[] {
 	const ordered = orderedSlots(slots);
 	const byLeft = new Map(boundaries.map((boundary) => [boundary.leftSlotId, boundary]));
@@ -112,7 +113,7 @@ export function splitScheduleSlot(
 	template: ScheduleTemplateCreate,
 	slotId: string,
 	splitSeconds: number,
-	createId: IdFactory = () => crypto.randomUUID(),
+	createId: IdFactory = randomUuid,
 ): ScheduleTemplateCreate {
 	const slots = orderedSlots(template.slots);
 	const index = slots.findIndex((slot) => slot.id === slotId);
@@ -163,7 +164,7 @@ export function splitScheduleSlot(
 export function deleteScheduleSlot(
 	template: ScheduleTemplateCreate,
 	slotId: string,
-	createId: IdFactory = () => crypto.randomUUID(),
+	createId: IdFactory = randomUuid,
 ): ScheduleTemplateCreate {
 	const slots = orderedSlots(template.slots);
 	if (slots.length <= 1) {
