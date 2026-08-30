@@ -324,58 +324,39 @@ a.nav-link.router-link-exact-active {
 	font-size: 0.72rem;
 }
 
-.etv-card {
-	min-height: 70px;
-	margin-top: auto;
-	padding: 12px;
-	display: grid;
-	grid-template-columns: 34px 1fr auto;
-	align-items: center;
-	gap: 9px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: rgba(10, 24, 36, 0.72);
+.status-nav-link {
+	min-height: 54px;
+	overflow: hidden;
 }
 
-.etv-card:hover {
-	border-color: var(--line-bright);
-	background: var(--panel-2);
-}
-
-.etv-card-icon {
-	width: 34px;
-	height: 34px;
-	display: grid;
-	place-items: center;
-	border-radius: 7px;
-	color: var(--accent);
-	background: rgba(8, 70, 58, 0.55);
-}
-
-.etv-card strong,
-.etv-card small {
+.status-nav-link > span,
+.status-nav-link strong,
+.status-nav-link small {
+	width: 100%;
+	min-width: 0;
 	display: block;
-	font-size: 0.76rem;
 }
 
-.etv-card small {
+.status-nav-link > span {
+	overflow: hidden;
+}
+
+.status-nav-link small {
 	margin-top: 2px;
+	overflow: hidden;
 	color: var(--accent);
+	font-size: 0.67rem;
+	font-weight: 500;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.etv-card.playback-degraded .etv-card-icon,
-.etv-card.playback-degraded small {
+.status-nav-link.playback-degraded small {
 	color: var(--danger);
 }
 
-.etv-card.playback-loading .etv-card-icon,
-.etv-card.playback-loading small {
+.status-nav-link.playback-loading small {
 	color: var(--muted);
-}
-
-.playback-spin {
-	animation: loading-spin 0.8s linear infinite;
 }
 
 .mobile-header,

@@ -375,6 +375,7 @@ shuffle, or random ordering. The server canonicalizes and deduplicates item refe
 atomically, and rejects the whole request when the resulting collection would exceed the configured
 limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 500 and may be set from 1 through the 5,000-item
 contract ceiling.
+
 Adding more than five genuinely new items to an existing program requires confirmation of the
 server-calculated addition. Duplicate references do not count toward that threshold, new programs
 do not require confirmation, and a changed item set invalidates a stale confirmation without
@@ -388,12 +389,10 @@ slot to resume tomorrow instead of restarting.
 The Programs catalog is searchable and filterable by content or sequence type. Content rows expose
 a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows
 show their authored child-program entries. Preview data is included in the scheduling status contract
-without exposing playback paths or the full scheduling catalog.
-
-Standalone program and template editors use document-scrolling page surfaces, while editors opened
-inside another scheduling workflow remain modal. Client-authored scheduling identifiers retain UUID
-v4 generation on non-secure LAN origins where the browser does not expose `crypto.randomUUID()`.
-Dialog class names avoid generic content-blocker selectors used by Safari extensions.
+without exposing playback paths or the full scheduling catalog. Standalone program and template
+editors use document-scrolling page surfaces, while editors opened inside another scheduling workflow
+remain modal. Client-authored scheduling identifiers retain UUID v4 generation on non-secure LAN
+origins where the browser does not expose `crypto.randomUUID()`.
 
 For example:
 
@@ -637,6 +636,9 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - channel and dedicated EPG guide views;
 - administrator account and local fallback credential management;
 - playback, status, and log views.
+
+The primary Status navigation item also carries the live IPTV readiness state and active channel
+count without a separate sidebar card.
 
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user

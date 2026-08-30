@@ -8,14 +8,12 @@ import {
 	ChevronDown,
 	ChevronRight,
 	CircleAlert,
-	CircleCheck,
 	CircleGauge,
 	FileText,
 	LayoutGrid,
 	Library,
 	LogOut,
 	Menu,
-	RefreshCw,
 	Settings,
 	TvMinimal,
 	X,
@@ -51,10 +49,6 @@ const playbackLabel = computed(() => {
 const playbackDetail = computed(() => {
 	if (!playback.value) {
 		return 'Loading status';
-	}
-
-	if (playback.value.detail) {
-		return playback.value.detail;
 	}
 
 	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} channels active`;
@@ -177,8 +171,8 @@ onUnmounted(() => {
 			</div>
 
 			<nav class="primary-nav" aria-label="Primary navigation">
-				<RouterLink class="nav-link" to="/">
-					<CircleGauge :size="18" /><span>Status</span>
+				<RouterLink class="nav-link status-nav-link" :class="`playback-${playback?.status ?? 'loading'}`" to="/" aria-live="polite">
+					<CircleGauge :size="18" /><span><strong>Status</strong><small>{{ playbackLabel }}</small><small>{{ playbackDetail }}</small></span>
 				</RouterLink>
 				<RouterLink class="nav-link" to="/guide">
 					<CalendarDays :size="18" /><span>Guide</span>
@@ -253,31 +247,6 @@ onUnmounted(() => {
 				>
 			</nav>
 
-			<RouterLink
-				class="etv-card"
-				:class="`playback-${playback?.status ?? 'loading'}`"
-				to="/settings"
-				aria-live="polite"
-			>
-				<span class="etv-card-icon">
-					<CircleCheck v-if="playback?.status === 'ready'" :size="19" />
-					<CircleAlert
-						v-else-if="playback?.status === 'degraded'"
-						:size="19"
-					/>
-					<RefreshCw
-						v-else-if="!playback"
-						class="playback-spin"
-						:size="19"
-					/>
-					<LayoutGrid v-else :size="19" />
-				</span>
-				<span
-				><strong>{{ playbackLabel }}</strong
-				><small>{{ playbackDetail }}</small></span
-				>
-				<ChevronRight :size="17" />
-			</RouterLink>
 			<footer class="sidebar-footer">
 				<div class="sidebar-account">
 					<RouterLink class="sidebar-account-link" to="/account">

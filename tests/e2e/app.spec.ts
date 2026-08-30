@@ -210,7 +210,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save changes' }).click();
 	await expect(page.getByText(channelName)).toBeVisible();
 	await expect(page.getByLabel('Seven-day channel guide')).toBeVisible();
-	await expect(page.locator('.etv-card')).toContainText('IPTV service ready');
+	await expect(page.locator('.status-nav-link')).toContainText('IPTV service ready');
+	await expect(page.locator('.etv-card')).toHaveCount(0);
 	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await expect(page.getByLabel('Name')).toHaveValue(channelName);
