@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Asterisk, Check, CircleHelp, MoreHorizontal } from '@lucide/vue';
+import { AlertTriangle, Asterisk, Check, CircleHelp, MoreHorizontal } from '@lucide/vue';
 import type { MediaBrowseEntry, MediaGroup } from '@moirai/shared';
 import { RouterLink } from 'vue-router';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
@@ -27,6 +27,21 @@ function activate(): void {
 		emit('toggle', props.entry.item.id);
 	}
 }
+
+/** Return the visible status label, leaving healthy items icon-only. */
+function statusLabel(): string {
+	if (!props.entry.item) {
+		return '';
+	}
+
+	if (props.entry.item.availability !== 'available') {
+		return 'Temporarily unavailable';
+	}
+
+	return props.entry.item.metadataStatus === 'incomplete'
+		? 'Incomplete'
+		: props.entry.item.metadataStatus === 'invalid' ? 'Invalid' : '';
+}
 </script>
 
 <template>
@@ -47,6 +62,6 @@ function activate(): void {
 			<img v-else-if="entry.item?.artworkUrl" :src="artworkVariantUrl(entry.item.artworkUrl, 'card')" :srcset="artworkSrcset(entry.item.artworkUrl, 'card')" :alt="`${entry.item.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" />
 		</span>
 		<span v-if="entry.group" class="media-card-copy"><span class="media-card-title">{{ entry.group.title }}</span><span class="media-card-subtitle">{{ mediaGroupSubtitle(libraryType, entry.group) || entry.group.kind }}</span><MoreHorizontal class="card-menu-icon" :size="16" /></span>
-		<span v-else-if="entry.item" class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(libraryType, entry.item) || entry.item.kind }}</span><small v-if="entry.item.availability !== 'available'" class="availability-warning">Temporarily unavailable</small><MoreHorizontal v-if="!selectionMode" class="card-menu-icon" :size="16" /><span class="metadata-indicator" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="11" /><Check v-else :size="10" /></span></span>
+		<span v-else-if="entry.item" class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(libraryType, entry.item) || entry.item.kind }}</span><span class="media-card-status" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="14" /><AlertTriangle v-else-if="entry.item.metadataStatus !== 'complete'" :size="14" /><Check v-else :size="14" /><small v-if="statusLabel()">{{ statusLabel() }}</small></span></span>
 	</component>
 </template>

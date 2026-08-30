@@ -864,23 +864,15 @@ a.media-card {
 	display: block;
 }
 
+.media-card-copy:has(.media-card-status) {
+	padding-right: 66px;
+}
+
 .media-card-title,
 .media-card-subtitle {
 	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-
-.availability-warning {
-	position: absolute;
-	right: 8px;
-	bottom: 6px;
-	left: 31px;
-	overflow: hidden;
-	color: #ffad75;
-	font-size: 0.65rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .media-card-title {
@@ -906,32 +898,34 @@ a.media-card {
 	color: #9aa6b3;
 }
 
-.metadata-indicator {
+.media-card-status {
 	position: absolute;
-	left: 10px;
-	bottom: 6px;
-	width: 14px;
-	height: 14px;
-	display: grid;
-	place-items: center;
-	border-radius: 50%;
+	top: 9px;
+	right: 8px;
+	max-width: 58px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 3px;
 	color: #8bf5d5;
-	background: #0a604f;
+	text-align: right;
 }
 
-.metadata-indicator[data-status='incomplete'] {
+.media-card-status small {
+	font-size: 0.62rem;
+	line-height: 1.15;
+}
+
+.media-card-status[data-status='incomplete'] {
 	color: #ffcd86;
-	background: #6d4512;
 }
 
-.metadata-indicator[data-status='invalid'] {
+.media-card-status[data-status='invalid'] {
 	color: #ffd2d8;
-	background: #7b2936;
 }
 
-.metadata-indicator[data-availability='unconfirmed'] {
+.media-card-status[data-availability='unconfirmed'] {
 	color: #d0d5dc;
-	background: #56606d;
 }
 
 .catalog-footer {

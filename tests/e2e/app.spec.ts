@@ -174,6 +174,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page).not.toHaveURL(/genre=/);
 	await expect(mediaCard).toContainText('2026');
 	await expect(mediaCard).not.toContainText(/S\d+E\d+/);
+	await expect(mediaCard.locator('.card-menu-icon')).toHaveCount(0);
 
 	const search = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });
 	await search.fill('No matching title');
