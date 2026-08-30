@@ -953,6 +953,11 @@ a.media-card {
 	font-size: 0.74rem;
 }
 
+.pagination-gap {
+	padding: 0 2px;
+	color: var(--muted);
+}
+
 .library-title-actions {
 	display: inline-flex;
 	align-items: center;
@@ -1018,7 +1023,10 @@ a.media-card {
 }
 
 .pagination-placeholder {
+	min-width: 0;
 	display: inline-flex;
+	justify-content: center;
+	align-items: center;
 	overflow: hidden;
 	border: 1px solid var(--line);
 	border-radius: 8px;

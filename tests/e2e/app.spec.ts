@@ -62,6 +62,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.status-watcher')).toContainText('ready');
 	await expect(page.locator('.library-status-panel')).toContainText('Indexed');
 	await expect(page.getByRole('button', { name: 'B', exact: true })).toHaveClass(/active/);
+	await expect(page.locator('.catalog-footer')).toContainText('100 per page');
 	const syncButton = page.getByRole('button', { name: 'Sync library' });
 	const settingsButton = page.getByRole('button', { name: 'Library settings' });
 	const libraryHeaderSearch = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });

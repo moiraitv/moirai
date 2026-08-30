@@ -236,13 +236,30 @@ const anchorKeys = computed(() => [
 	...new Set(entries.value.map((entry) => entry.navigationKey).filter(Boolean)),
 ]);
 
+const paginationWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth);
 const pageButtons = computed(() => {
 	const total = pagination.value?.totalPages ?? 1;
 	const current = page.value;
-	return [...new Set([1, current - 1, current, current + 1, total])]
-		.filter((value) => value >= 1 && value <= total)
-		.sort((left, right) => left - right);
+	const visibleCount = paginationWidth.value >= 1200 ? 11 : paginationWidth.value >= 700 ? 7 : 3;
+	const interiorCount = Math.max(1, visibleCount - 2);
+	let start = Math.max(2, current - Math.floor(interiorCount / 2));
+	let end = Math.min(total - 1, start + interiorCount - 1);
+	start = Math.max(2, end - interiorCount + 1);
+	const values = [1];
+	for (let value = start; value <= end; value += 1) {
+		values.push(value);
+	}
+	if (total > 1) {
+		values.push(total);
+	}
+
+	return [...new Set(values)];
 });
+
+/** Return whether a visual gap belongs before one pagination number. */
+function pageGapBefore(index: number): boolean {
+	return index > 0 && pageButtons.value[index]! - pageButtons.value[index - 1]! > 1;
+}
 
 /** Return whether the latest scan has started but not completed. */
 function isScanRunning(): boolean {
@@ -336,7 +353,7 @@ function currentMediaQuery(): MediaQuery {
 	return {
 		parentId: parentId.value,
 		page: page.value,
-		pageSize: 48,
+		pageSize: 100,
 		sort: sort.value,
 		direction: direction.value,
 		name: queryString('q') || undefined,
@@ -924,6 +941,12 @@ async function finishDeletion(): Promise<void> {
 	await router.push('/libraries');
 }
 
+/** Refresh width-dependent pagination and sticky catalog measurements. */
+function handleResize(): void {
+	paginationWidth.value = window.innerWidth;
+	scheduleAnchorUpdate();
+}
+
 let liveRefreshTimer: number | undefined;
 let searchTimer: number | undefined;
 let refreshMediaAfterEvent = false;
@@ -1050,13 +1073,13 @@ onBeforeUpdate(() => {
 onMounted(() => {
 	window.addEventListener('keydown', handleKeydown);
 	window.addEventListener('scroll', scheduleAnchorUpdate, { passive: true });
-	window.addEventListener('resize', scheduleAnchorUpdate, { passive: true });
+	window.addEventListener('resize', handleResize, { passive: true });
 	void loadInitial();
 });
 onUnmounted(() => {
 	window.removeEventListener('keydown', handleKeydown);
 	window.removeEventListener('scroll', scheduleAnchorUpdate);
-	window.removeEventListener('resize', scheduleAnchorUpdate);
+	window.removeEventListener('resize', handleResize);
 	unsubscribe();
 	resizeObserver?.disconnect();
 	if (anchorUpdateFrame !== undefined) {
@@ -1271,7 +1294,7 @@ onUnmounted(() => {
 
 		<footer v-if="pagination" class="catalog-footer">
 			<span>Showing {{ pagination.totalEntries ? (page - 1) * pagination.pageSize + 1 : 0 }}–{{ Math.min(page * pagination.pageSize, pagination.totalEntries) }} of {{ pagination.totalEntries.toLocaleString() }}</span>
-			<div class="pagination-placeholder"><button :disabled="page <= 1" aria-label="Previous page" @click="navigate({ page: page - 1 || undefined })"><ChevronLeft :size="16" /></button><button v-for="pageNumber in pageButtons" :key="pageNumber" :class="{ active: pageNumber === page }" @click="navigate({ page: pageNumber === 1 ? undefined : pageNumber })">{{ pageNumber }}</button><button :disabled="page >= pagination.totalPages" aria-label="Next page" @click="navigate({ page: page + 1 })"><ChevronRight :size="16" /></button></div>
+			<div class="pagination-placeholder"><button :disabled="page <= 1" aria-label="Previous page" @click="navigate({ page: page - 1 || undefined })"><ChevronLeft :size="16" /></button><template v-for="(pageNumber, index) in pageButtons" :key="pageNumber"><span v-if="pageGapBefore(index)" class="pagination-gap">…</span><button :class="{ active: pageNumber === page }" @click="navigate({ page: pageNumber === 1 ? undefined : pageNumber })">{{ pageNumber }}</button></template><button :disabled="page >= pagination.totalPages" aria-label="Next page" @click="navigate({ page: page + 1 })"><ChevronRight :size="16" /></button></div>
 			<span>{{ pagination.pageSize }} per page</span>
 		</footer>
 

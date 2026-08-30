@@ -118,9 +118,10 @@ Source media is managed outside Moirai. Moirai indexes files but does not add or
 Preview, artwork, and playout resource resolution are still filesystem-backed. Supporting a remote
 adapter will require a separate resource-access boundary in addition to implementing its scanner.
 
-The library settings dialog edits the library identity, scan and playback roots, scan cadence,
-watcher state, and scheduling enablement. Deleting a library requires exact-name confirmation and
-removes Moirai's configuration and index without changing source media files.
+The library detail view browses 100 catalog entries per page. Its settings dialog edits the library
+identity, scan and playback roots, scan cadence, watcher state, and scheduling enablement. Deleting a
+library requires exact-name confirmation and removes Moirai's configuration and index without
+changing source media files.
 
 ### Metadata and playback facts
 
