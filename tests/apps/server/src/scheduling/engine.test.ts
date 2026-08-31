@@ -685,6 +685,17 @@ describe('schedule timeline engine', () => {
 		expect(caught).toMatchObject({ limit: MAX_TIMELINE_SEGMENTS, statusCode: 422 });
 	}, 20_000);
 
+	it('materializes a fourteen-day channel made of thirty-second items', () => {
+		const clip = media(1, 30);
+		const clips = contentProgram(10, 1);
+		const daily = template([{ programId: clips.id, startSeconds: 0 }]);
+
+		const result = generateTimeline(input([clips], [clip], daily, { days: 14 }));
+
+		expect(result.segments).toHaveLength(14 * 24 * 60 * 2);
+		expect(result.segments.length).toBeLessThan(MAX_TIMELINE_SEGMENTS);
+	}, 20_000);
+
 	it('continues sequential episode playback across repeated daily templates', () => {
 		const episodes = Array.from({ length: 20 }, (_, index) =>
 			media(index + 1, 3_600, {

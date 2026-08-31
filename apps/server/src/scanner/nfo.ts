@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import {
 	MAX_METADATA_LIST_ITEMS,
+	MAX_METADATA_PEOPLE_ITEMS,
 	MAX_METADATA_PLOT_LENGTH,
 	MAX_METADATA_TEXT_LENGTH,
 } from '@moirai/shared';
@@ -250,14 +251,20 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 		return raw ? raw.slice(0, maximum) : null;
 	};
 	const genres = limitedList('genres', uniqueStrings(root.genre));
-	const directors = limitedList('directors', uniqueStrings(root.director));
+	const limitedPeople = (name: string, values: string[]): string[] => {
+		if (values.length > MAX_METADATA_PEOPLE_ITEMS) {
+			truncatedFields.push(name);
+		}
+		return values.slice(0, MAX_METADATA_PEOPLE_ITEMS);
+	};
+	const directors = limitedPeople('directors', uniqueStrings(root.director));
 	const allCast = actors(root.actor, (value) => checkedNumber('actorOrder', value, {
 		minimum: 0,
 		maximum: 999_999,
 		integer: true,
 	}));
-	const cast = allCast.slice(0, MAX_METADATA_LIST_ITEMS);
-	if (allCast.length > MAX_METADATA_LIST_ITEMS) {
+	const cast = allCast.slice(0, MAX_METADATA_PEOPLE_ITEMS);
+	if (allCast.length > MAX_METADATA_PEOPLE_ITEMS) {
 		truncatedFields.push('actors');
 	}
 	const writers = uniqueStrings(root.credits, root.writer);
@@ -297,14 +304,14 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 			rating: checkedNumber('rating', root.rating, { minimum: 0, maximum: 10 }),
 			certification: limitedScalar('certification', root.mpaa),
 			studio: limitedList('studio', uniqueStrings(root.studio)),
-			writers: limitedList('writers', writers),
+			writers: limitedPeople('writers', writers),
 			countries: limitedList('countries', countries),
 			resolution,
 			genres,
 			directors,
 			actors: cast,
 			tags: limitedList('tags', uniqueStrings(root.tag)),
-			artists: limitedList('artists', uniqueStrings(root.artist)),
+			artists: limitedPeople('artists', uniqueStrings(root.artist)),
 			album: limitedScalar('album', root.album),
 			track: checkedNumber('track', root.track, { minimum: 0, maximum: 999_999, integer: true }),
 		},

@@ -2,6 +2,7 @@ import type { ScheduleGuide, SchedulingCatalog, TimelinePreview } from '@moirai/
 import { MAX_GUIDE_TIMELINE_SEGMENTS, XMLTV_EPG_DAYS } from '@moirai/shared';
 import { Temporal } from '@js-temporal/polyfill';
 import type { Repository } from '../repository/index.js';
+import type { MaterializedSegmentRecord } from '../repository/contracts.js';
 import { generateTimeline } from '../scheduling/engine.js';
 import { schedulingRootProgramIds } from '../scheduling/catalog.js';
 
@@ -71,6 +72,46 @@ function coversRange(
 	return Temporal.Instant.compare(coveredUntil, requestedEnd) >= 0;
 }
 
+/** Shorten an oversized guide to the last complete local day before its overflow row. */
+export function boundedGuideWindow(
+	requestedStart: Temporal.PlainDate,
+	requestedEnd: Temporal.PlainDate,
+	timeZone: string,
+	rows: MaterializedSegmentRecord[],
+	limit = MAX_GUIDE_TIMELINE_SEGMENTS,
+): {
+	days: number;
+	endDate: Temporal.PlainDate;
+	rows: MaterializedSegmentRecord[];
+	segmentLimitApplied: boolean;
+} {
+	if (rows.length <= limit) {
+		return {
+			days: requestedStart.until(requestedEnd, { largestUnit: 'days' }).days,
+			endDate: requestedEnd,
+			rows,
+			segmentLimitApplied: false,
+		};
+	}
+
+	const overflow = rows[limit]!;
+	const endDate = Temporal.Instant.from(overflow.segment.start)
+		.toZonedDateTimeISO(timeZone)
+		.toPlainDate();
+	const days = requestedStart.until(endDate, { largestUnit: 'days' }).days;
+	if (days < 1) {
+		throw new GuideMaterializationLimitError(limit);
+	}
+
+	const rangeEnd = endDate.toZonedDateTime(timeZone).toInstant().toString();
+	return {
+		days,
+		endDate,
+		rows: rows.filter((row) => row.segment.start < rangeEnd),
+		segmentLimitApplied: true,
+	};
+}
+
 /** Materialize channel schedules through one shared, read-only scheduling pipeline. */
 export async function materializeScheduleGuide(
 	repository: Repository,
@@ -118,7 +159,14 @@ export async function materializeScheduleGuide(
 		channels.push({ channelId: schedule.channelId, preview });
 	}
 	return {
-		guide: { timeZone, startDate, days, channels },
+		guide: {
+			timeZone,
+			startDate,
+			requestedDays: days,
+			days,
+			segmentLimitApplied: false,
+			channels,
+		},
 		catalog,
 	};
 }
@@ -143,18 +191,22 @@ export async function readCommittedScheduleGuide(
 	}
 
 	const rangeStart = requestedStart.toZonedDateTime(timeZone).toInstant().toString();
-	const rangeEnd = requestedEnd.toZonedDateTime(timeZone).toInstant().toString();
+	const requestedRangeEnd = requestedEnd.toZonedDateTime(timeZone).toInstant().toString();
 
 	// Load schedules, committed segments, snapshots, and health in one bounded batch.
-	const [schedules, rows, catalog, statuses] = await Promise.all([
+	const [schedules, requestedRows, catalog, statuses] = await Promise.all([
 		repository.listChannelSchedules(),
-		repository.listMaterializedTimelineSegments(rangeStart, rangeEnd),
+		repository.listMaterializedTimelineSegmentsForGuide(
+			rangeStart,
+			requestedRangeEnd,
+			MAX_GUIDE_TIMELINE_SEGMENTS + 1,
+		),
 		repository.getSchedulingCatalog([]),
 		repository.listTimelineMaterializations(),
 	]);
-	if (rows.length > MAX_GUIDE_TIMELINE_SEGMENTS) {
-		throw new GuideMaterializationLimitError(MAX_GUIDE_TIMELINE_SEGMENTS);
-	}
+	const bounded = boundedGuideWindow(requestedStart, requestedEnd, timeZone, requestedRows);
+	const rangeEnd = bounded.endDate.toZonedDateTime(timeZone).toInstant().toString();
+	const rows = bounded.rows;
 
 	// Group segments by channel and overlay committed media snapshots on the live catalog.
 	const byChannel = new Map<string, TimelinePreview['segments']>();
@@ -197,7 +249,9 @@ export async function readCommittedScheduleGuide(
 		guide: {
 			timeZone,
 			startDate,
-			days,
+			requestedDays: days,
+			days: bounded.days,
+			segmentLimitApplied: bounded.segmentLimitApplied,
 			committedStartDate: today.toString(),
 			committedEndDate: committedEndDate.toString(),
 			...(committedAt ? { committedAt } : {}),
@@ -207,7 +261,7 @@ export async function readCommittedScheduleGuide(
 					channelId: schedule.channelId,
 					timeZone,
 					startDate,
-					days,
+					days: bounded.days,
 					segments: byChannel.get(schedule.channelId) ?? [],
 					issues: materializationByChannel.get(schedule.channelId)?.issues ?? [],
 					proposedState: [],
@@ -248,7 +302,9 @@ export async function readCommittedChannelScheduleGuide(
 		return {
 			timeZone,
 			startDate,
+			requestedDays: days,
 			days,
+			segmentLimitApplied: false,
 			committedStartDate: today.toString(),
 			committedEndDate: committedEndDate.toString(),
 			channels: [],
@@ -270,7 +326,9 @@ export async function readCommittedChannelScheduleGuide(
 	return {
 		timeZone,
 		startDate,
+		requestedDays: days,
 		days,
+		segmentLimitApplied: false,
 		committedStartDate: today.toString(),
 		committedEndDate: committedEndDate.toString(),
 		committedAt: status.committedAt,

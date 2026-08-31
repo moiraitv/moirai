@@ -376,7 +376,9 @@ export const timelinePreviewSchema = z.object({
 export const scheduleGuideSchema = z.object({
 	timeZone: z.string(),
 	startDate: z.iso.date(),
+	requestedDays: z.number().int().positive(),
 	days: z.number().int().positive(),
+	segmentLimitApplied: z.boolean(),
 	committedStartDate: z.iso.date().optional(),
 	committedEndDate: z.iso.date().optional(),
 	committedAt: isoDateSchema.optional(),

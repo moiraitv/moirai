@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseKodiNfo } from '@server/scanner/nfo.js';
-import { MAX_METADATA_PLOT_LENGTH, MAX_METADATA_TEXT_LENGTH } from '@moirai/shared';
+import {
+	MAX_METADATA_LIST_ITEMS,
+	MAX_METADATA_PEOPLE_ITEMS,
+	MAX_METADATA_PLOT_LENGTH,
+	MAX_METADATA_TEXT_LENGTH,
+} from '@moirai/shared';
 
 describe('parseKodiNfo', () => {
 	it('normalizes common Kodi fields without depending on incidental XML layout', () => {
@@ -68,6 +73,33 @@ describe('parseKodiNfo', () => {
 		expect(result.title).toHaveLength(MAX_METADATA_TEXT_LENGTH);
 		expect(result.plot).toHaveLength(MAX_METADATA_PLOT_LENGTH);
 		expect(result.truncatedFields).toEqual(expect.arrayContaining(['title', 'plot']));
+	});
+
+	it('preserves extensive people credits independently of generic metadata lists', () => {
+		const people = Array.from(
+			{ length: 168 },
+			(_, index) => `<actor><name>Actor ${index}</name></actor>`,
+		).join('');
+		const result = parseKodiNfo(`<movie>${people}</movie>`);
+
+		expect(result.actors).toHaveLength(168);
+		expect(result.truncatedFields).not.toContain('actors');
+	});
+
+	it('bounds people credits at their dedicated limit while retaining generic list bounds', () => {
+		const people = Array.from(
+			{ length: MAX_METADATA_PEOPLE_ITEMS + 1 },
+			(_, index) => `<actor><name>Actor ${index}</name></actor>`,
+		).join('');
+		const genres = Array.from(
+			{ length: MAX_METADATA_LIST_ITEMS + 1 },
+			(_, index) => `<genre>Genre ${index}</genre>`,
+		).join('');
+		const result = parseKodiNfo(`<movie>${people}${genres}</movie>`);
+
+		expect(result.actors).toHaveLength(MAX_METADATA_PEOPLE_ITEMS);
+		expect(result.genres).toHaveLength(MAX_METADATA_LIST_ITEMS);
+		expect(result.truncatedFields).toEqual(expect.arrayContaining(['actors', 'genres']));
 	});
 
 	it('deduplicates lists, captures provider IDs, and ignores invalid numeric fields', () => {

@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Temporal } from '@js-temporal/polyfill';
 import type { ChannelSchedule, TimelineSegment } from '@moirai/shared';
 import type { Repository } from '@server/repository/index.js';
 import {
+	boundedGuideWindow,
 	CommittedGuideUnavailableError,
 	readCommittedScheduleGuide,
 } from '@server/guide/schedule-guide.js';
@@ -59,6 +61,9 @@ function repositoryFixture(
 		listMaterializedTimelineSegments: vi.fn().mockResolvedValue(
 			segments.map((entry) => ({ segment: entry, mediaSnapshot: null, stateDelta: [] })),
 		),
+		listMaterializedTimelineSegmentsForGuide: vi.fn().mockResolvedValue(
+			segments.map((entry) => ({ segment: entry, mediaSnapshot: null, stateDelta: [] })),
+		),
 		getSchedulingCatalog: vi.fn().mockResolvedValue({
 			media: [],
 			groupParents: {},
@@ -108,7 +113,33 @@ describe('readCommittedScheduleGuide', () => {
 		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
 
 		expect(result.guide.committedAt).toBe('2026-08-23T00:01:00Z');
+		expect(result.guide).toMatchObject({
+			requestedDays: 1,
+			days: 1,
+			segmentLimitApplied: false,
+		});
 		expect(result.guide.channels).toHaveLength(2);
+	});
+
+	it('shortens an oversized response before the overflow day', () => {
+		const channelId = randomUUID();
+		const records = [
+			segment(channelId, '2026-08-23T00:00:00Z', '2026-08-23T12:00:00Z'),
+			segment(channelId, '2026-08-23T12:00:00Z', '2026-08-24T00:00:00Z'),
+			segment(channelId, '2026-08-24T00:00:00Z', '2026-08-24T12:00:00Z'),
+		].map((entry) => ({ segment: entry, mediaSnapshot: null, stateDelta: [] }));
+
+		const result = boundedGuideWindow(
+			Temporal.PlainDate.from('2026-08-23'),
+			Temporal.PlainDate.from('2026-08-25'),
+			'UTC',
+			records,
+			2,
+		);
+
+		expect(result).toMatchObject({ days: 1, segmentLimitApplied: true });
+		expect(result.rows).toHaveLength(2);
+		expect(result.endDate.toString()).toBe('2026-08-24');
 	});
 
 	it.each([

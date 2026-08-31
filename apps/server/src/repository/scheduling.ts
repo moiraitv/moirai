@@ -507,6 +507,27 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		return rows.map(materializedSegmentRecord);
 	}
 
+	/** Read a chronologically bounded committed range for combined guide responses. */
+	async listMaterializedTimelineSegmentsForGuide(
+		rangeStart: string,
+		rangeEnd: string,
+		limit: number,
+	): Promise<MaterializedSegmentRecord[]> {
+		const rows = await this.db
+			.select()
+			.from(materializedTimelineSegments)
+			.where(and(
+				gt(materializedTimelineSegments.finishesAt, rangeStart),
+				lt(materializedTimelineSegments.startsAt, rangeEnd),
+			))
+			.orderBy(
+				asc(materializedTimelineSegments.startsAt),
+				asc(materializedTimelineSegments.channelId),
+			)
+			.limit(limit);
+		return rows.map(materializedSegmentRecord);
+	}
+
 	/** Return one committed segment scoped to its owning channel. */
 	async getMaterializedTimelineSegment(
 		channelId: string,

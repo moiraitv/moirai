@@ -13,22 +13,22 @@ export const SECONDS_PER_SCHEDULING_DAY = 86_400;
 export const MAX_MEDIA_DURATION_MILLISECONDS = 366 * SECONDS_PER_SCHEDULING_DAY * 1_000;
 /** Bound shared scheduling contracts resource use for timeline preview days. */
 export const MAX_TIMELINE_PREVIEW_DAYS = 14;
-/** Bound shared scheduling contracts resource use for timeline segments. */
-export const MAX_TIMELINE_SEGMENTS = 5_000;
-/** Bound shared scheduling contracts resource use for guide timeline segments. */
-export const MAX_GUIDE_TIMELINE_SEGMENTS = 20_000;
+/** Bound one channel's timeline generation while supporting dense short-form schedules. */
+export const MAX_TIMELINE_SEGMENTS = 50_000;
+/** Bound combined guide responses while supporting several dense short-form channels. */
+export const MAX_GUIDE_TIMELINE_SEGMENTS = 200_000;
 /** Number of committed days exposed through the XMLTV guide. */
 export const XMLTV_EPG_DAYS = 14;
 /** Default configured capacity for explicit media-item collections. */
-export const DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS = 500;
+export const DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS = 5_000;
 /** Absolute contract ceiling for configured explicit media-item collections. */
-export const MAX_EXPLICIT_MEDIA_ITEMS = 5_000;
+export const MAX_EXPLICIT_MEDIA_ITEMS = 25_000;
 /** Number of new items an existing program may accept without explicit confirmation. */
 export const PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD = 5;
 /** SHA-256 token binding a program-addition confirmation to its ordered item identifiers. */
 export const programItemAdditionConfirmationTokenSchema = z.string().regex(/^[a-f0-9]{64}$/);
 /** Bound shared scheduling contracts resource use for explicit media groups. */
-export const MAX_EXPLICIT_MEDIA_GROUPS = 100;
+export const MAX_EXPLICIT_MEDIA_GROUPS = 1_000;
 /** Bound shared scheduling contracts resource use for channel schedule layers. */
 export const MAX_CHANNEL_SCHEDULE_LAYERS = 32;
 /** Bound shared scheduling contracts resource use for schedule predicate nodes. */
@@ -45,6 +45,8 @@ export const MAX_METADATA_TEXT_LENGTH = 512;
 export const MAX_METADATA_PLOT_LENGTH = 16 * 1024;
 /** Bound shared scheduling contracts resource use for metadata list items. */
 export const MAX_METADATA_LIST_ITEMS = 128;
+/** Preserve extensive cast and contributor credits without unbounded metadata arrays. */
+export const MAX_METADATA_PEOPLE_ITEMS = 512;
 /** Bound shared scheduling contracts resource use for xmltv description length. */
 export const MAX_XMLTV_DESCRIPTION_LENGTH = 4 * 1024;
 
@@ -681,7 +683,9 @@ export interface TimelinePreview {
 export interface ScheduleGuide {
 	timeZone: string;
 	startDate: string;
+	requestedDays: number;
 	days: number;
+	segmentLimitApplied: boolean;
 	/** Inclusive local-date boundary of the durable guide window. */
 	committedStartDate?: string;
 	/** Exclusive local-date boundary of the durable guide window. */

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { dateKey, formatDateKey, shiftCalendarMonths, shiftDateKey } from '@web/date-key';
+import {
+	calendarDateSpan,
+	dateKey,
+	formatDateKey,
+	shiftCalendarMonths,
+	shiftDateKey,
+} from '@web/date-key';
 
 describe('dateKey', () => {
 	it('uses the configured scheduling time zone rather than the browser or UTC date', () => {
@@ -11,6 +17,11 @@ describe('dateKey', () => {
 	it('shifts date keys across month and year boundaries', () => {
 		expect(shiftDateKey('2026-12-31', 1)).toBe('2027-01-01');
 		expect(shiftDateKey('2026-03-01', -1)).toBe('2026-02-28');
+	});
+
+	it('counts calendar days across daylight-saving and year boundaries', () => {
+		expect(calendarDateSpan('2026-03-07', '2026-03-10')).toBe(3);
+		expect(calendarDateSpan('2026-12-31', '2027-01-02')).toBe(2);
 	});
 
 	it('clamps calendar-month shifts at the target month end', () => {

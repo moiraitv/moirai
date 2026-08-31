@@ -370,6 +370,15 @@ export class Repository extends LibraryRepository {
 		return this.scheduling.listMaterializedTimelineSegments(rangeStart, rangeEnd, channelId);
 	}
 
+	/** Read a chronologically bounded committed range for combined guide responses. */
+	async listMaterializedTimelineSegmentsForGuide(
+		rangeStart: string,
+		rangeEnd: string,
+		limit: number,
+	): Promise<MaterializedSegmentRecord[]> {
+		return this.scheduling.listMaterializedTimelineSegmentsForGuide(rangeStart, rangeEnd, limit);
+	}
+
 	/** Return one committed timeline segment scoped to its owning channel. */
 	async getMaterializedTimelineSegment(
 		channelId: string,

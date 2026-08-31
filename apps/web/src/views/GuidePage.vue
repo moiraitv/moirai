@@ -14,7 +14,7 @@ import { XMLTV_EPG_DAYS } from '@moirai/shared';
 import GuideTimeline from '../components/GuideTimeline.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { dateKey, formatDateKey, shiftDateKey } from '../date-key';
+import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 import { liveEvents } from '../live-events';
 import { affectsGuide } from '../guide-events';
@@ -51,21 +51,32 @@ const epgUrl = computed(() =>
 	publicUrl.value ? `${publicUrl.value.replace(/\/+$/, '')}/epg.xml` : '');
 const m3uUrl = computed(() =>
 	publicUrl.value ? `${publicUrl.value.replace(/\/+$/, '')}/iptv/channels.m3u` : '');
+const displayedDays = computed(() => guide.value?.days ?? 7);
+const requestedWindowDays = computed(() => {
+	return requestedDaysFor(weekStart.value);
+});
+
+/** Bound one guide request to the remaining committed range from its proposed start. */
+function requestedDaysFor(startDate: string): number {
+	const committedEndDate = guide.value?.committedEndDate;
+	if (!committedEndDate || !startDate) {
+		return 7;
+	}
+
+	return Math.max(1, Math.min(7, calendarDateSpan(startDate, committedEndDate)));
+}
 
 const weekLabel = computed(() => {
 	if (!weekStart.value) {
 		return '';
 	}
 
-	return `${formatDateKey(weekStart.value, { month: 'short', day: 'numeric' })} – ${formatDateKey(shiftDateKey(weekStart.value, 6), { month: 'short', day: 'numeric', year: 'numeric' })}`;
+	return `${formatDateKey(weekStart.value, { month: 'short', day: 'numeric' })} – ${formatDateKey(shiftDateKey(weekStart.value, displayedDays.value - 1), { month: 'short', day: 'numeric', year: 'numeric' })}`;
 });
 const canMovePrevious = computed(() =>
-	Boolean(guide.value?.committedStartDate && weekStart.value > guide.value.committedStartDate));
+	channelsStore.guideNavigationTarget('backward') !== null);
 const canMoveNext = computed(() =>
-	Boolean(
-		guide.value?.committedEndDate
-		&& shiftDateKey(weekStart.value, 7) < guide.value.committedEndDate,
-	));
+	channelsStore.guideNavigationTarget('forward') !== null);
 
 /** Load the committed seven-day guide beginning at the selected date. */
 async function loadGuide(): Promise<void> {
@@ -73,7 +84,7 @@ async function loadGuide(): Promise<void> {
 		return;
 	}
 
-	await channelsStore.loadGuide(weekStart.value, 7);
+	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value);
 }
 
 /** Load channel metadata and the initial committed guide without discarding cached state. */
@@ -90,7 +101,7 @@ async function loadInitial(): Promise<void> {
 	error.value = '';
 	try {
 		await Promise.all([channelsStore.loadChannels(), channelsStore.loadCapabilities()]);
-		if (!weekStart.value || guideDays.value < 7) {
+		if (!weekStart.value || guideDays.value < requestedWindowDays.value) {
 			weekStart.value = dateKey(new Date(), timeZone.value);
 		}
 		await loadGuide();
@@ -104,19 +115,28 @@ async function loadInitial(): Promise<void> {
 }
 
 /** Move the guide window within the committed range and load the resulting week. */
-async function moveWeek(days: number): Promise<void> {
-	if ((days < 0 && !canMovePrevious.value) || (days > 0 && !canMoveNext.value)) {
+async function moveWindow(direction: -1 | 1): Promise<void> {
+	if ((direction < 0 && !canMovePrevious.value) || (direction > 0 && !canMoveNext.value)) {
 		return;
 	}
 
-	weekStart.value = shiftDateKey(weekStart.value, days);
-	await loadGuide();
+	const target = channelsStore.guideNavigationTarget(direction < 0 ? 'backward' : 'forward');
+	if (!target) {
+		return;
+	}
+
+	await channelsStore.loadGuide(
+		target,
+		requestedDaysFor(target),
+		direction < 0 ? 'backward' : 'forward',
+	);
 }
 
 /** Reset the EPG view to the week containing today. */
 async function showToday(): Promise<void> {
-	weekStart.value = dateKey(new Date(), timeZone.value);
-	await loadGuide();
+	const today = dateKey(new Date(), timeZone.value);
+	await channelsStore.loadGuide(today, requestedDaysFor(today));
+	channelsStore.clearGuideNavigationHistory();
 }
 
 /** Display copy feedback briefly without adding or removing layout content. */
@@ -289,7 +309,7 @@ onBeforeUnmount(() => {
 						class="square-button"
 						aria-label="Previous week"
 						:disabled="!canMovePrevious"
-						@click="moveWeek(-7)"
+						@click="moveWindow(-1)"
 					>
 						<ChevronLeft :size="18" />
 					</button>
@@ -300,7 +320,7 @@ onBeforeUnmount(() => {
 						class="square-button"
 						aria-label="Next week"
 						:disabled="!canMoveNext"
-						@click="moveWeek(7)"
+						@click="moveWindow(1)"
 					>
 						<ChevronRight :size="18" />
 					</button>
@@ -308,13 +328,17 @@ onBeforeUnmount(() => {
 				</div>
 				<span class="guide-time-zone"><Clock3 :size="15" />{{ timeZone }}</span>
 			</div>
+			<p v-if="guide?.segmentLimitApplied" class="notice warning">
+				Showing {{ guide.days }} of {{ guide.requestedDays }} requested days because this
+				schedule contains an unusually high number of programs.
+			</p>
 			<GuideTimeline
 				v-if="channels.length"
 				:channels="channels"
 				:guide="guide"
 				:time-zone="timeZone"
 				:start-date="weekStart"
-				:days="7"
+				:days="displayedDays"
 			/>
 			<div v-else-if="!error" class="empty-state">
 				<RadioTower :size="28" />

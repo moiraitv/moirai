@@ -23,6 +23,16 @@ export function shiftDateKey(value: string, amount: number): string {
 		.join('-');
 }
 
+/** Count whole calendar days between two ISO date keys without local-zone conversion. */
+export function calendarDateSpan(start: string, end: string): number {
+	const [startYear, startMonth, startDay] = start.split('-').map(Number);
+	const [endYear, endMonth, endDay] = end.split('-').map(Number);
+	const startTime = Date.UTC(startYear!, startMonth! - 1, startDay!);
+	const endTime = Date.UTC(endYear!, endMonth! - 1, endDay!);
+
+	return Math.round((endTime - startTime) / 86_400_000);
+}
+
 /** Shift a local date by calendar months while clamping month-end overflow. */
 export function shiftCalendarMonths(value: Date, amount: number): Date {
 	const shifted = new Date(value);

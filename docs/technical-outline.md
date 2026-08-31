@@ -194,6 +194,7 @@ Input limits protect parser, database, and guide memory:
 | Indexed scalar field    | 512 characters |
 | Plot                    |         16 KiB |
 | Metadata list           |    128 entries |
+| People-credit list      |    512 entries |
 | XMLTV description       |          4 KiB |
 | Measured media duration |       366 days |
 
@@ -373,7 +374,8 @@ to a selected-items program. The same action is available from media details. A 
 an existing selected-items program for that library or a newly named program with sequential,
 shuffle, or random ordering. The server canonicalizes and deduplicates item references, appends them
 atomically, and rejects the whole request when the resulting collection would exceed the configured
-limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 500 and may be set from 1 through the 5,000-item
+limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 5,000 and may be set from 1 through the
+25,000-item
 contract ceiling.
 
 Adding more than five genuinely new items to an existing program requires confirmation of the
@@ -470,9 +472,10 @@ future output. A failure retains the last good timeline and exposes a failed sta
 committing a partial replacement.
 
 Preview endpoints return proposed state without committing it. Preview ranges are limited to 14 days
-and 5,000 segments per channel; guide responses are limited to 20,000 segments. Scheduling runs in a
-bounded worker pool with two workers and a 32-request queue by default. Saturation returns `503` with
-`Retry-After`.
+and 50,000 segments per channel; combined guide responses are limited to 200,000 segments. An
+oversized combined guide returns the largest complete local-day range within that limit and reports
+both the requested and returned day counts. Scheduling runs in a bounded worker pool with two workers
+and a 32-request queue by default. Saturation returns `503` with `Retry-After`.
 
 Catalog loading follows program references. It reads whole libraries only for library-query sources,
 coalesces identical revision reads, builds reusable indexes, and retains at most 32 cached scopes.

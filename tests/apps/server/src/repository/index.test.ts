@@ -1131,6 +1131,8 @@ describe('Repository scheduling catalog', () => {
 			programs[0]!.id,
 			library.id,
 			items.slice(400, 501).map((entry) => entry.id),
+			undefined,
+			500,
 		);
 		expect(capacity).toEqual({
 			status: 'capacity',

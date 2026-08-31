@@ -19,7 +19,9 @@ describe('ErsatzTV playout output', () => {
 		const guide: ScheduleGuide = {
 			timeZone: 'UTC',
 			startDate: '2026-08-23',
+			requestedDays: 2,
 			days: 2,
+			segmentLimitApplied: false,
 			channels: [
 				{
 					channelId: configured.id,
@@ -73,7 +75,9 @@ describe('ErsatzTV playout output', () => {
 		const guide: ScheduleGuide = {
 			timeZone: 'America/Los_Angeles',
 			startDate: '2026-08-26',
+			requestedDays: 1,
 			days: 1,
+			segmentLimitApplied: false,
 			channels: [{
 				channelId: configured.id,
 				preview: {
@@ -126,7 +130,9 @@ describe('ErsatzTV playout output', () => {
 		const guide: ScheduleGuide = {
 			timeZone: 'America/Los_Angeles',
 			startDate: '2026-08-25',
+			requestedDays: 2,
 			days: 2,
+			segmentLimitApplied: false,
 			channels: [{
 				channelId: configured.id,
 				preview: {
@@ -183,7 +189,9 @@ describe('ErsatzTV playout output', () => {
 		const guide: ScheduleGuide = {
 			timeZone: 'America/Los_Angeles',
 			startDate: '2026-11-01',
+			requestedDays: 1,
 			days: 1,
+			segmentLimitApplied: false,
 			channels: [],
 		};
 
@@ -202,7 +210,9 @@ describe('ErsatzTV playout output', () => {
 		const guide: ScheduleGuide = {
 			timeZone: 'UTC',
 			startDate: '2026-08-23',
+			requestedDays: 1,
 			days: 1,
+			segmentLimitApplied: false,
 			channels: [{
 				channelId: configured.id,
 				preview: {

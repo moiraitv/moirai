@@ -6,7 +6,11 @@ import {
 	type ScheduleGuide,
 } from '@moirai/shared';
 import { api } from '../api';
+import { shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
+
+/** History effect applied after one successful guide request. */
+type GuideNavigation = 'preserve' | 'forward' | 'backward';
 
 /** Cached channel and guide state shared by channel consumers across route changes. */
 export const useChannelsStore = defineStore('channels', () => {
@@ -24,6 +28,7 @@ export const useChannelsStore = defineStore('channels', () => {
 	const guideDays = ref(0);
 	const guideLoading = ref(false);
 	const guideLoaded = ref(false);
+	const guideStartHistory = ref<string[]>([]);
 	const error = ref('');
 
 	// Ignore responses superseded by a newer request in the same data domain.
@@ -85,8 +90,13 @@ export const useChannelsStore = defineStore('channels', () => {
 	}
 
 	/** Load guide from the authoritative source and update the shared UI store. */
-	async function loadGuide(startDate: string, days = 7): Promise<void> {
+	async function loadGuide(
+		startDate: string,
+		days = 7,
+		navigation: GuideNavigation = 'preserve',
+	): Promise<void> {
 		const sequence = ++guideSequence;
+		const previousStart = guideWeekStart.value;
 		if (
 			!guideLoaded.value
 			|| guideWeekStart.value !== startDate
@@ -104,6 +114,17 @@ export const useChannelsStore = defineStore('channels', () => {
 			guideWeekStart.value = startDate;
 			guideDays.value = days;
 			guideLoaded.value = true;
+			if (navigation === 'forward' && previousStart && previousStart !== startDate) {
+				if (guideStartHistory.value.at(-1) !== previousStart) {
+					guideStartHistory.value.push(previousStart);
+				}
+			}
+			else if (
+				navigation === 'backward'
+				&& guideStartHistory.value.at(-1) === startDate
+			) {
+				guideStartHistory.value.pop();
+			}
 			error.value = '';
 		}
 		catch (cause) {
@@ -117,6 +138,38 @@ export const useChannelsStore = defineStore('channels', () => {
 				guideLoading.value = false;
 			}
 		}
+	}
+
+	/** Return the next valid guide boundary without mutating navigation history. */
+	function guideNavigationTarget(direction: 'forward' | 'backward'): string | null {
+		if (!guideWeekStart.value || !guide.value) {
+			return null;
+		}
+
+		if (direction === 'forward') {
+			const target = shiftDateKey(guideWeekStart.value, guide.value.days);
+			return guide.value.committedEndDate && target >= guide.value.committedEndDate
+				? null
+				: target;
+		}
+
+		const committedStart = guide.value.committedStartDate;
+		if (committedStart && guideWeekStart.value <= committedStart) {
+			return null;
+		}
+
+		const remembered = guideStartHistory.value.at(-1);
+		if (remembered) {
+			return remembered;
+		}
+
+		const fallback = shiftDateKey(guideWeekStart.value, -guide.value.days);
+		return committedStart && fallback < committedStart ? committedStart : fallback;
+	}
+
+	/** Discard prior guide boundaries after an explicit navigation reset. */
+	function clearGuideNavigationHistory(): void {
+		guideStartHistory.value = [];
 	}
 
 	// Expose stable refs and refresh actions to every channel and guide view.
@@ -138,5 +191,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		loadChannels,
 		loadCapabilities,
 		loadGuide,
+		guideNavigationTarget,
+		clearGuideNavigationHistory,
 	};
 });

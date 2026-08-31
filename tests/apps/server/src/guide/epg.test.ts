@@ -39,7 +39,9 @@ function guide(channelId: string, mediaId: string): ScheduleGuide {
 	return {
 		timeZone: 'America/Los_Angeles',
 		startDate: '2026-11-01',
+		requestedDays: 1,
 		days: 1,
+		segmentLimitApplied: false,
 		channels: [
 			{
 				channelId,

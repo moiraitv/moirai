@@ -107,7 +107,7 @@ documentation route in production.
 | `MOIRAI_MEDIA_PROBE_TIMEOUT_MS`        | `15000`                 | Deadline for inspecting one media file                                          |
 | `MOIRAI_SCHEDULING_WORKERS`            | `2`                     | Timeline worker threads; `0` uses the main thread                               |
 | `MOIRAI_SCHEDULING_WORKER_QUEUE`       | `32`                    | Maximum queued/in-flight timeline jobs                                          |
-| `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS`      | `500`                   | Maximum items in one selected-items program; accepts `1`–`5000`                 |
+| `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS`      | `5000`                  | Maximum items in one selected-items program; accepts `1`–`25000`                |
 | `MOIRAI_SCAN_CANCEL_GRACE_MS`          | `5000`                  | Wait limit for cancelled native filesystem work                                 |
 | `MOIRAI_SHUTDOWN_DEADLINE_MS`          | `10000`                 | Production graceful-shutdown deadline                                           |
 | `MOIRAI_SCAN_HISTORY_RETENTION_DAYS`   | `30`                    | Maximum completed scan-history age                                              |
