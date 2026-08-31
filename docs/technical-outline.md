@@ -388,6 +388,12 @@ Selection strategies include sequential, deterministic shuffle without repeats, 
 random selection. Persistent selection state remains separate from configuration, allowing a daily
 slot to resume tomorrow instead of restarting.
 
+Newly generated timeline material avoids scheduling the same exact media item concurrently on two
+channels when another candidate is eligible. The check covers primary and filler selection, rotates
+channel priority by day, and falls back to normal selection rather than creating dead air when every
+candidate conflicts. Already committed guide entries are never rewritten solely to remove a
+collision.
+
 The Programs catalog is searchable and filterable by content or sequence type. Content rows expose
 a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows
 show their authored child-program entries. Preview data is included in the scheduling status contract

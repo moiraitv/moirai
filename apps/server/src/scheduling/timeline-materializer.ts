@@ -21,6 +21,14 @@ import { currentTimestamp } from '../time.js';
 /** Delay between background checks of the durable rolling schedule window. */
 const MATERIALIZATION_INTERVAL_MS = 60_000;
 
+/** Cross-channel exact-media interval reserved during one materialization pass. */
+interface OccupiedMediaInterval {
+	channelId: string;
+	mediaItemId: string;
+	start: string;
+	finish: string;
+}
+
 /** Return whether a media group is contained by any selected group. */
 function belongsToGroup(
 	groupId: string | null,
@@ -371,9 +379,39 @@ export class TimelineMaterializer {
 			programs,
 			schedulingRootProgramIds(templates, schedules),
 		);
-		for (const schedule of schedules) {
+		const occupancyStart = currentTimestamp();
+		const occupancyEnd = new Date(Date.parse(occupancyStart) + (XMLTV_EPG_DAYS + 1) * 86_400_000)
+			.toISOString();
+		const occupiedMedia: OccupiedMediaInterval[] = (
+			await this.repository.listMaterializedTimelineSegments(occupancyStart, occupancyEnd)
+		)
+			.filter((record) => Boolean(record.segment.mediaItemId))
+			.map((record) => ({
+				channelId: record.segment.channelId,
+				mediaItemId: record.segment.mediaItemId!,
+				start: record.segment.start,
+				finish: record.segment.finish,
+			}));
+		const orderedSchedules = [...schedules].sort((left, right) =>
+			left.channelId.localeCompare(right.channelId));
+		const priorityDate = Temporal.Instant.from(occupancyStart)
+			.toZonedDateTimeISO(this.timeZone)
+			.toPlainDate();
+		const priorityDay = Temporal.PlainDate.from('1970-01-01')
+			.until(priorityDate, { largestUnit: 'days' }).days;
+		const rotation = orderedSchedules.length === 0
+			? 0
+			: priorityDay % orderedSchedules.length;
+		orderedSchedules.push(...orderedSchedules.splice(0, rotation));
+		for (const schedule of orderedSchedules) {
 			try {
-				await this.materializeChannel(schedule, templates, programs, catalog);
+				await this.materializeChannel(
+					schedule,
+					templates,
+					programs,
+					catalog,
+					occupiedMedia,
+				);
 			}
 			catch (error) {
 				const message = internalErrorMessage(error);
@@ -392,6 +430,7 @@ export class TimelineMaterializer {
 		templates: ScheduleTemplate[],
 		programs: SchedulingProgram[],
 		sourceCatalog: SchedulingCatalog,
+		occupiedMedia: OccupiedMediaInterval[],
 	): Promise<void> {
 		// Resolve the base template and desired rolling guide window.
 		const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
@@ -506,6 +545,9 @@ export class TimelineMaterializer {
 				programs,
 				catalog,
 				state: initialState,
+				occupiedMedia: occupiedMedia
+					.filter((entry) => entry.channelId !== schedule.channelId)
+					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),
 				initialCursor: replaceFrom,
 			})
 			: generateTimelineDetailed({
@@ -519,6 +561,9 @@ export class TimelineMaterializer {
 				programs,
 				catalog,
 				state: initialState,
+				occupiedMedia: occupiedMedia
+					.filter((entry) => entry.channelId !== schedule.channelId)
+					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),
 				initialCursor: replaceFrom,
 			});
 		if (generated.issues.some((issue) => issue.code === 'media-duration-missing')) {
@@ -568,6 +613,20 @@ export class TimelineMaterializer {
 			issues: generated.issues,
 			committedAt,
 		});
+		for (let index = occupiedMedia.length - 1; index >= 0; index -= 1) {
+			const entry = occupiedMedia[index]!;
+			if (entry.channelId === schedule.channelId && entry.finish > replaceFrom) {
+				occupiedMedia.splice(index, 1);
+			}
+		}
+		occupiedMedia.push(...segments
+			.filter((record) => Boolean(record.segment.mediaItemId))
+			.map((record) => ({
+				channelId: schedule.channelId,
+				mediaItemId: record.segment.mediaItemId!,
+				start: record.segment.start,
+				finish: record.segment.finish,
+			})));
 		this.events.publish({
 			type: 'timeline.changed',
 			data: { channelId: schedule.channelId, status: 'ready' },

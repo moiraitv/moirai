@@ -48,6 +48,8 @@ export interface GenerateTimelineInput {
 	state: SelectionStateRecord[];
 	/** Continue a committed range at this instant instead of the first local midnight. */
 	initialCursor?: string;
+	/** Exact media intervals already committed or generated on other channels. */
+	occupiedMedia?: Array<{ mediaItemId: string; start: string; finish: string }>;
 }
 
 /** Selection-state change attributed to one generated segment. */
@@ -356,6 +358,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				scheduleLayerId: layerId,
 				slotId: slot.id,
 				now: generatedAt,
+				selectionStart: cursor.toString(),
+				occupiedMedia: input.occupiedMedia ?? [],
 			};
 			let primaryCount = 0;
 			let resolvedEnd = nominalEnd;
@@ -374,6 +378,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 
 			// Select primary media until the slot is full or its boundary rejects another start.
 			while (slot.programId !== null && Temporal.Instant.compare(cursor, nominalEnd) < 0) {
+				context.selectionStart = cursor.toString();
 				const primaryConsumerKey = consumerKey(
 					'primary',
 					input,
@@ -520,6 +525,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				const filler = fillerFor(slot, template, input.schedule);
 				if (filler) {
 					while (Temporal.Instant.compare(cursor, resolvedEnd) < 0) {
+						context.selectionStart = cursor.toString();
 						const available = durationBetween(cursor, resolvedEnd);
 						const bestFit
 							= filler.policy === 'best-fit-only' || filler.policy === 'best-fit-or-truncate';

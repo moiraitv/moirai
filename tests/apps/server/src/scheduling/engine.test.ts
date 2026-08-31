@@ -167,6 +167,88 @@ function primaryTitles(result: ReturnType<typeof generateTimeline>, slotIndex = 
 }
 
 describe('schedule timeline engine', () => {
+	it('avoids an exact-media cross-channel overlap when another candidate is available', () => {
+		const items = [media(1, 3_600), media(2, 3_600)];
+		const sequential = contentProgram(10, [1, 2]);
+		const daily = template([{ programId: sequential.id, startSeconds: 0 }]);
+		const result = generateTimeline(input([sequential], items, daily, {
+			occupiedMedia: [{
+				mediaItemId: uuid(1),
+				start: '2026-01-05T00:00:00Z',
+				finish: '2026-01-06T00:00:00Z',
+			}],
+		}));
+		expect(new Set(primaryTitles(result))).toEqual(new Set(['Item 2']));
+	});
+
+	it('continues sequential state from a temporarily colliding last item', () => {
+		const items = [media(1, 60), media(2, 60), media(3, 60)];
+		const sequential = contentProgram(10, [1, 2, 3]);
+		const daily = template([{ programId: sequential.id, startSeconds: 0 }]);
+		const first = generateTimeline(input([sequential], items, daily, {
+			initialCursor: '2026-01-05T23:59:00Z',
+		}));
+
+		const resumed = generateTimeline(input([sequential], items, daily, {
+			startDate: '2026-01-06',
+			initialCursor: '2026-01-06T23:59:00Z',
+			state: first.proposedState,
+			occupiedMedia: [{
+				mediaItemId: uuid(1),
+				start: '2026-01-06T00:00:00Z',
+				finish: '2026-01-07T00:00:00Z',
+			}],
+		}));
+
+		expect(first.segments.find((segment) => segment.role === 'primary')?.mediaItemId).toBe(uuid(1));
+		expect(resumed.segments.find((segment) => segment.role === 'primary')?.mediaItemId).toBe(uuid(2));
+	});
+
+	it('retains a temporarily colliding item in shuffle cycle state', () => {
+		const items = [media(1, 60), media(2, 60), media(3, 60)];
+		const shuffled = contentProgram(10, [1, 2, 3], 'shuffle');
+		const daily = template([{ programId: shuffled.id, startSeconds: 0 }]);
+		const first = generateTimeline(input([shuffled], items, daily, {
+			initialCursor: '2026-01-05T23:59:00Z',
+		}));
+		const firstState = first.proposedState.find((record) => record.value.type === 'shuffle');
+		if (!firstState || firstState.value.type !== 'shuffle' || !firstState.value.lastItemId) {
+			throw new Error('Expected initialized shuffle state');
+		}
+
+		const resumed = generateTimeline(input([shuffled], items, daily, {
+			startDate: '2026-01-06',
+			initialCursor: '2026-01-06T23:59:00Z',
+			state: first.proposedState,
+			occupiedMedia: [{
+				mediaItemId: firstState.value.lastItemId,
+				start: '2026-01-06T00:00:00Z',
+				finish: '2026-01-07T00:00:00Z',
+			}],
+		}));
+		const resumedState = resumed.proposedState.find((record) => record.value.type === 'shuffle');
+		if (!resumedState || resumedState.value.type !== 'shuffle') {
+			throw new Error('Expected resumed shuffle state');
+		}
+
+		expect(resumed.segments.find((segment) => segment.role === 'primary')?.mediaItemId)
+			.not.toBe(firstState.value.lastItemId);
+		expect(new Set(resumedState.value.cycleItemIds)).toEqual(new Set(items.map((item) => item.id)));
+	});
+
+	it('falls back to normal selection when every candidate conflicts', () => {
+		const item = media(1, 3_600);
+		const sequential = contentProgram(10, 1);
+		const daily = template([{ programId: sequential.id, startSeconds: 0 }]);
+		const result = generateTimeline(input([sequential], [item], daily, {
+			occupiedMedia: [{
+				mediaItemId: item.id,
+				start: '2026-01-05T00:00:00Z',
+				finish: '2026-01-06T00:00:00Z',
+			}],
+		}));
+		expect(primaryTitles(result)).toContain('Item 1');
+	});
 	it('uses the highest matching conditional template only inside its predicate window', () => {
 		const baseMedia = media(1, 60 * 60);
 		const overlayMedia = media(2, 60 * 60);

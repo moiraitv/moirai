@@ -41,6 +41,24 @@ export interface SelectionContext {
 	scheduleLayerId: string | null;
 	slotId: string;
 	now: string;
+	selectionStart: string;
+	occupiedMedia: Array<{ mediaItemId: string; start: string; finish: string }>;
+}
+
+/** Remove avoidable exact-item overlaps with other channels at the proposed start instant. */
+function collisionFreeCandidates(
+	candidates: SchedulableMedia[],
+	context: SelectionContext,
+): SchedulableMedia[] {
+	const startMs = Date.parse(context.selectionStart);
+	const available = candidates.filter((candidate) => {
+		const finishMs = startMs + candidate.durationSeconds! * 1_000;
+		return !context.occupiedMedia.some((occupied) =>
+			occupied.mediaItemId === candidate.id
+			&& startMs < Date.parse(occupied.finish)
+			&& finishMs > Date.parse(occupied.start));
+	});
+	return available.length > 0 ? available : candidates;
 }
 
 /** Derive a repeatable numeric value from a string seed. */
@@ -454,19 +472,20 @@ function chooseContent(
 		const ordered = candidates.map(
 			(_, offset) => candidates[(start + offset) % candidates.length]!,
 		);
+		const selectable = collisionFreeCandidates(ordered, context);
 		const fitting
 			= fitSeconds === null
-				? ordered[0]!
+				? selectable[0]!
 				: fitMode === 'first-fit-arbitrary'
-					? ordered[0]!.durationSeconds! <= fitSeconds
-						? ordered[0]!
+					? selectable[0]!.durationSeconds! <= fitSeconds
+						? selectable[0]!
 						: null
-					: (ordered
+					: (selectable
 						.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
 						.sort(
 							(a, b) =>
 								b.durationSeconds! - a.durationSeconds!
-								|| ordered.indexOf(a) - ordered.indexOf(b),
+								|| selectable.indexOf(a) - selectable.indexOf(b),
 						)[0] ?? null);
 		if (!fitting) {
 			return null;
@@ -518,17 +537,18 @@ function chooseContent(
 		const ordered = value.remainingItemIds
 			.map((id) => candidates.find((candidate) => candidate.id === id))
 			.filter((candidate): candidate is SchedulableMedia => Boolean(candidate));
+		const selectable = collisionFreeCandidates(ordered, context);
 		const selected
 			= fitSeconds === null
-				? ordered[0]!
+				? selectable[0]!
 				: fitMode === 'first-fit-arbitrary'
-					? (ordered.find((candidate) => candidate.durationSeconds! <= fitSeconds) ?? null)
-					: (ordered
+					? (selectable.find((candidate) => candidate.durationSeconds! <= fitSeconds) ?? null)
+					: (selectable
 						.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
 						.sort(
 							(a, b) =>
 								b.durationSeconds! - a.durationSeconds!
-								|| ordered.indexOf(a) - ordered.indexOf(b),
+								|| selectable.indexOf(a) - selectable.indexOf(b),
 						)[0] ?? null);
 		if (!selected) {
 			return null;
@@ -549,10 +569,13 @@ function chooseContent(
 		context.now,
 	);
 	const value = record.value as Extract<SelectionStateValue, { type: 'random' }>;
-	const ordered = [...candidates].sort(
-		(a, b) =>
-			deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${a.id}`)
-			- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${b.id}`),
+	const ordered = collisionFreeCandidates(
+		[...candidates].sort(
+			(a, b) =>
+				deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${a.id}`)
+				- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${b.id}`),
+		),
+		context,
 	);
 	const selected
 		= fitSeconds === null
