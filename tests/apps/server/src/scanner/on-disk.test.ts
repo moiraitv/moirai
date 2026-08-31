@@ -206,6 +206,23 @@ describe('discoverOnDisk', () => {
 		});
 	});
 
+	it('resolves relative poster references from nested NFO artwork', async () => {
+		const fixture = await library();
+		const folder = path.join(fixture.sourceConfig.scanRoot, 'Referenced');
+		const artworkFolder = path.join(folder, 'images');
+		await mkdir(artworkFolder, { recursive: true });
+		await writeFile(path.join(folder, 'Referenced.mkv'), 'video');
+		await writeFile(
+			path.join(folder, 'Referenced.nfo'),
+			'<movie><title>Referenced</title><art><poster>images/key-art.jpg</poster></art></movie>',
+		);
+		await writeFile(path.join(artworkFolder, 'key-art.jpg'), 'image');
+
+		const result = await discoverOnDisk(fixture);
+
+		expect(result.items[0]?.artworkRelativePath).toBe('Referenced/images/key-art.jpg');
+	});
+
 	it('indexes a playable file with filename metadata when NFO is missing', async () => {
 		const fixture = await library();
 		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'No_NFO.mp4'), 'video');

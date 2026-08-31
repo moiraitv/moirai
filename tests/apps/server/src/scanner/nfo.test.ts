@@ -54,6 +54,80 @@ describe('parseKodiNfo', () => {
 		});
 	});
 
+	it('accepts exporter sortorder tags while preferring Kodi order tags', () => {
+		const result = parseKodiNfo(`<movie>
+			<actor><name>Exporter Order</name><sortorder>2</sortorder></actor>
+			<actor><name>Kodi Order</name><order>1</order><sortorder>9</sortorder></actor>
+			<actor><name>Unordered</name></actor>
+		</movie>`);
+
+		expect(result.actors).toEqual([
+			{ name: 'Exporter Order', role: null, sortOrder: 2 },
+			{ name: 'Kodi Order', role: null, sortOrder: 1 },
+			{ name: 'Unordered', role: null, sortOrder: null },
+		]);
+	});
+
+	it('accepts compatible title, artwork, and provider ID aliases', () => {
+		const result = parseKodiNfo(`<movie>
+			<localtitle>Localized Title</localtitle>
+			<name>Fallback Name</name>
+			<sortname>Title, Localized</sortname>
+			<imdbid>tt1234567</imdbid>
+			<tmdbid>42</tmdbid>
+			<tvdbid>84</tvdbid>
+			<art><poster>images/poster.jpg</poster></art>
+		</movie>`);
+
+		expect(result).toMatchObject({
+			title: 'Localized Title',
+			sortTitle: 'Title, Localized',
+			externalIds: [
+				{ provider: 'imdb', value: 'tt1234567', isDefault: false },
+				{ provider: 'tmdb', value: '42', isDefault: false },
+				{ provider: 'tvdb', value: '84', isDefault: false },
+			],
+			primaryArtworkPaths: ['images/poster.jpg'],
+		});
+	});
+
+	it('prefers canonical fields over compatible aliases', () => {
+		const result = parseKodiNfo(`<movie>
+			<title>Canonical Title</title><localtitle>Localized Title</localtitle><name>Fallback Name</name>
+			<sorttitle>Canonical Sort</sorttitle><sortname>Fallback Sort</sortname>
+			<thumb aspect="poster">canonical.jpg</thumb><art><poster>fallback.jpg</poster></art>
+			<uniqueid type="imdb" default="true">tt1234567</uniqueid><imdbid>tt1234567</imdbid>
+		</movie>`);
+
+		expect(result).toMatchObject({
+			title: 'Canonical Title',
+			sortTitle: 'Canonical Sort',
+			externalIds: [{ provider: 'imdb', value: 'tt1234567', isDefault: true }],
+			primaryArtworkPaths: ['canonical.jpg', 'fallback.jpg'],
+		});
+	});
+
+	it('imports nested community ratings and keeps the user rating distinct', () => {
+		const result = parseKodiNfo(`<movie>
+			<ratings>
+				<rating name="tmdb"><value>6.2</value></rating>
+				<rating name="imdb" default="true"><value>7.8</value></rating>
+			</ratings>
+			<userrating>9</userrating>
+		</movie>`);
+
+		expect(result.metadata).toMatchObject({ rating: 7.8, userRating: 9 });
+	});
+
+	it('prefers the scalar community rating over nested rating fallbacks', () => {
+		const result = parseKodiNfo(`<movie>
+			<rating>8.4</rating>
+			<ratings><rating default="true"><value>7.8</value></rating></ratings>
+		</movie>`);
+
+		expect(result.metadata).toMatchObject({ rating: 8.4 });
+	});
+
 	it('reads episode coordinates', () => {
 		expect(
 			parseKodiNfo(

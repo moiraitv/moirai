@@ -104,7 +104,7 @@ function strings(value: unknown): string[] {
 		.filter((item): item is string => Boolean(item));
 }
 
-/** Normalize NFO actor entries while preserving names and roles. */
+/** Normalize NFO actor entries while preserving names, roles, and compatible billing order tags. */
 function actors(
 	value: unknown,
 	parseOrder: (value: unknown) => number | null = (entry) => numberValue(entry, {
@@ -129,7 +129,7 @@ function actors(
 		return [{
 			name,
 			role: boundedText(actor.role),
-			sortOrder: parseOrder(actor.order),
+			sortOrder: parseOrder(actor.order) ?? parseOrder(actor.sortorder),
 		}];
 	});
 }
@@ -153,8 +153,11 @@ function uniqueStrings(...values: unknown[]): string[] {
 	return [...valuesByKey.values()];
 }
 
-/** Parse every provider-scoped unique ID without using it as structural identity. */
-function externalIds(value: unknown): ParsedNfo['externalIds'] {
+/** Parse provider-scoped and legacy provider-specific IDs without using them as structural identity. */
+function externalIds(
+	value: unknown,
+	legacyValues: Record<string, unknown>,
+): ParsedNfo['externalIds'] {
 	const entries = value === undefined || value === null ? [] : Array.isArray(value) ? value : [value];
 	const ids = new Map<string, ParsedNfo['externalIds'][number]>();
 	for (const entry of entries) {
@@ -174,12 +177,27 @@ function externalIds(value: unknown): ParsedNfo['externalIds'] {
 			});
 		}
 	}
+
+	for (const [provider, providerValue] of Object.entries(legacyValues)) {
+		const rawValue = boundedText(providerValue);
+		if (!rawValue) {
+			continue;
+		}
+
+		const key = `${provider}:${rawValue.toLocaleLowerCase('en-US')}`;
+		if (!ids.has(key)) {
+			ids.set(key, { provider, value: rawValue, isDefault: false });
+		}
+	}
+
 	return [...ids.values()].slice(0, MAX_METADATA_LIST_ITEMS);
 }
 
 /** Read bounded local artwork references, preferring poster-qualified thumbnails. */
-function primaryArtworkPaths(value: unknown): string[] {
-	const entries = value === undefined || value === null ? [] : Array.isArray(value) ? value : [value];
+function primaryArtworkPaths(...values: unknown[]): string[] {
+	const entries = values.flatMap((value) => {
+		return value === undefined || value === null ? [] : Array.isArray(value) ? value : [value];
+	});
 	return entries
 		.map((entry) => {
 			const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : null;
@@ -192,6 +210,34 @@ function primaryArtworkPaths(value: unknown): string[] {
 		.sort((left, right) => Number(right.aspect === 'poster') - Number(left.aspect === 'poster'))
 		.slice(0, MAX_METADATA_LIST_ITEMS)
 		.map((entry) => entry.value);
+}
+
+/** Select the default nested Kodi rating, falling back to the first valid named rating. */
+function nestedRating(
+	value: unknown,
+	parseRating: (value: unknown) => number | null,
+): number | null {
+	const ratings = recordValue(value);
+	const rawEntries = ratings?.rating;
+	const entries = rawEntries === undefined || rawEntries === null
+		? []
+		: Array.isArray(rawEntries) ? rawEntries : [rawEntries];
+	const ordered = [...entries].sort((left, right) => {
+		const leftDefault = recordValue(left)?.['@_default'] === true
+			|| String(recordValue(left)?.['@_default']).toLocaleLowerCase('en-US') === 'true';
+		const rightDefault = recordValue(right)?.['@_default'] === true
+			|| String(recordValue(right)?.['@_default']).toLocaleLowerCase('en-US') === 'true';
+		return Number(rightDefault) - Number(leftDefault);
+	});
+
+	for (const entry of ordered) {
+		const rating = parseRating(recordValue(entry)?.value);
+		if (rating !== null) {
+			return rating;
+		}
+	}
+
+	return null;
 }
 
 /** Parse Kodi-style NFO XML into bounded presentation metadata and field diagnostics. */
@@ -275,11 +321,18 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 	const height = checkedNumber('height', video?.height, { minimum: 1, maximum: 65_535, integer: true });
 	const resolution
 		= width !== null && width > 0 && height !== null && height > 0 ? { width, height } : null;
+	const ratingOptions = { minimum: 0, maximum: 10 };
+	const rating = checkedNumber('rating', root.rating, ratingOptions)
+		?? nestedRating(root.ratings, (value) => checkedNumber('rating', value, ratingOptions));
+	const art = recordValue(root.art);
 
 	// Separate common display fields from optional provider metadata and diagnostics.
 	return {
-		title: limitedScalar('title', root.title),
-		sortTitle: limitedScalar('sortTitle', root.sorttitle),
+		title: limitedScalar('title', root.title)
+			?? limitedScalar('localTitle', root.localtitle)
+			?? limitedScalar('name', root.name),
+		sortTitle: limitedScalar('sortTitle', root.sorttitle)
+			?? limitedScalar('sortName', root.sortname),
 		plot: limitedScalar('plot', root.plot, MAX_METADATA_PLOT_LENGTH)
 			?? limitedScalar('outline', root.outline, MAX_METADATA_PLOT_LENGTH),
 		year,
@@ -291,8 +344,12 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 			integer: true,
 		}),
 		uniqueId: limitedScalar('uniqueId', root.uniqueid),
-		externalIds: externalIds(root.uniqueid),
-		primaryArtworkPaths: primaryArtworkPaths(root.thumb),
+		externalIds: externalIds(root.uniqueid, {
+			imdb: root.imdbid,
+			tmdb: root.tmdbid,
+			tvdb: root.tvdbid,
+		}),
+		primaryArtworkPaths: primaryArtworkPaths(root.thumb, art?.poster),
 		genres,
 		directors,
 		actors: cast,
@@ -301,7 +358,8 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 			originalTitle: limitedScalar('originalTitle', root.originaltitle),
 			premiered: limitedScalar('premiered', root.premiered),
 			aired: limitedScalar('aired', root.aired),
-			rating: checkedNumber('rating', root.rating, { minimum: 0, maximum: 10 }),
+			rating,
+			userRating: checkedNumber('userRating', root.userrating, ratingOptions),
 			certification: limitedScalar('certification', root.mpaa),
 			studio: limitedList('studio', uniqueStrings(root.studio)),
 			writers: limitedPeople('writers', writers),

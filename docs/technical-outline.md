@@ -128,10 +128,14 @@ changing source media files.
 Kodi-compatible movie, episode, show, and music-video NFO files provide descriptive metadata:
 
 - titles, plots, release dates, and years;
-- genres, studios, countries, certifications, and ratings;
+- genres, studios, countries, certifications, community ratings, and user ratings;
 - directors, writers, actors, and roles;
 - show, season, and episode information;
 - provider identifiers used for diagnostics and metadata association.
+
+The parser accepts the compatible title, sort-title, actor-order, provider-ID, nested-rating, and
+poster-reference forms emitted by maintained Kodi-style metadata exporters while preserving each
+field's distinct meaning.
 
 Portable filename parsing fills gaps when NFO metadata is absent. It recognizes the documented
 movie year, provider-ID, edition, multipart, episode-coordinate, and music-video track forms. Show
