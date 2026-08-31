@@ -99,21 +99,23 @@ onMounted(() => void librariesStore.load());
 				<option value="other">Other</option>
 			</select></label
 			>
-			<label class="span-2"
-			><span>Path Moirai scans</span
-			><input v-model="form.sourceConfig.scanRoot" required placeholder="/media/movies"
-			/></label>
+			<div class="library-source-row span-2">
+				<label
+				><span>Path Moirai scans</span
+				><input v-model="form.sourceConfig.scanRoot" required placeholder="/media/movies"
+				/></label>
+				<label class="check"
+				><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label
+				>
+			</div>
 			<label class="span-2"
 			><span>Path playback engine sees <small>optional</small></span
 			><input v-model="form.sourceConfig.playbackRoot" placeholder="/media/movies"
 			/></label>
-			<label
+			<label class="span-2"
 			><span>Fallback scan, minutes</span
 			><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080"
 			/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
-			<label class="check"
-			><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label
-			>
 			<p v-if="error" class="notice error span-2">{{ error }}</p>
 			<div class="form-actions span-2">
 				<button class="button" :disabled="busy">{{ busy ? 'Adding…' : 'Add and scan' }}</button>

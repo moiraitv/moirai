@@ -686,6 +686,10 @@ body:has(.standalone-editor-backdrop) {
 		grid-template-columns: 1fr;
 	}
 
+	.library-source-row {
+		grid-template-columns: 1fr;
+	}
+
 	.playback-client {
 		grid-template-columns: 1fr;
 		gap: 2px;
