@@ -149,7 +149,7 @@ onMounted(() => void librariesStore.load());
 			</RouterLink>
 		</div>
 		<div v-else-if="loaded && !showForm" class="empty-state">
-			<span>◇</span>
+			<FolderOpen :size="48" />
 			<h3>Build your first library</h3>
 			<p>Choose a folder with media and Kodi-compatible NFO sidecars.</p>
 		</div>

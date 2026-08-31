@@ -293,7 +293,7 @@ onUnmounted(() => {
 				</RouterLink>
 			</div>
 			<div v-else class="empty-state">
-				<span>◇</span>
+				<Library :size="48" />
 				<h3>No libraries yet</h3>
 				<p>Add a media folder to begin building the index.</p>
 				<RouterLink class="button" to="/libraries">Add library</RouterLink>
