@@ -217,6 +217,25 @@ export const mediaItems = sqliteTable(
 	],
 );
 
+/** Qualified anonymous media encounters used to derive decaying scheduling preferences. */
+export const viewingPreferenceEvents = sqliteTable(
+	'viewing_preference_events',
+	{
+		id: text('id').primaryKey(),
+		mediaItemId: text('media_item_id').references(() => mediaItems.id, { onDelete: 'set null' }),
+		showGroupId: text('show_group_id').references(() => mediaGroups.id, { onDelete: 'set null' }),
+		points: integer('points').notNull(),
+		encounterType: text('encounter_type').$type<'initial' | 'continued'>().notNull(),
+		occurredAt: text('occurred_at').notNull(),
+	},
+	(table) => [
+		check('viewing_preference_events_points', sql`${table.points} IN (1, 2)`),
+		index('viewing_preference_events_time_idx').on(table.occurredAt),
+		index('viewing_preference_events_item_idx').on(table.mediaItemId),
+		index('viewing_preference_events_show_idx').on(table.showGroupId),
+	],
+);
+
 /** Compatibility aliases from absorbed multipart component IDs to their logical item. */
 export const mediaItemAliases = sqliteTable(
 	'media_item_aliases',

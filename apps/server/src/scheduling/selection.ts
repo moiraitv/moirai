@@ -8,6 +8,7 @@ import {
 	type SelectionStateRecord,
 	type SelectionStateValue,
 	type TimelineIssue,
+	type ViewingPreferenceScores,
 } from '@moirai/shared';
 import { stableJson, stableJsonFingerprint } from './stable-json.js';
 
@@ -41,6 +42,7 @@ export interface SelectionContext {
 	scheduleLayerId: string | null;
 	slotId: string;
 	now: string;
+	viewingPreferences: ViewingPreferenceScores;
 	selectionStart: string;
 	occupiedMedia: Array<{ mediaItemId: string; start: string; finish: string }>;
 }
@@ -59,6 +61,49 @@ function collisionFreeCandidates(
 			&& finishMs > Date.parse(occupied.start));
 	});
 	return available.length > 0 ? available : candidates;
+}
+
+/** Return the show ancestor that shares preference across episodes. */
+function showIdFor(media: SchedulableMedia, context: SelectionContext): string | null {
+	let current = media.groupId;
+	const visited = new Set<string>();
+	while (current && !visited.has(current)) {
+		if (context.catalog.groupKinds?.[current] === 'show') {
+			return current;
+		}
+
+		visited.add(current);
+		current = context.catalog.groupParents[current] ?? null;
+	}
+	return null;
+}
+
+/** Convert a decayed preference signal into a bounded odds multiplier. */
+function viewingPreferenceWeight(media: SchedulableMedia, context: SelectionContext): number {
+	const itemScore = context.viewingPreferences.itemScores[media.id] ?? 0;
+	const showId = showIdFor(media, context);
+	const score = showId
+		? (itemScore + (context.viewingPreferences.showScores[showId] ?? 0)) / 2
+		: itemScore;
+	return 1 + (4 * score) / (score + 8);
+}
+
+/** Order candidates by a deterministic weighted exponential race. */
+function weightedOrder(
+	candidates: SchedulableMedia[],
+	seed: string,
+	consumerKey: string,
+	counter: number,
+	context: SelectionContext,
+): SchedulableMedia[] {
+	return [...candidates].sort((left, right) => {
+		const key = (candidate: SchedulableMedia): number => {
+			const hash = deterministicNumber(`${seed}:${consumerKey}:${counter}:${candidate.id}`);
+			const uniform = (hash + 1) / (0xffffffffffff + 2);
+			return -Math.log(uniform) / viewingPreferenceWeight(candidate, context);
+		};
+		return key(left) - key(right) || left.id.localeCompare(right.id);
+	});
 }
 
 /** Derive a repeatable numeric value from a string seed. */
@@ -555,6 +600,45 @@ function chooseContent(
 		}
 
 		value.remainingItemIds = value.remainingItemIds.filter((id) => id !== selected.id);
+		value.lastItemId = selected.id;
+		record.updatedAt = context.now;
+		return selected;
+	}
+
+	// Draw independently by learned weight while preventing avoidable immediate repeats.
+	if (strategy.type === 'weighted-random') {
+		const record = stateFor(
+			state,
+			consumerKey,
+			program.config,
+			{ type: 'weighted-random', counter: 0, lastItemId: null },
+			context.now,
+		);
+		const value = record.value as Extract<SelectionStateValue, { type: 'weighted-random' }>;
+		let ordered = collisionFreeCandidates(
+			weightedOrder(candidates, strategy.seed, consumerKey, value.counter, context),
+			context,
+		);
+		const alternative = ordered.some((candidate) =>
+			candidate.id !== value.lastItemId
+			&& (fitSeconds === null || candidate.durationSeconds! <= fitSeconds));
+		if (alternative && value.lastItemId) {
+			ordered = ordered.filter((candidate) => candidate.id !== value.lastItemId);
+		}
+		const selected = fitSeconds === null
+			? ordered[0]!
+			: fitMode === 'first-fit-arbitrary'
+				? (ordered.find((candidate) => candidate.durationSeconds! <= fitSeconds) ?? null)
+				: (ordered
+					.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
+					.sort((a, b) =>
+						b.durationSeconds! - a.durationSeconds! || ordered.indexOf(a) - ordered.indexOf(b))[0]
+						?? null);
+		if (!selected) {
+			return null;
+		}
+
+		value.counter += 1;
 		value.lastItemId = selected.id;
 		record.updatedAt = context.now;
 		return selected;

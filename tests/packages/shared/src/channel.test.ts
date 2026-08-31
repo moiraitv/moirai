@@ -66,7 +66,10 @@ describe('channel external contracts', () => {
 	});
 
 	it('bounds the configurable concurrent playback capacity', () => {
-		expect(playbackSettingsSchema.parse({})).toEqual({ maxActiveSessions: 4 });
+		expect(playbackSettingsSchema.parse({})).toEqual({
+			maxActiveSessions: 4,
+			viewingPreferencesEnabled: true,
+		});
 		expect(playbackSettingsSchema.safeParse({ maxActiveSessions: 32 }).success).toBe(true);
 		expect(playbackSettingsSchema.safeParse({ maxActiveSessions: 33 }).success).toBe(false);
 	});

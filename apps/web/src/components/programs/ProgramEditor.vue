@@ -168,7 +168,7 @@ const form = reactive({
 	genres: [] as string[],
 	selectedItemIds: [] as string[],
 	selectedGroupIds: [] as string[],
-	strategy: 'sequential' as 'sequential' | 'shuffle' | 'random',
+	strategy: 'sequential' as 'sequential' | 'shuffle' | 'random' | 'weighted-random',
 	seed: '',
 	repeat: true,
 	entries: [] as Array<{ id: string; programId: string; count: number }>,

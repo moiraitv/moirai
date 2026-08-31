@@ -365,6 +365,55 @@
 	border-top: 1px solid var(--line);
 }
 
+.viewing-preferences-panel {
+	display: grid;
+	gap: 0.85rem;
+}
+
+.settings-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+}
+
+.settings-toggle input {
+	width: auto;
+}
+
+.viewing-preference-list {
+	display: grid;
+	gap: 0.45rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.viewing-preference-list li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.65rem 0;
+	border-bottom: 1px solid var(--line);
+}
+
+.viewing-preference-list span {
+	display: grid;
+	gap: 0.2rem;
+}
+
+.viewing-preference-list output {
+	font-variant-numeric: tabular-nums;
+	color: var(--accent);
+}
+
+.viewing-preference-danger {
+	margin-top: 0.5rem;
+	padding: 1rem;
+	border: 1px solid var(--danger);
+	border-radius: 10px;
+}
+
 .status-session-heading {
 	margin-top: 0;
 }

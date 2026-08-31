@@ -184,13 +184,14 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
                   WHERE media_groups.parent_id IS NOT NULL
                 )
               SELECT DISTINCT media_groups.id, media_groups.parent_id AS parentId,
-                media_groups.title
+                media_groups.title, media_groups.kind
               FROM media_groups JOIN related ON related.id = media_groups.id`,
 					)
 					.all(JSON.stringify(scope.groupIds)) as Array<{
 					id: string;
 					parentId: string | null;
 					title: string;
+					kind: string;
 				}>)
 				: [];
 		const relatedGroupIds = relatedGroupRows.map((group) => group.id);
@@ -254,6 +255,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						id: mediaGroups.id,
 						parentId: mediaGroups.parentId,
 						title: mediaGroups.title,
+						kind: mediaGroups.kind,
 					})
 					.from(mediaGroups)
 					.where(
@@ -365,6 +367,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				};
 			}),
 			groupParents: Object.fromEntries(groups.map((group) => [group.id, group.parentId])),
+			groupKinds: Object.fromEntries(groups.map((group) => [group.id, group.kind])),
 			groupTitles: Object.fromEntries(groups.map((group) => [group.id, group.title])),
 			libraryNames: Object.fromEntries(
 				sourceLibraries.map((library) => [library.id, library.name]),

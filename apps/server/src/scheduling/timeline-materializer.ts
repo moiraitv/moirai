@@ -7,6 +7,7 @@ import {
 	type SchedulingCatalog,
 	type SchedulingProgram,
 	type SelectionStateRecord,
+	type ViewingPreferenceScores,
 } from '@moirai/shared';
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import { internalErrorMessage } from '../error-message.js';
@@ -370,11 +371,16 @@ export class TimelineMaterializer {
 	/** Refresh each configured channel using one shared catalog snapshot. */
 	private async materializeAll(): Promise<void> {
 		const programsPromise = this.repository.listPrograms();
-		const [schedules, templates, programs] = await Promise.all([
+		const [schedules, templates, programs, playbackSettings] = await Promise.all([
 			this.repository.listChannelSchedules(),
 			this.repository.listScheduleTemplates(),
 			programsPromise,
+			this.repository.getPlaybackSettings(),
 		]);
+		const preferenceAsOf = currentTimestamp();
+		const viewingPreferences = playbackSettings.viewingPreferencesEnabled
+			? this.repository.viewingPreferenceScores(preferenceAsOf)
+			: { itemScores: {}, showScores: {} };
 		const catalog = await this.repository.getSchedulingCatalog(
 			programs,
 			schedulingRootProgramIds(templates, schedules),
@@ -410,6 +416,7 @@ export class TimelineMaterializer {
 					templates,
 					programs,
 					catalog,
+					viewingPreferences,
 					occupiedMedia,
 				);
 			}
@@ -430,6 +437,7 @@ export class TimelineMaterializer {
 		templates: ScheduleTemplate[],
 		programs: SchedulingProgram[],
 		sourceCatalog: SchedulingCatalog,
+		viewingPreferences: ViewingPreferenceScores,
 		occupiedMedia: OccupiedMediaInterval[],
 	): Promise<void> {
 		// Resolve the base template and desired rolling guide window.
@@ -545,6 +553,7 @@ export class TimelineMaterializer {
 				programs,
 				catalog,
 				state: initialState,
+				viewingPreferences,
 				occupiedMedia: occupiedMedia
 					.filter((entry) => entry.channelId !== schedule.channelId)
 					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),
@@ -561,6 +570,7 @@ export class TimelineMaterializer {
 				programs,
 				catalog,
 				state: initialState,
+				viewingPreferences,
 				occupiedMedia: occupiedMedia
 					.filter((entry) => entry.channelId !== schedule.channelId)
 					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),

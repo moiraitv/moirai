@@ -55,6 +55,7 @@ export const selectionStrategySchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('sequential') }),
 	z.object({ type: z.literal('shuffle'), seed: z.string().trim().max(200).default('') }),
 	z.object({ type: z.literal('random'), seed: z.string().trim().max(200).default('') }),
+	z.object({ type: z.literal('weighted-random'), seed: z.string().trim().max(200).default('') }),
 ]);
 /** Shared wire contract for selection strategy. */
 export type SelectionStrategy = z.infer<typeof selectionStrategySchema>;
@@ -526,6 +527,7 @@ export type SelectionStateValue
 			lastItemId: string | null;
 		}
 		| { type: 'random'; counter: number; lastItemId: string | null }
+		| { type: 'weighted-random'; counter: number; lastItemId: string | null }
 		| { type: 'sequence'; entryIndex: number; selectedInEntry: number; completed: boolean };
 
 /** Shared wire contract for selection state record. */
@@ -573,6 +575,8 @@ export interface SchedulingCatalog {
 	mediaByGroup?: ReadonlyMap<string, SchedulableMedia[]>;
 	mediaAliases?: Record<string, string>;
 	groupParents: Record<string, string | null>;
+	/** Group kinds used to roll episode preference up to its owning show. */
+	groupKinds?: Record<string, string>;
 	libraryAvailability: Record<string, SourceAvailability>;
 	/** Authored enablement stays separate from temporary source health. */
 	libraryEnabled?: Record<string, boolean>;

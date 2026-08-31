@@ -104,6 +104,11 @@ function fixture() {
 		listChannelSchedules: vi.fn(async () => [schedule]),
 		listScheduleTemplates: vi.fn(async () => [template]),
 		listPrograms: vi.fn(async () => [program]),
+		getPlaybackSettings: vi.fn(async () => ({
+			maxActiveSessions: 4,
+			viewingPreferencesEnabled: true,
+		})),
+		viewingPreferenceScores: vi.fn(() => ({ itemScores: {}, showScores: {} })),
 		getSchedulingCatalog: vi.fn(async () => catalog),
 		getTimelineMaterialization: vi.fn(async () => materialization),
 		listMaterializedTimelineSegments: vi.fn(

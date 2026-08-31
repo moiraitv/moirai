@@ -372,7 +372,8 @@ A program separates content eligibility from selection behavior. Content sources
 Library catalog pages can add one page-local selection or every recursively matching filtered item
 to a selected-items program. The same action is available from media details. A destination can be
 an existing selected-items program for that library or a newly named program with sequential,
-shuffle, or random ordering. The server canonicalizes and deduplicates item references, appends them
+shuffle, random, or viewing-weighted random ordering. The server canonicalizes and deduplicates item
+references, appends them
 atomically, and rejects the whole request when the resulting collection would exceed the configured
 limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 5,000 and may be set from 1 through the
 25,000-item
@@ -384,9 +385,12 @@ do not require confirmation, and a changed item set invalidates a stale confirma
 mutating the program. Reordering the same additions also invalidates confirmation for sequential
 programs, while shuffle and random programs compare additions as an unordered set.
 
-Selection strategies include sequential, deterministic shuffle without repeats, and deterministic
-random selection. Persistent selection state remains separate from configuration, allowing a daily
-slot to resume tomorrow instead of restarting.
+Selection strategies include sequential, deterministic shuffle without repeats, deterministic
+random selection, and deterministic viewing-weighted random selection. Weighted selection retains
+baseline odds for unseen content, blends episode and show preference equally, caps preference
+influence below five times baseline, and avoids an immediate repeat when another item fits.
+Persistent selection state remains separate from configuration, allowing a daily slot to resume
+tomorrow instead of restarting.
 
 Newly generated timeline material avoids scheduling the same exact media item concurrently on two
 channels when another candidate is eligible. The check covers primary and filler selection, rotates
@@ -575,6 +579,15 @@ uses its captured artwork reference. The Status page shows that poster, advances
 locally, refreshes at its finish boundary, follows playback events, and periodically reads the
 non-cacheable status resource so session starts and stops recover even when a live event connection
 is interrupted.
+
+When local viewing preferences are enabled, each approximate client and media encounter must remain
+active for two minutes before it is recorded. The initial item in a tune session contributes two
+points and later items contribute one. Only media and show references, encounter type, points, and
+time are persisted; network addresses and User-Agents are not. Effective scores use a 180-day
+half-life, and negligible events are pruned after two years. Administrators can inspect the strongest
+decayed preferences, disable both collection and application, or permanently clear the history from
+Settings. Preference changes affect only timeline days subsequently appended to the committed
+14-day window.
 
 ### Development and production engine builds
 

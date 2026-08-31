@@ -13,6 +13,7 @@ import type {
 	TimelineIssue,
 	TimelinePreview,
 	TimelineSegment,
+	ViewingPreferenceScores,
 } from '@moirai/shared';
 import { MAX_TIMELINE_SEGMENTS, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 import { predicateTimeBoundaries, schedulePredicateMatches } from './predicate.js';
@@ -48,6 +49,8 @@ export interface GenerateTimelineInput {
 	state: SelectionStateRecord[];
 	/** Continue a committed range at this instant instead of the first local midnight. */
 	initialCursor?: string;
+	/** Immutable decayed preference scores captured for this generation pass. */
+	viewingPreferences?: ViewingPreferenceScores;
 	/** Exact media intervals already committed or generated on other channels. */
 	occupiedMedia?: Array<{ mediaItemId: string; start: string; finish: string }>;
 }
@@ -358,6 +361,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				scheduleLayerId: layerId,
 				slotId: slot.id,
 				now: generatedAt,
+				viewingPreferences: input.viewingPreferences ?? { itemScores: {}, showScores: {} },
 				selectionStart: cursor.toString(),
 				occupiedMedia: input.occupiedMedia ?? [],
 			};

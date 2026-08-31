@@ -3,6 +3,7 @@ import type { ArtworkCache } from '../artwork/artwork-cache.js';
 import type { AppConfig } from '../config.js';
 import type { LogService } from './log-service.js';
 import type { Repository } from '../repository/index.js';
+import { VIEWING_PREFERENCE_RETENTION_DAYS } from '../repository/viewing-preferences.js';
 
 /** Delay between background retention and orphan-cleanup passes. */
 const MAINTENANCE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -85,6 +86,9 @@ export class MaintenanceService {
 			scanDays: this.config.scanHistoryRetentionDays,
 			scansPerLibrary: this.config.scanHistoryMaxPerLibrary,
 		});
+		this.repository.pruneViewingPreferences(new Date(
+			Date.now() - VIEWING_PREFERENCE_RETENTION_DAYS * 86_400_000,
+		).toISOString());
 		await this.logs.prune();
 		await this.artworkCache.pruneOrphans((libraryId, kind, ids) =>
 			this.repository.existingArtworkOwnerIds(libraryId, kind, ids));

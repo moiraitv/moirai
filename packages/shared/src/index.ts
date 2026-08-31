@@ -508,9 +508,25 @@ export function effectiveChannelTvgId(channel: Pick<Channel, 'id' | 'number'>): 
 /** Validate settings that can be changed without restarting the playback engine. */
 export const playbackSettingsSchema = z.object({
 	maxActiveSessions: z.number().int().min(1).max(32).default(4),
+	viewingPreferencesEnabled: z.boolean().default(true),
 });
 /** Shared wire contract for playback settings. */
 export type PlaybackSettings = z.infer<typeof playbackSettingsSchema>;
+
+/** One effective locally learned preference shown to an administrator. */
+export interface ViewingPreferenceSummary {
+	id: string;
+	kind: 'item' | 'show';
+	title: string;
+	score: number;
+	lastViewedAt: string;
+}
+
+/** Decayed item and show scores consumed by deterministic timeline generation. */
+export interface ViewingPreferenceScores {
+	itemScores: Record<string, number>;
+	showScores: Record<string, number>;
+}
 
 /** Server-visible identity and activity for one client currently consuming a channel session. */
 export interface PlaybackClientStatus {

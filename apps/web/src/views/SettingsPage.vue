@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
-import { Copy, RefreshCw, Save } from '@lucide/vue';
-import type { PlaybackEngineStatus, PlaybackSettings } from '@moirai/shared';
+import { Copy, RefreshCw, Save, Trash2 } from '@lucide/vue';
+import type {
+	PlaybackEngineStatus,
+	PlaybackSettings,
+	ViewingPreferenceSummary,
+} from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
@@ -9,12 +13,20 @@ import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
 import { liveEvents } from '../live-events';
 
-const settings = reactive<PlaybackSettings>({ maxActiveSessions: 4 });
+const settings = reactive<PlaybackSettings>({
+	maxActiveSessions: 4,
+	viewingPreferencesEnabled: true,
+});
 const status = ref<PlaybackEngineStatus | null>(null);
 const initialLoading = ref(true);
 const saving = ref(false);
 const message = ref('');
 const error = ref('');
+const preferences = ref<ViewingPreferenceSummary[]>([]);
+const preferencesLoading = ref(true);
+const preferencesError = ref('');
+const clearingPreferences = ref(false);
+const clearConfirmation = ref('');
 let refreshingStatus = false;
 let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
 /** Polling interval that keeps client activity current without following every segment request. */
@@ -22,6 +34,17 @@ const STATUS_REFRESH_INTERVAL_MS = 15_000;
 
 /** Load playback settings and live engine state. */
 async function load(): Promise<void> {
+	const preferenceLoad = api.viewingPreferences()
+		.then((loadedPreferences) => {
+			preferences.value = loadedPreferences;
+			preferencesError.value = '';
+		})
+		.catch((cause) => {
+			preferencesError.value = errorMessage(cause);
+		})
+		.finally(() => {
+			preferencesLoading.value = false;
+		});
 	try {
 		const [loadedSettings, loadedStatus] = await Promise.all([
 			api.playbackSettings(),
@@ -37,6 +60,35 @@ async function load(): Promise<void> {
 	finally {
 		initialLoading.value = false;
 	}
+	await preferenceLoad;
+}
+
+/** Clear local anonymous viewing history after exact typed confirmation. */
+async function clearViewingPreferences(): Promise<void> {
+	if (clearConfirmation.value !== 'CLEAR VIEWING HISTORY') {
+		return;
+	}
+
+	clearingPreferences.value = true;
+	message.value = '';
+	error.value = '';
+	try {
+		await api.clearViewingPreferences();
+		preferences.value = [];
+		clearConfirmation.value = '';
+		message.value = 'Viewing history cleared.';
+	}
+	catch (cause) {
+		error.value = errorMessage(cause);
+	}
+	finally {
+		clearingPreferences.value = false;
+	}
+}
+
+/** Format one decayed preference score for an understandable compact ranking. */
+function preferenceScore(value: number): string {
+	return value.toFixed(value >= 10 ? 1 : 2);
 }
 
 /** Refresh engine state without replacing an edited capacity value. */
@@ -161,6 +213,33 @@ onUnmounted(() => {
 				<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
 				<code>{{ status?.contractRevision.slice(0, 12) }}</code>
 			</aside>
+			<section class="panel viewing-preferences-panel span-2">
+				<p class="eyebrow">Local viewing preferences</p>
+				<h2>Learn what viewers choose</h2>
+				<p>Moirai anonymously scores media that remains tuned for at least two minutes. Network addresses and client details are never stored in viewing history.</p>
+				<label class="settings-toggle">
+					<input v-model="settings.viewingPreferencesEnabled" type="checkbox" />
+					<span>Learn from channel viewing and apply it to Weighted Random programs</span>
+				</label>
+				<div><button type="button" class="button secondary" :disabled="saving" @click="save"><Save :size="17" />Save preference setting</button></div>
+				<p v-if="preferencesLoading">Loading learned preferences…</p>
+				<p v-else-if="preferencesError" class="notice error">{{ preferencesError }}</p>
+				<p v-else-if="preferences.length === 0" class="muted">No qualified viewing has been recorded yet.</p>
+				<ol v-else class="viewing-preference-list">
+					<li v-for="preference in preferences" :key="`${preference.kind}:${preference.id}`">
+						<span><strong>{{ preference.title }}</strong><small>{{ preference.kind === 'show' ? 'Show' : 'Item' }} · Last viewed {{ new Date(preference.lastViewedAt).toLocaleDateString() }}</small></span>
+						<output>{{ preferenceScore(preference.score) }}</output>
+					</li>
+				</ol>
+				<div class="viewing-preference-danger">
+					<strong>Clear all viewing history</strong>
+					<p>This permanently removes every learned preference. Type <code>CLEAR VIEWING HISTORY</code> to confirm.</p>
+					<div class="input-with-action">
+						<input v-model="clearConfirmation" autocomplete="off" aria-label="Viewing history confirmation" />
+						<button type="button" class="button danger" :disabled="clearingPreferences || clearConfirmation !== 'CLEAR VIEWING HISTORY'" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear history' }}</button>
+					</div>
+				</div>
+			</section>
 		</div>
 	</section>
 </template>

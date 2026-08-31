@@ -41,6 +41,7 @@ import type {
 	LogLevel,
 	LogPage,
 	DataConflictReport,
+	ViewingPreferenceSummary,
 } from '@moirai/shared';
 
 /** Current synchronizer token sent with unsafe administrator requests. */
@@ -414,6 +415,13 @@ export const api = {
 			method: 'PUT',
 			body: JSON.stringify(body),
 		}),
+	viewingPreferences: (limit = 20) => request<ViewingPreferenceSummary[]>(
+		`/api/v1/viewing-preferences?${new URLSearchParams({ limit: String(limit) })}`,
+	),
+	clearViewingPreferences: () => request<void>('/api/v1/viewing-preferences/clear', {
+		method: 'POST',
+		body: JSON.stringify({ confirmation: 'CLEAR VIEWING HISTORY' }),
+	}),
 	restartPlaybackChannel: (id: string) =>
 		request<void>(`/api/v1/playback/channels/${id}/restart`, { method: 'POST' }),
 };

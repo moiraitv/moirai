@@ -1338,7 +1338,10 @@ describe('API', () => {
 			payload: { maxActiveSessions: 6 },
 		});
 		expect(saved.statusCode).toBe(200);
-		expect(saved.json()).toEqual({ maxActiveSessions: 6 });
+		expect(saved.json()).toEqual({
+			maxActiveSessions: 6,
+			viewingPreferencesEnabled: true,
+		});
 		const status = await app.inject({ url: '/api/v1/playback/status' });
 		expect(status.headers['cache-control']).toBe('private, no-store');
 		expect(status.json()).toMatchObject({
@@ -1347,6 +1350,25 @@ describe('API', () => {
 			m3uUrl: 'https://moirai.example.test/iptv/channels.m3u',
 			epgUrl: 'https://moirai.example.test/epg.xml',
 		});
+	});
+
+	it('lists and explicitly clears local viewing preferences', async () => {
+		const { app } = await fixture();
+		const listed = await app.inject({ url: '/api/v1/viewing-preferences' });
+		expect(listed.statusCode).toBe(200);
+		expect(listed.json()).toEqual([]);
+		const rejected = await app.inject({
+			method: 'POST',
+			url: '/api/v1/viewing-preferences/clear',
+			payload: { confirmation: 'clear' },
+		});
+		expect(rejected.statusCode).toBe(400);
+		const cleared = await app.inject({
+			method: 'POST',
+			url: '/api/v1/viewing-preferences/clear',
+			payload: { confirmation: 'CLEAR VIEWING HISTORY' },
+		});
+		expect(cleared.statusCode).toBe(204);
 	});
 
 	it('predicts Automatic using server-visible playback hardware', async () => {

@@ -67,6 +67,22 @@ CREATE INDEX `media_items_library_group_idx` ON `media_items` (`library_id`,`gro
 --> statement-breakpoint
 CREATE INDEX `media_items_library_title_idx` ON `media_items` (`library_id`,`sort_title`);
 --> statement-breakpoint
+CREATE TABLE `viewing_preference_events` (
+  `id` text PRIMARY KEY NOT NULL,
+  `media_item_id` text REFERENCES `media_items`(`id`) ON UPDATE no action ON DELETE set null,
+  `show_group_id` text REFERENCES `media_groups`(`id`) ON UPDATE no action ON DELETE set null,
+  `points` integer NOT NULL,
+  `encounter_type` text NOT NULL,
+  `occurred_at` text NOT NULL,
+  CONSTRAINT `viewing_preference_events_points` CHECK(`points` IN (1, 2))
+);
+--> statement-breakpoint
+CREATE INDEX `viewing_preference_events_time_idx` ON `viewing_preference_events` (`occurred_at`);
+--> statement-breakpoint
+CREATE INDEX `viewing_preference_events_item_idx` ON `viewing_preference_events` (`media_item_id`);
+--> statement-breakpoint
+CREATE INDEX `viewing_preference_events_show_idx` ON `viewing_preference_events` (`show_group_id`);
+--> statement-breakpoint
 CREATE TABLE `scan_runs` (
   `id` text PRIMARY KEY NOT NULL,
   `library_id` text NOT NULL REFERENCES `libraries`(`id`) ON DELETE cascade,

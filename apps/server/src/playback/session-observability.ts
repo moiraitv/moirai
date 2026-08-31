@@ -18,6 +18,12 @@ export interface PlaybackClientObservation {
 	userAgent: string | null;
 }
 
+/** Transient identity result used to deduplicate one anonymous tune session. */
+export interface PlaybackClientActivity {
+	key: string;
+	started: boolean;
+}
+
 /** Client record with numeric activity time retained only inside the playback engine. */
 interface TrackedPlaybackClient extends PlaybackClientStatus {
 	lastSeenMs: number;
@@ -67,7 +73,7 @@ export class PlaybackClientTracker {
 	private readonly clients = new Map<string, TrackedPlaybackClient>();
 
 	/** Record one playlist or segment request using only sanitized server-visible identity data. */
-	observe(observation: PlaybackClientObservation, nowMs = Date.now()): void {
+	observe(observation: PlaybackClientObservation, nowMs = Date.now()): PlaybackClientActivity {
 		const address = normalizeClientValue(
 			observation.address,
 			MAX_CLIENT_ADDRESS_LENGTH,
@@ -83,7 +89,7 @@ export class PlaybackClientTracker {
 		if (current) {
 			current.lastSeenAt = timestamp;
 			current.lastSeenMs = nowMs;
-			return;
+			return { key, started: false };
 		}
 
 		if (this.clients.size >= MAX_SESSION_CLIENTS) {
@@ -101,6 +107,7 @@ export class PlaybackClientTracker {
 			lastSeenAt: timestamp,
 			lastSeenMs: nowMs,
 		});
+		return { key, started: true };
 	}
 
 	/** Return currently active clients ordered by their most recent request. */

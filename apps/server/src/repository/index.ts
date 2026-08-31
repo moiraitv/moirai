@@ -23,6 +23,8 @@ import type {
 	SelectionStateRecord,
 	ChannelTimelineMaterializationStatus,
 	DataConflictReport,
+	ViewingPreferenceScores,
+	ViewingPreferenceSummary,
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import { MediaCatalogRepository } from './catalog.js';
@@ -30,6 +32,7 @@ import { AuthenticationRepository } from './authentication.js';
 import { ChannelRepository } from './channels.js';
 import { SchedulingRepository } from './scheduling.js';
 import { SettingsRepository } from './settings.js';
+import { ViewingPreferenceRepository } from './viewing-preferences.js';
 import { LibraryRepository } from './libraries.js';
 import { listDataConflicts } from './conflicts.js';
 import type {
@@ -74,6 +77,7 @@ export class Repository extends LibraryRepository {
 	private readonly channels: ChannelRepository;
 	private readonly scheduling: SchedulingRepository;
 	private readonly settings: SettingsRepository;
+	private readonly viewingPreferences: ViewingPreferenceRepository;
 
 	constructor(private readonly database: MoiraiDatabase) {
 		super(database);
@@ -82,6 +86,7 @@ export class Repository extends LibraryRepository {
 		this.channels = new ChannelRepository(database);
 		this.scheduling = new SchedulingRepository(database);
 		this.settings = new SettingsRepository(database);
+		this.viewingPreferences = new ViewingPreferenceRepository(database);
 	}
 
 	/** Run the smallest SQLite query used to verify database readiness. */
@@ -410,5 +415,40 @@ export class Repository extends LibraryRepository {
 	/** Persist validated playback settings. */
 	async setPlaybackSettings(value: PlaybackSettings): Promise<PlaybackSettings> {
 		return this.settings.setPlaybackSettings(value);
+	}
+
+	/** Persist one qualified anonymous media encounter. */
+	recordViewingPreference(
+		mediaItemId: string,
+		points: 1 | 2,
+		encounterType: 'initial' | 'continued',
+		occurredAt: string,
+	): void {
+		this.viewingPreferences.recordViewingPreference(
+			mediaItemId,
+			points,
+			encounterType,
+			occurredAt,
+		);
+	}
+
+	/** Return the current decayed viewing-preference score snapshot. */
+	viewingPreferenceScores(asOf: string): ViewingPreferenceScores {
+		return this.viewingPreferences.viewingPreferenceScores(asOf);
+	}
+
+	/** List the strongest current learned preferences. */
+	listViewingPreferences(asOf: string, limit: number): ViewingPreferenceSummary[] {
+		return this.viewingPreferences.listViewingPreferences(asOf, limit);
+	}
+
+	/** Remove all learned viewing preferences. */
+	clearViewingPreferences(): void {
+		this.viewingPreferences.clearViewingPreferences();
+	}
+
+	/** Prune expired or orphaned viewing-preference events. */
+	pruneViewingPreferences(cutoff: string): void {
+		this.viewingPreferences.pruneViewingPreferences(cutoff);
 	}
 }

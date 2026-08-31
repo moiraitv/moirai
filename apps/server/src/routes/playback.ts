@@ -11,6 +11,8 @@ import {
 	hardwareAccelerationPredictionSchema,
 	playbackEngineStatusSchema,
 	playbackSettingsResponseSchema,
+	clearViewingPreferencesSchema,
+	viewingPreferenceListSchema,
 } from '@moirai/shared/api-contracts';
 import { publicChannelLogoUrl } from '../artwork/channel-logo-url.js';
 import type { PlaybackEngine } from '../playback/playback-engine.js';
@@ -34,6 +36,11 @@ const channelNumberParamsSchema = z.object({ number: z.string().min(1).max(32) }
 const sessionFileParamsSchema = z.object({
 	channelId: z.uuid(),
 	filename: z.string().min(1).max(180),
+});
+
+/** Bounded preference-summary query. */
+const viewingPreferenceQuerySchema = z.object({
+	limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 /** Dependencies used by playback management and public IPTV delivery. */
@@ -138,6 +145,33 @@ export function registerPlaybackRoutes(
 		}),
 	}, async (request) =>
 		playback.updateSettings(playbackSettingsSchema.parse(request.body)));
+	app.get('/api/v1/viewing-preferences', {
+		schema: apiOperation({
+			operationId: 'listViewingPreferences',
+			tags: ['Playback'],
+			summary: 'List learned viewing preferences',
+			querystring: viewingPreferenceQuerySchema,
+			response: { 200: responseContent('Viewing preferences', 'application/json', viewingPreferenceListSchema) },
+			errors: [400, 500, 503],
+		}),
+	}, async (request) => {
+		const query = viewingPreferenceQuerySchema.parse(request.query);
+		return repository.listViewingPreferences(new Date().toISOString(), query.limit);
+	});
+	app.post('/api/v1/viewing-preferences/clear', {
+		schema: apiOperation({
+			operationId: 'clearViewingPreferences',
+			tags: ['Playback'],
+			summary: 'Clear learned viewing preferences',
+			body: clearViewingPreferencesSchema,
+			response: { 204: emptyResponseSchema },
+			errors: [400, 500, 503],
+		}),
+	}, async (request, reply) => {
+		clearViewingPreferencesSchema.parse(request.body);
+		repository.clearViewingPreferences();
+		return reply.status(204).send();
+	});
 	app.post('/api/v1/playback/hardware-acceleration/predict', {
 		schema: apiOperation({
 			operationId: 'predictHardwareAcceleration',

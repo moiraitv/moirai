@@ -344,6 +344,11 @@ export const selectionStateRecordSchema = z.object({
 		}),
 		z.object({ type: z.literal('random'), counter: z.number().int(), lastItemId: idSchema.nullable() }),
 		z.object({
+			type: z.literal('weighted-random'),
+			counter: z.number().int(),
+			lastItemId: idSchema.nullable(),
+		}),
+		z.object({
 			type: z.literal('sequence'),
 			entryIndex: z.number().int(),
 			selectedInEntry: z.number().int(),
@@ -439,6 +444,23 @@ export const playbackEngineStatusSchema = z.object({
 
 /** Runtime-adjustable playback settings response. */
 export const playbackSettingsResponseSchema = playbackSettingsSchema;
+
+/** One effective locally learned preference returned to an administrator. */
+export const viewingPreferenceSummarySchema = z.object({
+	id: idSchema,
+	kind: z.enum(['item', 'show']),
+	title: z.string(),
+	score: z.number().nonnegative(),
+	lastViewedAt: z.iso.datetime({ offset: true }),
+});
+
+/** Bounded viewing-preference list response. */
+export const viewingPreferenceListSchema = z.array(viewingPreferenceSummarySchema).max(100);
+
+/** Explicit destructive confirmation required to clear local viewing history. */
+export const clearViewingPreferencesSchema = z.object({
+	confirmation: z.literal('CLEAR VIEWING HISTORY'),
+});
 
 /** Draft channel values used to predict Moirai's automatic hardware selection. */
 export const hardwareAccelerationPredictionRequestSchema = videoNormalizationSchema.pick({

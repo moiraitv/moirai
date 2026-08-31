@@ -62,7 +62,7 @@ function program(value: number, config: ProgramConfig): SchedulingProgram {
 function contentProgram(
 	value: number,
 	itemIds: number[] | number,
-	strategy: 'sequential' | 'shuffle' | 'random' = 'sequential',
+	strategy: 'sequential' | 'shuffle' | 'random' | 'weighted-random' = 'sequential',
 ): SchedulingProgram {
 	const ids = Array.isArray(itemIds) ? itemIds : [itemIds];
 	return program(value, {
@@ -167,6 +167,23 @@ function primaryTitles(result: ReturnType<typeof generateTimeline>, slotIndex = 
 }
 
 describe('schedule timeline engine', () => {
+	it('uses decayed preference weights while retaining baseline variety and no immediate repeat', () => {
+		const items = [media(1, 60), media(2, 60), media(3, 60)];
+		const weighted = contentProgram(10, [1, 2, 3], 'weighted-random');
+		const daily = template([{ programId: weighted.id, startSeconds: 0 }]);
+		const result = generateTimeline(input([weighted], items, daily, {
+			viewingPreferences: {
+				itemScores: { [uuid(1)]: 1_000 },
+				showScores: {},
+			},
+		}));
+		const titles = primaryTitles(result);
+		const favoredCount = titles.filter((title) => title === 'Item 1').length;
+		expect(favoredCount).toBeGreaterThan(titles.filter((title) => title === 'Item 2').length);
+		expect(new Set(titles)).toEqual(new Set(['Item 1', 'Item 2', 'Item 3']));
+		expect(titles.some((title, index) => index > 0 && title === titles[index - 1])).toBe(false);
+	});
+
 	it('avoids an exact-media cross-channel overlap when another candidate is available', () => {
 		const items = [media(1, 3_600), media(2, 3_600)];
 		const sequential = contentProgram(10, [1, 2]);
