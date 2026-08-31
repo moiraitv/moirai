@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type {
 	MediaGenreFacet,
 	MediaGroup,
@@ -285,7 +285,11 @@ export class CatalogAssetsRepository {
 			.select()
 			.from(mediaItemPeople)
 			.where(eq(mediaItemPeople.itemId, canonicalId))
-			.orderBy(asc(mediaItemPeople.sortOrder), asc(mediaItemPeople.name));
+			.orderBy(
+				asc(sql<number>`${mediaItemPeople.sortOrder} IS NULL`),
+				asc(mediaItemPeople.sortOrder),
+				asc(mediaItemPeople.name),
+			);
 		const groupTrail = row.groupId
 			? (this.db.$client
 				.prepare(

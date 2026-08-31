@@ -738,6 +738,13 @@ describe('Repository scan reconciliation', () => {
 			people: [
 				{
 					personType: 'actor' as const,
+					name: 'Aaron Unbilled',
+					normalizedName: 'aaron unbilled',
+					role: 'Bystander',
+					sortOrder: null,
+				},
+				{
+					personType: 'actor' as const,
 					name: 'Ada Actor',
 					normalizedName: 'ada actor',
 					role: 'Navigator',
@@ -897,7 +904,10 @@ describe('Repository scan reconciliation', () => {
 		expect(await repository.getMediaItem(alpha.id)).toMatchObject({
 			durationSeconds: 98.765,
 			genres: ['Drama', 'Science Fiction'],
-			actors: [{ name: 'Ada Actor', role: 'Navigator' }],
+			actors: [
+				{ name: 'Ada Actor', role: 'Navigator', sortOrder: 1 },
+				{ name: 'Aaron Unbilled', role: 'Bystander', sortOrder: null },
+			],
 		});
 		expect(await repository.listMediaItemsByIds(library.id, [beta.id, alpha.id])).toMatchObject([
 			{ title: 'Beta', durationSeconds: null },
