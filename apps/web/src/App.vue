@@ -216,6 +216,7 @@ onUnmounted(() => {
 							<Library :size="18" /><span>Library</span>
 						</RouterLink>
 						<button
+							v-if="!loaded || libraries.length > 0"
 							class="nav-section-toggle"
 							:aria-expanded="libraryNavOpen"
 							aria-label="Toggle configured libraries"
@@ -224,7 +225,7 @@ onUnmounted(() => {
 							<ChevronDown :size="16" :class="{ rotated: !libraryNavOpen }" />
 						</button>
 					</div>
-					<div v-show="libraryNavOpen" class="library-nav">
+					<div v-if="!loaded || libraries.length > 0" v-show="libraryNavOpen" class="library-nav">
 						<RouterLink
 							v-for="library in libraries"
 							:key="library.id"
@@ -235,7 +236,6 @@ onUnmounted(() => {
 							<span>{{ library.name }}</span>
 						</RouterLink>
 						<span v-if="!loaded" class="library-nav-empty">Loading libraries…</span>
-						<span v-else-if="!libraries.length" class="library-nav-empty">No libraries yet</span>
 					</div>
 				</div>
 
