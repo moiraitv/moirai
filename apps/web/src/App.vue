@@ -22,6 +22,7 @@ import type { PlaybackEngineStatus } from '@moirai/shared';
 import logoUrl from './assets/moirai-logo.png';
 import { api } from './api';
 import { liveEvents } from './live-events';
+import { clearMediaCardPreviewCache } from './media-card-preview';
 import { useLibrariesStore } from './stores/libraries';
 import { useChannelsStore } from './stores/channels';
 import { useAuthenticationStore } from './stores/authentication';
@@ -125,6 +126,9 @@ watch(
 	(value) => {
 		if (value) {
 			loadAdministrativeState();
+		}
+		else {
+			clearMediaCardPreviewCache();
 		}
 	},
 );

@@ -12,6 +12,7 @@ import {
 } from '@moirai/shared';
 import {
 	mediaBrowseResultSchema,
+	mediaCardPreviewSchema,
 	mediaGenreFacetSchema,
 	mediaGroupSchema,
 	mediaItemDetailSchema,
@@ -233,6 +234,23 @@ export function registerCatalogRoutes(
 		catch {
 			return item;
 		}
+	});
+	app.get('/api/v1/media/:id/card-preview', {
+		schema: apiOperation({
+			operationId: 'getMediaCardPreview',
+			tags: ['Catalog'],
+			summary: 'Read indexed media card preview metadata',
+			params: idParamsSchema,
+			response: { 200: responseContent('Bounded media card preview', 'application/json', mediaCardPreviewSchema) },
+			errors: [400, 404, 500],
+		}),
+	}, async (request) => {
+		const item = await repository.getMediaCardPreview(parseId(request));
+		if (!item) {
+			throw app.httpErrors.notFound('Media item not found');
+		}
+
+		return item;
 	});
 	/** Stream a validated source file with browser-seekable byte-range support. */
 	const serveMediaPreview: RouteHandlerMethod = async (request, reply) => {

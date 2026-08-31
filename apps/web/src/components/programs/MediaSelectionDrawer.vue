@@ -6,6 +6,7 @@ import LoadingState from '../LoadingState.vue';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
+import MediaCardPreview from '../MediaCardPreview.vue';
 
 defineProps<{
 	selectingGroups: boolean;
@@ -115,34 +116,36 @@ onMounted(async () => {
 							</article>
 						</div>
 						<div v-else-if="!selectingGroups && items.length" class="selected-item-grid">
-							<article v-for="item in items" :key="item.id">
-								<span class="selected-item-poster">
-									<span class="source-artwork-placeholder"><Asterisk :size="20" /></span>
-									<img
-										v-if="item.artworkUrl"
-										:src="artworkVariantUrl(item.artworkUrl, 'card')"
-										:srcset="artworkSrcset(item.artworkUrl, 'card')"
-										:alt="`${item.title} artwork`"
-										loading="eager"
-										decoding="async"
-										@error="hideBrokenImage"
-									/>
-								</span>
-								<span class="selected-item-copy">
-									<strong>{{ item.title }}</strong>
-									<small>{{ mediaItemSubtitle(libraryType, item) || item.kind }}</small>
-									<small v-if="item.availability !== 'available'" class="availability-warning">
-										Temporarily unavailable
-									</small>
-								</span>
-								<button
-									type="button"
-									:aria-label="`Remove ${item.title}`"
-									@click="emit('removeItem', item.id)"
-								>
-									<X :size="15" />
-								</button>
-							</article>
+							<MediaCardPreview v-for="item in items" :key="item.id" :item="item" class="selected-item-preview">
+								<article>
+									<span class="selected-item-poster">
+										<span class="source-artwork-placeholder"><Asterisk :size="20" /></span>
+										<img
+											v-if="item.artworkUrl"
+											:src="artworkVariantUrl(item.artworkUrl, 'card')"
+											:srcset="artworkSrcset(item.artworkUrl, 'card')"
+											:alt="`${item.title} artwork`"
+											loading="eager"
+											decoding="async"
+											@error="hideBrokenImage"
+										/>
+									</span>
+									<span class="selected-item-copy">
+										<strong>{{ item.title }}</strong>
+										<small>{{ mediaItemSubtitle(libraryType, item) || item.kind }}</small>
+										<small v-if="item.availability !== 'available'" class="availability-warning">
+											Temporarily unavailable
+										</small>
+									</span>
+									<button
+										type="button"
+										:aria-label="`Remove ${item.title}`"
+										@click="emit('removeItem', item.id)"
+									>
+										<X :size="15" />
+									</button>
+								</article>
+							</MediaCardPreview>
 						</div>
 						<div v-else class="empty-state compact selection-drawer-empty">
 							<p>

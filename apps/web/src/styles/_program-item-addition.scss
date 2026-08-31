@@ -236,6 +236,11 @@
 	scroll-snap-align: start;
 }
 
+.program-addition-preview {
+	min-width: 0;
+	scroll-snap-align: start;
+}
+
 .program-addition-carousel-card > span {
 	position: relative;
 	aspect-ratio: 2 / 3;

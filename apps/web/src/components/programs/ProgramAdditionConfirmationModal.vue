@@ -4,6 +4,7 @@ import { Asterisk, ChevronLeft, ChevronRight, ListPlus } from '@lucide/vue';
 import type { ProgramItemAdditionConfirmationItem } from '@moirai/shared/api-contracts';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
+import MediaCardPreview from '../MediaCardPreview.vue';
 
 /** Exact server-calculated mutation presented before a large program addition. */
 interface ProgramAdditionConfirmationProps {
@@ -76,22 +77,24 @@ onMounted(async () => {
 						</div>
 					</div>
 					<div ref="carousel" class="program-addition-carousel" tabindex="0" aria-label="Items to add">
-						<article v-for="item in items" :key="item.id" class="program-addition-carousel-card">
-							<span>
-								<Asterisk :size="28" />
-								<img
-									v-if="item.artworkUrl"
-									:src="artworkVariantUrl(item.artworkUrl, 'card')"
-									:srcset="artworkSrcset(item.artworkUrl, 'card')"
-									:alt="`${item.title} artwork`"
-									loading="lazy"
-									decoding="async"
-									@error="hideBrokenImage"
-								/>
-							</span>
-							<strong>{{ item.title }}</strong>
-							<small v-if="item.year">{{ item.year }}</small>
-						</article>
+						<MediaCardPreview v-for="item in items" :key="item.id" :item="item" class="program-addition-preview">
+							<article class="program-addition-carousel-card">
+								<span>
+									<Asterisk :size="28" />
+									<img
+										v-if="item.artworkUrl"
+										:src="artworkVariantUrl(item.artworkUrl, 'card')"
+										:srcset="artworkSrcset(item.artworkUrl, 'card')"
+										:alt="`${item.title} artwork`"
+										loading="lazy"
+										decoding="async"
+										@error="hideBrokenImage"
+									/>
+								</span>
+								<strong>{{ item.title }}</strong>
+								<small v-if="item.year">{{ item.year }}</small>
+							</article>
+						</MediaCardPreview>
 						<p v-if="items.length === 0" class="program-addition-carousel-empty">
 							Item previews are no longer available. Submit again to refresh the selection.
 						</p>

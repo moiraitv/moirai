@@ -509,7 +509,8 @@
 	scroll-snap-type: inline proximity;
 }
 
-.program-carousel > article {
+.program-carousel > article,
+.program-carousel > .program-carousel-preview > article {
 	position: relative;
 	width: 112px;
 	min-width: 112px;
@@ -522,7 +523,19 @@
 	scroll-snap-align: start;
 }
 
-.program-carousel > article > span {
+.program-carousel > .program-carousel-preview {
+	width: 112px;
+	min-width: 112px;
+	scroll-snap-align: start;
+}
+
+.program-carousel > .program-carousel-preview > article {
+	width: 100%;
+	min-width: 0;
+}
+
+.program-carousel > article > span,
+.program-carousel > .program-carousel-preview > article > span {
 	height: 66px;
 	display: grid;
 	place-items: center;
@@ -566,7 +579,8 @@
 	font-style: normal;
 }
 
-.program-carousel > article.unavailable {
+.program-carousel > article.unavailable,
+.program-carousel > .program-carousel-preview > article.unavailable {
 	border-color: rgba(239, 107, 107, 0.55);
 }
 

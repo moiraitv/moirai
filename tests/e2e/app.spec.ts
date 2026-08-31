@@ -24,7 +24,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await writeFile(path.join(mediaRoot, 'Broadcast.mp4'), 'fixture');
 	await writeFile(
 		path.join(mediaRoot, 'Broadcast.nfo'),
-		'<movie><title>Broadcast Fixture</title><year>2026</year><genre>Sci-Fi</genre><genre>Drama</genre><director>Jane Director</director><actor><name>Ada Actor</name><role>Host</role></actor></movie>',
+		'<movie><title>Broadcast Fixture</title><year>2026</year><plot>A broadcast preview summary.</plot><rating>8.4</rating><genre>Sci-Fi</genre><genre>Drama</genre><director>Jane Director</director><actor><name>Ada Actor</name><role>Host</role><order>1</order></actor><actor><name>Bea Performer</name><order>2</order></actor><actor><name>Cora Player</name><order>3</order></actor><actor><name>Unbilled Player</name></actor></movie>',
 	);
 	await writeFile(path.join(mediaRoot, 'Companion.mp4'), 'fixture');
 	await writeFile(
@@ -175,6 +175,34 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(mediaCard).toContainText('2026');
 	await expect(mediaCard).not.toContainText(/S\d+E\d+/);
 	await expect(mediaCard.locator('.card-menu-icon')).toHaveCount(0);
+	const cardPreview = page.getByRole('tooltip');
+	await page.mouse.move(0, 0);
+	await expect(cardPreview).toBeHidden();
+	const mediaCardBounds = await mediaCard.boundingBox();
+	expect(mediaCardBounds).not.toBeNull();
+	await page.mouse.move(
+		mediaCardBounds!.x + mediaCardBounds!.width / 2,
+		mediaCardBounds!.y + mediaCardBounds!.height / 2,
+	);
+	await page.waitForTimeout(150);
+	await expect(cardPreview).toBeHidden();
+	await expect(cardPreview).toBeVisible();
+	await expect(cardPreview).toContainText('Broadcast Fixture');
+	await expect(cardPreview).toContainText('2026');
+	await expect(cardPreview).toContainText('★ 8.4');
+	await expect(cardPreview).toContainText('Sci-Fi');
+	await expect(cardPreview).toContainText('A broadcast preview summary.');
+	await expect(cardPreview).toContainText('Starring Ada Actor, Bea Performer, Cora Player');
+	await page.mouse.move(0, 0);
+	await expect(cardPreview).toBeHidden();
+	await mediaCard.focus();
+	await expect(cardPreview).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(cardPreview).toBeHidden();
+	await page.getByRole('button', { name: 'Preview Broadcast Fixture' }).click();
+	await expect(cardPreview).toBeVisible();
+	await page.getByRole('heading', { name: libraryName }).click();
+	await expect(cardPreview).toBeHidden();
 
 	const search = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });
 	await search.fill('No matching title');

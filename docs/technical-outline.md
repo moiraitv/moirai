@@ -123,6 +123,11 @@ identity, scan and playback roots, scan cadence, watcher state, and scheduling e
 library requires exact-name confirmation and removes Moirai's configuration and index without
 changing source media files.
 
+Compact media-item cards expose a shared indexed-metadata preview on pointer hover, keyboard focus,
+or an explicit touch information control. The client waits before loading incidental hover previews,
+deduplicates requests, and retains successful summaries for the browser session. Preview responses
+contain only bounded display metadata and never inspect or open the source media file.
+
 ### Metadata and playback facts
 
 Kodi-compatible movie, episode, show, and music-video NFO files provide descriptive metadata:

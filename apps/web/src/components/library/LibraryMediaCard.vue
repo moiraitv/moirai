@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { AlertTriangle, Asterisk, Check, CircleHelp, MoreHorizontal } from '@lucide/vue';
 import type { MediaBrowseEntry, MediaGroup } from '@moirai/shared';
+import { useAttrs } from 'vue';
 import { RouterLink } from 'vue-router';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
+import MediaCardPreview from '../MediaCardPreview.vue';
+
+defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{
 	entry: MediaBrowseEntry;
@@ -13,6 +17,7 @@ const props = defineProps<{
 	selectionMode: boolean;
 	selected: boolean;
 }>();
+const attrs = useAttrs();
 const emit = defineEmits<{
 	enter: [group: MediaGroup];
 	toggle: [itemId: string];
@@ -46,22 +51,29 @@ function statusLabel(): string {
 
 <template>
 	<component
-		:is="entry.item && !selectionMode ? RouterLink : 'button'"
-		class="media-card"
-		:class="{ 'selectable-media-card': Boolean(entry.item && selectionMode), selected }"
-		:to="entry.item && !selectionMode ? `/libraries/${libraryId}/items/${entry.item.id}` : undefined"
-		:type="entry.item && !selectionMode ? undefined : 'button'"
-		:aria-pressed="entry.item && selectionMode ? selected : undefined"
-		:aria-label="entry.item && selectionMode ? `${selected ? 'Deselect' : 'Select'} ${entry.item.title}` : undefined"
-		@click="activate"
+		:is="entry.item ? MediaCardPreview : 'div'"
+		v-bind="entry.item ? { item: entry.item } : {}"
+		class="media-card-preview-trigger"
 	>
-		<span v-if="entry.item && selectionMode" class="media-selection-check"><Check v-if="selected" :size="16" /></span>
-		<span class="poster">
-			<Asterisk class="poster-placeholder" :size="38" />
-			<img v-if="entry.group?.artworkUrl" :src="artworkVariantUrl(entry.group.artworkUrl, 'card')" :srcset="artworkSrcset(entry.group.artworkUrl, 'card')" :alt="`${entry.group.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" />
-			<img v-else-if="entry.item?.artworkUrl" :src="artworkVariantUrl(entry.item.artworkUrl, 'card')" :srcset="artworkSrcset(entry.item.artworkUrl, 'card')" :alt="`${entry.item.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" />
-		</span>
-		<span v-if="entry.group" class="media-card-copy"><span class="media-card-title">{{ entry.group.title }}</span><span class="media-card-subtitle">{{ mediaGroupSubtitle(libraryType, entry.group) || entry.group.kind }}</span><MoreHorizontal class="card-menu-icon" :size="16" /></span>
-		<span v-else-if="entry.item" class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(libraryType, entry.item) || entry.item.kind }}</span><span class="media-card-status" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="14" /><AlertTriangle v-else-if="entry.item.metadataStatus !== 'complete'" :size="14" /><Check v-else :size="14" /><small v-if="statusLabel()">{{ statusLabel() }}</small></span></span>
+		<component
+			:is="entry.item && !selectionMode ? RouterLink : 'button'"
+			v-bind="attrs"
+			class="media-card"
+			:class="{ 'selectable-media-card': Boolean(entry.item && selectionMode), selected }"
+			:to="entry.item && !selectionMode ? `/libraries/${libraryId}/items/${entry.item.id}` : undefined"
+			:type="entry.item && !selectionMode ? undefined : 'button'"
+			:aria-pressed="entry.item && selectionMode ? selected : undefined"
+			:aria-label="entry.item && selectionMode ? `${selected ? 'Deselect' : 'Select'} ${entry.item.title}` : undefined"
+			@click="activate"
+		>
+			<span v-if="entry.item && selectionMode" class="media-selection-check"><Check v-if="selected" :size="16" /></span>
+			<span class="poster">
+				<Asterisk class="poster-placeholder" :size="38" />
+				<img v-if="entry.group?.artworkUrl" :src="artworkVariantUrl(entry.group.artworkUrl, 'card')" :srcset="artworkSrcset(entry.group.artworkUrl, 'card')" :alt="`${entry.group.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" />
+				<img v-else-if="entry.item?.artworkUrl" :src="artworkVariantUrl(entry.item.artworkUrl, 'card')" :srcset="artworkSrcset(entry.item.artworkUrl, 'card')" :alt="`${entry.item.title} artwork`" loading="lazy" decoding="async" @error="hideBrokenImage" />
+			</span>
+			<span v-if="entry.group" class="media-card-copy"><span class="media-card-title">{{ entry.group.title }}</span><span class="media-card-subtitle">{{ mediaGroupSubtitle(libraryType, entry.group) || entry.group.kind }}</span><MoreHorizontal class="card-menu-icon" :size="16" /></span>
+			<span v-else-if="entry.item" class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(libraryType, entry.item) || entry.item.kind }}</span><span class="media-card-status" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="14" /><AlertTriangle v-else-if="entry.item.metadataStatus !== 'complete'" :size="14" /><Check v-else :size="14" /><small v-if="statusLabel()">{{ statusLabel() }}</small></span></span>
+		</component>
 	</component>
 </template>

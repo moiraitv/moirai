@@ -3,6 +3,7 @@ import type {
 	MediaGenreFacet,
 	MediaGroup,
 	MediaGroupKind,
+	MediaCardPreview,
 	MediaItem,
 	MediaItemDetail,
 } from '@moirai/shared';
@@ -21,6 +22,7 @@ import type {
 	MediaProbeCacheEntry,
 } from './contracts.js';
 import {
+	artworkUrl,
 	cacheVersion,
 	mappedGroup,
 	mappedItem,
@@ -324,6 +326,67 @@ export class CatalogAssetsRepository {
 			probeUpdatedAt: row.probeUpdatedAt,
 			probeErrorCode: row.probeErrorCode,
 			groupTrail,
+		};
+	}
+
+	/** Return bounded indexed metadata for a compact media-card preview. */
+	async getMediaCardPreview(id: string): Promise<MediaCardPreview | null> {
+		const canonicalId = await this.canonicalItemId(id);
+		const [row] = await this.db
+			.select({
+				id: mediaItems.id,
+				title: mediaItems.title,
+				year: mediaItems.year,
+				plot: mediaItems.plot,
+				metadata: mediaItems.metadata,
+				artworkRelativePath: mediaItems.artworkRelativePath,
+				fingerprint: mediaItems.fingerprint,
+			})
+			.from(mediaItems)
+			.where(eq(mediaItems.id, canonicalId));
+		if (!row) {
+			return null;
+		}
+
+		const sourceGenres = metadataStrings(row.metadata, 'genres');
+		const [actors, fallbackGenres] = await Promise.all([
+			this.db
+				.select({ name: mediaItemPeople.name })
+				.from(mediaItemPeople)
+				.where(and(
+					eq(mediaItemPeople.itemId, canonicalId),
+					eq(mediaItemPeople.personType, 'actor'),
+				))
+				.orderBy(
+					asc(sql<number>`${mediaItemPeople.sortOrder} IS NULL`),
+					asc(mediaItemPeople.sortOrder),
+					asc(mediaItemPeople.name),
+				)
+				.limit(3),
+			sourceGenres.length === 0
+				? this.db
+					.select({ name: mediaItemGenres.genreName })
+					.from(mediaItemGenres)
+					.where(eq(mediaItemGenres.itemId, canonicalId))
+					.orderBy(asc(mediaItemGenres.genreName))
+					.limit(1)
+				: Promise.resolve([]),
+		]);
+
+		return {
+			id: row.id,
+			title: row.title,
+			year: row.year,
+			plot: row.plot,
+			artworkUrl: artworkUrl(
+				'items',
+				row.id,
+				row.artworkRelativePath,
+				cacheVersion(row.metadata, row.fingerprint),
+			),
+			rating: metadataNumber(row.metadata, 'rating'),
+			primaryGenre: sourceGenres[0] ?? fallbackGenres[0]?.name ?? null,
+			actors: actors.map((actor) => actor.name),
 		};
 	}
 

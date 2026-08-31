@@ -237,6 +237,18 @@ export interface MediaPerson {
 	sortOrder: number | null;
 }
 
+/** Bounded indexed metadata displayed beside compact media cards. */
+export interface MediaCardPreview {
+	id: string;
+	title: string;
+	year: number | null;
+	plot: string | null;
+	artworkUrl: string | null;
+	rating: number | null;
+	primaryGenre: string | null;
+	actors: string[];
+}
+
 /** Full media detail including credits and measured playback facts. */
 export interface MediaItemDetail extends MediaItem {
 	genres: string[];

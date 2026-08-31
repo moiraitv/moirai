@@ -124,6 +124,14 @@ describe('Repository scan reconciliation', () => {
 			id: logical.id,
 			multipartStatus: 'complete',
 		});
+		expect(await repository.getMediaCardPreview(logical.aliasIds[0]!)).toMatchObject({
+			id: logical.id,
+			title: logical.title,
+			plot: null,
+			rating: null,
+			primaryGenre: null,
+			actors: [],
+		});
 		const addition = repository.appendProgramItems(
 			selectedProgram.id,
 			library.id,
@@ -731,6 +739,8 @@ describe('Repository scan reconciliation', () => {
 			title: 'Alpha',
 			sortTitle: 'Alpha',
 			titleBucket: 'A',
+			plot: 'A navigator charts a course through an unstable frontier.',
+			metadata: { rating: 8.2, genres: ['Science Fiction', 'Drama'] },
 			genres: [
 				{ key: 'drama', name: 'Drama' },
 				{ key: 'science-fiction', name: 'Science Fiction' },
@@ -749,6 +759,20 @@ describe('Repository scan reconciliation', () => {
 					normalizedName: 'ada actor',
 					role: 'Navigator',
 					sortOrder: 1,
+				},
+				{
+					personType: 'actor' as const,
+					name: 'Bea Performer',
+					normalizedName: 'bea performer',
+					role: 'Pilot',
+					sortOrder: 2,
+				},
+				{
+					personType: 'actor' as const,
+					name: 'Cora Player',
+					normalizedName: 'cora player',
+					role: 'Engineer',
+					sortOrder: 3,
 				},
 				{
 					personType: 'director' as const,
@@ -906,8 +930,22 @@ describe('Repository scan reconciliation', () => {
 			genres: ['Drama', 'Science Fiction'],
 			actors: [
 				{ name: 'Ada Actor', role: 'Navigator', sortOrder: 1 },
+				{ name: 'Bea Performer', role: 'Pilot', sortOrder: 2 },
+				{ name: 'Cora Player', role: 'Engineer', sortOrder: 3 },
 				{ name: 'Aaron Unbilled', role: 'Bystander', sortOrder: null },
 			],
+		});
+		expect(await repository.getMediaCardPreview(alpha.id)).toMatchObject({
+			id: alpha.id,
+			title: 'Alpha',
+			plot: alpha.plot,
+			rating: 8.2,
+			primaryGenre: 'Science Fiction',
+			actors: ['Ada Actor', 'Bea Performer', 'Cora Player'],
+		});
+		expect(await repository.getMediaCardPreview(beta.id)).toMatchObject({
+			id: beta.id,
+			primaryGenre: 'Drama',
 		});
 		expect(await repository.listMediaItemsByIds(library.id, [beta.id, alpha.id])).toMatchObject([
 			{ title: 'Beta', durationSeconds: null },

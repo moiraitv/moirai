@@ -539,6 +539,10 @@
 	background: #0b1b27;
 }
 
+.selected-item-preview {
+	min-width: 0;
+}
+
 .selected-item-poster {
 	position: relative;
 	aspect-ratio: 2 / 3;

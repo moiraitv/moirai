@@ -39,6 +39,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'getLibrary',
 	'getLibraryReconciliation',
 	'getLiveness',
+	'getMediaCardPreview',
 	'getMediaItem',
 	'getPlaybackSessionFile',
 	'getPlaybackSettings',

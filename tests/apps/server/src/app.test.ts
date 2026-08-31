@@ -931,8 +931,13 @@ describe('API', () => {
 		await writeFile(
 			path.join(mediaRoot, 'Preview.nfo'),
 			`<movie>
-        <title>Preview Film</title><runtime>98</runtime><rating>7.2</rating><mpaa>PG-13</mpaa>
-        <credits>Example Writer</credits><studio>Example Studio</studio><country>Example Country</country>
+		<title>Preview Film</title><runtime>98</runtime><rating>7.2</rating><mpaa>PG-13</mpaa>
+		<plot>A concise preview summary.</plot><genre>Adventure</genre><genre>Drama</genre>
+		<actor><name>Second Actor</name><order>2</order></actor>
+		<actor><name>First Actor</name><sortorder>1</sortorder></actor>
+		<actor><name>Third Actor</name><order>3</order></actor>
+		<actor><name>Unbilled Actor</name></actor>
+		<credits>Example Writer</credits><studio>Example Studio</studio><country>Example Country</country>
         <fileinfo><streamdetails><video><width>1920</width><height>1080</height></video></streamdetails></fileinfo>
       </movie>`,
 		);
@@ -961,6 +966,21 @@ describe('API', () => {
 			rating: 7.2,
 			resolution: { width: 1920, height: 1080 },
 		});
+		const cardPreview = await app.inject({ url: `/api/v1/media/${itemId}/card-preview` });
+		expect(cardPreview.statusCode).toBe(200);
+		expect(cardPreview.json()).toEqual({
+			id: itemId,
+			title: 'Preview Film',
+			year: null,
+			plot: 'A concise preview summary.',
+			artworkUrl: null,
+			rating: 7.2,
+			primaryGenre: 'Adventure',
+			actors: ['First Actor', 'Second Actor', 'Third Actor'],
+		});
+		expect((await app.inject({
+			url: `/api/v1/media/${randomUUID()}/card-preview`,
+		})).statusCode).toBe(404);
 
 		const full = await app.inject({ url: `/api/v1/media/${itemId}/preview` });
 		expect(full.statusCode).toBe(200);
@@ -1005,6 +1025,9 @@ describe('API', () => {
 		expect(rejected.headers['content-range']).toBe(`bytes */${mediaBytes.length}`);
 
 		await rm(mediaRoot, { recursive: true, force: true });
+		expect((await app.inject({
+			url: `/api/v1/media/${itemId}/card-preview`,
+		})).statusCode).toBe(200);
 		const unavailable = await app.inject({ url: `/api/v1/media/${itemId}/preview` });
 		expect(unavailable.statusCode).toBe(503);
 	});

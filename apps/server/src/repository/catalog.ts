@@ -1,6 +1,7 @@
 import type {
 	CatalogProgramItemQuery,
 	MediaBrowseResult,
+	MediaCardPreview,
 	MediaGenreFacet,
 	MediaGroup,
 	MediaItem,
@@ -819,6 +820,11 @@ export class MediaCatalogRepository {
 	/** Return a media item's full catalog detail, if it still exists. */
 	async getMediaItem(id: string): Promise<MediaItemDetail | null> {
 		return this.assets.getMediaItem(id);
+	}
+
+	/** Return bounded indexed metadata for a compact media-card preview. */
+	async getMediaCardPreview(id: string): Promise<MediaCardPreview | null> {
+		return this.assets.getMediaCardPreview(id);
 	}
 
 	/** Return the library source location that owns a media item. */

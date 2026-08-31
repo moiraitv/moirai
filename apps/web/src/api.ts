@@ -13,6 +13,7 @@ import type {
 	ReconciliationAction,
 	GenreMatch,
 	MediaBrowseResult,
+	MediaCardPreview,
 	MediaGenreFacet,
 	MediaGroup,
 	MediaItem,
@@ -328,6 +329,7 @@ export const api = {
 			body: JSON.stringify({ groupIds }),
 		}),
 	mediaItem: (id: string) => request<MediaItemDetail>(`/api/v1/media/${id}`),
+	mediaCardPreview: (id: string) => request<MediaCardPreview>(`/api/v1/media/${id}/card-preview`),
 	addLibraryItemsToProgram: (id: string, body: ProgramItemAddition) =>
 		request<ProgramItemAdditionResult>(`/api/v1/libraries/${id}/program-items`, {
 			method: 'POST',

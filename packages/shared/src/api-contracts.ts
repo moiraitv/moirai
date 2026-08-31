@@ -198,6 +198,18 @@ export const mediaItemDetailSchema = mediaItemSchema.extend({
 	})),
 });
 
+/** Bounded indexed metadata displayed beside compact media cards. */
+export const mediaCardPreviewSchema = z.object({
+	id: idSchema,
+	title: z.string(),
+	year: z.number().int().nullable(),
+	plot: z.string().nullable(),
+	artworkUrl: z.string().nullable(),
+	rating: z.number().min(0).max(10).nullable(),
+	primaryGenre: z.string().nullable(),
+	actors: z.array(z.string()).max(3),
+});
+
 /** One media item or hierarchy group returned by catalog browsing. */
 export const mediaBrowseEntrySchema = z.object({
 	key: z.string(),

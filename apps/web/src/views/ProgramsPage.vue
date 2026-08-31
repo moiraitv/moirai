@@ -8,6 +8,7 @@ import type { SchedulingProgram } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
+import MediaCardPreview from '../components/MediaCardPreview.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
 import { countProgramUsages } from '../program-usage';
 import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
@@ -206,7 +207,9 @@ onMounted(async () => {
 					<article v-for="program in visiblePrograms" :key="program.id" class="program-row">
 						<div class="program-row-heading"><span class="status-dot" :class="`health-${healthLabel(program)}`"></span><div><RouterLink :to="`/schedules/programs/${program.id}`">{{ program.name }}</RouterLink><small>{{ program.config.type }} · {{ statuses.get(program.id)?.sourceLabel }}</small></div><span class="program-row-counts">{{ statuses.get(program.id)?.availableItemCount ?? 0 }}/{{ statuses.get(program.id)?.indexedItemCount ?? 0 }} playable · {{ usages.get(program.id) ?? 0 }} uses</span><details class="program-row-menu"><summary :aria-label="`Actions for ${program.name}`"><MoreVertical :size="19" /></summary><div><RouterLink :to="`/schedules/programs/${program.id}`">Edit</RouterLink><button type="button" @click="remove(program)">Delete</button></div></details></div>
 						<div v-if="program.config.type === 'content'" class="program-carousel" :aria-label="`${program.name} media preview`">
-							<article v-for="item in statuses.get(program.id)?.previewItems ?? []" :key="item.id" :class="{ unavailable: item.availability !== 'available' }"><span><img v-if="item.artworkUrl" :src="artworkVariantUrl(item.artworkUrl, 'thumb')" :srcset="artworkSrcset(item.artworkUrl, 'thumb')" alt="" loading="lazy" @error="hideBrokenImage" /><FileText v-else :size="23" /></span><strong>{{ item.title }}</strong><small>{{ item.year ?? 'Year unknown' }}</small><em v-if="item.availability !== 'available'">Unavailable</em></article>
+							<MediaCardPreview v-for="item in statuses.get(program.id)?.previewItems ?? []" :key="item.id" :item="item" class="program-carousel-preview">
+								<article class="program-carousel-card" :class="{ unavailable: item.availability !== 'available' }"><span><img v-if="item.artworkUrl" :src="artworkVariantUrl(item.artworkUrl, 'thumb')" :srcset="artworkSrcset(item.artworkUrl, 'thumb')" alt="" loading="lazy" @error="hideBrokenImage" /><FileText v-else :size="23" /></span><strong>{{ item.title }}</strong><small>{{ item.year ?? 'Year unknown' }}</small><em v-if="item.availability !== 'available'">Unavailable</em></article>
+							</MediaCardPreview>
 							<article v-if="remainingPreviewCount(program.id)" class="program-carousel-more"><span><Plus :size="26" /></span><strong>{{ remainingPreviewCount(program.id).toLocaleString() }} more</strong><small>matching items</small></article>
 							<p v-if="!(statuses.get(program.id)?.previewItems.length)">No indexed media matches this program.</p>
 						</div>
