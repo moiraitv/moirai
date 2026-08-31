@@ -137,7 +137,7 @@ onMounted(() => void librariesStore.load());
 						<h2>{{ library.name }}</h2>
 						<StatusPill :value="libraryStatusValue(library, isScanning(library))" />
 					</div>
-					<p>{{ library.itemCount }} indexed · {{ library.warningCount }} warnings</p>
+					<p>{{ library.itemCount }} indexed</p>
 					<p
 						v-if="isLibrarySourceUnavailable(library) && !isScanning(library)"
 						class="library-source-warning"

@@ -74,8 +74,16 @@ const reconciliation = ref<LibraryReconciliation>();
 const genres = ref<MediaGenreFacet[]>([]);
 const browse = ref<MediaBrowseResult>();
 const latestScan = computed(() => scans.value[0]);
+const currentScanIssues = computed(() => {
+	if (!library.value?.warningCount) {
+		return [];
+	}
+
+	return scans.value.find((scan) => scan.status !== 'running' && scan.issues.length)?.issues ?? [];
+});
 const activeScanId = ref<string>();
 const activeScanProgress = ref<ScanProgress>();
+const showScanIssues = ref(false);
 const sourceUnavailable = computed(() =>
 	library.value ? isLibrarySourceUnavailable(library.value) : false);
 const scanProgressPercent = computed(() => {
@@ -1124,6 +1132,18 @@ onUnmounted(() => {
 		</header>
 
 		<p v-if="message" class="notice">{{ message }}</p>
+		<div v-if="library.warningCount > 0" class="reconciliation-banner library-warning-banner" role="alert">
+			<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
+			<div>
+				<strong>Library scan needs attention</strong>
+				<p>{{ library.warningCount }} scan {{ library.warningCount === 1 ? 'issue requires' : 'issues require' }} review.</p>
+				<ul v-if="showScanIssues && currentScanIssues.length" class="library-warning-issues">
+					<li v-for="issue in currentScanIssues" :key="`${issue.code}:${issue.path}:${issue.message}`"><strong>{{ issue.code }}</strong><span>{{ issue.path ?? issue.message }}</span><small v-if="issue.path">{{ issue.message }}</small></li>
+				</ul>
+				<p v-else-if="showScanIssues">Detailed issues are no longer retained. Run a library sync to refresh the warning state.</p>
+			</div>
+			<button v-if="currentScanIssues.length" type="button" class="button secondary" :aria-expanded="showScanIssues" @click="showScanIssues = !showScanIssues">{{ showScanIssues ? 'Hide issues' : 'Review issues' }}</button>
+		</div>
 		<div v-if="sourceUnavailable" class="source-outage-banner" role="status">
 			<span class="source-outage-icon"><Unplug :size="22" /></span>
 			<div>

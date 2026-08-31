@@ -254,6 +254,40 @@
 	color: var(--muted);
 }
 
+.library-warning-banner {
+	align-items: start;
+}
+
+.library-warning-issues {
+	margin: 12px 0 0;
+	padding: 0;
+	display: grid;
+	gap: 7px;
+	list-style: none;
+}
+
+.library-warning-issues li {
+	padding: 9px 10px;
+	display: grid;
+	gap: 3px;
+	border: 1px solid rgba(245, 158, 11, 0.25);
+	border-radius: 7px;
+	background: rgba(7, 17, 27, 0.48);
+}
+
+.library-warning-issues span,
+.library-warning-issues small {
+	overflow-wrap: anywhere;
+}
+
+.library-warning-issues span {
+	color: var(--text);
+}
+
+.library-warning-issues small {
+	color: var(--muted);
+}
+
 .reconciliation-icon {
 	width: 42px;
 	height: 42px;
