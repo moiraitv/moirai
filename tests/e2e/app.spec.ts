@@ -75,6 +75,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	expect(syncBounds!.x).toBeLessThan(settingsBounds!.x);
 	expect(settingsBounds!.x).toBeLessThan(searchBounds!.x);
 	expect(Math.abs(settingsBounds!.y + settingsBounds!.height / 2 - (searchBounds!.y + searchBounds!.height / 2))).toBeLessThan(2);
+	const scanResponse = page.waitForResponse((response) =>
+		response.url().includes('/api/v1/libraries/')
+		&& response.url().endsWith('/scans')
+		&& response.request().method() === 'POST');
+	await syncButton.click();
+	expect((await scanResponse).status()).toBe(202);
 	await settingsButton.click();
 	const librarySettings = page.getByRole('dialog', { name: `Library settings for ${libraryName}` });
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);

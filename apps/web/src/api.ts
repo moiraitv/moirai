@@ -147,11 +147,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 	const requestAuthenticationGeneration = authenticationGeneration;
 	const method = init?.method?.toUpperCase() ?? 'GET';
 	const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+	const hasBody = init?.body !== undefined && init.body !== null;
 	const response = await fetch(url, {
 		...init,
 		credentials: 'same-origin',
 		headers: {
-			'Content-Type': 'application/json',
+			...(hasBody ? { 'Content-Type': 'application/json' } : {}),
 			...(unsafe && csrfToken ? { 'X-Moirai-CSRF': csrfToken } : {}),
 			...init?.headers,
 		},
