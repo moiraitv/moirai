@@ -79,9 +79,19 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const librarySettings = page.getByRole('dialog', { name: `Library settings for ${libraryName}` });
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
 	const deleteLibrary = librarySettings.getByRole('button', { name: 'Remove library permanently' });
+	await expect(deleteLibrary).toBeHidden();
+	const deleteDisclosure = librarySettings.getByText('Permanently remove this library', { exact: true });
+	await deleteDisclosure.click();
+	await expect(deleteLibrary).toBeVisible();
 	await expect(deleteLibrary).toBeDisabled();
-	await librarySettings.getByLabel(new RegExp(`Type ${libraryName} to confirm`)).fill(libraryName);
+	const deleteConfirmation = librarySettings.getByLabel(new RegExp(`Type ${libraryName} to confirm`));
+	await deleteConfirmation.fill(libraryName);
 	await expect(deleteLibrary).toBeEnabled();
+	await deleteDisclosure.click();
+	await expect(deleteLibrary).toBeHidden();
+	await deleteDisclosure.click();
+	await expect(deleteConfirmation).toHaveValue('');
+	await expect(deleteLibrary).toBeDisabled();
 	await librarySettings.getByRole('button', { name: 'Cancel' }).click();
 	const movieLibraryUrl = page.url();
 

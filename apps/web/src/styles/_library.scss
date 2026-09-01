@@ -1021,25 +1021,39 @@ a.media-card {
 }
 
 .library-danger-heading {
+	cursor: pointer;
+	list-style: none;
 	display: flex;
-	align-items: flex-start;
+	align-items: center;
 	gap: 12px;
 	color: #ff8292;
 }
 
-.library-danger-heading h3,
-.library-danger-heading p {
+.library-danger-heading::-webkit-details-marker {
+	display: none;
+}
+
+.library-danger-heading h3 {
+	flex: 1;
 	margin: 0;
 }
 
-.library-danger-heading p {
-	margin-top: 6px;
+.library-danger-chevron {
+	transition: transform 0.15s ease;
+}
+
+.library-danger-zone[open] .library-danger-chevron {
+	transform: rotate(180deg);
+}
+
+.library-danger-content > p {
+	margin: 14px 0 0;
 	color: #d6adb3;
 	font-size: 0.82rem;
 	line-height: 1.45;
 }
 
-.library-danger-zone > label {
+.library-danger-content > label {
 	margin: 16px 0 12px;
 	display: grid;
 	gap: 7px;

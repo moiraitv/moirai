@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
-import { AlertTriangle, Trash2, X } from '@lucide/vue';
+import { AlertTriangle, ChevronDown, Trash2, X } from '@lucide/vue';
 import type { Library, LibraryUpdate } from '@moirai/shared';
 import { api } from '../../api';
 import { errorMessage } from '../../error-message';
@@ -68,6 +68,13 @@ async function remove(): Promise<void> {
 	}
 }
 
+/** Clear destructive confirmation whenever its disclosure is collapsed. */
+function handleDangerToggle(event: Event): void {
+	if (event.currentTarget instanceof HTMLDetailsElement && !event.currentTarget.open) {
+		deleteConfirmation.value = '';
+	}
+}
+
 onMounted(() => nameInput.value?.focus());
 </script>
 
@@ -105,11 +112,14 @@ onMounted(() => nameInput.value?.focus());
 				<p v-if="error" class="notice error">{{ error }}</p>
 				<div class="form-actions"><button type="button" class="button ghost" @click="emit('close')">Cancel</button><button class="button" :disabled="saving || deleting">{{ saving ? 'Saving…' : 'Save settings' }}</button></div>
 
-				<section class="library-danger-zone" aria-labelledby="library-delete-title">
-					<div class="library-danger-heading"><AlertTriangle :size="24" /><div><h3 id="library-delete-title">Permanently remove this library</h3><p>This deletes the library configuration, index, and cached artwork from Moirai. Your source media files will not be changed.</p></div></div>
-					<label><span>Type <strong>{{ library.name }}</strong> to confirm</span><input v-model="deleteConfirmation" autocomplete="off" /></label>
-					<button type="button" class="button danger" :disabled="!deletionConfirmed || deleting || saving" @click="remove"><Trash2 :size="17" />{{ deleting ? 'Removing…' : 'Remove library permanently' }}</button>
-				</section>
+				<details class="library-danger-zone" @toggle="handleDangerToggle">
+					<summary class="library-danger-heading"><AlertTriangle :size="24" /><h3 id="library-delete-title">Permanently remove this library</h3><ChevronDown class="library-danger-chevron" :size="18" /></summary>
+					<div class="library-danger-content" aria-labelledby="library-delete-title">
+						<p><strong>This action cannot be undone.</strong> It deletes the library configuration, index, and cached artwork from Moirai. Your source media files will not be changed.</p>
+						<label><span>Type <strong>{{ library.name }}</strong> to confirm</span><input v-model="deleteConfirmation" autocomplete="off" /></label>
+						<button type="button" class="button danger" :disabled="!deletionConfirmed || deleting || saving" @click="remove"><Trash2 :size="17" />{{ deleting ? 'Removing…' : 'Remove library permanently' }}</button>
+					</div>
+				</details>
 			</form>
 		</div>
 	</Teleport>
