@@ -226,6 +226,20 @@ legend {
 	margin-bottom: 0;
 }
 
+.channel-schedule-link {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	color: #c7d0da;
+	font-size: 0.77rem;
+	font-weight: 620;
+}
+
+.channel-schedule-link .button {
+	margin-top: 2px;
+}
+
 .moirai-dialog .form-actions {
 	justify-content: flex-end;
 }

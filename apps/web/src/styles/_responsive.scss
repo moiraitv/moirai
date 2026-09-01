@@ -731,6 +731,10 @@ body:has(.standalone-editor-backdrop) {
 		grid-column: auto;
 	}
 
+	.channel-schedule-link .button {
+		width: 100%;
+	}
+
 	.moirai-dialog-backdrop {
 		padding: 6px;
 	}
