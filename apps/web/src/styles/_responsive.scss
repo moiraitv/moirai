@@ -438,16 +438,6 @@ body:has(.standalone-editor-backdrop) {
 		justify-self: end;
 	}
 
-	.templates-get-started {
-		padding: 18px;
-		grid-template-columns: 48px minmax(0, 1fr);
-	}
-
-	.templates-get-started .toolbar-button {
-		min-width: 0;
-		grid-column: 1 / -1;
-	}
-
 	.template-toolbar {
 		padding: 14px;
 		grid-template-columns: 1fr;

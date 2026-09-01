@@ -279,9 +279,6 @@ onMounted(() => scrollToCurrentTime());
 				</template>
 			</div>
 		</div>
-		<p class="guide-empty-note">
-			Previewed from Moirai scheduling rules. Playback cursor state is not advanced by this guide.
-		</p>
 	</div>
 	<GuideSegmentPreviewModal
 		v-if="selectedLoading || selectedDetail || selectedError"

@@ -412,17 +412,6 @@ onMounted(async () => {
 					</template>
 				</ResourceEmptyState>
 			</section>
-
-			<aside v-if="visibleTemplates.length" class="templates-get-started">
-				<div class="templates-add-icon"><Plus :size="24" /></div>
-				<p>
-					<strong>{{ templates.length ? 'Build another structure' : 'Get started' }}</strong>
-					<span>Create a template to structure a 24-hour day with reusable schedule slots.</span>
-				</p>
-				<RouterLink class="toolbar-button" to="/schedules/templates/new">
-					{{ templates.length ? 'Create Another Template' : 'Create Your First Template' }}
-				</RouterLink>
-			</aside>
 		</template>
 
 		<TemplateEditor
