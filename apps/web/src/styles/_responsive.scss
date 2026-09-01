@@ -279,6 +279,7 @@ body:has(.standalone-editor-backdrop) {
 
 @media (max-width: 680px) {
 	.app-content {
+		--app-content-inline-padding: 14px;
 		padding-inline: 14px;
 	}
 

@@ -365,9 +365,10 @@ a.nav-link.router-link-exact-active {
 }
 
 .app-content {
+	--app-content-inline-padding: clamp(24px, 2.6vw, 42px);
 	width: 100%;
 	min-width: 0;
-	padding: 28px clamp(24px, 2.6vw, 42px) 54px;
+	padding: 28px var(--app-content-inline-padding) 54px;
 }
 
 .transient-toast {

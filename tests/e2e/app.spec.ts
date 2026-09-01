@@ -501,8 +501,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Select items' }).click();
 	await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Add selected' })).toBeDisabled();
-	await expect(page.getByRole('toolbar', { name: 'Item selection' })).toHaveCSS('position', 'sticky');
+	await expect(page.locator('.catalog-controls-stack')).toHaveCSS('position', 'sticky');
+	await expect(page.getByRole('toolbar', { name: 'Item selection' })).toHaveCSS('background-color', 'rgb(8, 43, 37)');
 	await expect(page.locator('.catalog-footer')).toHaveCSS('position', 'sticky');
+	await expect(page.locator('.catalog-footer')).toHaveCSS('border-radius', '0px');
+	const appContentBounds = await page.locator('.app-content').boundingBox();
+	const catalogFooterBounds = await page.locator('.catalog-footer').boundingBox();
+	expect(Math.abs(catalogFooterBounds!.x - appContentBounds!.x)).toBeLessThan(2);
+	expect(Math.abs(catalogFooterBounds!.width - appContentBounds!.width)).toBeLessThan(2);
 	await page.getByRole('button', { name: 'Select Companion Fixture' }).click();
 	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Add selected' })).toBeEnabled();

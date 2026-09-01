@@ -114,8 +114,7 @@ const scanProgressDescription = computed(() => {
 const searchInput = ref<HTMLInputElement>();
 const libraryPage = ref<HTMLElement>();
 const libraryHeader = ref<HTMLElement>();
-const catalogToolbar = ref<HTMLElement>();
-const catalogSelectionToolbar = ref<HTMLElement>();
+const catalogControlsStack = ref<HTMLElement>();
 const catalogResults = ref<HTMLElement>();
 const navigationScroller = ref<HTMLElement>();
 const searchText = ref(queryString('q'));
@@ -503,7 +502,7 @@ function setNavigationButton(key: string, element: Element | ComponentPublicInst
 
 /** Return the vertical boundary used to select the active catalog anchor. */
 function stickyBoundary(): number {
-	if (!libraryPage.value || !libraryHeader.value || !catalogToolbar.value) {
+	if (!libraryPage.value || !libraryHeader.value || !catalogControlsStack.value) {
 		return 0;
 	}
 
@@ -512,29 +511,26 @@ function stickyBoundary(): number {
 	);
 	return (
 		(Number.isFinite(applicationOffset) ? applicationOffset : 0)
-		+ libraryHeader.value.offsetHeight
-		+ catalogToolbar.value.offsetHeight
-		+ (catalogSelectionToolbar.value?.offsetHeight ?? 0)
+		+ libraryHeader.value.getBoundingClientRect().height
+		+ catalogControlsStack.value.getBoundingClientRect().height
 	);
 }
 
 /** Publish measured sticky-header heights for layout and scroll calculations. */
 function updateStickyMetrics(): void {
-	if (!libraryPage.value || !libraryHeader.value || !catalogToolbar.value) {
+	if (!libraryPage.value || !libraryHeader.value || !catalogControlsStack.value) {
 		return;
 	}
 
+	const headerHeight = libraryHeader.value.getBoundingClientRect().height;
+	const controlsHeight = catalogControlsStack.value.getBoundingClientRect().height;
 	libraryPage.value.style.setProperty(
 		'--library-header-height',
-		`${libraryHeader.value.offsetHeight}px`,
+		`${headerHeight}px`,
 	);
 	libraryPage.value.style.setProperty(
-		'--catalog-toolbar-height',
-		`${catalogToolbar.value.offsetHeight}px`,
-	);
-	libraryPage.value.style.setProperty(
-		'--catalog-selection-toolbar-height',
-		`${catalogSelectionToolbar.value?.offsetHeight ?? 0}px`,
+		'--catalog-controls-height',
+		`${controlsHeight}px`,
 	);
 	scheduleAnchorUpdate();
 }
@@ -667,16 +663,13 @@ let resizeObserver: ResizeObserver | undefined;
 /** Watch sticky header sizes and refresh catalog scroll geometry. */
 function observeStickyElements(): void {
 	resizeObserver?.disconnect();
-	if (!libraryHeader.value || !catalogToolbar.value) {
+	if (!libraryHeader.value || !catalogControlsStack.value) {
 		return;
 	}
 
 	resizeObserver = new ResizeObserver(updateStickyMetrics);
 	resizeObserver.observe(libraryHeader.value);
-	resizeObserver.observe(catalogToolbar.value);
-	if (catalogSelectionToolbar.value) {
-		resizeObserver.observe(catalogSelectionToolbar.value);
-	}
+	resizeObserver.observe(catalogControlsStack.value);
 	updateStickyMetrics();
 }
 
@@ -1162,163 +1155,165 @@ onUnmounted(() => {
 			</div>
 		</header>
 
-		<p v-if="actionError" class="notice error" role="alert">{{ actionError }}</p>
-		<div v-if="library.warningCount > 0" class="reconciliation-banner library-warning-banner" role="alert">
-			<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
-			<div>
-				<strong>Library scan needs attention</strong>
-				<p>{{ library.warningCount }} scan {{ library.warningCount === 1 ? 'issue requires' : 'issues require' }} review.</p>
-				<ul v-if="showScanIssues && currentScanIssues.length" class="library-warning-issues">
-					<li v-for="issue in currentScanIssues" :key="`${issue.code}:${issue.path}:${issue.message}`"><strong>{{ issue.code }}</strong><span>{{ issue.path ?? issue.message }}</span><small v-if="issue.path">{{ issue.message }}</small></li>
-				</ul>
-				<p v-else-if="showScanIssues">Detailed issues are no longer retained. Run a library sync to refresh the warning state.</p>
-			</div>
-			<button v-if="currentScanIssues.length" type="button" class="button secondary" :aria-expanded="showScanIssues" @click="showScanIssues = !showScanIssues">{{ showScanIssues ? 'Hide issues' : 'Review issues' }}</button>
-		</div>
-		<div v-if="sourceUnavailable" class="source-outage-banner" role="status">
-			<span class="source-outage-icon"><Unplug :size="22" /></span>
-			<div>
-				<strong>{{ isScanRunning() ? 'Checking media source' : 'Media source may be offline' }}</strong>
-				<p v-if="isScanRunning()">
-					Moirai is checking <code>{{ library.sourceConfig.scanRoot }}</code> after the source
-					was unavailable. Indexed media remains retained while the scan runs.
-				</p>
-				<p v-else>
-					Moirai cannot currently access <code>{{ library.sourceConfig.scanRoot }}</code>. The
-					disk may be disconnected or unmounted, or the network location may be offline.
-					Indexed media is being retained until the source returns and a healthy scan completes.
-				</p>
-			</div>
-			<button v-if="!isScanRunning()" class="button secondary" @click="scan">Scan again</button>
-		</div>
-		<div
-			v-if="reconciliation && reconciliation.status !== 'idle'"
-			class="reconciliation-banner"
-		>
-			<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
-			<div>
-				<strong>Library index needs review</strong>
-				<p>{{ reconciliation.pendingRemovalCount }} indexed item(s) are awaiting reconciliation.</p>
-			</div>
-			<button class="button secondary" @click="showReconciliation = true">Review</button>
-		</div>
-
-		<section class="library-status-panel" aria-label="Library status">
-			<div class="status-stat status-watcher">
-				<span class="status-icon"><Unplug v-if="sourceUnavailable" :size="24" /><CircleCheck v-else :size="24" /></span>
-				<div><span>Watcher</span><strong>{{ sourceUnavailable ? 'Source offline' : library.watcherStatus === 'fallback' ? 'Periodic scans' : library.watcherStatus }}</strong><small>{{ sourceUnavailable ? 'Waiting for the configured path' : library.watcherStatus === 'fallback' ? 'Live watching paused; scheduled scans remain active' : library.watcherEnabled ? 'Monitoring library' : 'Disabled' }}</small></div>
-			</div>
-			<div class="status-stat status-scan">
-				<span class="status-icon" :class="{ spinning: isScanRunning() }"><RefreshCw :size="24" /></span>
+		<div class="library-status-surface">
+			<p v-if="actionError" class="notice error" role="alert">{{ actionError }}</p>
+			<div v-if="library.warningCount > 0" class="reconciliation-banner library-warning-banner" role="alert">
+				<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
 				<div>
-					<span>Scan status</span>
-					<strong>{{ isScanRunning() ? 'Running' : sourceUnavailable ? 'Source unavailable' : latestScan?.status ?? 'Ready' }}</strong>
-					<small>{{ isScanRunning() ? scanProgressDescription : sourceUnavailable ? 'Disk path cannot be accessed' : 'No scan in progress' }}</small>
-					<div
-						v-if="isScanRunning() && scanProgressPercent !== null"
-						class="scan-progress-track"
-						role="progressbar"
-						aria-label="Library scan progress"
-						aria-valuemin="0"
-						aria-valuemax="100"
-						:aria-valuenow="scanProgressPercent"
-					>
-						<i class="scan-progress-fill" :style="{ width: `${scanProgressPercent}%` }"></i>
-					</div>
-					<button v-if="isScanRunning()" class="status-inline-action" @click="cancelScan">Cancel scan</button>
+					<strong>Library scan needs attention</strong>
+					<p>{{ library.warningCount }} scan {{ library.warningCount === 1 ? 'issue requires' : 'issues require' }} review.</p>
+					<ul v-if="showScanIssues && currentScanIssues.length" class="library-warning-issues">
+						<li v-for="issue in currentScanIssues" :key="`${issue.code}:${issue.path}:${issue.message}`"><strong>{{ issue.code }}</strong><span>{{ issue.path ?? issue.message }}</span><small v-if="issue.path">{{ issue.message }}</small></li>
+					</ul>
+					<p v-else-if="showScanIssues">Detailed issues are no longer retained. Run a library sync to refresh the warning state.</p>
 				</div>
+				<button v-if="currentScanIssues.length" type="button" class="button secondary" :aria-expanded="showScanIssues" @click="showScanIssues = !showScanIssues">{{ showScanIssues ? 'Hide issues' : 'Review issues' }}</button>
 			</div>
-			<div class="status-stat status-indexed">
-				<span class="status-icon"><Layers3 :size="24" /></span>
-				<div><span>Indexed</span><strong>{{ library.itemCount.toLocaleString() }}</strong><small>{{ typeLabel }}</small></div>
-			</div>
-			<div class="status-stat status-last-scan">
-				<span class="status-icon"><Clock3 :size="24" /></span>
-				<div><span>Last scan</span><strong>{{ formatDate(library.lastScanCompletedAt) }}</strong><small>{{ formatRelative(library.lastScanCompletedAt) }}</small></div>
-			</div>
-			<div class="status-stat status-change">
-				<span class="status-icon"><Zap :size="24" /></span>
-				<div><span>Last change</span><strong>{{ formatDate(library.lastChangeDetectedAt) }}</strong><small>{{ formatRelative(library.lastChangeDetectedAt) }}</small></div>
-			</div>
-		</section>
-
-		<nav v-if="trail.length > 1" class="breadcrumbs" aria-label="Library location">
-			<button v-for="(crumb, index) in trail" :key="crumb.id ?? 'root'" @click="jump(index)">{{ crumb.title }}</button>
-		</nav>
-
-		<div ref="catalogToolbar" class="catalog-toolbar">
-			<div ref="navigationScroller" class="alphabet-filter" aria-label="Catalog navigation">
-				<template v-if="sort === 'title'">
-					<button v-for="key in alphabet" :key="key" :ref="(element) => setNavigationButton(key, element)" :class="{ active: activeNavigationKey === key }" :aria-current="activeNavigationKey === key ? 'location' : undefined" :disabled="!browse?.navigation.some((option) => option.key === key)" @click="navigateToKey(key)">{{ key }}</button>
-				</template>
-				<template v-else-if="sort === 'date-added'">
-					<button v-for="option in [{ key: 'today', label: 'Today' }, { key: 'week', label: 'This Week' }, { key: 'month', label: 'This Month' }, { key: 'three-months', label: '3 Months' }, { key: 'six-months', label: 'Six Months' }, { key: 'older', label: 'Older' }]" :key="option.key" class="date-option" :class="{ active: activeNavigationKey === option.key }" :aria-current="activeNavigationKey === option.key ? 'location' : undefined" @click="selectDateWindow(option.key)">{{ option.label }}</button>
-				</template>
-				<template v-else>
-					<button v-for="option in browse?.navigation ?? []" :key="option.key" :ref="(element) => setNavigationButton(option.key, element)" class="genre-option" :class="{ active: activeNavigationKey === option.key }" :aria-current="activeNavigationKey === option.key ? 'location' : undefined" @click="navigateToKey(option.key)">{{ option.label }}</button>
-				</template>
-			</div>
-			<div class="action-menu sort-control">
-				<button class="catalog-select wide" :aria-expanded="showSort" @click="showSort = !showSort">{{ sortLabel }} <ChevronDown :size="16" /></button>
-				<div v-if="showSort" class="action-popover sort-popover">
-					<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
-					<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse order</button>
+			<div v-if="sourceUnavailable" class="source-outage-banner" role="status">
+				<span class="source-outage-icon"><Unplug :size="22" /></span>
+				<div>
+					<strong>{{ isScanRunning() ? 'Checking media source' : 'Media source may be offline' }}</strong>
+					<p v-if="isScanRunning()">
+						Moirai is checking <code>{{ library.sourceConfig.scanRoot }}</code> after the source
+						was unavailable. Indexed media remains retained while the scan runs.
+					</p>
+					<p v-else>
+						Moirai cannot currently access <code>{{ library.sourceConfig.scanRoot }}</code>. The
+						disk may be disconnected or unmounted, or the network location may be offline.
+						Indexed media is being retained until the source returns and a healthy scan completes.
+					</p>
 				</div>
+				<button v-if="!isScanRunning()" class="button secondary" @click="scan">Scan again</button>
 			</div>
-			<button class="toolbar-button" :class="{ active: activeFilterCount > 0 }" @click="openFilters"><Filter :size="16" /> Filter <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
-			<button
-				type="button"
-				class="toolbar-button catalog-selection-toggle"
-				:class="{ active: selectionMode }"
-				:aria-pressed="selectionMode"
-				@click="selectionMode ? cancelSelection() : beginSelection()"
-			>
-				<X v-if="selectionMode" :size="16" />
-				<ListPlus v-else :size="16" />
-				{{ selectionMode ? 'Cancel' : 'Select items' }}
-			</button>
-		</div>
-		<Transition
-			name="catalog-selection"
-			@after-enter="observeStickyElements"
-			@after-leave="observeStickyElements"
-		>
 			<div
-				v-if="selectionMode"
-				ref="catalogSelectionToolbar"
-				class="catalog-selection-toolbar"
-				role="toolbar"
-				aria-label="Item selection"
+				v-if="reconciliation && reconciliation.status !== 'idle'"
+				class="reconciliation-banner"
 			>
-				<div class="catalog-selection-primary">
-					<strong>{{ selectedItemIds.length }} selected</strong>
-					<button
-						type="button"
-						class="toolbar-button catalog-selection-action"
-						:disabled="selectedItemIds.length === 0"
-						@click="addSelectedItems"
-					>
-						<ListPlus :size="15" /> Add selected
-					</button>
-					<button
-						type="button"
-						class="toolbar-button catalog-selection-action"
-						:disabled="mediaLoading || !browse || entries.length === 0"
-						@click="addAllMatchingItems"
-					>
-						<Layers3 :size="15" /> Add all
-					</button>
+				<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
+				<div>
+					<strong>Library index needs review</strong>
+					<p>{{ reconciliation.pendingRemovalCount }} indexed item(s) are awaiting reconciliation.</p>
 				</div>
+				<button class="button secondary" @click="showReconciliation = true">Review</button>
+			</div>
+
+			<section class="library-status-panel" aria-label="Library status">
+				<div class="status-stat status-watcher">
+					<span class="status-icon"><Unplug v-if="sourceUnavailable" :size="24" /><CircleCheck v-else :size="24" /></span>
+					<div><span>Watcher</span><strong>{{ sourceUnavailable ? 'Source offline' : library.watcherStatus === 'fallback' ? 'Periodic scans' : library.watcherStatus }}</strong><small>{{ sourceUnavailable ? 'Waiting for the configured path' : library.watcherStatus === 'fallback' ? 'Live watching paused; scheduled scans remain active' : library.watcherEnabled ? 'Monitoring library' : 'Disabled' }}</small></div>
+				</div>
+				<div class="status-stat status-scan">
+					<span class="status-icon" :class="{ spinning: isScanRunning() }"><RefreshCw :size="24" /></span>
+					<div>
+						<span>Scan status</span>
+						<strong>{{ isScanRunning() ? 'Running' : sourceUnavailable ? 'Source unavailable' : latestScan?.status ?? 'Ready' }}</strong>
+						<small>{{ isScanRunning() ? scanProgressDescription : sourceUnavailable ? 'Disk path cannot be accessed' : 'No scan in progress' }}</small>
+						<div
+							v-if="isScanRunning() && scanProgressPercent !== null"
+							class="scan-progress-track"
+							role="progressbar"
+							aria-label="Library scan progress"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							:aria-valuenow="scanProgressPercent"
+						>
+							<i class="scan-progress-fill" :style="{ width: `${scanProgressPercent}%` }"></i>
+						</div>
+						<button v-if="isScanRunning()" class="status-inline-action" @click="cancelScan">Cancel scan</button>
+					</div>
+				</div>
+				<div class="status-stat status-indexed">
+					<span class="status-icon"><Layers3 :size="24" /></span>
+					<div><span>Indexed</span><strong>{{ library.itemCount.toLocaleString() }}</strong><small>{{ typeLabel }}</small></div>
+				</div>
+				<div class="status-stat status-last-scan">
+					<span class="status-icon"><Clock3 :size="24" /></span>
+					<div><span>Last scan</span><strong>{{ formatDate(library.lastScanCompletedAt) }}</strong><small>{{ formatRelative(library.lastScanCompletedAt) }}</small></div>
+				</div>
+				<div class="status-stat status-change">
+					<span class="status-icon"><Zap :size="24" /></span>
+					<div><span>Last change</span><strong>{{ formatDate(library.lastChangeDetectedAt) }}</strong><small>{{ formatRelative(library.lastChangeDetectedAt) }}</small></div>
+				</div>
+			</section>
+		</div>
+
+		<div ref="catalogControlsStack" class="catalog-controls-stack">
+			<nav v-if="trail.length > 1" class="breadcrumbs" aria-label="Library location">
+				<button v-for="(crumb, index) in trail" :key="crumb.id ?? 'root'" @click="jump(index)">{{ crumb.title }}</button>
+			</nav>
+			<div class="catalog-toolbar">
+				<div ref="navigationScroller" class="alphabet-filter" aria-label="Catalog navigation">
+					<template v-if="sort === 'title'">
+						<button v-for="key in alphabet" :key="key" :ref="(element) => setNavigationButton(key, element)" :class="{ active: activeNavigationKey === key }" :aria-current="activeNavigationKey === key ? 'location' : undefined" :disabled="!browse?.navigation.some((option) => option.key === key)" @click="navigateToKey(key)">{{ key }}</button>
+					</template>
+					<template v-else-if="sort === 'date-added'">
+						<button v-for="option in [{ key: 'today', label: 'Today' }, { key: 'week', label: 'This Week' }, { key: 'month', label: 'This Month' }, { key: 'three-months', label: '3 Months' }, { key: 'six-months', label: 'Six Months' }, { key: 'older', label: 'Older' }]" :key="option.key" class="date-option" :class="{ active: activeNavigationKey === option.key }" :aria-current="activeNavigationKey === option.key ? 'location' : undefined" @click="selectDateWindow(option.key)">{{ option.label }}</button>
+					</template>
+					<template v-else>
+						<button v-for="option in browse?.navigation ?? []" :key="option.key" :ref="(element) => setNavigationButton(option.key, element)" class="genre-option" :class="{ active: activeNavigationKey === option.key }" :aria-current="activeNavigationKey === option.key ? 'location' : undefined" @click="navigateToKey(option.key)">{{ option.label }}</button>
+					</template>
+				</div>
+				<div class="action-menu sort-control">
+					<button class="catalog-select wide" :aria-expanded="showSort" @click="showSort = !showSort">{{ sortLabel }} <ChevronDown :size="16" /></button>
+					<div v-if="showSort" class="action-popover sort-popover">
+						<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
+						<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse order</button>
+					</div>
+				</div>
+				<button class="toolbar-button" :class="{ active: activeFilterCount > 0 }" @click="openFilters"><Filter :size="16" /> Filter <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
 				<button
 					type="button"
-					class="toolbar-button catalog-selection-page-action"
-					:disabled="pageItemIds.length === 0"
-					@click="togglePageSelection"
+					class="toolbar-button catalog-selection-toggle"
+					:class="{ active: selectionMode }"
+					:aria-pressed="selectionMode"
+					@click="selectionMode ? cancelSelection() : beginSelection()"
 				>
-					{{ allPageItemsSelected ? 'Clear page' : 'Select page' }}
+					<X v-if="selectionMode" :size="16" />
+					<ListPlus v-else :size="16" />
+					{{ selectionMode ? 'Cancel' : 'Select items' }}
 				</button>
 			</div>
-		</Transition>
+			<Transition
+				name="catalog-selection"
+				@after-enter="observeStickyElements"
+				@after-leave="observeStickyElements"
+			>
+				<div
+					v-if="selectionMode"
+					class="catalog-selection-toolbar"
+					role="toolbar"
+					aria-label="Item selection"
+				>
+					<div class="catalog-selection-primary">
+						<strong>{{ selectedItemIds.length }} selected</strong>
+						<button
+							type="button"
+							class="toolbar-button catalog-selection-action"
+							:disabled="selectedItemIds.length === 0"
+							@click="addSelectedItems"
+						>
+							<ListPlus :size="15" /> Add selected
+						</button>
+						<button
+							type="button"
+							class="toolbar-button catalog-selection-action"
+							:disabled="mediaLoading || !browse || entries.length === 0"
+							@click="addAllMatchingItems"
+						>
+							<Layers3 :size="15" /> Add all
+						</button>
+					</div>
+					<button
+						type="button"
+						class="toolbar-button catalog-selection-page-action"
+						:disabled="pageItemIds.length === 0"
+						@click="togglePageSelection"
+					>
+						{{ allPageItemsSelected ? 'Clear page' : 'Select page' }}
+					</button>
+				</div>
+			</Transition>
+		</div>
 
 		<section ref="catalogResults" class="catalog-results" :class="{ loading: mediaLoading }" aria-live="polite">
 			<LoadingState v-if="mediaLoading && !browse" label="Loading media…" />

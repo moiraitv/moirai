@@ -1,22 +1,29 @@
 .library-page {
 	--app-header-offset: 0px;
 	--library-header-height: 0px;
-	--catalog-toolbar-height: 0px;
-	--catalog-selection-toolbar-height: 0px;
+	--catalog-controls-height: 0px;
 }
 
 .library-page-header {
 	position: sticky;
 	top: var(--app-header-offset);
 	z-index: 17;
-	padding: 10px 0 14px;
+	width: calc(100% + var(--app-content-inline-padding) + var(--app-content-inline-padding));
+	padding: 10px var(--app-content-inline-padding) 14px;
 	display: flex;
 	justify-content: space-between;
 	align-items: flex-end;
 	gap: 28px;
-	margin: -10px 0 15px;
-	background: linear-gradient(180deg, #06101a 82%, rgba(6, 16, 26, 0.97));
+	margin: -10px calc(0px - var(--app-content-inline-padding)) 0;
+	background: rgba(7, 18, 28, 0.97);
 	box-shadow: 0 1px rgba(37, 57, 73, 0.35);
+}
+
+.library-status-surface {
+	width: calc(100% + var(--app-content-inline-padding) + var(--app-content-inline-padding));
+	margin-inline: calc(0px - var(--app-content-inline-padding));
+	padding: 15px var(--app-content-inline-padding) 0;
+	background: #06101a;
 }
 
 .library-page-header h1 {
@@ -507,27 +514,31 @@
 	font-size: 0.68rem;
 }
 
-.catalog-toolbar {
+.catalog-controls-stack {
 	position: sticky;
 	top: calc(var(--app-header-offset) + var(--library-header-height));
 	z-index: 16;
+	width: calc(100% + var(--app-content-inline-padding) + var(--app-content-inline-padding));
+	margin: 0 calc(0px - var(--app-content-inline-padding)) 10px;
+	padding-inline: var(--app-content-inline-padding);
+	background: rgba(7, 18, 28, 0.97);
+}
+
+.catalog-controls-stack:has(.catalog-selection-toolbar) {
+	padding-bottom: 8px;
+}
+
+.catalog-toolbar {
 	padding: 8px 0;
 	display: grid;
 	grid-template-columns: minmax(350px, 1fr) auto auto auto;
 	align-items: center;
 	gap: 12px;
-	margin: -8px 0 10px;
-	background: linear-gradient(180deg, #06101a 78%, rgba(6, 16, 26, 0.97));
-	box-shadow: 0 1px rgba(37, 57, 73, 0.28);
+	background: transparent;
 }
 
 .catalog-selection-toolbar {
-	position: sticky;
-	top: calc(
-		var(--app-header-offset) + var(--library-header-height) + var(--catalog-toolbar-height)
-	);
-	z-index: 15;
-	margin: -2px 0 14px;
+	margin: 0;
 	padding: 10px 12px;
 	display: flex;
 	align-items: center;
@@ -535,7 +546,7 @@
 	gap: 14px;
 	border: 1px solid rgba(37, 199, 156, 0.34);
 	border-radius: 10px;
-	background: rgba(8, 43, 37, 0.97);
+	background: #082b25;
 	box-shadow: 0 7px 14px rgba(2, 8, 12, 0.28);
 }
 
@@ -773,8 +784,8 @@ a.media-card {
 
 .catalog-anchor {
 	scroll-margin-top: calc(
-		var(--app-header-offset) + var(--library-header-height) + var(--catalog-toolbar-height)
-			+ var(--catalog-selection-toolbar-height) + 4px
+		var(--app-header-offset) + var(--library-header-height) + var(--catalog-controls-height)
+			+ 4px
 	);
 }
 
@@ -930,7 +941,9 @@ a.media-card {
 	bottom: 0;
 	z-index: 14;
 	min-height: 68px;
-	padding: 12px;
+	width: calc(100% + var(--app-content-inline-padding) + var(--app-content-inline-padding));
+	margin-inline: calc(0px - var(--app-content-inline-padding));
+	padding: 12px calc(12px + var(--app-content-inline-padding));
 	display: grid;
 	grid-template-columns: 1fr auto 1fr;
 	align-items: center;
@@ -938,10 +951,14 @@ a.media-card {
 	color: var(--muted);
 	border: 1px solid rgba(52, 72, 88, 0.72);
 	border-bottom: 0;
-	border-radius: 10px 10px 0 0;
+	border-radius: 0;
 	background: rgba(7, 18, 28, 0.97);
 	box-shadow: 0 -8px 24px rgba(2, 8, 12, 0.34);
 	font-size: 0.74rem;
+}
+
+.library-header-icon-button .spinning {
+	animation: loading-spin 1.4s linear infinite;
 }
 
 .pagination-gap {
