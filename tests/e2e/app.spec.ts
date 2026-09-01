@@ -578,7 +578,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await addToProgram.getByRole('radio', { name: /Create a new program/ }).check();
 	const filteredProgramName = `Z E2E Filtered Picks ${runId}`;
 	await addToProgram.getByLabel('Program name').fill(filteredProgramName);
-	await addToProgram.getByLabel('Playback order').selectOption('shuffle');
+	await addToProgram.getByLabel('Playback order').selectOption('weighted-random');
 	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
 	await expect(page.getByRole('status')).toContainText(`1 added to ${filteredProgramName}`);
 	await page.getByRole('button', { name: 'Dismiss' }).click();

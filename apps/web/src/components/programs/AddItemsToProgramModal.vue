@@ -5,6 +5,7 @@ import {
 	type ProgramItemAddition,
 	type ProgramItemAdditionResult,
 	type SchedulingProgram,
+	type SelectionStrategy,
 } from '@moirai/shared';
 import {
 	programItemAdditionConfirmationDetailsSchema,
@@ -77,7 +78,7 @@ const pendingConfirmation = ref<PendingProgramAdditionConfirmation | null>(null)
 const destinationType = ref<'existing' | 'new'>('existing');
 const programId = ref('');
 const name = ref('');
-const strategy = ref<'sequential' | 'shuffle' | 'random'>('sequential');
+const strategy = ref<SelectionStrategy['type']>('sequential');
 const compatiblePrograms = computed(() =>
 	(scheduling.overview?.programs ?? []).filter((program) =>
 		program.config.type === 'content'
@@ -321,7 +322,7 @@ onMounted(async () => {
 
 				<div v-if="destinationType === 'new'" class="program-create-fields">
 					<label><span>Program name</span><input v-model="name" maxlength="120" autocomplete="off" /></label>
-					<label><span>Playback order</span><select v-model="strategy"><option value="sequential">Sequential</option><option value="shuffle">Shuffle</option><option value="random">Random</option></select></label>
+					<label><span>Playback order</span><select v-model="strategy"><option value="sequential">Sequential</option><option value="shuffle">Shuffle</option><option value="random">Random</option><option value="weighted-random">Weighted random</option></select></label>
 				</div>
 
 				<footer class="program-item-modal-footer">
