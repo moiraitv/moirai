@@ -13,6 +13,7 @@ import {
 } from '@lucide/vue';
 import type { Channel, ChannelSchedule, ScheduleGuide, ScheduleTemplate } from '@moirai/shared';
 import { channelLogoUrl } from '../../channel-logo';
+import ResourceEmptyState from '../ResourceEmptyState.vue';
 import {
 	schedulePredicateSummary,
 	scheduleTemplateName,
@@ -240,15 +241,27 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 				</div>
 			</article>
 
-			<div v-if="channels.length === 0" class="empty-state">
-				<h3>No channels configured</h3>
-				<p>Create a channel before building its schedule stack.</p>
-				<RouterLink class="button" to="/channels">Create channel</RouterLink>
-			</div>
-			<div v-else-if="filteredChannels.length === 0" class="empty-state compact">
-				<h3>No matching channels</h3>
-				<p>Try a different channel name or number.</p>
-			</div>
+			<ResourceEmptyState
+				v-if="channels.length === 0"
+				title="No channels configured"
+				description="Create a channel before building its schedule stack."
+				:heading-level="3"
+			>
+				<template #icon><TvMinimal :size="37" /></template>
+				<RouterLink class="button" to="/channels?new=1">Create channel</RouterLink>
+			</ResourceEmptyState>
+			<ResourceEmptyState
+				v-else-if="filteredChannels.length === 0"
+				title="No matching channels"
+				description="Try a different channel name or number."
+				:heading-level="3"
+				compact
+			>
+				<template #icon><Search :size="35" /></template>
+				<button class="button" type="button" @click="updateListQuery({ q: null })">
+					Clear search
+				</button>
+			</ResourceEmptyState>
 		</div>
 	</section>
 </template>

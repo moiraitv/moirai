@@ -47,7 +47,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	releaseLibraries?.();
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/libraries');
-	await page.getByRole('button', { name: 'Add library' }).click();
+	await page.locator('.resource-empty-state').getByRole('button', { name: 'Add library' }).click();
 	await page.getByLabel('Name').fill(libraryName);
 	await page.getByLabel('Path Moirai scans').fill(mediaRoot);
 	await page.getByRole('button', { name: 'Add and scan' }).click();
@@ -252,12 +252,17 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByText('No channels configured')).toBeHidden();
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/channels');
+	await page.goto('/guide');
+	await expect(page.getByRole('heading', { name: 'No channels configured' })).toBeVisible();
+	await page.getByRole('link', { name: 'Create channel' }).click();
+	await expect(page).toHaveURL(/\/channels\?new=1$/);
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
-	await page.getByRole('button', { name: 'New channel' }).click();
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
+	await expect(page.locator('.acceleration-prediction')).toBeVisible();
 	await page.getByLabel('Number').fill(runId.slice(-8));
 	await page.getByLabel('Name').fill(channelName);
 	await page.getByRole('button', { name: 'Save changes' }).click();
+	await expect(page).toHaveURL(/\/channels$/);
 	await expect(page.getByText(channelName)).toBeVisible();
 	await expect(page.getByLabel('Seven-day channel guide')).toBeVisible();
 	await expect(page.locator('.status-nav-link')).toContainText('IPTV service ready');
@@ -483,6 +488,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const seasonProgramCard = page.locator('.program-row').filter({
 		has: page.getByRole('link', { name: seasonProgramName, exact: true }),
 	});
+	await page.getByRole('searchbox', { name: 'Search programs' }).fill('No matching program');
+	await expect(page.getByRole('heading', { name: 'No matching programs' })).toBeVisible();
+	await page.getByRole('button', { name: 'Clear filters' }).click();
+	await expect(programCard).toBeVisible();
 	await expect(seasonProgramCard).toContainText('1 selected media groups');
 	await seasonProgramCard.getByRole('link', { name: seasonProgramName, exact: true }).click();
 	await page.getByRole('button', { name: 'Review selection' }).click();
@@ -593,7 +602,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.setViewportSize({ width: 768, height: 1024 });
 	await page.goto('/schedules/templates');
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
-	await page.getByRole('link', { name: 'New template' }).click();
+	await expect(page.getByRole('heading', { name: 'No templates yet' })).toBeVisible();
+	await page.getByRole('link', { name: 'Create your first template' }).click();
 	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByLabel('Template name').fill(templateName);
@@ -706,6 +716,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(channelScheduleHelp).toBeHidden();
 	await page.getByRole('button', { name: 'Show channel schedule help' }).click();
 	await expect(channelScheduleHelp).toBeVisible();
+	await page.getByRole('searchbox', { name: 'Search channels' }).fill('No matching channel');
+	await expect(page.getByRole('heading', { name: 'No matching channels' })).toBeVisible();
+	await page.getByRole('button', { name: 'Clear search' }).click();
 	const channelScheduleCard = page
 		.locator('.schedule-channel-card')
 		.filter({ hasText: `${channelName} Preserved` });
@@ -837,6 +850,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	).toBe(editorColor);
 	await page.getByRole('searchbox', { name: 'Search templates' }).fill(templateName);
 	await expect(page).toHaveURL(/q=E2E(?:\+|%20)Daily/);
+	await expect(templateRow).toBeVisible();
+	await page.getByRole('searchbox', { name: 'Search templates' }).fill('No matching template');
+	await expect(page.getByRole('heading', { name: 'No matching templates' })).toBeVisible();
+	await page.getByRole('button', { name: 'Clear filters' }).click();
 	await expect(templateRow).toBeVisible();
 });
 

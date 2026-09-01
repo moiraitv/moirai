@@ -14,6 +14,7 @@ import { XMLTV_EPG_DAYS } from '@moirai/shared';
 import GuideTimeline from '../components/GuideTimeline.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
+import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 import { liveEvents } from '../live-events';
@@ -340,11 +341,14 @@ onBeforeUnmount(() => {
 				:start-date="weekStart"
 				:days="displayedDays"
 			/>
-			<div v-else-if="!error" class="empty-state">
-				<RadioTower :size="28" />
-				<h3>No channels configured</h3>
-				<p>Create a channel before connecting an IPTV client to the guide.</p>
-			</div>
+			<ResourceEmptyState
+				v-else-if="!error"
+				title="No channels configured"
+				description="Create a channel before connecting an IPTV client to the guide."
+			>
+				<template #icon><RadioTower :size="37" /></template>
+				<RouterLink class="button" to="/channels?new=1">Create channel</RouterLink>
+			</ResourceEmptyState>
 		</template>
 	</section>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RouterLink } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import {
 	CalendarDays,
 	ChevronLeft,
@@ -10,6 +10,7 @@ import {
 	Pencil,
 	Plus,
 	ImagePlus,
+	RadioTower,
 	Trash2,
 	Upload,
 	X,
@@ -30,6 +31,7 @@ import { errorMessage } from '../error-message';
 import GuideTimeline from '../components/GuideTimeline.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
+import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import { liveEvents } from '../live-events';
 import { affectsGuide } from '../guide-events';
 import { cloneContractValue } from '../reactive-clone';
@@ -37,6 +39,8 @@ import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 
 const channelsStore = useChannelsStore();
+const route = useRoute();
+const router = useRouter();
 const {
 	channels,
 	guide,
@@ -215,6 +219,11 @@ function resetLogoEditor(logo: string | null): void {
 function closeForm(): void {
 	disposeCropSource();
 	showForm.value = false;
+	if (route.query.new === '1') {
+		const query = { ...route.query };
+		delete query.new;
+		void router.replace({ path: '/channels', query });
+	}
 }
 
 /** Debounce a server-side prediction and discard responses for superseded form values. */
@@ -566,6 +575,7 @@ function add() {
 	editingId.value = undefined;
 	showForm.value = true;
 }
+
 /** Open an existing channel in the editor. */
 function edit(channel: Channel) {
 	const { id, createdAt, updatedAt, ...config } = channel;
@@ -657,6 +667,18 @@ watch(
 	],
 	scheduleAccelerationPrediction,
 );
+
+/** Open the blank channel creator when requested through the durable channel entry URL. */
+watch(
+	() => route.query.new,
+	(value) => {
+		if (value === '1' && !showForm.value) {
+			add();
+		}
+	},
+	{ immediate: true },
+);
+
 onMounted(() => void loadInitial());
 onBeforeUnmount(() => {
 	unsubscribe();
@@ -751,11 +773,14 @@ onBeforeUnmount(() => {
 					</button>
 				</template>
 			</GuideTimeline>
-			<div v-else-if="!error" class="empty-state">
-				<span>⌁</span>
-				<h3>No channels configured</h3>
-				<p>Create a channel, tune normalization, and stream it directly from Moirai.</p>
-			</div>
+			<ResourceEmptyState
+				v-else-if="!error"
+				title="No channels configured"
+				description="Create a channel, tune normalization, and stream it directly from Moirai."
+			>
+				<template #icon><RadioTower :size="37" /></template>
+				<button class="button" type="button" @click="add"><Plus :size="18" />Create channel</button>
+			</ResourceEmptyState>
 		</template>
 		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">
 			<form class="moirai-dialog" @submit.prevent="save">

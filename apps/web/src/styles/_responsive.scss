@@ -552,16 +552,18 @@ body:has(.standalone-editor-backdrop) {
 		width: 100%;
 	}
 
-	.programs-empty-state {
+	.resource-empty-state {
 		min-height: 370px;
 		padding-inline: 16px;
 	}
 
-	.programs-empty-state > p br {
-		display: none;
+	.resource-empty-state.compact {
+		min-height: 280px;
 	}
 
-	.programs-empty-action {
+	.resource-empty-actions,
+	.resource-empty-actions > .button,
+	.resource-empty-actions > .toolbar-button {
 		width: 100%;
 		min-width: 0;
 	}

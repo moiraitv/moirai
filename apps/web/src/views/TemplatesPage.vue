@@ -9,6 +9,7 @@ import { templateSlotStyle } from '../channel-schedule-display';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
+import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import TemplateEditor from '../components/templates/TemplateEditor.vue';
 import { programColorStyle } from '../program-colors';
 import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
@@ -385,20 +386,34 @@ onMounted(async () => {
 						</select>
 					</footer>
 				</div>
-				<div v-else class="templates-filter-empty">
-					<CalendarDays :size="34" />
-					<h3>{{ templates.length ? 'No matching templates' : 'No templates yet' }}</h3>
-					<p>
-						{{
-							templates.length
-								? 'Adjust the search or channel filter to see more templates.'
-								: 'Create a program, then divide a day into reusable schedule slots.'
-						}}
-					</p>
-				</div>
+				<ResourceEmptyState
+					v-else
+					:title="templates.length ? 'No matching templates' : 'No templates yet'"
+					:description="templates.length
+						? 'Adjust the search or channel filter to see more templates.'
+						: 'Create a program, then divide a day into reusable schedule slots.'"
+					:heading-level="3"
+					:compact="templates.length > 0"
+				>
+					<template #icon><CalendarDays :size="37" /></template>
+					<button
+						v-if="templates.length"
+						class="button"
+						type="button"
+						@click="updateListQuery({ q: null, channel: null, page: null })"
+					>
+						Clear filters
+					</button>
+					<RouterLink v-else class="button" to="/schedules/templates/new">
+						<Plus :size="19" />Create your first template
+					</RouterLink>
+					<template v-if="templates.length" #secondary>
+						<RouterLink to="/schedules/templates/new"><Plus :size="17" />New template</RouterLink>
+					</template>
+				</ResourceEmptyState>
 			</section>
 
-			<aside class="templates-get-started">
+			<aside v-if="visibleTemplates.length" class="templates-get-started">
 				<div class="templates-add-icon"><Plus :size="24" /></div>
 				<p>
 					<strong>{{ templates.length ? 'Build another structure' : 'Get started' }}</strong>

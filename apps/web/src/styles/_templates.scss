@@ -390,28 +390,6 @@
 	border-radius: 6px;
 }
 
-.templates-filter-empty {
-	min-height: 260px;
-	padding: 30px;
-	display: grid;
-	place-items: center;
-	align-content: center;
-	gap: 10px;
-	border: 1px dashed #315268;
-	border-radius: 11px;
-	color: #70d8bf;
-	text-align: center;
-}
-
-.templates-filter-empty h3,
-.templates-filter-empty p {
-	margin: 0;
-}
-
-.templates-filter-empty p {
-	color: var(--muted);
-}
-
 .templates-get-started {
 	min-height: 88px;
 	margin-top: 20px;

@@ -16,6 +16,7 @@ import { liveEvents } from '../live-events';
 import LoadingState from '../components/LoadingState.vue';
 import MediaCardPreview from '../components/MediaCardPreview.vue';
 import PageHeader from '../components/PageHeader.vue';
+import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import StatusPill from '../components/StatusPill.vue';
 import { isLibrarySourceUnavailable, libraryStatusValue } from '../library-health';
 import { useLibrariesStore } from '../stores/libraries';
@@ -249,10 +250,15 @@ onUnmounted(() => {
 				</div>
 			</article>
 		</div>
-		<div v-else-if="loaded && !showForm" class="empty-state">
-			<FolderOpen :size="48" />
-			<h3>Build your first library</h3>
-			<p>Choose a folder with media and Kodi-compatible NFO sidecars.</p>
-		</div>
+		<ResourceEmptyState
+			v-else-if="loaded && !showForm"
+			title="Build your first library"
+			description="Choose a folder with media and Kodi-compatible NFO sidecars."
+		>
+			<template #icon><FolderOpen :size="37" /></template>
+			<button class="button" type="button" @click="showForm = true">
+				<Plus :size="18" />Add library
+			</button>
+		</ResourceEmptyState>
 	</section>
 </template>

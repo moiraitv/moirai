@@ -10,6 +10,7 @@ import PageHeader from '../components/PageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
 import MediaCardPreview from '../components/MediaCardPreview.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
+import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import { countProgramUsages } from '../program-usage';
 import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { useLibrariesStore } from '../stores/libraries';
@@ -220,22 +221,39 @@ onMounted(async () => {
 					</article>
 					<footer class="programs-pagination"><span>Showing {{ programRangeStart }}–{{ programRangeEnd }} of {{ filteredPrograms.length }} programs</span><div class="program-page-buttons"><button type="button" aria-label="Previous program page" :disabled="programPage <= 1" @click="updateListQuery({ page: programPage - 1 || null })"><ChevronLeft :size="18" /></button><button type="button" class="active" aria-current="page">{{ programPage }}</button><button type="button" aria-label="Next program page" :disabled="programPage >= programTotalPages" @click="updateListQuery({ page: programPage + 1 })"><ChevronRight :size="18" /></button></div><select aria-label="Programs per page" :value="programPageSize" @change="updateListQuery({ pageSize: Number(($event.target as HTMLSelectElement).value) === 20 ? null : Number(($event.target as HTMLSelectElement).value), page: null })"><option :value="10">10 per page</option><option :value="20">20 per page</option><option :value="50">50 per page</option></select></footer>
 				</div>
-				<div v-else class="programs-empty-state">
-					<div class="programs-empty-icon" aria-hidden="true">
+				<ResourceEmptyState
+					v-else
+					:title="programs.length ? 'No matching programs' : 'No programs yet'"
+					:description="programs.length
+						? 'Adjust the search or type filter to see more programs.'
+						: 'Create a program to define how media should be selected and arranged. You can reuse it in any schedule slot.'"
+					:heading-level="3"
+					:compact="programs.length > 0"
+				>
+					<template #icon>
 						<ListOrdered :size="37" />
 						<Zap class="programs-empty-zap" :size="23" />
-					</div>
-					<h2>{{ programs.length ? 'No matching programs' : 'No programs yet' }}</h2>
-					<p>
-						{{ programs.length ? 'Adjust the search or type filter to see more programs.' : 'Create a program to define how media should be selected and arranged. You can reuse it in any schedule slot.' }}
-					</p>
-					<RouterLink class="button programs-empty-action" to="/schedules/programs/new">
+					</template>
+					<button
+						v-if="programs.length"
+						class="button"
+						type="button"
+						@click="updateListQuery({ q: null, type: null, page: null })"
+					>
+						Clear filters
+					</button>
+					<RouterLink v-else class="button" to="/schedules/programs/new">
 						<Plus :size="19" />Create your first program
 					</RouterLink>
-					<a class="programs-example-link" href="#program-types" @click="showProgramHelp">
-						<FileText :size="17" />Browse example programs
-					</a>
-				</div>
+					<template #secondary>
+						<RouterLink v-if="programs.length" to="/schedules/programs/new">
+							<Plus :size="17" />New program
+						</RouterLink>
+						<a v-else href="#program-types" @click="showProgramHelp">
+							<FileText :size="17" />Browse example programs
+						</a>
+					</template>
+				</ResourceEmptyState>
 			</section>
 		</template>
 

@@ -67,6 +67,87 @@ select {
 	font: inherit;
 }
 
+.resource-empty-state {
+	min-height: 390px;
+	margin-top: 26px;
+	padding: 38px 24px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	border: 1px dashed #315268;
+	border-radius: 13px;
+	background: rgba(5, 14, 23, 0.16);
+	text-align: center;
+}
+
+.resource-empty-state.compact {
+	min-height: 280px;
+}
+
+.resource-empty-icon {
+	position: relative;
+	width: 70px;
+	height: 70px;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line-bright);
+	border-radius: 11px;
+	color: #77c5c3;
+	background: linear-gradient(145deg, #102a37, #0b1b27);
+	box-shadow: 0 0 30px rgba(22, 214, 164, 0.08);
+}
+
+.resource-empty-title {
+	margin: 22px 0 9px;
+	font-size: 1.55rem;
+}
+
+.resource-empty-description {
+	max-width: 560px;
+	margin: 0 0 21px;
+	color: var(--muted-strong);
+	font-size: 0.91rem;
+	line-height: 1.55;
+}
+
+.resource-empty-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+}
+
+.resource-empty-actions > .button,
+.resource-empty-actions > .toolbar-button {
+	min-width: 240px;
+	min-height: 51px;
+	justify-content: center;
+	font-size: 0.94rem;
+}
+
+.resource-empty-secondary {
+	margin-top: 18px;
+	font-size: 0.88rem;
+}
+
+.resource-empty-secondary > a,
+.resource-empty-secondary > button {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	border: 0;
+	background: none;
+	color: var(--accent);
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.resource-empty-secondary > a:hover,
+.resource-empty-secondary > button:hover {
+	color: #64f4cf;
+}
+
 button,
 a {
 	-webkit-tap-highlight-color: transparent;
