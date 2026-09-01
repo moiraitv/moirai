@@ -128,6 +128,21 @@ docker compose up --build
 
 The example maps persistent application data to `/data`. Add read-only media mounts and configure library scan roots using their container paths. Playback roots, when set, must be paths visible inside the same Moirai container because the integrated channel worker inherits those mounts. Set `MOIRAI_PUBLIC_URL` to an origin reachable by IPTV clients; the application shell and Guide display a prominent warning while the loopback default is in use. The pinned upstream engine image is currently `linux/amd64` only.
 
+The production image includes Bash for interactive inspection. Enter the container as its normal
+runtime user to check the permissions Moirai actually receives:
+
+```sh
+docker compose exec moirai bash
+id
+ls -ln /dev/dri
+```
+
+Use `docker compose exec --user root moirai bash` when administrative inspection is necessary. If
+`/dev/dri` is absent, pass it through with the `devices` example in `compose.yaml`. If it is present
+but inaccessible, add the numeric GIDs that own the host's video and render device nodes under
+`group_add`; determine them with `stat -c '%g %n' /dev/dri/*` on the host. Do not diagnose effective
+Moirai permissions from a root shell because root may be able to open devices the runtime user cannot.
+
 Create a **Traditional web** application in Logto. Use `MOIRAI_PUBLIC_URL` for server callbacks and
 `MOIRAI_MANAGEMENT_URL` for the browser return after sign-out. The two values normally match. For
 example, when both are `https://moirai.example.com`, configure:

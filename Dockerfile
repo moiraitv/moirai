@@ -23,6 +23,7 @@ FROM node:24-bookworm-slim AS node-runtime
 FROM ghcr.io/ersatztv/next@sha256:24d6f9d0cd7719e495e79e6919a0e898f83a23812642ae39ad99739b6ce3f9eb AS runtime
 USER root
 ENV NODE_ENV=production \
+    HOME=/home/ersatztv \
     MOIRAI_HOST=0.0.0.0 \
     MOIRAI_PORT=3000 \
     MOIRAI_DATA_DIR=/data \
@@ -36,7 +37,9 @@ COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/node_modules ./apps
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/dist ./apps/server/dist
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/web/dist ./apps/web/dist
 COPY --from=build --chown=ersatztv:ersatztv /app/drizzle ./drizzle
-RUN mkdir -p /data && chown ersatztv:ersatztv /data
+RUN usermod --shell /bin/bash ersatztv \
+    && mkdir -p /data /home/ersatztv \
+    && chown ersatztv:ersatztv /data /home/ersatztv
 USER ersatztv
 EXPOSE 3000
 VOLUME ["/data"]

@@ -33,6 +33,13 @@ services:
       - moirai-data:/data
       # Add media libraries as read-only mounts, for example:
       # - /host/media/movies:/media/movies:ro
+    # Hardware acceleration must be passed through explicitly. Also add the host video/render
+    # group GIDs under group_add when the device nodes are not accessible to the container user.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - '44'
+    #   - '109'
 
 volumes:
   moirai-data:
