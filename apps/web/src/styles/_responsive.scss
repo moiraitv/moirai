@@ -26,7 +26,6 @@ body:has(.standalone-editor-backdrop) {
 }
 
 @media (max-width: 1220px) {
-
 	.programs-intro,
 	.templates-intro {
 		grid-template-columns: 1fr;
@@ -818,6 +817,15 @@ body:has(.standalone-editor-backdrop) {
 		padding-inline: 16px;
 	}
 
+	.selection-drawer-toolbar {
+		grid-template-columns: minmax(0, 1fr) minmax(150px, 0.75fr);
+	}
+
+	.selection-drawer-toolbar label:first-child,
+	.selection-drawer-toolbar.group-selection-toolbar label:first-child {
+		grid-column: 1 / -1;
+	}
+
 	.selection-drawer-content,
 	.selection-drawer-footer {
 		padding-inline: 14px;
@@ -944,6 +952,14 @@ body:has(.standalone-editor-backdrop) {
 }
 
 @media (max-width: 440px) {
+	.selection-drawer-toolbar {
+		grid-template-columns: 1fr;
+	}
+
+	.selection-drawer-toolbar > * {
+		grid-column: 1;
+	}
+
 	.filter-release-inputs,
 	.genre-match,
 	.genre-choices {

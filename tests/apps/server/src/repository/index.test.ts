@@ -10,6 +10,7 @@ import {
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 	type LibraryCreate,
+	type ProgramConfig,
 } from '@moirai/shared';
 import { loadConfig } from '@server/config.js';
 import { createDatabase } from '@server/db/index.js';
@@ -182,6 +183,7 @@ describe('Repository scan reconciliation', () => {
 					type: 'collection',
 					libraryId: library.id,
 					itemIds: [absorbed.id],
+					sort: { type: 'manual', itemIds: [absorbed.id] },
 				},
 				strategy: { type: 'sequential' },
 			},
@@ -212,6 +214,10 @@ describe('Repository scan reconciliation', () => {
 			primaryGenre: null,
 			actors: [],
 		});
+		expect(await repository.listMediaItemsByIds(library.id, [absorbed.id]))
+			.toMatchObject([{ id: logical.id }]);
+		expect(await repository.listMediaItemsByIds(library.id, [absorbed.id], 'requested'))
+			.toMatchObject([{ id: absorbed.id, title: logical.title }]);
 		const addition = repository.appendProgramItems(
 			selectedProgram.id,
 			library.id,
@@ -222,7 +228,14 @@ describe('Repository scan reconciliation', () => {
 			changed: true,
 			addedItemCount: 0,
 			alreadySelectedCount: 1,
-			program: { config: { source: { itemIds: [logical.id] } } },
+			program: {
+				config: {
+					source: {
+						itemIds: [logical.id],
+						sort: { type: 'manual', itemIds: [logical.id] },
+					},
+				},
+			},
 		});
 	});
 
@@ -820,7 +833,11 @@ describe('Repository scan reconciliation', () => {
 			sortTitle: 'Alpha',
 			titleBucket: 'A',
 			plot: 'A navigator charts a course through an unstable frontier.',
-			metadata: { rating: 8.2, genres: ['Science Fiction', 'Drama'] },
+			metadata: {
+				releaseDate: '2001-06-01',
+				rating: 8.2,
+				genres: ['Science Fiction', 'Drama'],
+			},
 			genres: [
 				{ key: 'drama', name: 'Drama' },
 				{ key: 'science-fiction', name: 'Science Fiction' },
@@ -981,7 +998,12 @@ describe('Repository scan reconciliation', () => {
 			name: 'Selected films',
 			config: {
 				type: 'content',
-				source: { type: 'collection', libraryId: library.id, itemIds: [alpha.id] },
+				source: {
+					type: 'collection',
+					libraryId: library.id,
+					itemIds: [alpha.id],
+					sort: { type: 'manual', itemIds: [alpha.id] },
+				},
 				strategy: { type: 'shuffle', seed: 'stable' },
 			},
 		});
@@ -996,7 +1018,10 @@ describe('Repository scan reconciliation', () => {
 			alreadySelectedCount: 1,
 			program: {
 				config: {
-					source: { itemIds: [alpha.id, beta.id] },
+					source: {
+						itemIds: [alpha.id, beta.id],
+						sort: { type: 'manual', itemIds: [alpha.id, beta.id] },
+					},
 					strategy: { type: 'shuffle', seed: 'stable' },
 				},
 			},
@@ -1007,6 +1032,7 @@ describe('Repository scan reconciliation', () => {
 		});
 		expect(await repository.getMediaItem(alpha.id)).toMatchObject({
 			durationSeconds: 98.765,
+			releaseDate: '2001-06-01',
 			genres: ['Drama', 'Science Fiction'],
 			actors: [
 				{ name: 'Ada Actor', role: 'Navigator', sortOrder: 1 },
@@ -1238,6 +1264,7 @@ describe('Repository scheduling catalog', () => {
 							type: 'collection',
 							libraryId: library.id,
 							itemIds: items.slice(start, start + 400).map((entry) => entry.id),
+							sort: { type: 'date-added', direction: 'asc' },
 						},
 						strategy: { type: 'sequential' },
 					},
@@ -1251,8 +1278,37 @@ describe('Repository scheduling catalog', () => {
 					type: 'collection',
 					libraryId: library.id,
 					itemIds: [items[0]!.id],
+					sort: { type: 'name', direction: 'asc' },
 				},
 				strategy: { type: 'sequential' },
+			},
+		});
+		const editedConfig = {
+			type: 'content',
+			source: {
+				type: 'collection',
+				libraryId: library.id,
+				itemIds: [items[0]!.id],
+				sort: { type: 'date-added', direction: 'desc' },
+			},
+			strategy: { type: 'sequential' },
+		} satisfies ProgramConfig;
+		const editedProgram = await repository.createProgram({
+			name: 'Edited collection',
+			config: editedConfig,
+		});
+		const edited = await repository.updateProgram(editedProgram.id, {
+			config: {
+				...editedConfig,
+				source: {
+					...editedConfig.source,
+					itemIds: [items[0]!.id, items[1]!.id, items[2]!.id],
+				},
+			},
+		});
+		expect(edited?.config).toMatchObject({
+			source: {
+				additionBatches: [[items[0]!.id], [items[1]!.id, items[2]!.id]],
 			},
 		});
 		const capacity = repository.appendProgramItems(
@@ -1346,10 +1402,17 @@ describe('Repository scheduling catalog', () => {
 			status: 'updated',
 			addedItemCount: PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD + 1,
 			alreadySelectedCount: 1,
-			program: { config: { source: { itemIds: confirmationItemIds } } },
+			program: {
+				config: {
+					source: {
+						itemIds: confirmationItemIds,
+						additionBatches: [[confirmationItemIds[0]!], confirmationItemIds.slice(1)],
+					},
+				},
+			},
 		});
 
-		for (const strategyType of ['shuffle', 'random'] as const) {
+		for (const strategyType of ['shuffle', 'random', 'weighted-random'] as const) {
 			const unorderedProgram = await repository.createProgram({
 				name: `${strategyType} confirmation collection`,
 				config: {
@@ -1358,6 +1421,7 @@ describe('Repository scheduling catalog', () => {
 						type: 'collection',
 						libraryId: library.id,
 						itemIds: [confirmationItemIds[0]!],
+						sort: { type: 'date-added', direction: 'asc' },
 					},
 					strategy: { type: strategyType, seed: '' },
 				},
@@ -1379,7 +1443,17 @@ describe('Repository scheduling catalog', () => {
 			);
 			expect(reorderedConfirmation).toMatchObject({
 				status: 'updated',
-				program: { config: { source: { itemIds: reorderedConfirmationItemIds } } },
+				program: {
+					config: {
+						source: {
+							itemIds: reorderedConfirmationItemIds,
+							additionBatches: [
+								[reorderedConfirmationItemIds[0]!],
+								reorderedConfirmationItemIds.slice(1),
+							],
+						},
+					},
+				},
 			});
 		}
 

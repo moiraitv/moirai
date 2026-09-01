@@ -179,12 +179,12 @@ export function registerCatalogRoutes(
 			summary: 'Resolve selected media items',
 			params: idParamsSchema,
 			body: mediaSelectionSchema,
-			response: { 200: responseContent('Selected media in request order', 'application/json', z.array(mediaItemSchema)) },
+			response: { 200: responseContent('Selected media retaining request identifiers', 'application/json', z.array(mediaItemSchema)) },
 			errors: [400, 404, 500, 503],
 		}),
 	}, async (request) => {
 		const itemIds = mediaSelectionSchema.parse(request.body).itemIds;
-		return repository.listMediaItemsByIds(parseId(request), itemIds);
+		return repository.listMediaItemsByIds(parseId(request), itemIds, 'requested');
 	});
 	app.post('/api/v1/libraries/:id/media-group-selection', {
 		schema: apiOperation({

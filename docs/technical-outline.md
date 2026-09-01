@@ -397,6 +397,13 @@ limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 5,000 and may be set from 1
 25,000-item
 contract ceiling.
 
+Selected-items programs retain chronological insertion batches separately from their effective order.
+They default to oldest-added first and may instead order by normalized title, exact release date with
+year fallback, descending variants of those automatic fields, or a manually dragged order. Descending
+date-added order reverses batches while preserving request order inside each batch. Automatic title and
+release ordering is derived from current indexed metadata for both review and sequential playback.
+Missing release dates sort last, and stable ties retain insertion order.
+
 Adding more than five genuinely new items to an existing program requires confirmation of the
 server-calculated addition. Duplicate references do not count toward that threshold, new programs
 do not require confirmation, and a changed item set invalidates a stale confirmation without

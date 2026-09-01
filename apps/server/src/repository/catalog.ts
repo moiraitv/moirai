@@ -29,7 +29,12 @@ import {
 } from './catalog-records.js';
 import type { RawGroupRow, RawItemRow } from './catalog-records.js';
 
-export { artworkUrl, cacheVersion, decodedMetadata } from './catalog-records.js';
+export {
+	artworkUrl,
+	cacheVersion,
+	decodedMetadata,
+	metadataReleaseDate,
+} from './catalog-records.js';
 
 /** Parameterized SQL fragments shared by flattened browsing and bulk program selection. */
 interface FilteredItemScope {
@@ -808,9 +813,13 @@ export class MediaCatalogRepository {
 		return this.assets.listMediaGenres(libraryId, selection);
 	}
 
-	/** Collect the stable identifiers for list media items by. */
-	async listMediaItemsByIds(libraryId: string, itemIds: string[]): Promise<MediaItem[]> {
-		return this.assets.listMediaItemsByIds(libraryId, itemIds);
+	/** Resolve selected media in request order with canonical or authored response identifiers. */
+	async listMediaItemsByIds(
+		libraryId: string,
+		itemIds: string[],
+		identity: 'canonical' | 'requested' = 'canonical',
+	): Promise<MediaItem[]> {
+		return this.assets.listMediaItemsByIds(libraryId, itemIds, identity);
 	}
 
 	/** Collect the stable identifiers for list media groups by. */

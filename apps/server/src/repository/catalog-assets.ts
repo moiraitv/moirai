@@ -238,8 +238,12 @@ export class CatalogAssetsRepository {
 			.all(...required.params, ...excluded.params, libraryId, libraryId) as MediaGenreFacet[];
 	}
 
-	/** Return selected media items in the caller's requested order. */
-	async listMediaItemsByIds(libraryId: string, itemIds: string[]): Promise<MediaItem[]> {
+	/** Return selected media in request order using canonical or authored response identifiers. */
+	async listMediaItemsByIds(
+		libraryId: string,
+		itemIds: string[],
+		identity: 'canonical' | 'requested' = 'canonical',
+	): Promise<MediaItem[]> {
 		if (itemIds.length === 0) {
 			return [];
 		}
@@ -254,9 +258,11 @@ export class CatalogAssetsRepository {
 			.from(mediaItems)
 			.where(and(eq(mediaItems.libraryId, libraryId), inArray(mediaItems.id, canonicalIds)));
 		const byId = new Map(rows.map((row) => [row.id, mappedItem(row as unknown as RawItemRow)]));
-		return canonicalIds.flatMap((id) => {
-			const item = byId.get(id);
-			return item ? [item] : [];
+		return canonicalIds.flatMap((canonicalId, index) => {
+			const item = byId.get(canonicalId);
+			return item
+				? [{ ...item, id: identity === 'requested' ? itemIds[index]! : item.id }]
+				: [];
 		});
 	}
 

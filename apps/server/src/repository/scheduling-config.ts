@@ -18,6 +18,7 @@ import {
 	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
 	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	programConfigSchema,
+	updateSelectedMediaAdditionOrder,
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import {
@@ -99,9 +100,11 @@ export class SchedulingConfigurationRepository {
 	/** Persist a reusable scheduling program. */
 	async createProgram(input: ProgramCreate): Promise<SchedulingProgram> {
 		const timestamp = currentTimestamp();
+		const config = this.normalizeCollectionAdditionOrder(null, input.config);
 		const program: SchedulingProgram = {
 			id: randomUUID(),
 			...input,
+			config,
 			createdAt: timestamp,
 			updatedAt: timestamp,
 		};
@@ -150,6 +153,42 @@ export class SchedulingConfigurationRepository {
 		return alias?.libraryId ?? null;
 	}
 
+	/** Preserve immutable collection insertion history while grouping one update's new IDs together. */
+	private normalizeCollectionAdditionOrder(
+		current: ProgramConfig | null,
+		updated: ProgramConfig,
+	): ProgramConfig {
+		if (updated.type !== 'content' || updated.source.type !== 'collection') {
+			return updated;
+		}
+
+		const currentSource = current?.type === 'content' && current.source.type === 'collection'
+			? current.source
+			: null;
+		const currentItemIds = new Set(currentSource?.itemIds ?? []);
+		const addedItem = updated.source.itemIds.some((itemId) => !currentItemIds.has(itemId));
+		const additionOrder = updateSelectedMediaAdditionOrder(
+			currentSource?.itemIds ?? [],
+			currentSource?.additionBatches,
+			updated.source.itemIds,
+		);
+		const retainAdditionBatches = currentSource === null
+			|| currentSource.additionBatches !== undefined
+			|| addedItem;
+		const updatedSource = { ...updated.source };
+		delete updatedSource.additionBatches;
+		return {
+			...updated,
+			source: {
+				...updatedSource,
+				itemIds: additionOrder.itemIds,
+				...(retainAdditionBatches
+					? { additionBatches: additionOrder.additionBatches }
+					: {}),
+			},
+		};
+	}
+
 	/** Reject structural program changes that would invalidate its established source identity. */
 	private async validateProgramStructure(
 		current: ProgramConfig,
@@ -166,15 +205,34 @@ export class SchedulingConfigurationRepository {
 		if (current.source.type !== updated.source.type) {
 			throw new SchedulingValidationError('Program source type cannot be changed after creation');
 		}
+		const currentReferenceId = current.source.type === 'item'
+			? current.source.itemId
+			: current.source.type === 'group'
+				? current.source.groupId
+				: null;
+		const updatedReferenceId = updated.source.type === 'item'
+			? updated.source.itemId
+			: updated.source.type === 'group'
+				? updated.source.groupId
+				: null;
 
 		const [currentLibraryId, updatedLibraryId] = await Promise.all([
 			this.contentSourceLibraryId(current.source),
 			this.contentSourceLibraryId(updated.source),
 		]);
 		if (
-			currentLibraryId !== null
-			&& updatedLibraryId !== null
-			&& currentLibraryId !== updatedLibraryId
+			currentLibraryId !== updatedLibraryId
+			&& (
+				currentLibraryId !== null
+				|| updatedLibraryId !== null
+				|| currentReferenceId !== updatedReferenceId
+			)
+		) {
+			throw new SchedulingValidationError('Program library cannot be changed after creation');
+		}
+		if (
+			currentReferenceId !== updatedReferenceId
+			&& (currentLibraryId === null || updatedLibraryId === null)
 		) {
 			throw new SchedulingValidationError('Program library cannot be changed after creation');
 		}
@@ -186,14 +244,17 @@ export class SchedulingConfigurationRepository {
 		if (!current) {
 			return null;
 		}
+		const config = input.config
+			? this.normalizeCollectionAdditionOrder(current.config, input.config)
+			: current.config;
 		if (input.config) {
-			await this.validateProgramStructure(current.config, input.config);
+			await this.validateProgramStructure(current.config, config);
 		}
 
 		const updated: SchedulingProgram = {
 			...current,
 			name: input.name ?? current.name,
-			config: input.config ?? current.config,
+			config,
 			updatedAt: currentTimestamp(),
 		};
 		const programs = (await this.listPrograms()).map((program) =>
@@ -242,7 +303,18 @@ export class SchedulingConfigurationRepository {
 
 			// Resolve absorbed multipart identifiers before comparing or rewriting the collection.
 			const authoredCurrentIds = config.source.itemIds;
-			const candidateIds = [...new Set([...authoredCurrentIds, ...itemIds])];
+			const authoredAdditionBatches = config.source.additionBatches;
+			const authoredManualIds = config.source.sort.type === 'manual'
+				? config.source.sort.itemIds
+				: [];
+			const candidateIds = [
+				...new Set([
+					...authoredCurrentIds,
+					...(authoredAdditionBatches?.flat() ?? []),
+					...authoredManualIds,
+					...itemIds,
+				]),
+			];
 			const aliases = candidateIds.length > 0
 				? tx.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
 					.from(mediaItemAliases)
@@ -254,18 +326,41 @@ export class SchedulingConfigurationRepository {
 				return aliasMap.get(itemId) ?? itemId;
 			}
 
-			const currentIds = [...new Set(authoredCurrentIds.map(canonicalId))];
+			const currentIds: string[] = [];
+			const additionBatches: string[][] = [];
+			const current = new Set<string>();
+			for (const batch of authoredAdditionBatches
+				?? authoredCurrentIds.map((itemId) => [itemId])) {
+				const canonicalBatch: string[] = [];
+				for (const itemId of batch) {
+					const canonical = canonicalId(itemId);
+					if (!current.has(canonical)) {
+						current.add(canonical);
+						currentIds.push(canonical);
+						canonicalBatch.push(canonical);
+					}
+				}
+				if (canonicalBatch.length > 0) {
+					additionBatches.push(canonicalBatch);
+				}
+			}
+			const manualIds = [...new Set(authoredManualIds.map(canonicalId))];
 			const incomingIds = [...new Set(itemIds.map(canonicalId))];
-			const current = new Set(currentIds);
 			const additions = incomingIds.filter((itemId) => !current.has(itemId));
+			const additionsOrderSensitive = config.strategy.type === 'sequential';
 			const confirmationToken = programItemAdditionConfirmationToken(
 				additions,
-				config.strategy.type === 'sequential',
+				additionsOrderSensitive,
 			);
 			const alreadySelectedCount = incomingIds.length - additions.length;
 			const remainingItemCount = maxItemCount - currentIds.length;
 			const normalizedCurrent = currentIds.length !== authoredCurrentIds.length
 				|| currentIds.some((itemId, index) => itemId !== authoredCurrentIds[index]);
+			const normalizedAdditionBatches = authoredAdditionBatches !== undefined
+				&& JSON.stringify(additionBatches) !== JSON.stringify(authoredAdditionBatches);
+			const normalizedManual = config.source.sort.type === 'manual'
+				&& (manualIds.length !== authoredManualIds.length
+					|| manualIds.some((itemId, index) => itemId !== authoredManualIds[index]));
 			if (additions.length > remainingItemCount) {
 				return {
 					status: 'capacity',
@@ -298,7 +393,12 @@ export class SchedulingConfigurationRepository {
 					confirmationToken,
 				};
 			}
-			if (additions.length === 0 && !normalizedCurrent) {
+			if (
+				additions.length === 0
+				&& !normalizedCurrent
+				&& !normalizedAdditionBatches
+				&& !normalizedManual
+			) {
 				return {
 					status: 'updated',
 					program: {
@@ -320,7 +420,20 @@ export class SchedulingConfigurationRepository {
 				name: row.name,
 				config: {
 					...config,
-					source: { ...config.source, itemIds: [...currentIds, ...additions] },
+					source: {
+						...config.source,
+						itemIds: [...currentIds, ...additions],
+						additionBatches: [
+							...additionBatches,
+							...(additions.length > 0 ? [additions] : []),
+						],
+						sort: config.source.sort.type === 'manual'
+							? {
+								type: 'manual',
+								itemIds: [...manualIds, ...additions],
+							}
+							: config.source.sort,
+					},
 				},
 				createdAt: row.createdAt,
 				updatedAt: timestamp,

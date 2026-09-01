@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue';
-import { Asterisk, Layers3, Trash2, X } from '@lucide/vue';
-import type { MediaGroup, MediaItem } from '@moirai/shared';
+import { computed, nextTick, onMounted, ref } from 'vue';
+import { ChevronLeft, ChevronRight, GripVertical, Asterisk, Layers3, Trash2, X } from '@lucide/vue';
+import type { MediaGroup, MediaItem, SelectedMediaSort } from '@moirai/shared';
+import { VueDraggable } from 'vue-draggable-plus';
 import LoadingState from '../LoadingState.vue';
 import { requestConfirmation } from '../../confirmation';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
@@ -25,15 +26,37 @@ const props = defineProps<{
 	groupReferenceCount: number;
 	libraryType: string;
 	search: string;
+	sort: SelectedMediaSort;
 }>();
 const emit = defineEmits<{
 	close: [];
 	clear: [];
 	removeItem: [id: string];
 	removeGroup: [id: string];
+	moveItem: [id: string, offset: -1 | 1];
+	reorderItems: [itemIds: string[]];
 	'update:search': [value: string];
+	'update:sortType': [value: 'date-added' | 'name' | 'release-date' | 'manual'];
+	'update:sortDirection': [value: 'asc' | 'desc'];
 }>();
 const drawer = ref<HTMLElement>();
+const drawerContent = ref<HTMLElement>();
+const manual = computed(() => props.sort.type === 'manual');
+const filtered = computed(() => props.search.trim().length > 0);
+const direction = computed(() => props.sort.type === 'manual' ? 'asc' : props.sort.direction);
+const draggableItems = computed({
+	get: () => props.items,
+	set: (items: MediaItem[]) => emit('reorderItems', items.map((item) => item.id)),
+});
+
+/** Describe ascending and descending choices in terms appropriate to the active field. */
+function directionLabel(value: 'asc' | 'desc'): string {
+	if (props.sort.type === 'name') {
+		return value === 'asc' ? 'A–Z' : 'Z–A';
+	}
+
+	return value === 'asc' ? 'Oldest First' : 'Newest First';
+}
 
 /** Close the confirmation and clear every selected reference. */
 async function confirmClear(): Promise<void> {
@@ -63,6 +86,7 @@ onMounted(async () => {
 			<aside
 				ref="drawer"
 				class="selection-drawer"
+				:class="{ 'media-selection-drawer': !selectingGroups }"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="selection-drawer-title"
@@ -80,16 +104,48 @@ onMounted(async () => {
 						<X :size="21" />
 					</button>
 				</header>
-				<div class="selection-drawer-toolbar">
-					<input
-						:value="search"
-						type="search"
-						aria-label="Search selected media"
-						placeholder="Search selected items…"
-						@input="emit('update:search', ($event.target as HTMLInputElement).value)"
-					/>
+				<div class="selection-drawer-toolbar" :class="{ 'group-selection-toolbar': selectingGroups }">
+					<label>
+						<span>Search</span>
+						<input
+							:value="search"
+							type="search"
+							aria-label="Search selected media"
+							placeholder="Search selected items…"
+							@input="emit('update:search', ($event.target as HTMLInputElement).value)"
+						/>
+					</label>
+					<label v-if="!selectingGroups">
+						<span>Sort By</span>
+						<select
+							:value="sort.type"
+							:disabled="loading || !loaded"
+							aria-label="Sort selected media"
+							@change="emit('update:sortType', ($event.target as HTMLSelectElement).value as 'date-added' | 'name' | 'release-date' | 'manual')"
+						>
+							<option value="date-added">Date Added to Program</option>
+							<option value="name">Name</option>
+							<option value="release-date">Release Date</option>
+							<option value="manual">Manual</option>
+						</select>
+					</label>
+					<label v-if="!selectingGroups && !manual">
+						<span>Direction</span>
+						<select
+							:value="direction"
+							:disabled="loading || !loaded"
+							aria-label="Selected media sort direction"
+							@change="emit('update:sortDirection', ($event.target as HTMLSelectElement).value as 'asc' | 'desc')"
+						>
+							<option value="asc">{{ directionLabel('asc') }}</option>
+							<option value="desc">{{ directionLabel('desc') }}</option>
+						</select>
+					</label>
+					<p v-if="!selectingGroups && manual && filtered" class="manual-order-hint">
+						Clear search to reorder selected media.
+					</p>
 				</div>
-				<div class="selection-drawer-content">
+				<div ref="drawerContent" class="selection-drawer-content">
 					<LoadingState
 						v-if="loading && !loaded"
 						:label="
@@ -132,8 +188,30 @@ onMounted(async () => {
 								</button>
 							</article>
 						</div>
-						<div v-else-if="!selectingGroups && items.length" class="selected-item-grid">
-							<MediaCardPreview v-for="item in items" :key="item.id" :item="item" class="selected-item-preview">
+						<VueDraggable
+							v-else-if="!selectingGroups && items.length"
+							v-model="draggableItems"
+							class="selected-item-grid"
+							draggable=".selected-item-preview"
+							handle=".selected-item-drag-handle"
+							:disabled="!manual || filtered"
+							:animation="160"
+							:scroll="drawerContent ?? true"
+							:scroll-sensitivity="72"
+							:scroll-speed="12"
+							:bubble-scroll="true"
+							:force-fallback="true"
+							:fallback-on-body="true"
+							ghost-class="selected-item-drag-ghost"
+							drag-class="selected-item-dragging"
+						>
+							<MediaCardPreview
+								v-for="(item, index) in items"
+								:key="item.id"
+								:item="item"
+								class="selected-item-preview"
+								:class="{ 'manual-order-preview': manual }"
+							>
 								<article>
 									<span class="selected-item-poster">
 										<span class="source-artwork-placeholder"><Asterisk :size="20" /></span>
@@ -146,6 +224,32 @@ onMounted(async () => {
 											decoding="async"
 											@error="hideBrokenImage"
 										/>
+										<span v-if="manual" class="selected-item-order-controls">
+											<button
+												type="button"
+												class="selected-item-drag-handle"
+												:disabled="filtered"
+												:aria-label="`Drag ${item.title} to reorder`"
+											>
+												<GripVertical :size="15" />
+											</button>
+											<button
+												type="button"
+												:disabled="filtered || index === 0"
+												:aria-label="`Move ${item.title} earlier`"
+												@click="emit('moveItem', item.id, -1)"
+											>
+												<ChevronLeft :size="14" />
+											</button>
+											<button
+												type="button"
+												:disabled="filtered || index === items.length - 1"
+												:aria-label="`Move ${item.title} later`"
+												@click="emit('moveItem', item.id, 1)"
+											>
+												<ChevronRight :size="14" />
+											</button>
+										</span>
 									</span>
 									<span class="selected-item-copy">
 										<strong>{{ item.title }}</strong>
@@ -156,6 +260,7 @@ onMounted(async () => {
 									</span>
 									<button
 										type="button"
+										class="selected-item-remove"
 										:aria-label="`Remove ${item.title}`"
 										@click="emit('removeItem', item.id)"
 									>
@@ -163,7 +268,7 @@ onMounted(async () => {
 									</button>
 								</article>
 							</MediaCardPreview>
-						</div>
+						</VueDraggable>
 						<div v-else class="empty-state compact selection-drawer-empty">
 							<p>
 								{{

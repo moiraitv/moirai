@@ -69,6 +69,7 @@ export interface MediaItem {
 	playbackPath: string;
 	plot: string | null;
 	year: number | null;
+	releaseDate: string | null;
 	durationSeconds: number | null;
 	seasonNumber: number | null;
 	episodeNumber: number | null;

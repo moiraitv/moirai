@@ -5,7 +5,7 @@ import {
 	canonicalNumberSet,
 	canonicalStringSet,
 } from './normalization.js';
-import { catalogProgramItemQuerySchema } from './catalog.js';
+import { catalogProgramItemQuerySchema, sortDirectionSchema } from './catalog.js';
 
 /** Number of nominal wall-clock seconds represented by a daily template. */
 export const SECONDS_PER_SCHEDULING_DAY = 86_400;
@@ -60,17 +60,126 @@ export const selectionStrategySchema = z.discriminatedUnion('type', [
 /** Shared wire contract for selection strategy. */
 export type SelectionStrategy = z.infer<typeof selectionStrategySchema>;
 
+/** Validate one automatic or manually authored selected-media ordering. */
+export const selectedMediaSortSchema = z.discriminatedUnion('type', [
+	z.object({ type: z.literal('date-added'), direction: sortDirectionSchema }),
+	z.object({ type: z.literal('name'), direction: sortDirectionSchema }),
+	z.object({ type: z.literal('release-date'), direction: sortDirectionSchema }),
+	z.object({
+		type: z.literal('manual'),
+		itemIds: z.array(z.uuid()).min(1).max(MAX_EXPLICIT_MEDIA_ITEMS)
+			.refine((ids) => new Set(ids).size === ids.length, 'Manual media order must be unique'),
+	}),
+]);
+/** Shared wire contract for selected-media ordering. */
+export type SelectedMediaSort = z.infer<typeof selectedMediaSortSchema>;
+
+/** Persist bounded insertion batches without duplicating selected-media identifiers. */
+const selectedMediaAdditionBatchesSchema = z.array(
+	z.array(z.uuid()).min(1).max(MAX_EXPLICIT_MEDIA_ITEMS),
+).min(1).max(MAX_EXPLICIT_MEDIA_ITEMS);
+
+/** Minimum metadata needed to derive one selected-media program order. */
+export interface SelectedMediaSortable {
+	id: string;
+	sortTitle: string;
+	year: number | null;
+	releaseDate?: string | null;
+}
+
+/** Order indexed selected media while retaining input order as the stable tie breaker. */
+export function orderSelectedMedia<T extends SelectedMediaSortable>(
+	items: T[],
+	sort: SelectedMediaSort,
+	additionBatches?: string[][],
+): T[] {
+	if (sort.type === 'manual' || (sort.type === 'date-added' && sort.direction === 'asc')) {
+		return [...items];
+	}
+	if (sort.type === 'date-added') {
+		if (!additionBatches) {
+			return [...items].reverse();
+		}
+
+		const remainingIndexesById = new Map<string, number[]>();
+		for (const [index, item] of items.entries()) {
+			remainingIndexesById.set(item.id, [
+				...(remainingIndexesById.get(item.id) ?? []),
+				index,
+			]);
+		}
+		const orderedIndexes = [...additionBatches].reverse().flatMap((batch) => batch.flatMap((itemId) => {
+			const index = remainingIndexesById.get(itemId)?.shift();
+			return index === undefined ? [] : [index];
+		}));
+		const remainingIndexes = [...remainingIndexesById.values()].flat().sort((left, right) => left - right);
+		return [...orderedIndexes, ...remainingIndexes].map((index) => items[index]!);
+	}
+
+	const additionOrder = new Map(items.map((item, index) => [item.id, index]));
+	return [...items].sort((left, right) => {
+		let compared = 0;
+		let missing = false;
+		if (sort.type === 'name') {
+			compared = left.sortTitle.localeCompare(right.sortTitle, 'en-US', {
+				sensitivity: 'base',
+			});
+		}
+		else {
+			const leftDate = left.releaseDate ?? (left.year === null ? null : `${left.year}-01-01`);
+			const rightDate = right.releaseDate ?? (right.year === null ? null : `${right.year}-01-01`);
+			if (leftDate === null || rightDate === null) {
+				compared = leftDate === rightDate ? 0 : leftDate === null ? 1 : -1;
+				missing = true;
+			}
+			else {
+				compared = leftDate.localeCompare(rightDate);
+			}
+		}
+
+		const directed = sort.direction === 'desc' && !missing ? -compared : compared;
+		return directed || additionOrder.get(left.id)! - additionOrder.get(right.id)!;
+	});
+}
+
+/** Preserve retained insertion batches and append all newly requested IDs as one ordered batch. */
+export function updateSelectedMediaAdditionOrder(
+	currentItemIds: string[],
+	currentBatches: string[][] | undefined,
+	requestedItemIds: string[],
+): { itemIds: string[]; additionBatches: string[][] } {
+	const requested = new Set(requestedItemIds);
+	const current = new Set(currentItemIds);
+	const retainedItemIds = currentItemIds.filter((itemId) => requested.has(itemId));
+	const retainedBatches = (currentBatches ?? currentItemIds.map((itemId) => [itemId]))
+		.map((batch) => batch.filter((itemId) => requested.has(itemId)))
+		.filter((batch) => batch.length > 0);
+	const addedItemIds = requestedItemIds.filter((itemId) => !current.has(itemId));
+	return {
+		itemIds: [...retainedItemIds, ...addedItemIds],
+		additionBatches: [
+			...retainedBatches,
+			...(addedItemIds.length > 0 ? [addedItemIds] : []),
+		],
+	};
+}
+
+/** Validate a unique bounded list of explicitly selected media. */
+const selectedMediaItemIdsSchema = z
+	.array(z.uuid())
+	.min(1)
+	.max(MAX_EXPLICIT_MEDIA_ITEMS)
+	.refine((ids) => new Set(ids).size === ids.length, 'Selected media must be unique');
+
 /** Validate the content source contract at runtime. */
 export const contentSourceSchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('item'), itemId: z.uuid() }),
 	z.object({
 		type: z.literal('collection'),
 		libraryId: z.uuid(),
-		itemIds: z
-			.array(z.uuid())
-			.min(1)
-			.max(MAX_EXPLICIT_MEDIA_ITEMS)
-			.refine((ids) => new Set(ids).size === ids.length, 'Selected media must be unique'),
+		itemIds: selectedMediaItemIdsSchema,
+		additionBatches: selectedMediaAdditionBatchesSchema.optional(),
+		sort: selectedMediaSortSchema.default({ type: 'date-added', direction: 'asc' }),
 	}),
 	z.object({
 		type: z.literal('group'),
@@ -100,7 +209,41 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 			.default([])
 			.transform((values) => canonicalStringSet(values, canonicalGenreKey)),
 	}),
-]);
+]).superRefine((source, context) => {
+	if (source.type !== 'collection') {
+		return;
+	}
+
+	if (source.additionBatches) {
+		const additionOrder = source.additionBatches.flat();
+		if (
+			additionOrder.length !== source.itemIds.length
+			|| additionOrder.some((itemId, index) => itemId !== source.itemIds[index])
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['additionBatches'],
+				message: 'Addition batches must partition selected items in insertion order',
+			});
+		}
+	}
+
+	if (source.sort.type !== 'manual') {
+		return;
+	}
+
+	const selected = new Set(source.itemIds);
+	if (
+		source.sort.itemIds.length !== source.itemIds.length
+		|| source.sort.itemIds.some((itemId) => !selected.has(itemId))
+	) {
+		context.addIssue({
+			code: 'custom',
+			path: ['sort', 'itemIds'],
+			message: 'Manual media order must contain every selected item exactly once',
+		});
+	}
+});
 /** Shared wire contract for content source. */
 export type ContentSource = z.infer<typeof contentSourceSchema>;
 
@@ -560,6 +703,7 @@ export interface SchedulableMedia {
 	genreNames: string[];
 	plot: string | null;
 	year: number | null;
+	releaseDate?: string | null;
 	artworkUrl: string | null;
 	availability: MediaAvailability;
 }

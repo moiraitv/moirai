@@ -6,9 +6,11 @@ import {
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	MAX_SCHEDULE_PREDICATE_DEPTH,
 	layerBoundarySchema,
+	orderSelectedMedia,
 	programConfigSchema,
 	scheduleBoundarySchema,
 	scheduleSlotSchema,
+	updateSelectedMediaAdditionOrder,
 	type SchedulePredicate,
 } from '@shared-source/scheduling.js';
 
@@ -166,6 +168,113 @@ describe('layered schedule contracts', () => {
 			negated: false,
 		});
 		expect(predicate).toMatchObject({ values: [1, 2, 5] });
+	});
+
+	it('defaults legacy selected items to ascending program-addition order', () => {
+		const config = programConfigSchema.parse({
+			type: 'content',
+			source: {
+				type: 'collection',
+				libraryId: uuid(1),
+				itemIds: [uuid(2), uuid(3)],
+			},
+			strategy: { type: 'sequential' },
+		});
+
+		expect(config).toMatchObject({
+			source: { sort: { type: 'date-added', direction: 'asc' } },
+		});
+	});
+
+	it('requires a direction when an automatic selected-media sort is supplied', () => {
+		expect(programConfigSchema.safeParse({
+			type: 'content',
+			source: {
+				type: 'collection',
+				libraryId: uuid(1),
+				itemIds: [uuid(2)],
+				sort: { type: 'name' },
+			},
+			strategy: { type: 'sequential' },
+		}).success).toBe(false);
+	});
+
+	it('requires Manual ordering to contain the selected item set exactly once', () => {
+		const source = {
+			type: 'collection' as const,
+			libraryId: uuid(1),
+			itemIds: [uuid(2), uuid(3)],
+		};
+		expect(programConfigSchema.safeParse({
+			type: 'content',
+			source: { ...source, sort: { type: 'manual', itemIds: [uuid(3), uuid(2)] } },
+			strategy: { type: 'sequential' },
+		}).success).toBe(true);
+		expect(programConfigSchema.safeParse({
+			type: 'content',
+			source: { ...source, sort: { type: 'manual', itemIds: [uuid(2), uuid(4)] } },
+			strategy: { type: 'sequential' },
+		}).success).toBe(false);
+	});
+
+	it('orders selected media by normalized name and release date with stable fallbacks', () => {
+		const items = [
+			{ id: uuid(2), sortTitle: 'Zulu', year: null, releaseDate: null },
+			{ id: uuid(3), sortTitle: 'Alpha', year: 2001, releaseDate: null },
+			{ id: uuid(4), sortTitle: 'Alpha', year: 2001, releaseDate: '2001-06-01' },
+		];
+
+		expect(orderSelectedMedia(items, { type: 'name', direction: 'asc' }).map((item) => item.id))
+			.toEqual([uuid(3), uuid(4), uuid(2)]);
+		expect(orderSelectedMedia(items, { type: 'release-date', direction: 'desc' }).map((item) => item.id))
+			.toEqual([uuid(4), uuid(3), uuid(2)]);
+		expect(orderSelectedMedia(items, { type: 'date-added', direction: 'desc' }).map((item) => item.id))
+			.toEqual([uuid(4), uuid(3), uuid(2)]);
+	});
+
+	it('reverses date-added batches without reversing request order inside a batch', () => {
+		const items = [
+			{ id: uuid(2), sortTitle: 'First', year: null },
+			{ id: uuid(3), sortTitle: 'Second', year: null },
+			{ id: uuid(4), sortTitle: 'Third', year: null },
+			{ id: uuid(5), sortTitle: 'Fourth', year: null },
+		];
+
+		expect(orderSelectedMedia(
+			items,
+			{ type: 'date-added', direction: 'desc' },
+			[[uuid(2)], [uuid(3), uuid(4)], [uuid(5)]],
+		).map((item) => item.id)).toEqual([uuid(5), uuid(3), uuid(4), uuid(2)]);
+	});
+
+	it('requires addition batches to partition insertion order exactly', () => {
+		const source = {
+			type: 'collection' as const,
+			libraryId: uuid(1),
+			itemIds: [uuid(2), uuid(3), uuid(4)],
+			sort: { type: 'date-added' as const, direction: 'asc' as const },
+		};
+		expect(programConfigSchema.safeParse({
+			type: 'content',
+			source: { ...source, additionBatches: [[uuid(2)], [uuid(3), uuid(4)]] },
+			strategy: { type: 'sequential' },
+		}).success).toBe(true);
+		expect(programConfigSchema.safeParse({
+			type: 'content',
+			source: { ...source, additionBatches: [[uuid(2), uuid(4)], [uuid(3)]] },
+			strategy: { type: 'sequential' },
+		}).success).toBe(false);
+	});
+
+	it('preserves retained batches and groups one update’s new items together', () => {
+		expect(updateSelectedMediaAdditionOrder(
+			[uuid(2), uuid(3), uuid(4)],
+			[[uuid(2)], [uuid(3), uuid(4)]],
+			[uuid(4), uuid(2), uuid(5), uuid(6)],
+		)).toEqual({
+			itemIds: [uuid(2), uuid(4), uuid(5), uuid(6)],
+			additionBatches: [[uuid(2)], [uuid(4)], [uuid(5), uuid(6)]],
+		});
 	});
 
 	it('rejects duplicate sequence entry identifiers', () => {

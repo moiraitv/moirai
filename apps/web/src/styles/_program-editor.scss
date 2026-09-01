@@ -705,6 +705,10 @@
 	box-shadow: -24px 0 70px rgba(0, 0, 0, 0.52);
 }
 
+.selection-drawer.media-selection-drawer {
+	width: min(960px, 100%);
+}
+
 .selection-drawer-header {
 	padding: 25px 24px 19px;
 	display: flex;
@@ -740,11 +744,41 @@
 
 .selection-drawer-toolbar {
 	padding: 14px 24px;
+	display: grid;
+	grid-template-columns: minmax(220px, 1fr) minmax(190px, 0.65fr) minmax(140px, 0.45fr);
+	align-items: end;
+	gap: 12px;
 	border-bottom: 1px solid var(--line);
 }
 
-.selection-drawer-toolbar input {
+.selection-drawer-toolbar.group-selection-toolbar {
+	grid-template-columns: 1fr;
+}
+
+.selection-drawer-toolbar label {
+	min-width: 0;
+	display: grid;
+	gap: 5px;
+}
+
+.selection-drawer-toolbar label > span {
+	color: var(--muted);
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+.selection-drawer-toolbar input,
+.selection-drawer-toolbar select {
 	width: 100%;
+}
+
+.manual-order-hint {
+	margin: 0 0 10px;
+	align-self: end;
+	color: var(--muted);
+	font-size: 0.72rem;
 }
 
 .selection-drawer-content {
@@ -759,8 +793,53 @@
 .selection-drawer .selected-item-grid {
 	max-height: none;
 	padding-right: 0;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 	overflow: visible;
+}
+
+.selected-item-order-controls {
+	position: absolute;
+	bottom: 7px;
+	left: 7px;
+	z-index: 5;
+	display: flex;
+	gap: 4px;
+}
+
+.selected-item-order-controls button {
+	width: 27px;
+	height: 27px;
+	padding: 0;
+	display: grid;
+	place-items: center;
+	border: 1px solid rgba(222, 232, 238, 0.5);
+	border-radius: 50%;
+	color: #f4f8fa;
+	background: rgba(4, 12, 19, 0.86);
+	box-shadow: 0 2px 9px rgba(0, 0, 0, 0.42);
+}
+
+.selected-item-order-controls button:not(:disabled):hover,
+.selected-item-order-controls button:not(:disabled):focus-visible {
+	border-color: var(--accent);
+	background: #17384a;
+}
+
+.selected-item-order-controls button:disabled {
+	opacity: 0.38;
+}
+
+.selected-item-drag-handle:not(:disabled) {
+	cursor: grab;
+	touch-action: none;
+}
+
+.selected-item-dragging .selected-item-drag-handle {
+	cursor: grabbing;
+}
+
+.selected-item-drag-ghost {
+	opacity: 0.35;
 }
 
 .selection-drawer-empty {

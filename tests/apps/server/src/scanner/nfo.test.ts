@@ -12,7 +12,8 @@ describe('parseKodiNfo', () => {
 		const result = parseKodiNfo(`
       <?xml version="1.0" encoding="utf-8"?>
       <movie>
-        <title>Moonrise</title><sorttitle>Moonrise, The</sorttitle><year>2024</year>
+		<title>Moonrise</title><sorttitle>Moonrise, The</sorttitle><year>2024</year>
+		<releasedate>2024-05-17</releasedate>
         <plot>A test transmission.</plot><runtime>12.5</runtime>
         <genre>Drama</genre><genre>Science Fiction</genre>
         <director>Jane Director</director>
@@ -34,6 +35,7 @@ describe('parseKodiNfo', () => {
 			actors: [{ name: 'Ada Actor', role: 'Navigator', sortOrder: 2 }],
 			metadata: {
 				reportedRuntimeMinutes: 12.5,
+				releaseDate: '2024-05-17',
 				writers: ['First Writer', 'Second Writer'],
 				studio: ['Example Studio'],
 				countries: ['United States'],
@@ -44,6 +46,20 @@ describe('parseKodiNfo', () => {
 			seasonNumber: null,
 			episodeNumber: null,
 		});
+	});
+
+	it('normalizes common exact release-date aliases by source precedence', () => {
+		expect(parseKodiNfo(`<movie>
+			<premiered>2024-02-03</premiered>
+			<releasedate>2024-03-04</releasedate>
+			<aired>2024-04-05</aired>
+		</movie>`).metadata.releaseDate).toBe('2024-02-03');
+		expect(parseKodiNfo('<movie><aired>2021-03-04</aired></movie>').metadata.releaseDate)
+			.toBe('2021-03-04');
+		expect(parseKodiNfo('<movie><premiered>not-a-date</premiered></movie>').metadata.releaseDate)
+			.toBeNull();
+		expect(parseKodiNfo('<movie><premiered>2021-02-29</premiered></movie>').metadata.releaseDate)
+			.toBeNull();
 	});
 
 	it('does not coerce absent numeric fields to zero', () => {

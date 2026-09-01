@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
 	MAX_MEDIA_DURATION_MILLISECONDS,
+	orderSelectedMedia,
 	type ProgramConfig,
 	type SchedulableMedia,
 	type SchedulingCatalog,
@@ -310,12 +311,17 @@ function candidatesFor(
 	}
 
 	// Filter source members by group ancestry, media kind, and genre constraints.
+	const collectionItemIds = source.type === 'collection' && source.sort.type === 'manual'
+		? source.sort.itemIds
+		: source.type === 'collection'
+			? source.itemIds
+			: [];
 	const candidatePool
 		= source.type === 'item'
 			? [mediaById.get(canonicalItemId(source.itemId))]
 				.filter((media): media is SchedulableMedia => Boolean(media))
 			: source.type === 'collection'
-				? source.itemIds.flatMap((itemId) => {
+				? collectionItemIds.flatMap((itemId) => {
 					const media = mediaById.get(canonicalItemId(itemId));
 					return media ? [media] : [];
 				})
@@ -398,9 +404,14 @@ function candidatesFor(
 	const missingDuration = candidates.filter(
 		(media) => !usableDurationSeconds(media.durationSeconds),
 	);
-	const playable = candidates
-		.filter((media) => usableDurationSeconds(media.durationSeconds))
-		.sort(mediaOrder);
+	const measured = candidates.filter((media) => usableDurationSeconds(media.durationSeconds));
+	const playable = source.type === 'collection'
+		? orderSelectedMedia(
+			measured,
+			source.sort,
+			source.additionBatches?.map((batch) => batch.map(canonicalItemId)),
+		)
+		: measured.sort(mediaOrder);
 	context.candidateCache.set(programId, {
 		playable,
 		missingDuration,
@@ -452,23 +463,92 @@ function candidatesFor(
 	return playable;
 }
 
-/** Return existing selection state or initialize the requested cursor state. */
+/** Return current state, migrate a compatible fingerprint, or initialize a new cursor state. */
 function stateFor(
 	state: Map<string, SelectionStateRecord>,
 	consumerKey: string,
 	config: unknown,
 	initial: SelectionStateValue,
 	now: string,
+	compatibleConfig: unknown | null = null,
 ): SelectionStateRecord {
 	const configFingerprint = stableJsonFingerprint(config);
 	const existing = state.get(consumerKey);
-	if (existing?.configFingerprint === configFingerprint && existing.value.type === initial.type) {
-		return existing;
+	if (existing?.value.type === initial.type) {
+		if (existing.configFingerprint === configFingerprint) {
+			return existing;
+		}
+		if (
+			compatibleConfig !== null
+			&& existing.configFingerprint === stableJsonFingerprint(compatibleConfig)
+		) {
+			const migrated = { ...existing, configFingerprint, updatedAt: now };
+			state.set(consumerKey, migrated);
+			return migrated;
+		}
 	}
 
 	const created = { consumerKey, configFingerprint, value: initial, updatedAt: now };
 	state.set(consumerKey, created);
 	return created;
+}
+
+/** Reconstruct the authored collection identity used before set fingerprints were canonicalized. */
+function legacySetSelectionStateConfig(config: ProgramConfig): unknown | null {
+	if (
+		config.type !== 'content'
+		|| config.source.type !== 'collection'
+		|| config.strategy.type === 'sequential'
+		|| config.source.additionBatches !== undefined
+	) {
+		return null;
+	}
+
+	return {
+		...config,
+		source: {
+			type: 'collection',
+			libraryId: config.source.libraryId,
+			itemIds: config.source.itemIds,
+		},
+	};
+}
+
+/** Normalize collection state identity for legacy defaults and set-based strategies. */
+function selectionStateConfig(config: ProgramConfig): unknown {
+	if (
+		config.type !== 'content'
+		|| config.source.type !== 'collection'
+	) {
+		return config;
+	}
+	if (config.strategy.type === 'sequential') {
+		if (
+			config.source.additionBatches === undefined
+			&& config.source.sort.type === 'date-added'
+			&& config.source.sort.direction === 'asc'
+		) {
+			return {
+				...config,
+				source: {
+					type: 'collection',
+					libraryId: config.source.libraryId,
+					itemIds: config.source.itemIds,
+				},
+			};
+		}
+
+		return config;
+	}
+
+	return {
+		...config,
+		source: {
+			type: 'collection',
+			libraryId: config.source.libraryId,
+			itemIds: [...config.source.itemIds].sort(),
+		},
+	};
 }
 
 /** Select one item from a source while applying ordering and fit rules. */
@@ -498,13 +578,15 @@ function chooseContent(
 	}
 
 	const strategy = program.config.strategy;
+	const stateConfig = selectionStateConfig(program.config);
+	const legacyStateConfig = legacySetSelectionStateConfig(program.config);
 
 	// Advance a stable cursor through the source's natural media order.
 	if (strategy.type === 'sequential') {
 		const record = stateFor(
 			state,
 			consumerKey,
-			program.config,
+			stateConfig,
 			{ type: 'sequential', nextIndex: 0, lastItemId: null },
 			context.now,
 		);
@@ -547,9 +629,10 @@ function chooseContent(
 		const record = stateFor(
 			state,
 			consumerKey,
-			program.config,
+			stateConfig,
 			{ type: 'shuffle', cycle: 0, cycleItemIds: [], remainingItemIds: [], lastItemId: null },
 			context.now,
+			legacyStateConfig,
 		);
 		const value = record.value as Extract<SelectionStateValue, { type: 'shuffle' }>;
 		const availableIds = new Set(candidates.map((candidate) => candidate.id));
@@ -610,9 +693,10 @@ function chooseContent(
 		const record = stateFor(
 			state,
 			consumerKey,
-			program.config,
+			stateConfig,
 			{ type: 'weighted-random', counter: 0, lastItemId: null },
 			context.now,
+			legacyStateConfig,
 		);
 		const value = record.value as Extract<SelectionStateValue, { type: 'weighted-random' }>;
 		let ordered = collisionFreeCandidates(
@@ -648,9 +732,10 @@ function chooseContent(
 	const record = stateFor(
 		state,
 		consumerKey,
-		program.config,
+		stateConfig,
 		{ type: 'random', counter: 0, lastItemId: null },
 		context.now,
+		legacyStateConfig,
 	);
 	const value = record.value as Extract<SelectionStateValue, { type: 'random' }>;
 	const ordered = collisionFreeCandidates(

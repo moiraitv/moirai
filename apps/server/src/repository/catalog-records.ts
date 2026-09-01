@@ -1,4 +1,5 @@
 import type { MediaGroup, MediaItem, MediaItemDetail } from '@moirai/shared';
+import { normalizedReleaseDate } from '../media/release-date.js';
 
 /** Joined media-item row before JSON columns are decoded. */
 export interface RawItemRow {
@@ -93,6 +94,22 @@ export function metadataNumber(metadata: Record<string, unknown>, key: string): 
 	return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/** Read a normalized full release date from persisted provider metadata. */
+export function metadataReleaseDate(metadata: Record<string, unknown>): string | null {
+	if (Object.prototype.hasOwnProperty.call(metadata, 'releaseDate')) {
+		return normalizedReleaseDate(metadata.releaseDate);
+	}
+
+	for (const candidate of [metadata.premiered, metadata.aired]) {
+		const normalized = normalizedReleaseDate(candidate);
+		if (normalized) {
+			return normalized;
+		}
+	}
+
+	return null;
+}
+
 /** Read persisted video width and height when both are valid. */
 export function metadataResolution(
 	metadata: Record<string, unknown>,
@@ -159,6 +176,7 @@ export function mappedItem(row: RawItemRow): MediaItem {
 		playbackPath: row.playbackPath,
 		plot: row.plot,
 		year: row.year,
+		releaseDate: metadataReleaseDate(metadata),
 		durationSeconds: row.durationMilliseconds === null || row.durationMilliseconds === undefined
 			? row.durationSeconds
 			: row.durationMilliseconds / 1_000,

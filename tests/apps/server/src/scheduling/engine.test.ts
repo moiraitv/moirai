@@ -7,6 +7,7 @@ import type {
 	ScheduleTemplate,
 	SchedulableMedia,
 	SchedulingProgram,
+	SelectedMediaSort,
 	SelectionStateRecord,
 } from '@moirai/shared';
 import {
@@ -19,6 +20,7 @@ import {
 	TimelineMaterializationLimitError,
 	type GenerateTimelineInput,
 } from '@server/scheduling/engine.js';
+import { stableJsonFingerprint } from '@server/stable-json.js';
 
 const uuid = (value: number): string =>
 	`00000000-0000-4000-8000-${value.toString().padStart(12, '0')}`;
@@ -722,6 +724,7 @@ describe('schedule timeline engine', () => {
 				type: 'collection',
 				libraryId: uuid(900),
 				itemIds: overlayMedia.map((item) => item.id),
+				sort: { type: 'date-added', direction: 'asc' },
 			},
 			strategy: { type: 'sequential' },
 		});
@@ -1199,6 +1202,7 @@ describe('schedule timeline engine', () => {
 				type: 'collection',
 				libraryId: uuid(900),
 				itemIds: [uuid(1), surviving.id],
+				sort: { type: 'date-added', direction: 'asc' },
 			},
 			strategy: { type: 'sequential' },
 		});
@@ -1220,6 +1224,170 @@ describe('schedule timeline engine', () => {
 		expect(result.proposedState.length).toBeGreaterThan(0);
 	});
 
+	it('uses the selected-media sort for sequential collection playback', () => {
+		const oldestAdded = media(1, 60 * 60, {
+			title: 'Zulu',
+			sortTitle: 'Zulu',
+			year: null,
+			releaseDate: null,
+		});
+		const middleAdded = media(2, 60 * 60, {
+			title: 'Alpha Later',
+			sortTitle: 'Alpha',
+			year: 2001,
+			releaseDate: '2001-06-01',
+		});
+		const newestAdded = media(3, 60 * 60, {
+			title: 'Alpha Earlier',
+			sortTitle: 'Alpha',
+			year: 2001,
+			releaseDate: null,
+		});
+		const items = [oldestAdded, middleAdded, newestAdded];
+		const orderedTitles = (sort: SelectedMediaSort): string[] => {
+			const collection = program(10, {
+				type: 'content',
+				source: {
+					type: 'collection',
+					libraryId: uuid(900),
+					itemIds: items.map((item) => item.id),
+					additionBatches: [[oldestAdded.id], [middleAdded.id, newestAdded.id]],
+					sort,
+				},
+				strategy: { type: 'sequential' },
+			});
+			const daily = template([{ programId: collection.id, startSeconds: 0 }]);
+			return primaryTitles(generateTimeline(input([collection], items, daily))).slice(0, 3);
+		};
+
+		expect(orderedTitles({ type: 'date-added', direction: 'asc' }))
+			.toEqual(['Zulu', 'Alpha Later', 'Alpha Earlier']);
+		expect(orderedTitles({ type: 'date-added', direction: 'desc' }))
+			.toEqual(['Alpha Later', 'Alpha Earlier', 'Zulu']);
+		expect(orderedTitles({ type: 'name', direction: 'asc' }))
+			.toEqual(['Alpha Later', 'Alpha Earlier', 'Zulu']);
+		expect(orderedTitles({ type: 'release-date', direction: 'desc' }))
+			.toEqual(['Alpha Later', 'Alpha Earlier', 'Zulu']);
+		expect(orderedTitles({
+			type: 'manual',
+			itemIds: [newestAdded.id, oldestAdded.id, middleAdded.id],
+		})).toEqual(['Alpha Earlier', 'Zulu', 'Alpha Later']);
+	});
+
+	it('preserves a legacy sequential collection cursor after adding the default sort', () => {
+		const items = [media(1, 60 * 60), media(2, 60 * 60), media(3, 60 * 60)];
+		const collection = program(10, {
+			type: 'content',
+			source: {
+				type: 'collection',
+				libraryId: uuid(900),
+				itemIds: items.map((item) => item.id),
+				sort: { type: 'date-added', direction: 'asc' },
+			},
+			strategy: { type: 'sequential' },
+		});
+		const daily = template([{ programId: collection.id, startSeconds: 0 }]);
+		const first = generateTimeline(input([collection], items, daily));
+		const currentState = first.proposedState[0]!;
+		const legacyConfig = {
+			type: 'content',
+			source: {
+				type: 'collection',
+				libraryId: uuid(900),
+				itemIds: items.map((item) => item.id),
+			},
+			strategy: { type: 'sequential' },
+		};
+		const legacyState: SelectionStateRecord = {
+			...currentState,
+			configFingerprint: stableJsonFingerprint(legacyConfig),
+			value: { type: 'sequential', nextIndex: 1, lastItemId: items[0]!.id },
+		};
+
+		const continued = generateTimeline(input([collection], items, daily, { state: [legacyState] }));
+
+		expect(primaryTitles(continued)[0]).toBe(items[1]!.title);
+	});
+
+	it('migrates legacy set-strategy fingerprints without resetting their state', () => {
+		const items = [
+			media(1, SECONDS_PER_SCHEDULING_DAY),
+			media(2, SECONDS_PER_SCHEDULING_DAY),
+			media(3, SECONDS_PER_SCHEDULING_DAY),
+		];
+		const itemIds = [items[2]!.id, items[0]!.id, items[1]!.id];
+		const daily = template([{ programId: uuid(10), startSeconds: 0 }]);
+
+		for (const strategyType of ['random', 'weighted-random'] as const) {
+			const strategy = { type: strategyType, seed: 'fixture' };
+			const collection = program(10, {
+				type: 'content',
+				source: {
+					type: 'collection',
+					libraryId: uuid(900),
+					itemIds,
+					sort: { type: 'date-added', direction: 'asc' },
+				},
+				strategy,
+			});
+			const initialized = generateTimeline(input([collection], items, daily));
+			const legacyConfig = {
+				type: 'content',
+				source: { type: 'collection', libraryId: uuid(900), itemIds },
+				strategy,
+			};
+			const legacyFingerprint = stableJsonFingerprint(legacyConfig);
+			const legacyState: SelectionStateRecord = {
+				...initialized.proposedState[0]!,
+				configFingerprint: legacyFingerprint,
+				value: { type: strategyType, counter: 17, lastItemId: items[0]!.id },
+			};
+
+			const continued = generateTimeline(input([collection], items, daily, {
+				state: [legacyState],
+			}));
+			const migrated = continued.proposedState[0]!;
+
+			expect(migrated.value).toMatchObject({ type: strategyType, counter: 18 });
+			expect(migrated.configFingerprint).not.toBe(legacyFingerprint);
+		}
+
+		const shuffleStrategy = { type: 'shuffle' as const, seed: 'fixture' };
+		const shuffled = program(10, {
+			type: 'content',
+			source: {
+				type: 'collection',
+				libraryId: uuid(900),
+				itemIds,
+				sort: { type: 'date-added', direction: 'asc' },
+			},
+			strategy: shuffleStrategy,
+		});
+		const initialized = generateTimeline(input([shuffled], items, daily));
+		const legacyFingerprint = stableJsonFingerprint({
+			type: 'content',
+			source: { type: 'collection', libraryId: uuid(900), itemIds },
+			strategy: shuffleStrategy,
+		});
+		const legacyState: SelectionStateRecord = {
+			...initialized.proposedState[0]!,
+			configFingerprint: legacyFingerprint,
+			value: {
+				type: 'shuffle',
+				cycle: 7,
+				cycleItemIds: itemIds,
+				remainingItemIds: itemIds.slice(1),
+				lastItemId: itemIds[0]!,
+			},
+		};
+
+		const continued = generateTimeline(input([shuffled], items, daily, { state: [legacyState] }));
+		const migrated = continued.proposedState[0]!;
+
+		expect(migrated.value).toMatchObject({ type: 'shuffle', cycle: 7 });
+		expect(migrated.configFingerprint).not.toBe(legacyFingerprint);
+	});
+
 	it('uses available members without dropping temporarily unavailable collection members', () => {
 		const unavailable = media(1, 60 * 60, { availability: 'unconfirmed' });
 		const available = media(2, 60 * 60);
@@ -1229,6 +1397,7 @@ describe('schedule timeline engine', () => {
 				type: 'collection',
 				libraryId: uuid(900),
 				itemIds: [unavailable.id, available.id],
+				sort: { type: 'date-added', direction: 'asc' },
 			},
 			strategy: { type: 'sequential' },
 		});

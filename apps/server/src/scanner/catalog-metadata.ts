@@ -1,5 +1,5 @@
 /** Version used to invalidate indexed metadata when normalization behavior changes. */
-export const ON_DISK_METADATA_VERSION = 9;
+export const ON_DISK_METADATA_VERSION = 10;
 
 /** Canonical genre key paired with its preferred display name. */
 export interface NormalizedGenre {
@@ -37,7 +37,7 @@ export function catalogSortTitle(title: string, authoredSortTitle?: string | nul
 		.trim()
 		.replace(/\s+/g, ' ');
 	const match = normalized.match(/^(A|An|The)\s+(.+)$/iu);
-	return match ? match[2] : normalized;
+	return match?.[2] ?? normalized;
 }
 
 /** Return the A–Z browse bucket for a normalized title. */

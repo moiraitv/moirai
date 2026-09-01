@@ -92,6 +92,7 @@ describe('scheduling program status', () => {
 					type: 'collection',
 					libraryId: '00000000-0000-4000-8000-000000000002',
 					itemIds: ['00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000004'],
+					sort: { type: 'date-added', direction: 'asc' },
 				},
 				strategy: { type: 'sequential' },
 			},

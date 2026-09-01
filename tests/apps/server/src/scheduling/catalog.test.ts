@@ -13,7 +13,12 @@ describe('scheduling catalog scopes', () => {
 		const itemId = randomUUID();
 		const explicit = program({
 			type: 'content',
-			source: { type: 'collection', libraryId, itemIds: [itemId] },
+			source: {
+				type: 'collection',
+				libraryId,
+				itemIds: [itemId],
+				sort: { type: 'date-added', direction: 'asc' },
+			},
 			strategy: { type: 'sequential' },
 		});
 		const sequence = program({

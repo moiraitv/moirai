@@ -426,9 +426,37 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		.locator('.source-picker-list')
 		.evaluate((element) => (element as HTMLElement).offsetTop);
 	expect(Math.abs(sourcePickerTopAfterSelection - sourcePickerTopBeforeSelection)).toBeLessThan(2);
+	await page.getByRole('searchbox', { name: 'Search source media' }).fill('');
+	await page.getByRole('button', { name: 'Search', exact: true }).click();
+	const companionMovie = page
+		.locator('.source-picker-list article')
+		.filter({ hasText: 'Companion Fixture' });
+	await companionMovie.getByRole('button', { name: 'Add' }).click();
+	await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Review Selection' }).click();
 	const selectionDrawer = page.getByRole('dialog', { name: 'Review selection' });
 	await expect(selectionDrawer).toBeVisible();
+	await expect(selectionDrawer.getByLabel('Sort selected media')).toHaveValue('date-added');
+	await expect(selectionDrawer.getByLabel('Selected media sort direction')).toHaveValue('asc');
+	const selectionDrawerBounds = await selectionDrawer.boundingBox();
+	expect(selectionDrawerBounds!.width).toBeGreaterThan(850);
+	await selectionDrawer.getByLabel('Sort selected media').selectOption('name');
+	await expect(selectionDrawer.locator('.selected-item-copy strong')).toHaveText([
+		'Broadcast Fixture',
+		'Companion Fixture',
+	]);
+	await selectionDrawer.getByLabel('Sort selected media').selectOption('manual');
+	await expect(selectionDrawer.getByLabel('Selected media sort direction')).toHaveCount(0);
+	await selectionDrawer.getByRole('button', { name: 'Move Companion Fixture earlier' }).click();
+	await expect(selectionDrawer.locator('.selected-item-copy strong')).toHaveText([
+		'Companion Fixture',
+		'Broadcast Fixture',
+	]);
+	await selectionDrawer.getByRole('searchbox', { name: 'Search selected media' }).fill('Broadcast');
+	await expect(selectionDrawer.getByText('Clear search to reorder selected media.')).toBeVisible();
+	await expect(selectionDrawer.getByRole('button', { name: 'Drag Broadcast Fixture to reorder' }))
+		.toBeDisabled();
+	await selectionDrawer.getByRole('searchbox', { name: 'Search selected media' }).fill('');
 	const selectedMovie = selectionDrawer.locator('.selected-item-grid article').filter({
 		hasText: 'Broadcast Fixture',
 	});
@@ -442,6 +470,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const removeBounds = await removeSelectedMovie.boundingBox();
 	expect(removeBounds!.y).toBeLessThan((posterBounds?.y ?? 0) + (posterBounds?.height ?? 0) / 3);
 	await removeSelectedMovie.click();
+	await selectionDrawer.getByRole('button', { name: 'Remove Companion Fixture' }).click();
 	await expect(page.getByText('0 selected', { exact: true })).toBeVisible();
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
 	await expect(selectionDrawer).toBeHidden();

@@ -15,6 +15,7 @@ import {
 	type MediaSourcePickerEntry,
 	type ProgramCreate,
 	type SchedulingProgram,
+	type SelectedMediaSort,
 } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../../api';
@@ -32,6 +33,9 @@ import MediaSelectionDrawer from './MediaSelectionDrawer.vue';
 import ProgramTypeRail from './ProgramTypeRail.vue';
 import SelectionStrategyEditor from './SelectionStrategyEditor.vue';
 import SequenceProgramEditor from './SequenceProgramEditor.vue';
+import { itemsInReferenceOrder, manualOrderFromDisplay, mergeVisibleManualOrder } from './selected-media-order';
+import { useSelectedMediaOrderState } from './selected-media-order-state';
+import { subscribeToSelectedMediaRefresh } from './selected-media-refresh';
 
 const props = withDefaults(
 	defineProps<{
@@ -77,6 +81,7 @@ const selectedItemSearch = ref('');
 const selectionReviewButton = ref<HTMLButtonElement>();
 let selectedItemsLoadSequence = 0;
 let selectedGroupsLoadSequence = 0;
+let unsubscribeLiveEvents: (() => void) | undefined;
 const genres = ref<Array<{ key: string; name: string }>>([]);
 const editorOpen = computed(() =>
 	props.embedded ? Boolean(props.programId) : route.params.id !== undefined);
@@ -105,23 +110,28 @@ const selectionLoading = computed(() =>
 	selectingGroups.value ? selectedGroupsLoading.value : selectedItemsLoading.value);
 const selectionLoaded = computed(() =>
 	selectingGroups.value ? selectedGroupsLoaded.value : selectedItemsLoaded.value);
-const missingSelectedCount = computed(
-	() => form.selectedItemIds.length - selectedItems.value.length,
+const missingSelectedCount = computed(() => form.selectedItemIds.length - selectedItems.value.length);
+const selectedItemSort = computed<SelectedMediaSort>(() => form.selectedItemSort === 'manual'
+	? { type: 'manual', itemIds: form.manualItemIds }
+	: { type: form.selectedItemSort, direction: form.selectedItemSortDirection });
+const selectedItemOrdering = useSelectedMediaOrderState(
+	() => form.selectedItemIds,
+	() => selectedItems.value,
+	() => selectedItemSort.value,
 );
 const filteredSelectedItems = computed(() => {
 	const query = selectedItemSearch.value.trim().toLocaleLowerCase();
 	if (!query) {
-		return selectedItems.value;
+		return selectedItemOrdering.orderedItems.value;
 	}
 
-	return selectedItems.value.filter((item) => {
+	return selectedItemOrdering.orderedItems.value.filter((item) => {
 		const subtitle = mediaItemSubtitle(selectedLibraryType.value, item) || item.kind;
 		return `${item.title} ${subtitle}`.toLocaleLowerCase().includes(query);
 	});
 });
-const missingSelectedGroupCount = computed(
-	() => form.selectedGroupIds.length - selectedGroups.value.length,
-);
+const missingSelectedGroupCount = computed(() =>
+	form.selectedGroupIds.length - selectedGroups.value.length);
 const filteredSelectedGroups = computed(() => {
 	const query = selectedItemSearch.value.trim().toLocaleLowerCase();
 	if (!query) {
@@ -187,6 +197,9 @@ const form = reactive({
 	kinds: [] as string[],
 	genres: [] as string[],
 	selectedItemIds: [] as string[],
+	selectedItemSort: 'date-added' as 'date-added' | 'name' | 'release-date' | 'manual',
+	selectedItemSortDirection: 'asc' as 'asc' | 'desc',
+	manualItemIds: [] as string[],
 	selectedGroupIds: [] as string[],
 	strategy: 'sequential' as 'sequential' | 'shuffle' | 'random' | 'weighted-random',
 	seed: '',
@@ -207,11 +220,15 @@ function resetForm(program?: SchedulingProgram): void {
 	form.kinds = [];
 	form.genres = [];
 	form.selectedItemIds = [];
+	form.selectedItemSort = 'date-added';
+	form.selectedItemSortDirection = 'asc';
+	form.manualItemIds = [];
 	form.selectedGroupIds = [];
 	form.strategy = 'sequential';
 	form.seed = '';
 	form.repeat = true;
 	form.entries = [];
+	selectedItemOrdering.reset();
 	selectedSourceLabel.value = '';
 	selectedItems.value = [];
 	selectedItemsLoaded.value = false;
@@ -230,6 +247,12 @@ function resetForm(program?: SchedulingProgram): void {
 			case 'collection':
 				form.libraryId = source.libraryId;
 				form.selectedItemIds = [...source.itemIds];
+				selectedItemOrdering.reset(source);
+				form.selectedItemSort = source.sort.type;
+				form.selectedItemSortDirection = source.sort.type === 'manual'
+					? 'asc'
+					: source.sort.direction;
+				form.manualItemIds = source.sort.type === 'manual' ? [...source.sort.itemIds] : [];
 				break;
 			case 'item':
 				form.sourceId = source.itemId;
@@ -332,7 +355,10 @@ async function loadSelectedItems(): Promise<void> {
 	selectedItemsLoading.value = true;
 	selectedItemsLoaded.value = false;
 	try {
-		const items = await api.mediaSelection(form.libraryId, form.selectedItemIds);
+		const requestedIds = form.selectedItemSort === 'manual'
+			? form.manualItemIds
+			: selectedItemOrdering.additionOrder.value.itemIds;
+		const items = await api.mediaSelection(form.libraryId, requestedIds);
 		if (sequence === selectedItemsLoadSequence) {
 			selectedItems.value = items;
 			selectedItemsLoaded.value = true;
@@ -410,6 +436,7 @@ function browseGroup(entry: MediaSourcePickerEntry): void {
 function toggleSelectedItem(item: MediaItem): void {
 	if (selectedIdSet.value.has(item.id)) {
 		form.selectedItemIds = form.selectedItemIds.filter((id) => id !== item.id);
+		form.manualItemIds = form.manualItemIds.filter((id) => id !== item.id);
 		selectedItems.value = selectedItems.value.filter((selected) => selected.id !== item.id);
 		return;
 	}
@@ -420,6 +447,9 @@ function toggleSelectedItem(item: MediaItem): void {
 	}
 
 	form.selectedItemIds.push(item.id);
+	if (form.selectedItemSort === 'manual') {
+		form.manualItemIds.push(item.id);
+	}
 	selectedItems.value.push(item);
 	selectedItemsLoaded.value = true;
 }
@@ -445,7 +475,49 @@ function toggleSelectedGroup(group: MediaGroup): void {
 /** Remove one explicit item from both the request identifiers and review cards. */
 function removeSelectedItem(id: string): void {
 	form.selectedItemIds = form.selectedItemIds.filter((candidate) => candidate !== id);
+	form.manualItemIds = form.manualItemIds.filter((candidate) => candidate !== id);
 	selectedItems.value = selectedItems.value.filter((item) => item.id !== id);
+}
+
+/** Change selected-media ordering and freeze the current display when entering Manual. */
+function changeSelectedItemSort(value: 'date-added' | 'name' | 'release-date' | 'manual'): void {
+	if (value === 'manual') {
+		form.manualItemIds = manualOrderFromDisplay(
+			form.selectedItemIds,
+			selectedItemOrdering.orderedItems.value,
+		);
+		selectedItems.value = [...selectedItemOrdering.orderedItems.value];
+	}
+	else if (form.selectedItemSort === 'manual') {
+		selectedItems.value = itemsInReferenceOrder(form.selectedItemIds, selectedItems.value);
+		form.manualItemIds = [];
+	}
+
+	form.selectedItemSort = value;
+}
+
+/** Persist a complete visible Manual ordering while retaining missing references at the end. */
+function reorderSelectedItems(itemIds: string[]): void {
+	if (form.selectedItemSort !== 'manual' || selectedItemSearch.value.trim()) {
+		return;
+	}
+
+	form.manualItemIds = mergeVisibleManualOrder(form.manualItemIds, itemIds);
+	selectedItems.value = itemsInReferenceOrder(itemIds, selectedItems.value);
+}
+
+/** Move one visible Manual item by one position for keyboard-accessible ordering. */
+function moveSelectedItem(id: string, offset: -1 | 1): void {
+	const ids = selectedItemOrdering.orderedItems.value.map((item) => item.id);
+	const index = ids.indexOf(id);
+	const target = index + offset;
+	if (index < 0 || target < 0 || target >= ids.length) {
+		return;
+	}
+
+	const [itemId] = ids.splice(index, 1);
+	ids.splice(target, 0, itemId!);
+	reorderSelectedItems(ids);
 }
 
 /** Remove one selected group from both the request identifiers and review cards. */
@@ -484,6 +556,7 @@ function clearSelectedItems(): void {
 	}
 	else {
 		form.selectedItemIds = [];
+		form.manualItemIds = [];
 		selectedItems.value = [];
 		selectedItemsLoaded.value = true;
 	}
@@ -512,6 +585,8 @@ function changeSourceLibrary(): void {
 	selectedSourceLabel.value = '';
 	if (form.sourceType === 'collection') {
 		form.selectedItemIds = [];
+		form.manualItemIds = [];
+		selectedItemOrdering.reset();
 		selectedItems.value = [];
 		selectedItemsLoaded.value = true;
 	}
@@ -538,6 +613,8 @@ async function changeSourceType(): Promise<void> {
 	form.sourceId = '';
 	selectedSourceLabel.value = '';
 	form.selectedItemIds = [];
+	form.manualItemIds = [];
+	selectedItemOrdering.reset();
 	form.selectedGroupIds = [];
 	selectedItems.value = [];
 	selectedItemsLoaded.value = true;
@@ -681,7 +758,8 @@ function payload(): ProgramCreate {
 						? ({
 							type: 'collection',
 							libraryId: form.libraryId,
-							itemIds: form.selectedItemIds,
+							itemIds: selectedItemOrdering.additionOrder.value.itemIds,
+							sort: selectedItemSort.value,
 						} as const)
 						: ({
 							type: 'library-query',
@@ -741,12 +819,14 @@ watch(
 		void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	},
 );
-watch(
-	() => form.libraryId,
-	() => void loadSourceOptions(),
-);
+watch(() => form.libraryId, () => void loadSourceOptions());
 onMounted(async () => {
 	document.addEventListener('keydown', handleSelectionDrawerKeydown);
+	unsubscribeLiveEvents = subscribeToSelectedMediaRefresh(
+		() => form.libraryId,
+		() => form.sourceType === 'collection',
+		() => void loadSelectedItems(),
+	);
 	try {
 		await Promise.all([
 			scheduling.load(),
@@ -767,6 +847,7 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
 	document.removeEventListener('keydown', handleSelectionDrawerKeydown);
+	unsubscribeLiveEvents?.();
 });
 </script>
 
@@ -1251,7 +1332,12 @@ onBeforeUnmount(() => {
 			:group-reference-count="form.selectedGroupIds.length"
 			:library-type="selectedLibraryType"
 			:search="selectedItemSearch"
+			:sort="selectedItemSort"
 			@update:search="selectedItemSearch = $event"
+			@update:sort-type="changeSelectedItemSort"
+			@update:sort-direction="form.selectedItemSortDirection = $event"
+			@reorder-items="reorderSelectedItems"
+			@move-item="moveSelectedItem"
 			@close="closeSelectionDrawer"
 			@clear="clearSelectedItems"
 			@remove-item="removeSelectedItem"

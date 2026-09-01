@@ -1392,6 +1392,32 @@ describe('API', () => {
 		expect(changedLibrary.statusCode).toBe(400);
 		expect((await services.repository.getProgram(programId))?.config).toEqual(initialConfig);
 
+		const missingItemId = randomUUID();
+		const missingItemProgram = await app.inject({
+			method: 'POST',
+			url: '/api/v1/programs',
+			payload: {
+				name: 'Missing exact item',
+				config: {
+					type: 'content',
+					source: { type: 'item', itemId: missingItemId },
+					strategy: { type: 'sequential' },
+				},
+			},
+		});
+		const changedMissingItem = await app.inject({
+			method: 'PATCH',
+			url: `/api/v1/programs/${missingItemProgram.json().id}`,
+			payload: {
+				config: {
+					type: 'content',
+					source: { type: 'item', itemId: randomUUID() },
+					strategy: { type: 'sequential' },
+				},
+			},
+		});
+		expect(changedMissingItem.statusCode).toBe(400);
+
 		const changedBehavior = await app.inject({
 			method: 'PATCH',
 			url: `/api/v1/programs/${programId}`,
@@ -1654,7 +1680,12 @@ describe('API', () => {
 			name: 'Confirm scheduled films',
 			config: {
 				type: 'content',
-				source: { type: 'collection', libraryId: library.id, itemIds: [itemId] },
+				source: {
+					type: 'collection',
+					libraryId: library.id,
+					itemIds: [itemId],
+					sort: { type: 'date-added', direction: 'asc' },
+				},
 				strategy: { type: 'sequential' },
 			},
 		});

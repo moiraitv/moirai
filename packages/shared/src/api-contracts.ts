@@ -146,6 +146,7 @@ export const mediaItemSchema = z.object({
 	playbackPath: z.string(),
 	plot: z.string().nullable(),
 	year: z.number().int().nullable(),
+	releaseDate: z.iso.date().nullable(),
 	durationSeconds: z.number().nonnegative().nullable(),
 	seasonNumber: z.number().int().nullable(),
 	episodeNumber: z.number().int().nullable(),

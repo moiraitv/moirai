@@ -23,7 +23,12 @@ import type {
 	TimelineCommit,
 	TimelineMaterializationRecord,
 } from './contracts.js';
-import { artworkUrl, cacheVersion, decodedMetadata } from './catalog.js';
+import {
+	artworkUrl,
+	cacheVersion,
+	decodedMetadata,
+	metadataReleaseDate,
+} from './catalog.js';
 import { SchedulingConfigurationRepository } from './scheduling-config.js';
 
 /** Internal marker for a failed channel that has never committed a timeline. */
@@ -357,6 +362,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					genreNames: genreNameMap.get(item.id) ?? [],
 					plot: item.plot,
 					year: item.year,
+					releaseDate: metadataReleaseDate(metadata),
 					artworkUrl: artworkUrl(
 						'items',
 						item.id,

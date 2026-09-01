@@ -162,7 +162,12 @@ export function registerSchedulingRoutes(
 				name: input.destination.name,
 				config: {
 					type: 'content',
-					source: { type: 'collection', libraryId, itemIds },
+					source: {
+						type: 'collection',
+						libraryId,
+						itemIds,
+						sort: { type: 'date-added', direction: 'asc' },
+					},
 					strategy: input.destination.strategy,
 				},
 			});

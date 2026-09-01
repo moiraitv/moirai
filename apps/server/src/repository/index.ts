@@ -140,9 +140,13 @@ export class Repository extends LibraryRepository {
 		return this.catalog.listMediaGenres(libraryId, selection);
 	}
 
-	/** Collect the stable identifiers for list media items by. */
-	async listMediaItemsByIds(libraryId: string, itemIds: string[]): Promise<MediaItem[]> {
-		return this.catalog.listMediaItemsByIds(libraryId, itemIds);
+	/** Resolve selected media in request order with canonical or authored response identifiers. */
+	async listMediaItemsByIds(
+		libraryId: string,
+		itemIds: string[],
+		identity: 'canonical' | 'requested' = 'canonical',
+	): Promise<MediaItem[]> {
+		return this.catalog.listMediaItemsByIds(libraryId, itemIds, identity);
 	}
 
 	/** Return successful probe data used to avoid reopening unchanged media files. */

@@ -5,6 +5,7 @@ import {
 	MAX_METADATA_PLOT_LENGTH,
 	MAX_METADATA_TEXT_LENGTH,
 } from '@moirai/shared';
+import { normalizedReleaseDate } from '../media/release-date.js';
 
 /** Normalized metadata accepted from a bounded Kodi-style NFO sidecar. */
 export interface ParsedNfo {
@@ -90,6 +91,18 @@ function releaseYear(root: Record<string, unknown>): number | null {
 			return Number(match[1]);
 		}
 	}
+	return null;
+}
+
+/** Return the first valid full ISO release date exposed by common NFO aliases. */
+function releaseDate(root: Record<string, unknown>): string | null {
+	for (const candidate of [root.premiered, root.releasedate, root.aired]) {
+		const normalized = normalizedReleaseDate(rawStringValue(candidate));
+		if (normalized) {
+			return normalized;
+		}
+	}
+
 	return null;
 }
 
@@ -280,6 +293,7 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 		integer: true,
 	});
 	const year = explicitYear ?? releaseYear({ ...root, year: undefined });
+	const exactReleaseDate = releaseDate(root);
 
 	// Bound scalar and repeated presentation metadata before persistence.
 	const limitedList = (name: string, values: string[]): string[] => {
@@ -356,6 +370,7 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 		metadata: {
 			reportedRuntimeMinutes: runtimeMinutes,
 			originalTitle: limitedScalar('originalTitle', root.originaltitle),
+			releaseDate: exactReleaseDate,
 			premiered: limitedScalar('premiered', root.premiered),
 			aired: limitedScalar('aired', root.aired),
 			rating,
