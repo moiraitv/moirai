@@ -5,6 +5,7 @@ import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } 
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api';
+import { requestConfirmation } from '../confirmation';
 import { templateSlotStyle } from '../channel-schedule-display';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
@@ -150,7 +151,13 @@ function timeLabel(seconds: number): string {
 }
 /** Confirm template deletion and refresh shared scheduling state. */
 async function removeTemplate(template: ScheduleTemplate): Promise<void> {
-	if (!confirm('Delete ' + template.name + '?')) {
+	if (!(await requestConfirmation({
+		key: `delete-template:${template.id}`,
+		title: 'Delete Template?',
+		message: `Delete ${template.name}? This cannot be undone.`,
+		confirmLabel: 'Delete Template',
+		destructive: true,
+	}))) {
 		return; 
 	}
 

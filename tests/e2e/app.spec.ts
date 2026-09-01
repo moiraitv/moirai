@@ -447,8 +447,32 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(selectionDrawer).toBeHidden();
 	await sourceMovie.getByRole('button', { name: 'Add' }).click();
 	await page.getByRole('button', { name: 'Review Selection' }).click();
-	page.once('dialog', (dialog) => dialog.accept());
-	await selectionDrawer.getByRole('button', { name: 'Clear All' }).click();
+	const clearAll = selectionDrawer.getByRole('button', { name: 'Clear All' });
+	await selectionDrawer.getByRole('button', { name: 'Preview Broadcast Fixture' }).click();
+	const pinnedPreview = page.getByRole('tooltip');
+	await expect(pinnedPreview).toBeVisible();
+	await clearAll.focus();
+	await page.keyboard.press('Enter');
+	const clearConfirmation = page.getByRole('alertdialog', { name: 'Clear Selected Media?' });
+	await expect(clearConfirmation).toBeVisible();
+	const confirmationLayer = page.locator('.confirmation-modal-backdrop');
+	const confirmationZIndex = Number(await confirmationLayer.evaluate((element) =>
+		getComputedStyle(element).zIndex));
+	const previewZIndex = Number(await pinnedPreview.evaluate((element) =>
+		getComputedStyle(element).zIndex));
+	expect(confirmationZIndex).toBeGreaterThan(previewZIndex);
+	const cancelClear = clearConfirmation.getByRole('button', { name: 'Cancel' });
+	const confirmClear = clearConfirmation.getByRole('button', { name: 'Clear All' });
+	await expect(cancelClear).toBeFocused();
+	await page.keyboard.press('Shift+Tab');
+	await expect(confirmClear).toBeFocused();
+	await page.keyboard.press('Tab');
+	await expect(cancelClear).toBeFocused();
+	await cancelClear.click();
+	await expect(clearConfirmation).toBeHidden();
+	await expect(clearAll).toBeFocused();
+	await clearAll.click();
+	await confirmClear.click();
 	await expect(selectionDrawer.getByText('No media selected.')).toBeVisible();
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
 	await sourceMovie.getByRole('button', { name: 'Add' }).click();

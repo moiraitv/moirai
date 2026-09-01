@@ -16,6 +16,7 @@ import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissibl
 import { useLibrariesStore } from '../stores/libraries';
 import { useSchedulingStore } from '../stores/scheduling';
 import { api } from '../api';
+import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { hideBrokenImage } from '../image-error';
@@ -108,7 +109,13 @@ function remainingPreviewCount(programId: string): number {
 }
 /** Confirm and delete a program that is not in use. */
 async function remove(program: SchedulingProgram): Promise<void> {
-	if (!confirm('Delete ' + program.name + '?')) {
+	if (!(await requestConfirmation({
+		key: `delete-program:${program.id}`,
+		title: 'Delete Program?',
+		message: `Delete ${program.name}? This cannot be undone.`,
+		confirmLabel: 'Delete Program',
+		destructive: true,
+	}))) {
 		return; 
 	}
 

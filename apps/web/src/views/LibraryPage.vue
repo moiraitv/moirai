@@ -12,6 +12,7 @@ import {
 } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import { errorMessage } from '../error-message';
+import { requestConfirmation } from '../confirmation';
 import {
 	ArrowDownAZ,
 	ArrowUpAZ,
@@ -809,22 +810,33 @@ async function cancelScan(): Promise<void> {
 /** Apply the selected source or removal reconciliation action. */
 async function reconcile(action: ReconciliationAction['action']): Promise<void> {
 	const current = reconciliation.value;
+	const libraryId = id.value;
 	if (!current?.revision) {
 		return;
 	}
 
 	if (
 		action === 'confirm-removals'
-		&& !confirm(`Permanently remove ${current.pendingRemovalCount} missing item(s) from the index?`)
+		&& !(await requestConfirmation({
+			key: `confirm-library-removals:${libraryId}:${current.revision}`,
+			title: 'Permanently Remove Missing Items?',
+			message: `Permanently remove ${current.pendingRemovalCount} missing item(s) from the index?`,
+			confirmLabel: 'Remove Missing Items',
+			destructive: true,
+		}))
 	) {
 		return;
 	}
 
 	if (
 		action === 'accept-source'
-		&& !confirm(
-			'Replace this library index with the reviewed source? Media files will not be changed.',
-		)
+		&& !(await requestConfirmation({
+			key: `accept-library-source:${libraryId}:${current.revision}`,
+			title: 'Replace Library Index?',
+			message: 'Replace this library index with the reviewed source? Media files will not be changed.',
+			confirmLabel: 'Replace Index',
+			destructive: true,
+		}))
 	) {
 		return;
 	}
@@ -832,7 +844,7 @@ async function reconcile(action: ReconciliationAction['action']): Promise<void> 
 	reconciliationBusy.value = true;
 	actionError.value = '';
 	try {
-		await api.reconcileLibrary(id.value, { action, revision: current.revision });
+		await api.reconcileLibrary(libraryId, { action, revision: current.revision });
 		message.value
 			= action === 'accept-source'
 				? 'Source acceptance scan queued'

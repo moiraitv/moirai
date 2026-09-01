@@ -16,6 +16,7 @@ import {
 	timelineDraftPreviewSchema,
 } from '@moirai/shared';
 import { api } from '../../api';
+import { requestConfirmation } from '../../confirmation';
 import { errorMessage } from '../../error-message';
 import LoadingState from '../LoadingState.vue';
 import ProgramsPage from '../../views/ProgramsPage.vue';
@@ -639,10 +640,16 @@ async function save(): Promise<void> {
 	}
 }
 
-/** Close the editor, confirming before discarding an embedded unsaved draft. */
-function closeEditor(): void {
+/** Close the editor after confirming an embedded unsaved draft may be discarded. */
+async function closeEditor(): Promise<void> {
 	if (props.embedded) {
-		if (isDirty.value && !confirm('Discard unsaved template changes?')) {
+		if (isDirty.value && !(await requestConfirmation({
+			key: `discard-embedded-template:${editingId.value ?? 'new'}`,
+			title: 'Discard Unsaved Changes?',
+			message: 'Close this template without saving your changes?',
+			confirmLabel: 'Discard Changes',
+			destructive: true,
+		}))) {
 			return;
 		}
 
@@ -765,7 +772,7 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 		event.preventDefault();
 		if (props.embedded) {
 			event.stopImmediatePropagation();
-			closeEditor();
+			void closeEditor();
 		}
 		else {
 			void router.push('/schedules/templates');
@@ -773,12 +780,18 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 	}
 }
 
-onBeforeRouteLeave(() => {
+onBeforeRouteLeave(async () => {
 	if (props.embedded) {
 		return true;
 	}
 
-	if (!isDirty.value || confirm('Discard unsaved schedule changes?')) {
+	if (!isDirty.value || await requestConfirmation({
+		key: `discard-template:${editingId.value ?? 'new'}`,
+		title: 'Discard Unsaved Changes?',
+		message: 'Leave this template without saving your changes?',
+		confirmLabel: 'Discard Changes',
+		destructive: true,
+	})) {
 		return true;
 	}
 

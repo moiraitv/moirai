@@ -21,6 +21,8 @@ import {
 import type { PlaybackEngineStatus } from '@moirai/shared';
 import logoUrl from './assets/moirai-logo.png';
 import { api } from './api';
+import ConfirmationModal from './components/ConfirmationModal.vue';
+import { activeConfirmation, cancelConfirmations, settleConfirmation } from './confirmation';
 import { liveEvents } from './live-events';
 import { clearMediaCardPreviewCache } from './media-card-preview';
 import { useLibrariesStore } from './stores/libraries';
@@ -113,7 +115,10 @@ const unsubscribe = liveEvents.subscribe((event) => {
 
 watch(
 	() => route.fullPath,
-	() => closeDrawer(),
+	() => {
+		closeDrawer();
+		cancelConfirmations();
+	},
 );
 onMounted(() => {
 	window.addEventListener('keydown', handleKeydown);
@@ -140,7 +145,7 @@ onUnmounted(() => {
 
 <template>
 	<RouterView v-if="!authentication.authenticated" />
-	<div v-else class="app-shell">
+	<div v-else class="app-shell" :inert="Boolean(activeConfirmation)">
 		<header class="mobile-header">
 			<RouterLink class="mobile-brand" to="/" aria-label="Moirai home">
 				<img :src="logoUrl" alt="" />
@@ -278,4 +283,13 @@ onUnmounted(() => {
 			<RouterView />
 		</main>
 	</div>
+	<ConfirmationModal
+		v-if="activeConfirmation"
+		:title="activeConfirmation.title"
+		:message="activeConfirmation.message"
+		:confirm-label="activeConfirmation.confirmLabel"
+		:destructive="activeConfirmation.destructive"
+		@cancel="settleConfirmation(false)"
+		@confirm="settleConfirmation(true)"
+	/>
 </template>

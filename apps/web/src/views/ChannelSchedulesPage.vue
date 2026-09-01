@@ -29,6 +29,7 @@ import {
 	type TimelinePreview,
 } from '@moirai/shared';
 import { api } from '../api';
+import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import { randomUuid } from '../random-uuid';
 import LoadingState from '../components/LoadingState.vue';
@@ -378,11 +379,18 @@ async function applyTimelineNow(): Promise<void> {
 
 /** Confirm and remove the selected channel's authored and generated schedule state. */
 async function removeSchedule(): Promise<void> {
-	if (!channel.value || !confirm(`Remove the schedule for ${channel.value.name}?`)) {
+	const selectedChannel = channel.value;
+	if (!selectedChannel || !(await requestConfirmation({
+		key: `remove-channel-schedule:${selectedChannel.id}`,
+		title: 'Remove Channel Schedule?',
+		message: `Remove the authored and generated schedule for ${selectedChannel.name}?`,
+		confirmLabel: 'Remove Schedule',
+		destructive: true,
+	}))) {
 		return;
 	}
 
-	await api.deleteChannelSchedule(channel.value.id);
+	await api.deleteChannelSchedule(selectedChannel.id);
 	await scheduling.load();
 	await router.push('/schedules/channels');
 }
@@ -455,7 +463,13 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 	}
 }
 
-onBeforeRouteLeave(() => !isDirty.value || confirm('Discard unsaved schedule changes?'));
+onBeforeRouteLeave(async () => !isDirty.value || requestConfirmation({
+	key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
+	title: 'Discard Unsaved Changes?',
+	message: 'Leave this channel schedule without saving your changes?',
+	confirmLabel: 'Discard Changes',
+	destructive: true,
+}));
 watch(
 	() => route.params.id,
 	() => {

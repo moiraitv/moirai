@@ -477,10 +477,6 @@ async function closeSelectionDrawer(): Promise<void> {
 /** Confirm and clear every explicit item or group from the current source. */
 function clearSelectedItems(): void {
 	const groups = form.sourceType === 'group-collection';
-	if (!confirm(`Remove all selected ${groups ? 'media groups' : 'media items'}?`)) {
-		return;
-	}
-
 	if (groups) {
 		form.selectedGroupIds = [];
 		selectedGroups.value = [];

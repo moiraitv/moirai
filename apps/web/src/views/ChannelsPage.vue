@@ -24,6 +24,7 @@ import {
 } from '@moirai/shared';
 import type { HardwareAccelerationPrediction } from '@moirai/shared/api-contracts';
 import { api } from '../api';
+import { requestConfirmation } from '../confirmation';
 import { formatHardwareAccelerationPrediction } from '../channel-acceleration';
 import { channelLogoUrl } from '../channel-logo';
 import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
@@ -629,8 +630,17 @@ async function save() {
 	}
 }
 /** Confirm and remove a channel. */
-async function remove(id: string) {
-	if (!confirm('Remove this channel?')) {
+async function remove(id: string): Promise<void> {
+	const selected = channels.value.find((channel) => channel.id === id);
+	if (!(await requestConfirmation({
+		key: `delete-channel:${id}`,
+		title: 'Remove Channel?',
+		message: selected
+			? `Remove ${selected.name} and its generated schedule?`
+			: 'Remove this channel and its generated schedule?',
+		confirmLabel: 'Remove Channel',
+		destructive: true,
+	}))) {
 		return;
 	}
 

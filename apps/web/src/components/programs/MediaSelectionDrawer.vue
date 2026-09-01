@@ -3,12 +3,13 @@ import { nextTick, onMounted, ref } from 'vue';
 import { Asterisk, Layers3, Trash2, X } from '@lucide/vue';
 import type { MediaGroup, MediaItem } from '@moirai/shared';
 import LoadingState from '../LoadingState.vue';
+import { requestConfirmation } from '../../confirmation';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import MediaCardPreview from '../MediaCardPreview.vue';
 
-defineProps<{
+const props = defineProps<{
 	selectingGroups: boolean;
 	selectionCount: number;
 	selectionLimit: number;
@@ -33,6 +34,22 @@ const emit = defineEmits<{
 	'update:search': [value: string];
 }>();
 const drawer = ref<HTMLElement>();
+
+/** Close the confirmation and clear every selected reference. */
+async function confirmClear(): Promise<void> {
+	const groups = props.selectingGroups;
+	if (await requestConfirmation({
+		key: groups ? 'clear-selected-media-groups' : 'clear-selected-media',
+		title: groups ? 'Clear Selected Media Groups?' : 'Clear Selected Media?',
+		message: groups
+			? 'Remove every selected media group from this program?'
+			: 'Remove every selected media item from this program?',
+		confirmLabel: 'Clear All',
+		destructive: true,
+	})) {
+		emit('clear');
+	}
+}
 
 onMounted(async () => {
 	await nextTick();
@@ -171,7 +188,7 @@ onMounted(async () => {
 						type="button"
 						class="toolbar-button danger-button"
 						:disabled="selectionCount === 0"
-						@click="emit('clear')"
+						@click="confirmClear"
 					>
 						<Trash2 :size="16" />Clear All
 					</button>

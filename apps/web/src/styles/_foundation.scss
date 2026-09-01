@@ -581,6 +581,56 @@ a.nav-link.router-link-exact-active {
 	border-color: rgba(255, 111, 127, 0.42);
 }
 
+.moirai-dialog-backdrop.confirmation-modal-backdrop {
+	z-index: 140;
+}
+
+.moirai-dialog.confirmation-modal {
+	width: min(430px, 100%);
+	padding: 0;
+	overflow: hidden;
+}
+
+.confirmation-modal header,
+.confirmation-modal > p,
+.confirmation-modal footer {
+	padding-inline: 24px;
+}
+
+.confirmation-modal header {
+	padding-top: 24px;
+}
+
+.confirmation-modal header h2,
+.confirmation-modal header p {
+	margin: 0;
+}
+
+.confirmation-modal header h2 {
+	margin-top: 4px;
+	font-size: 1.35rem;
+}
+
+.confirmation-modal > p {
+	margin: 18px 0 24px;
+	color: var(--muted);
+}
+
+.confirmation-modal footer {
+	padding-block: 16px;
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+	border-top: 1px solid var(--line);
+	background: rgba(5, 14, 22, 0.52);
+}
+
+.confirmation-modal .button.danger {
+	color: #fff;
+	border-color: rgba(255, 111, 127, 0.68);
+	background: linear-gradient(180deg, #a94452, #812d39);
+}
+
 .icon-button {
 	cursor: pointer;
 	width: 36px;
