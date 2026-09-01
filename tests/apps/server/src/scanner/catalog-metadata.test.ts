@@ -84,6 +84,13 @@ describe('catalog metadata normalization', () => {
 		]);
 	});
 
+	it('ignores punctuation and symbols in fallback sort titles', () => {
+		expect(catalogSortTitle("The 'Burbs")).toBe('Burbs');
+		expect(catalogSortTitle('M*A*S*H')).toBe('MASH');
+		expect(catalogSortTitle('Spider-Man')).toBe('SpiderMan');
+		expect(titleBucket(catalogSortTitle("The 'Burbs"))).toBe('B');
+	});
+
 	it('preserves an authored sort title instead of applying article handling', () => {
 		expect(catalogSortTitle('The Matrix', 'Custom Matrix Order')).toBe('Custom Matrix Order');
 	});

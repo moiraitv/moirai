@@ -187,8 +187,8 @@ Moirai normalizes values before persistence:
 - Invalid or out-of-range numeric values are ignored and reported as scan diagnostics.
 - Release years fall back from documented release fields to filename years where appropriate.
 - Show groups derive an observed year range from show and episode metadata.
-- Fallback sort titles omit leading English articles `A`, `An`, and `The` while preserving explicit
-  NFO sort titles.
+- Fallback sort titles omit punctuation, symbols, and leading English articles `A`, `An`, and `The`
+  while preserving explicit NFO sort titles.
 
 Each scan fingerprints the final normalized item record as well as its source files and measured
 technical identity. A parser or normalization change that alters persisted metadata therefore

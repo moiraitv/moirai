@@ -1,5 +1,5 @@
 /** Version used to invalidate indexed metadata when normalization behavior changes. */
-export const ON_DISK_METADATA_VERSION = 8;
+export const ON_DISK_METADATA_VERSION = 9;
 
 /** Canonical genre key paired with its preferred display name. */
 export interface NormalizedGenre {
@@ -26,14 +26,18 @@ export function normalizeSearchText(value: string): string {
 		.toLocaleLowerCase('en-US');
 }
 
-/** Preserve an authored key or omit a leading English article from the fallback sort title. */
+/** Preserve an authored key or remove punctuation and a leading article from a fallback sort key. */
 export function catalogSortTitle(title: string, authoredSortTitle?: string | null): string {
 	if (authoredSortTitle !== undefined && authoredSortTitle !== null) {
 		return authoredSortTitle;
 	}
 
-	const match = title.trim().match(/^(A|An|The)\s+(.+)$/iu);
-	return match ? match[2] : title;
+	const normalized = title
+		.replace(/[\p{Punctuation}\p{Symbol}]+/gu, '')
+		.trim()
+		.replace(/\s+/g, ' ');
+	const match = normalized.match(/^(A|An|The)\s+(.+)$/iu);
+	return match ? match[2] : normalized;
 }
 
 /** Return the A–Z browse bucket for a normalized title. */
