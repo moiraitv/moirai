@@ -26,6 +26,16 @@ export function normalizeSearchText(value: string): string {
 		.toLocaleLowerCase('en-US');
 }
 
+/** Preserve an authored key or omit a leading English article from the fallback sort title. */
+export function catalogSortTitle(title: string, authoredSortTitle?: string | null): string {
+	if (authoredSortTitle !== undefined && authoredSortTitle !== null) {
+		return authoredSortTitle;
+	}
+
+	const match = title.trim().match(/^(A|An|The)\s+(.+)$/iu);
+	return match ? match[2] : title;
+}
+
 /** Return the A–Z browse bucket for a normalized title. */
 export function titleBucket(value: string): string {
 	const first = normalizeSearchText(value).charAt(0).toUpperCase();

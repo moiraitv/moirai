@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeGenres, normalizeSearchText, titleBucket } from '@server/scanner/catalog-metadata.js';
+import {
+	catalogSortTitle,
+	normalizeGenres,
+	normalizeSearchText,
+	titleBucket,
+} from '@server/scanner/catalog-metadata.js';
 
 describe('catalog metadata normalization', () => {
 	it('collapses documented genre aliases into one stable facet', () => {
@@ -55,5 +60,31 @@ describe('catalog metadata normalization', () => {
 		expect(normalizeSearchText('  Chloé   Zhao ')).toBe('chloe zhao');
 		expect(titleBucket('Arrival')).toBe('A');
 		expect(titleBucket('2001: A Space Odyssey')).toBe('#');
+	});
+
+	it('omits leading English articles from fallback sort titles', () => {
+		expect(catalogSortTitle('The Matrix')).toBe('Matrix');
+		expect(catalogSortTitle('A Quiet Place')).toBe('Quiet Place');
+		expect(catalogSortTitle('an Education')).toBe('Education');
+		expect(catalogSortTitle('There Will Be Blood')).toBe('There Will Be Blood');
+		expect(catalogSortTitle('A')).toBe('A');
+	});
+
+	it('sorts an article-only base title before longer titles with the same first word', () => {
+		expect([
+			'The Matrix Reloaded',
+			'The Matrix Resurrections',
+			'The Matrix Revolutions',
+			'The Matrix',
+		].map((title) => catalogSortTitle(title)).sort()).toEqual([
+			'Matrix',
+			'Matrix Reloaded',
+			'Matrix Resurrections',
+			'Matrix Revolutions',
+		]);
+	});
+
+	it('preserves an authored sort title instead of applying article handling', () => {
+		expect(catalogSortTitle('The Matrix', 'Custom Matrix Order')).toBe('Custom Matrix Order');
 	});
 });

@@ -225,9 +225,14 @@ describe('discoverOnDisk', () => {
 
 	it('indexes a playable file with filename metadata when NFO is missing', async () => {
 		const fixture = await library();
-		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'No_NFO.mp4'), 'video');
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'The_No_NFO.mp4'), 'video');
 		const result = await discoverOnDisk(fixture);
-		expect(result.items[0]).toMatchObject({ title: 'No NFO', metadataStatus: 'incomplete' });
+		expect(result.items[0]).toMatchObject({
+			title: 'The No NFO',
+			sortTitle: 'No NFO',
+			titleBucket: 'N',
+			metadataStatus: 'incomplete',
+		});
 		expect(result.issues.some((issue) => issue.code === 'nfo_missing')).toBe(true);
 	});
 
@@ -308,21 +313,25 @@ describe('discoverOnDisk', () => {
 		await mkdir(path.join(show, 'Season 01'), { recursive: true });
 		await writeFile(
 			path.join(show, 'tvshow.nfo'),
-			'<tvshow><title>Signal</title><year>2019</year><uniqueid>signal</uniqueid></tvshow>',
+			'<tvshow><title>The Signal</title><year>2019</year><uniqueid>signal</uniqueid></tvshow>',
 		);
 		await writeFile(path.join(show, 'Season 01', 'Signal.S01E02.mkv'), 'video');
 		await writeFile(
 			path.join(show, 'Season 01', 'Signal.S01E02.nfo'),
-			'<episodedetails><title>Second Light</title><aired>2021-03-04</aired><season>1</season><episode>2</episode></episodedetails>',
+			'<episodedetails><title>A Second Light</title><aired>2021-03-04</aired><season>1</season><episode>2</episode></episodedetails>',
 		);
 		const result = await discoverOnDisk(fixture);
 		expect(result.groups.map((group) => group.kind)).toEqual(['show', 'season']);
 		expect(result.groups.find((group) => group.kind === 'show')).toMatchObject({
+			title: 'The Signal',
+			sortTitle: 'Signal',
 			year: 2019,
 			metadata: { yearEnd: 2021 },
 		});
 		expect(result.items[0]).toMatchObject({
-			title: 'Second Light',
+			title: 'A Second Light',
+			sortTitle: 'Second Light',
+			titleBucket: 'S',
 			year: 2021,
 			seasonNumber: 1,
 			episodeNumber: 2,
@@ -490,16 +499,16 @@ describe('discoverOnDisk', () => {
 
 	it('builds artist and album groups and applies music-video tag precedence', async () => {
 		const fixture = await library('music-videos');
-		const album = path.join(fixture.sourceConfig.scanRoot, 'Folder Artist', 'Folder Album');
+		const album = path.join(fixture.sourceConfig.scanRoot, 'The Folder Artist', 'Folder Album');
 		await mkdir(album, { recursive: true });
 		await writeFile(path.join(album, '04 - Filename Title.mkv'), 'video');
 		await writeFile(
-			path.join(album, 'Folder Artist - Folder Album.nfo'),
-			'<album><title>NFO Album</title><year>2022</year><thumb>album-cover.jpg</thumb></album>',
+			path.join(album, 'The Folder Artist - Folder Album.nfo'),
+			'<album><title>An NFO Album</title><year>2022</year><thumb>album-cover.jpg</thumb></album>',
 		);
 		await writeFile(path.join(album, 'album-cover.jpg'), 'art');
 		await writeFile(
-			path.join(fixture.sourceConfig.scanRoot, 'Folder Artist', 'folder.jpg'),
+			path.join(fixture.sourceConfig.scanRoot, 'The Folder Artist', 'folder.jpg'),
 			'artist art',
 		);
 		const probeMedia = vi.fn().mockResolvedValue({
@@ -509,7 +518,7 @@ describe('discoverOnDisk', () => {
 			streams: [],
 			resolution: { width: 1920, height: 1080 },
 			tags: {
-				title: 'Tagged Title',
+				title: 'A Tagged Title',
 				artist: 'Tagged Artist; Guest Artist',
 				album: 'Tagged Album',
 				track: '4/10',
@@ -523,15 +532,20 @@ describe('discoverOnDisk', () => {
 
 		expect(result.groups.map((group) => group.kind)).toEqual(['artist', 'album']);
 		expect(result.groups.find((group) => group.kind === 'artist')).toMatchObject({
-			artworkRelativePath: 'Folder Artist/folder.jpg',
+			title: 'The Folder Artist',
+			sortTitle: 'Folder Artist',
+			artworkRelativePath: 'The Folder Artist/folder.jpg',
 		});
 		expect(result.groups.find((group) => group.kind === 'album')).toMatchObject({
-			title: 'NFO Album',
+			title: 'An NFO Album',
+			sortTitle: 'NFO Album',
 			year: 2022,
-			artworkRelativePath: 'Folder Artist/Folder Album/album-cover.jpg',
+			artworkRelativePath: 'The Folder Artist/Folder Album/album-cover.jpg',
 		});
 		expect(result.items[0]).toMatchObject({
-			title: 'Tagged Title',
+			title: 'A Tagged Title',
+			sortTitle: 'Tagged Title',
+			titleBucket: 'T',
 			year: 2023,
 			trackNumber: 4,
 			discNumber: 2,

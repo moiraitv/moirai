@@ -20,6 +20,7 @@ import type {
 	DiscoveredItem,
 } from '../repository/contracts.js';
 import {
+	catalogSortTitle,
 	normalizeGenres,
 	normalizePeople,
 	ON_DISK_METADATA_VERSION,
@@ -708,7 +709,10 @@ export async function discoverOnDisk(
 					parentId: null,
 					kind: 'show',
 					title: showNfo?.title ?? showFilename.title,
-					sortTitle: showNfo?.sortTitle ?? showNfo?.title ?? showFilename.title,
+					sortTitle: catalogSortTitle(
+						showNfo?.title ?? showFilename.title,
+						showNfo?.sortTitle,
+					),
 					year: showNfo?.year ?? showFilename.year,
 					plot: showNfo?.plot ?? null,
 					metadata: {
@@ -795,7 +799,7 @@ export async function discoverOnDisk(
 						parentId: null,
 						kind: 'artist',
 						title: artistFolder,
-						sortTitle: artistFolder,
+						sortTitle: catalogSortTitle(artistFolder),
 						year: null,
 						plot: null,
 						metadata: artistArtworkFingerprint
@@ -837,7 +841,10 @@ export async function discoverOnDisk(
 						parentId: artistId,
 						kind: 'album',
 						title: albumNfo?.title ?? probeTags.album ?? albumFolder,
-						sortTitle: albumNfo?.sortTitle ?? albumNfo?.title ?? probeTags.album ?? albumFolder,
+						sortTitle: catalogSortTitle(
+							albumNfo?.title ?? probeTags.album ?? albumFolder,
+							albumNfo?.sortTitle,
+						),
 						year: albumNfo?.year ?? taggedYear,
 						plot: albumNfo?.plot ?? null,
 						metadata: {
@@ -898,6 +905,7 @@ export async function discoverOnDisk(
 			? nfo.parsed.metadata.track
 			: taggedNumber(probeTags.track) ?? filename.trackNumber;
 		const externalIds = mergedExternalIds(nfo.parsed?.externalIds ?? [], filename.externalIds);
+		const sortTitle = catalogSortTitle(title, nfo.parsed?.sortTitle);
 		const itemPart: MediaPart = {
 			number: partNumber,
 			kind: filename.part?.kind ?? null,
@@ -913,7 +921,7 @@ export async function discoverOnDisk(
 			stableKey: nfo.parsed?.uniqueId ?? relativePath,
 			kind,
 			title,
-			sortTitle: nfo.parsed?.sortTitle ?? title,
+			sortTitle,
 			relativePath,
 			playbackPath: playbackPath(library, relativePath),
 			nfoRelativePath: nfo.path ? normalizeRelative(scanRoot, nfo.path) : null,
@@ -964,7 +972,7 @@ export async function discoverOnDisk(
 				`${probeFingerprint}:${probeResult?.durationMilliseconds ?? probeErrorCode ?? 'failed'}`,
 			),
 			fileModifiedAt: mediaInfo.mtime.toISOString(),
-			titleBucket: titleBucket(nfo.parsed?.sortTitle ?? title),
+			titleBucket: titleBucket(sortTitle),
 			genres,
 			people,
 		});
