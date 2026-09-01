@@ -949,8 +949,8 @@ a.media-card {
 	align-items: center;
 	gap: 16px;
 	color: var(--muted);
-	border: 1px solid rgba(52, 72, 88, 0.72);
-	border-bottom: 0;
+	border: 0;
+	border-top: 1px solid rgba(52, 72, 88, 0.72);
 	border-radius: 0;
 	background: rgba(7, 18, 28, 0.97);
 	box-shadow: 0 -8px 24px rgba(2, 8, 12, 0.34);
