@@ -20,8 +20,13 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 
 <template>
 	<section class="program-editor-section sequence-editor-section">
-		<div class="program-section-heading"><span>1</span><strong>Sequence steps</strong></div>
-		<p class="program-section-description">Combine existing programs in a counted custom order.</p>
+		<div class="program-section-heading">
+			<span>1</span>
+			<div class="program-section-heading-copy">
+				<strong>Sequence steps</strong>
+				<p class="program-section-description">Combine existing programs in a counted custom order.</p>
+			</div>
+		</div>
 		<div class="program-sequence-panel">
 			<div v-for="(entry, index) in entries" :key="entry.id" class="sequence-entry">
 				<input :value="entry.count" type="number" min="1" max="10000" @input="updateEntry(index, { count: Number(($event.target as HTMLInputElement).value) })" />

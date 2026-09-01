@@ -97,7 +97,7 @@ onMounted(() => nameInput.value?.focus());
 				</header>
 
 				<div class="form-grid library-settings-fields">
-					<label><span>Name</span><input ref="nameInput" v-model="form.name" required maxlength="120" /></label>
+					<label><span>Name</span><input ref="nameInput" v-model="form.name" required maxlength="120" autocapitalize="words" /></label>
 					<label><span>Type</span><select v-model="form.typeKey"><option value="movies">Movies</option><option value="shows">Shows</option><option value="music-videos">Music videos</option><option value="other">Other</option></select></label>
 					<label class="span-2"><span>Path Moirai scans</span><input v-model="form.sourceConfig!.scanRoot" required /></label>
 					<label class="span-2"><span>Path playback engine sees <small>optional</small></span><input v-model="form.sourceConfig!.playbackRoot" /></label>

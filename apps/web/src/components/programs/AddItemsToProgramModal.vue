@@ -321,7 +321,7 @@ onMounted(async () => {
 				</fieldset>
 
 				<div v-if="destinationType === 'new'" class="program-create-fields">
-					<label><span>Program name</span><input v-model="name" maxlength="120" autocomplete="off" /></label>
+					<label><span>Program name</span><input v-model="name" maxlength="120" autocomplete="off" autocapitalize="words" /></label>
 					<label><span>Playback order</span><select v-model="strategy"><option value="sequential">Sequential</option><option value="shuffle">Shuffle</option><option value="random">Random</option><option value="weighted-random">Weighted random</option></select></label>
 				</div>
 

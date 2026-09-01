@@ -801,9 +801,11 @@ onBeforeUnmount(() => {
 			>
 				<header class="program-editor-header">
 					<div>
-						<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} program</p>
+						<p class="eyebrow">
+							{{ editingId ? `Edit ${form.type} rule` : 'New program' }}
+						</p>
 						<h2 id="program-editor-title">
-							{{ editingId ? 'Edit' : 'Create' }} {{ form.type }} rule
+							{{ editingId ? 'Edit program' : `Create ${form.type} rule` }}
 						</h2>
 						<p>
 							{{
@@ -831,6 +833,7 @@ onBeforeUnmount(() => {
 							<small>A descriptive name for this {{ form.type }} rule.</small>
 							<input
 								v-model="form.name"
+								autocapitalize="words"
 								required
 								:placeholder="
 									form.type === 'content' ? 'e.g. Primetime Movies' : 'e.g. Evening Lineup'
@@ -841,9 +844,12 @@ onBeforeUnmount(() => {
 						<template v-if="form.type === 'content'">
 							<section class="program-editor-section">
 								<div class="program-section-heading">
-									<span>1</span><strong>Content source</strong>
+									<span>1</span>
+									<div class="program-section-heading-copy">
+										<strong>Content source</strong>
+										<p class="program-section-description">Choose the source of eligible media.</p>
+									</div>
 								</div>
-								<p class="program-section-description">Choose the source of eligible media.</p>
 								<div class="program-source-panel">
 									<div class="form-grid">
 										<div v-if="structureLocked" class="program-fixed-field">

@@ -846,7 +846,7 @@ onBeforeUnmount(() => {
 				<section class="template-toolbar editor-surface">
 					<label>
 						<span>Template name</span>
-						<input v-model="draft.name" aria-label="Template name" @input="markChanged" />
+						<input v-model="draft.name" aria-label="Template name" autocapitalize="words" @input="markChanged" />
 					</label>
 					<span v-if="isDirty" class="draft-badge">Unsaved changes</span>
 					<div class="template-toolbar-actions">

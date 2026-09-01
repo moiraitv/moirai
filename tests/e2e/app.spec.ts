@@ -683,7 +683,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const unsavedTemplateName = `${templateName} Draft`;
 	await page.getByLabel('Template name').fill(unsavedTemplateName);
 	await page.getByRole('button', { name: `Edit ${programName}` }).click();
-	const nestedProgramEditor = page.getByRole('dialog', { name: 'Edit content rule' });
+	const nestedProgramEditor = page.getByRole('dialog', { name: 'Edit program' });
 	await expect(nestedProgramEditor).toBeVisible();
 	await nestedProgramEditor.getByLabel('Name').fill(`${programName} Quick Edit`);
 	await nestedProgramEditor.getByRole('button', { name: 'Save changes' }).click();

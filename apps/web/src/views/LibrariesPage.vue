@@ -162,7 +162,7 @@ onUnmounted(() => {
 		>
 		<form v-if="showForm" class="panel form-grid" @submit.prevent="create">
 			<label
-			><span>Name</span><input v-model="form.name" required placeholder="Cinema archive"
+			><span>Name</span><input v-model="form.name" required autocapitalize="words" placeholder="Cinema archive"
 			/></label>
 			<label
 			><span>Type</span

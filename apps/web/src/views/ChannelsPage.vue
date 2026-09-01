@@ -799,8 +799,8 @@ onBeforeUnmount(() => {
 						<label
 						><span>Number</span
 						><input v-model="form.number" required pattern="[A-Za-z0-9._-]+" /></label
-						><label><span>Name</span><input v-model="form.name" required /></label
-						><label><span>Group</span><input v-model="form.group" /></label>
+						><label><span>Name</span><input v-model="form.name" autocapitalize="words" required /></label
+						><label><span>Group</span><input v-model="form.group" autocapitalize="words" /></label>
 						<div class="span-2 channel-schedule-link">
 							<span>Schedule</span>
 							<RouterLink
