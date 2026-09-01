@@ -419,7 +419,9 @@ collision.
 The Programs catalog is searchable and filterable by content or sequence type. Content rows expose
 a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows
 show their authored child-program entries. Preview data is included in the scheduling status contract
-without exposing playback paths or the full scheduling catalog. Standalone program and template
+without exposing playback paths or the full scheduling catalog. A program's type, content-source
+type, and source library are fixed after creation; its name, source details, and selection behavior
+remain editable. Standalone program and template
 editors use document-scrolling page surfaces, while editors opened inside another scheduling workflow
 remain modal. Client-authored scheduling identifiers retain UUID v4 generation on non-secure LAN
 origins where the browser does not expose `crypto.randomUUID()`.

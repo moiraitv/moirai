@@ -145,6 +145,27 @@
 	line-height: 1.45;
 }
 
+.program-type-fixed {
+	min-height: 78px;
+	padding: 13px;
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	border: 1px solid var(--accent);
+	border-radius: 9px;
+	color: var(--muted-strong);
+	background: linear-gradient(145deg, rgba(18, 57, 59, 0.88), rgba(10, 32, 42, 0.9));
+	box-shadow: 0 0 18px rgba(22, 214, 164, 0.08);
+	text-align: left;
+}
+
+.program-type-fixed .program-type-radio {
+	border-color: var(--accent);
+	box-shadow: inset 0 0 0 4px #07131d;
+	background: var(--accent);
+}
+
 .program-editor-main {
 	min-width: 0;
 	padding: 28px 30px 40px;
@@ -215,6 +236,25 @@
 
 .program-source-panel > label + label {
 	margin-top: 0;
+}
+
+.program-fixed-field {
+	display: grid;
+	align-content: start;
+	gap: 6px;
+}
+
+.program-fixed-field > span {
+	color: #c7d0da;
+	font-size: 0.77rem;
+	font-weight: 620;
+}
+
+.program-fixed-field > strong {
+	padding-block: 7px;
+	color: #f1f5f8;
+	font-size: 0.9rem;
+	font-weight: 620;
 }
 
 .program-token-field {

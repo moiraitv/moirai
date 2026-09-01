@@ -1332,6 +1332,84 @@ describe('API', () => {
 		expect(guide.channels).toMatchObject([{ channelId, preview: { days: 1 } }]);
 	});
 
+	it('keeps a program type, source type, and library fixed after creation', async () => {
+		const { app, services } = await fixture();
+		const libraryId = randomUUID();
+		const initialConfig = {
+			type: 'content' as const,
+			source: {
+				type: 'library-query' as const,
+				libraryId,
+				kinds: ['movie'],
+				genres: [],
+			},
+			strategy: { type: 'sequential' as const },
+		};
+		const created = await app.inject({
+			method: 'POST',
+			url: '/api/v1/programs',
+			payload: { name: 'Fixed structure', config: initialConfig },
+		});
+		expect(created.statusCode).toBe(201);
+		const programId = created.json().id as string;
+
+		const changedType = await app.inject({
+			method: 'PATCH',
+			url: `/api/v1/programs/${programId}`,
+			payload: {
+				config: {
+					type: 'sequence',
+					entries: [{ id: randomUUID(), programId, count: 1 }],
+					repeat: true,
+				},
+			},
+		});
+		expect(changedType.statusCode).toBe(400);
+
+		const changedSourceType = await app.inject({
+			method: 'PATCH',
+			url: `/api/v1/programs/${programId}`,
+			payload: {
+				config: {
+					type: 'content',
+					source: { type: 'collection', libraryId, itemIds: [randomUUID()] },
+					strategy: { type: 'sequential' },
+				},
+			},
+		});
+		expect(changedSourceType.statusCode).toBe(400);
+
+		const changedLibrary = await app.inject({
+			method: 'PATCH',
+			url: `/api/v1/programs/${programId}`,
+			payload: {
+				config: {
+					...initialConfig,
+					source: { ...initialConfig.source, libraryId: randomUUID() },
+				},
+			},
+		});
+		expect(changedLibrary.statusCode).toBe(400);
+		expect((await services.repository.getProgram(programId))?.config).toEqual(initialConfig);
+
+		const changedBehavior = await app.inject({
+			method: 'PATCH',
+			url: `/api/v1/programs/${programId}`,
+			payload: {
+				name: 'Editable behavior',
+				config: {
+					...initialConfig,
+					strategy: { type: 'shuffle', seed: 'retained-source' },
+				},
+			},
+		});
+		expect(changedBehavior.statusCode).toBe(200);
+		expect(changedBehavior.json()).toMatchObject({
+			name: 'Editable behavior',
+			config: { strategy: { type: 'shuffle', seed: 'retained-source' } },
+		});
+	});
+
 	it('creates a channel and exposes it through the integrated M3U playlist', async () => {
 		const { app } = await fixture();
 		const created = await app.inject({

@@ -255,7 +255,8 @@ export function registerSchedulingRoutes(
 		schema: apiOperation({
 			operationId: 'updateProgram',
 			tags: ['Programs'],
-			summary: 'Update a content program',
+			summary: 'Update mutable program settings',
+			description: 'Program type, content source type, and source library are fixed after creation.',
 			params: idParamsSchema,
 			body: programUpdateSchema,
 			response: { 200: responseContent('Updated program', 'application/json', schedulingProgramSchema) },

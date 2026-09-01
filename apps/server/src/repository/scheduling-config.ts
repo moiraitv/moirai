@@ -3,7 +3,9 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import type {
 	ChannelSchedule,
 	ChannelScheduleConfig,
+	ContentSource,
 	ProgramCreate,
+	ProgramConfig,
 	ProgramUpdate,
 	ScheduleTemplate,
 	ScheduleTemplateCreate,
@@ -24,6 +26,8 @@ import {
 	channelSchedules,
 	materializedTimelineSegments,
 	mediaItemAliases,
+	mediaGroups,
+	mediaItems,
 	scheduleBoundaries,
 	scheduleSlots,
 	scheduleTemplates,
@@ -116,11 +120,74 @@ export class SchedulingConfigurationRepository {
 		return program;
 	}
 
+	/** Resolve the library that owns a content source when its contract does not carry one directly. */
+	private async contentSourceLibraryId(source: ContentSource): Promise<string | null> {
+		if ('libraryId' in source) {
+			return source.libraryId;
+		}
+
+		if (source.type === 'group') {
+			const [group] = await this.db
+				.select({ libraryId: mediaGroups.libraryId })
+				.from(mediaGroups)
+				.where(eq(mediaGroups.id, source.groupId));
+			return group?.libraryId ?? null;
+		}
+
+		const [item] = await this.db
+			.select({ libraryId: mediaItems.libraryId })
+			.from(mediaItems)
+			.where(eq(mediaItems.id, source.itemId));
+		if (item) {
+			return item.libraryId;
+		}
+
+		const [alias] = await this.db
+			.select({ libraryId: mediaItems.libraryId })
+			.from(mediaItemAliases)
+			.innerJoin(mediaItems, eq(mediaItems.id, mediaItemAliases.itemId))
+			.where(eq(mediaItemAliases.aliasId, source.itemId));
+		return alias?.libraryId ?? null;
+	}
+
+	/** Reject structural program changes that would invalidate its established source identity. */
+	private async validateProgramStructure(
+		current: ProgramConfig,
+		updated: ProgramConfig,
+	): Promise<void> {
+		if (current.type !== updated.type) {
+			throw new SchedulingValidationError('Program type cannot be changed after creation');
+		}
+
+		if (current.type !== 'content' || updated.type !== 'content') {
+			return;
+		}
+
+		if (current.source.type !== updated.source.type) {
+			throw new SchedulingValidationError('Program source type cannot be changed after creation');
+		}
+
+		const [currentLibraryId, updatedLibraryId] = await Promise.all([
+			this.contentSourceLibraryId(current.source),
+			this.contentSourceLibraryId(updated.source),
+		]);
+		if (
+			currentLibraryId !== null
+			&& updatedLibraryId !== null
+			&& currentLibraryId !== updatedLibraryId
+		) {
+			throw new SchedulingValidationError('Program library cannot be changed after creation');
+		}
+	}
+
 	/** Replace a program configuration while preserving its identity. */
 	async updateProgram(id: string, input: ProgramUpdate): Promise<SchedulingProgram | null> {
 		const current = await this.getProgram(id);
 		if (!current) {
 			return null;
+		}
+		if (input.config) {
+			await this.validateProgramStructure(current.config, input.config);
 		}
 
 		const updated: SchedulingProgram = {

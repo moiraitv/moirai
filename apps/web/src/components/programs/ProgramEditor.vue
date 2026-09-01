@@ -86,6 +86,7 @@ const editingId = computed(() =>
 		: route.params.id === 'new'
 			? null
 			: String(route.params.id ?? ''));
+const structureLocked = computed(() => Boolean(editingId.value));
 const programs = computed(() => scheduling.overview?.programs ?? []);
 const statuses = computed(
 	() =>
@@ -136,6 +137,25 @@ const sourceLibraries = computed(() =>
 	form.sourceType === 'group' || form.sourceType === 'group-collection'
 		? librariesStore.libraries.filter((library) => library.typeKey === 'shows')
 		: librariesStore.libraries);
+const sourceTypeLabel = computed(() => ({
+	'library-query': 'Library query',
+	collection: 'Specific media items',
+	'group-collection': 'Specific media groups',
+	group: 'Show or season',
+	item: 'Exact item',
+})[form.sourceType]);
+const sourceLibraryLabel = computed(() => {
+	if (form.sourceType === 'item') {
+		return 'Defined by the exact item';
+	}
+
+	if (form.sourceType === 'group') {
+		return 'Defined by the show or season';
+	}
+
+	return librariesStore.libraries.find((library) => library.id === form.libraryId)?.name
+		?? 'Missing library';
+});
 const selectedLibraryType = computed(
 	() =>
 		librariesStore.libraries.find((library) => library.id === form.libraryId)?.typeKey ?? 'other',
@@ -803,7 +823,7 @@ onBeforeUnmount(() => {
 					</button>
 				</header>
 				<div class="program-editor-scroll">
-					<ProgramTypeRail v-model="form.type" />
+					<ProgramTypeRail v-model="form.type" :disabled="structureLocked" />
 					<div class="program-editor-main">
 						<p v-if="error" class="notice error">{{ error }}</p>
 						<label class="program-name-field">
@@ -826,7 +846,11 @@ onBeforeUnmount(() => {
 								<p class="program-section-description">Choose the source of eligible media.</p>
 								<div class="program-source-panel">
 									<div class="form-grid">
-										<label
+										<div v-if="structureLocked" class="program-fixed-field">
+											<span>Source type</span>
+											<strong>{{ sourceTypeLabel }}</strong>
+										</div>
+										<label v-else
 										><span>Source type</span
 										><select
 											v-model="form.sourceType"
@@ -844,7 +868,11 @@ onBeforeUnmount(() => {
 											</option>
 										</select></label
 										>
-										<label
+										<div v-if="structureLocked" class="program-fixed-field">
+											<span>Library</span>
+											<strong>{{ sourceLibraryLabel }}</strong>
+										</div>
+										<label v-else
 										><span>Library</span
 										><select
 											v-model="form.libraryId"

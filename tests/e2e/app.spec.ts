@@ -500,6 +500,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await expect(programCard).toContainText(`1 selected from ${libraryName}`);
 	await programCard.getByRole('link', { name: programName, exact: true }).click();
+	await expect(page.getByRole('radio', { name: /Content/ })).toHaveCount(0);
+	await expect(page.getByLabel('Source type')).toHaveCount(0);
+	await expect(page.getByLabel('Library')).toHaveCount(0);
+	await expect(page.locator('.program-type-fixed')).toContainText('Content');
+	await expect(page.locator('.program-source-panel')).toContainText('Specific media items');
+	await expect(page.locator('.program-source-panel')).toContainText(libraryName);
 	await page.getByRole('button', { name: 'Review selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText(
 		'Broadcast Fixture',
