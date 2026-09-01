@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
 				description="Create a channel before connecting an IPTV client to the guide."
 			>
 				<template #icon><RadioTower :size="37" /></template>
-				<RouterLink class="button" to="/channels?new=1">Create channel</RouterLink>
+				<RouterLink class="button" to="/channels?new=1">Create Channel</RouterLink>
 			</ResourceEmptyState>
 		</template>
 	</section>

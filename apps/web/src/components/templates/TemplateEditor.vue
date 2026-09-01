@@ -852,7 +852,7 @@ onBeforeUnmount(() => {
 					<div class="template-toolbar-actions">
 						<button type="button" class="toolbar-button" @click="closeEditor">Close</button>
 						<button class="button" :disabled="saving" @click="save">
-							{{ saving ? 'Saving…' : 'Save template' }}
+							{{ saving ? 'Saving…' : 'Save Template' }}
 						</button>
 					</div>
 				</section>

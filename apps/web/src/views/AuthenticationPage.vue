@@ -25,7 +25,7 @@ const heading = computed(() => recovering.value
 	: uninitialized.value ? 'Create user' : 'Sign in to Moirai');
 const submitLabel = computed(() => recovering.value
 	? 'Recover access'
-	: uninitialized.value ? 'Create User' : 'Sign in');
+	: uninitialized.value ? 'Create User' : 'Sign In');
 
 /** Return a safe internal destination after authentication succeeds. */
 function returnPath(): string {
@@ -108,7 +108,7 @@ onMounted(() => {
 				class="authentication-provider"
 			>
 				<button class="button secondary" type="button" @click="continueWithLogto">
-					<LogIn :size="17" />Sign in with Logto
+					<LogIn :size="17" />Sign In with Logto
 				</button>
 				<span v-if="showLocalForm">
 					{{ uninitialized ? 'or create a local user' : 'or sign in locally' }}

@@ -47,10 +47,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	releaseLibraries?.();
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/libraries');
-	await page.locator('.resource-empty-state').getByRole('button', { name: 'Add library' }).click();
+	await page.locator('.resource-empty-state').getByRole('button', { name: 'Add Library' }).click();
 	await page.getByLabel('Name').fill(libraryName);
 	await page.getByLabel('Path Moirai scans').fill(mediaRoot);
-	await page.getByRole('button', { name: 'Add and scan' }).click();
+	await page.getByRole('button', { name: 'Add and Scan' }).click();
 
 	const libraryRow = page.locator('.library-row').filter({
 		has: page.getByRole('link', { name: libraryName, exact: true }),
@@ -188,7 +188,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const mediaCard = page.locator('.media-card').filter({ hasText: 'Broadcast Fixture' });
 	await expect(mediaCard).toBeVisible();
 	await page.getByRole('button', { name: /Filter/ }).click();
-	await page.getByRole('button', { name: 'Clear all' }).click();
+	await page.getByRole('button', { name: 'Clear All' }).click();
 	await expect(page.getByLabel('Actor')).toHaveValue('');
 	await expect(page).toHaveURL(/actor=Ada/);
 	await page.getByRole('button', { name: 'Apply filters' }).click();
@@ -254,14 +254,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.unroute('**/api/v1/channels');
 	await page.goto('/guide');
 	await expect(page.getByRole('heading', { name: 'No channels configured' })).toBeVisible();
-	await page.getByRole('link', { name: 'Create channel' }).click();
+	await page.getByRole('link', { name: 'Create Channel' }).click();
 	await expect(page).toHaveURL(/\/channels\?new=1$/);
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await expect(page.locator('.acceleration-prediction')).toBeVisible();
 	await page.getByLabel('Number').fill(runId.slice(-8));
 	await page.getByLabel('Name').fill(channelName);
-	await page.getByRole('button', { name: 'Save changes' }).click();
+	await page.getByRole('button', { name: 'Save Changes' }).click();
 	await expect(page).toHaveURL(/\/channels$/);
 	await expect(page.getByText(channelName)).toBeVisible();
 	await expect(page.getByLabel('Seven-day channel guide')).toBeVisible();
@@ -285,7 +285,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.mouse.down();
 	await page.mouse.move(handleBox!.x - 60, handleBox!.y + handleBox!.height / 2);
 	await page.mouse.up();
-	await page.getByRole('button', { name: 'Save changes' }).click();
+	await page.getByRole('button', { name: 'Save Changes' }).click();
 	await expect(page.getByText(`${channelName} Edited`)).toBeVisible();
 
 	const savedLogo = page
@@ -303,7 +303,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.getByRole('button', { name: `Edit ${channelName} Edited` }).click();
 	await page.getByLabel('Name').fill(`${channelName} Preserved`);
-	await page.getByRole('button', { name: 'Save changes' }).click();
+	await page.getByRole('button', { name: 'Save Changes' }).click();
 	const preservedLogo = page
 		.locator('.guide-channel-cell')
 		.filter({ hasText: `${channelName} Preserved` })
@@ -387,7 +387,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const programName = `E2E Movie Picks ${runId}`;
 	await page.setViewportSize({ width: 768, height: 1024 });
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
-	await page.getByRole('link', { name: 'New program' }).click();
+	await page.getByRole('link', { name: 'New Program' }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const programTypes = page.getByRole('radiogroup', { name: 'Program type' });
@@ -426,7 +426,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		.locator('.source-picker-list')
 		.evaluate((element) => (element as HTMLElement).offsetTop);
 	expect(Math.abs(sourcePickerTopAfterSelection - sourcePickerTopBeforeSelection)).toBeLessThan(2);
-	await page.getByRole('button', { name: 'Review selection' }).click();
+	await page.getByRole('button', { name: 'Review Selection' }).click();
 	const selectionDrawer = page.getByRole('dialog', { name: 'Review selection' });
 	await expect(selectionDrawer).toBeVisible();
 	const selectedMovie = selectionDrawer.locator('.selected-item-grid article').filter({
@@ -446,9 +446,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
 	await expect(selectionDrawer).toBeHidden();
 	await sourceMovie.getByRole('button', { name: 'Add' }).click();
-	await page.getByRole('button', { name: 'Review selection' }).click();
+	await page.getByRole('button', { name: 'Review Selection' }).click();
 	page.once('dialog', (dialog) => dialog.accept());
-	await selectionDrawer.getByRole('button', { name: 'Clear all' }).click();
+	await selectionDrawer.getByRole('button', { name: 'Clear All' }).click();
 	await expect(selectionDrawer.getByText('No media selected.')).toBeVisible();
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
 	await sourceMovie.getByRole('button', { name: 'Add' }).click();
@@ -466,7 +466,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const seasonSource = page.locator('.source-picker-list article').filter({ hasText: 'Season 1' });
 	await seasonSource.getByRole('button', { name: 'Add' }).click();
 	await expect(page.locator('.selected-collection-summary')).toContainText('1 selected');
-	await page.getByRole('button', { name: 'Review selection' }).click();
+	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
 	await page.getByRole('button', { name: 'Done' }).click();
 	await page.getByRole('searchbox', { name: 'Search source media' }).fill('Nova');
@@ -490,11 +490,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	});
 	await page.getByRole('searchbox', { name: 'Search programs' }).fill('No matching program');
 	await expect(page.getByRole('heading', { name: 'No matching programs' })).toBeVisible();
-	await page.getByRole('button', { name: 'Clear filters' }).click();
+	await page.getByRole('button', { name: 'Clear Filters' }).click();
 	await expect(programCard).toBeVisible();
 	await expect(seasonProgramCard).toContainText('1 selected media groups');
 	await seasonProgramCard.getByRole('link', { name: seasonProgramName, exact: true }).click();
-	await page.getByRole('button', { name: 'Review selection' }).click();
+	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
 	await page.getByRole('button', { name: 'Done' }).click();
 	await page.getByRole('button', { name: 'Cancel' }).click();
@@ -506,7 +506,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.program-type-fixed')).toContainText('Content');
 	await expect(page.locator('.program-source-panel')).toContainText('Specific media items');
 	await expect(page.locator('.program-source-panel')).toContainText(libraryName);
-	await page.getByRole('button', { name: 'Review selection' }).click();
+	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText(
 		'Broadcast Fixture',
 	);
@@ -515,7 +515,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.goto(movieLibraryUrl);
 	await page.getByRole('button', { name: 'Select items' }).click();
 	await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Add selected' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Add Selected' })).toBeDisabled();
 	await expect(page.locator('.catalog-controls-stack')).toHaveCSS('position', 'sticky');
 	await expect(page.getByRole('toolbar', { name: 'Item selection' })).toHaveCSS('background-color', 'rgb(8, 43, 37)');
 	await expect(page.locator('.catalog-footer')).toHaveCSS('position', 'sticky');
@@ -526,13 +526,13 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	expect(Math.abs(catalogFooterBounds!.width - appContentBounds!.width)).toBeLessThan(2);
 	await page.getByRole('button', { name: 'Select Companion Fixture' }).click();
 	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Add selected' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Add Selected' })).toBeEnabled();
 	const librarySearch = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });
 	await librarySearch.fill('Broadcast');
 	await expect(page.getByText('0 selected', { exact: true })).toBeVisible();
 	await librarySearch.fill('Companion');
 	await page.getByRole('button', { name: 'Select Companion Fixture' }).click();
-	await page.getByRole('button', { name: 'Add selected' }).click();
+	await page.getByRole('button', { name: 'Add Selected' }).click();
 	const addToProgram = page.getByRole('dialog', { name: 'Add to program' });
 	await expect(addToProgram).toBeVisible();
 	await addToProgram.getByRole('radio', { name: new RegExp(programName) }).check();
@@ -568,33 +568,33 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		const response = await route.fetch({ postData: JSON.stringify(payload) });
 		await route.fulfill({ response });
 	});
-	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
+	await addToProgram.getByRole('button', { name: 'Add to Program' }).click();
 	const additionConfirmation = page.getByRole('alertdialog', { name: 'Confirm addition' });
 	await expect(additionConfirmation.getByRole('article')).toHaveCount(6);
 	await expect(additionConfirmation.getByText('Carousel Fixture 1')).toBeVisible();
 	await expect(additionConfirmation).toContainText('1 item is already selected and will be skipped.');
-	await additionConfirmation.getByRole('button', { name: 'Add items' }).click();
+	await additionConfirmation.getByRole('button', { name: 'Add Items' }).click();
 	await expect(page.getByRole('status')).toContainText(`1 added to ${programName}`);
 	await page.unroute('**/api/v1/libraries/*/program-items');
 	await page.getByRole('button', { name: 'Dismiss' }).click();
 
 	await page.getByRole('button', { name: 'Select items' }).click();
-	await page.getByRole('button', { name: 'Add all' }).click();
+	await page.getByRole('button', { name: 'Add All' }).click();
 	await expect(addToProgram.getByRole('radio', { name: new RegExp(programName) })).toBeChecked();
 	await addToProgram.getByRole('radio', { name: /Create a new program/ }).check();
 	const filteredProgramName = `Z E2E Filtered Picks ${runId}`;
 	await addToProgram.getByLabel('Program name').fill(filteredProgramName);
 	await addToProgram.getByLabel('Playback order').selectOption('weighted-random');
-	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
+	await addToProgram.getByRole('button', { name: 'Add to Program' }).click();
 	await expect(page.getByRole('status')).toContainText(`1 added to ${filteredProgramName}`);
 	await page.getByRole('button', { name: 'Dismiss' }).click();
 
 	await page.locator('.media-card').filter({ hasText: 'Companion Fixture' }).click();
-	await page.getByRole('button', { name: 'Add to program' }).click();
+	await page.getByRole('button', { name: 'Add to Program' }).click();
 	await expect(addToProgram.getByRole('radio', { name: new RegExp(filteredProgramName) }))
 		.toBeChecked();
 	await addToProgram.getByRole('radio', { name: new RegExp(programName) }).check();
-	await addToProgram.getByRole('button', { name: 'Add to program' }).click();
+	await addToProgram.getByRole('button', { name: 'Add to Program' }).click();
 	await expect(page.getByRole('status')).toContainText(`Already selected in ${programName}`);
 	await page.getByRole('button', { name: 'Dismiss' }).click();
 
@@ -609,7 +609,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.goto('/schedules/templates');
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await expect(page.getByRole('heading', { name: 'No templates yet' })).toBeVisible();
-	await page.getByRole('link', { name: 'Create your first template' }).click();
+	await page.getByRole('link', { name: 'Create Your First Template' }).click();
 	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByLabel('Template name').fill(templateName);
@@ -621,7 +621,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	expect(timelinePreviewRequests).toBeGreaterThan(0);
 	const editorView = page.getByRole('group', { name: 'Template editor view' });
 	await editorView.getByRole('button', { name: 'List', exact: true }).click();
-	await page.getByRole('button', { name: 'Add slot' }).click();
+	await page.getByRole('button', { name: 'Add Slot' }).click();
 	await expect(editorView.getByRole('button', { name: 'Timeline', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true',
@@ -632,7 +632,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.slot-placement-instructions')).toBeHidden();
 	await expect(page.locator('.template-slot')).toHaveCount(1);
 
-	await page.getByRole('button', { name: 'Add slot' }).click();
+	await page.getByRole('button', { name: 'Add Slot' }).click();
 	await page.keyboard.press('ArrowLeft');
 	await page.keyboard.press('Enter');
 	const editorSlots = page.locator('.template-slot');
@@ -647,7 +647,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			.evaluate((element) => getComputedStyle(element).getPropertyValue('--program-color').trim()),
 	).toBe(editorColor);
 
-	await page.getByRole('button', { name: 'Add slot' }).click();
+	await page.getByRole('button', { name: 'Add Slot' }).click();
 	const firstSlotBounds = await editorSlots.first().boundingBox();
 	expect(firstSlotBounds).not.toBeNull();
 	await page.mouse.click(
@@ -686,7 +686,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const nestedProgramEditor = page.getByRole('dialog', { name: 'Edit program' });
 	await expect(nestedProgramEditor).toBeVisible();
 	await nestedProgramEditor.getByLabel('Name').fill(`${programName} Quick Edit`);
-	await nestedProgramEditor.getByRole('button', { name: 'Save changes' }).click();
+	await nestedProgramEditor.getByRole('button', { name: 'Save Changes' }).click();
 	await expect(nestedProgramEditor).toBeHidden();
 	await expect(page.getByLabel('Template name')).toHaveValue(unsavedTemplateName);
 	await expect(page.getByLabel('Program').first()).toContainText(`${programName} Quick Edit`);
@@ -702,7 +702,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateBoundary.getByLabel('Maximum drift (minutes)')).toBeDisabled();
 	await expect(templateBoundary.getByLabel('Fallback')).toBeDisabled();
 	await expect(page.getByRole('heading', { name: 'Preview resolved schedule' })).toBeVisible();
-	await page.getByRole('button', { name: 'Save template' }).click();
+	await page.getByRole('button', { name: 'Save Template' }).click();
 	await expect(page).toHaveURL(/\/schedules\/templates\/[0-9a-f-]+$/);
 	await expect(page.locator('.notice.error')).toHaveCount(0);
 	await page.reload();
@@ -743,7 +743,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(nestedTemplateEditor).toBeVisible();
 	const quickTemplateName = `${templateName} Quick Edit`;
 	await nestedTemplateEditor.getByLabel('Template name').fill(quickTemplateName);
-	await nestedTemplateEditor.getByRole('button', { name: 'Save template' }).click();
+	await nestedTemplateEditor.getByRole('button', { name: 'Save Template' }).click();
 	await expect(nestedTemplateEditor).toBeHidden();
 	templateName = quickTemplateName;
 	await expect(conditionalLayer).toContainText(templateName);
@@ -787,7 +787,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			response.request().method() === 'POST'
 			&& response.url().endsWith('/api/v1/channel-schedule-preview'),
 	);
-	await page.getByRole('button', { name: 'Refresh now' }).click();
+	await page.getByRole('button', { name: 'Refresh Now' }).click();
 	await refreshedLayerPreview;
 	await expect(page.getByLabel('Schedule preview issues')).toContainText(
 		'Boundary preview diagnostic',
@@ -797,7 +797,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.schedule-preview-ruler > span').last()).toHaveText('24:00');
 	await expect(page.getByLabel('Schedule preview legend')).toBeVisible();
 	await page.unroute('**/api/v1/channel-schedule-preview');
-	await page.getByRole('button', { name: 'Save schedule' }).click();
+	await page.getByRole('button', { name: 'Save Schedule' }).click();
 	await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
 	await page.reload();
 	await expect(
@@ -859,7 +859,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateRow).toBeVisible();
 	await page.getByRole('searchbox', { name: 'Search templates' }).fill('No matching template');
 	await expect(page.getByRole('heading', { name: 'No matching templates' })).toBeVisible();
-	await page.getByRole('button', { name: 'Clear filters' }).click();
+	await page.getByRole('button', { name: 'Clear Filters' }).click();
 	await expect(templateRow).toBeVisible();
 });
 
@@ -874,7 +874,7 @@ test('does not expose playback controls before playback settings load', async ({
 		await route.continue();
 	});
 	await page.goto('/settings');
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = page.getByRole('button', { name: 'Save Settings' });
 	await expect(page.getByRole('status')).toContainText('Loading playback settings');
 	await expect(save).toHaveCount(0);
 	releaseSettings?.();

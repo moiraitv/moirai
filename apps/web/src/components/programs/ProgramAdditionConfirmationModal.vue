@@ -108,7 +108,7 @@ onMounted(async () => {
 				<footer class="program-addition-confirmation-footer">
 					<button type="button" class="button secondary" :disabled="busy" @click="cancel">Cancel</button>
 					<button type="button" class="button" :disabled="busy" @click="emit('confirm')">
-						{{ busy ? 'Adding…' : 'Add items' }}
+						{{ busy ? 'Adding…' : 'Add Items' }}
 					</button>
 				</footer>
 			</section>

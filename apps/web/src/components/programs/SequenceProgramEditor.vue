@@ -38,7 +38,7 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 				<button type="button" class="icon-button" @click="emit('move', index, 1)"><ArrowDown :size="15" /></button>
 				<button type="button" class="icon-button danger-icon" @click="emit('remove', index)"><Trash2 :size="15" /></button>
 			</div>
-			<button type="button" class="toolbar-button" @click="emit('add')"><Plus :size="16" />Add step</button>
+			<button type="button" class="toolbar-button" @click="emit('add')"><Plus :size="16" />Add Step</button>
 			<label class="check-row"><input :checked="repeat" type="checkbox" @change="emit('update:repeat', ($event.target as HTMLInputElement).checked)" />Repeat sequence</label>
 		</div>
 	</section>

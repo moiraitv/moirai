@@ -178,7 +178,7 @@ onUnmounted(closePlayer);
 	<section v-else-if="item" class="media-detail-page">
 		<button class="detail-back" @click="back">
 			<span><ArrowLeft :size="20" /></span>
-			Back to library
+			Back to Library
 		</button>
 
 		<div class="media-detail-hero">
@@ -196,11 +196,11 @@ onUnmounted(closePlayer);
 				<div class="detail-actions">
 					<button ref="playButton" class="button primary detail-play" @click="openPlayer">
 						<Play :size="19" fill="currentColor" />
-						Play preview
+						Play Preview
 					</button>
 					<button class="button secondary" @click="addToProgramOpen = true">
 						<ListPlus :size="19" />
-						Add to program
+						Add to Program
 					</button>
 				</div>
 			</div>
@@ -276,7 +276,7 @@ onUnmounted(closePlayer);
 					class="button ghost detail-credits-toggle"
 					@click="showAllCredits = !showAllCredits"
 				>
-					{{ showAllCredits ? 'Show featured cast' : 'View full cast & crew' }}
+					{{ showAllCredits ? 'Show Featured Cast' : 'View Full Cast & Crew' }}
 				</button>
 			</article>
 

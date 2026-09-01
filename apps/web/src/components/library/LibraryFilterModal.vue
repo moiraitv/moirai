@@ -258,9 +258,9 @@ onUnmounted(() => genreCountsController?.abort());
 			</div>
 
 			<footer class="filter-modal-footer">
-				<button type="button" class="button ghost" @click="clearDraft">Clear all</button>
+				<button type="button" class="button ghost" @click="clearDraft">Clear All</button>
 				<button type="button" class="button secondary" @click="emit('close')">Cancel</button>
-				<button class="button filter-apply" type="submit" :disabled="genreRuleLimitExceeded">Apply filters <Filter :size="17" aria-hidden="true" /></button>
+				<button class="button filter-apply" type="submit" :disabled="genreRuleLimitExceeded">Apply Filters <Filter :size="17" aria-hidden="true" /></button>
 			</footer>
 		</form>
 	</div>

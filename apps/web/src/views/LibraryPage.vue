@@ -1167,7 +1167,7 @@ onUnmounted(() => {
 					</ul>
 					<p v-else-if="showScanIssues">Detailed issues are no longer retained. Run a library sync to refresh the warning state.</p>
 				</div>
-				<button v-if="currentScanIssues.length" type="button" class="button secondary" :aria-expanded="showScanIssues" @click="showScanIssues = !showScanIssues">{{ showScanIssues ? 'Hide issues' : 'Review issues' }}</button>
+				<button v-if="currentScanIssues.length" type="button" class="button secondary" :aria-expanded="showScanIssues" @click="showScanIssues = !showScanIssues">{{ showScanIssues ? 'Hide Issues' : 'Review Issues' }}</button>
 			</div>
 			<div v-if="sourceUnavailable" class="source-outage-banner" role="status">
 				<span class="source-outage-icon"><Unplug :size="22" /></span>
@@ -1183,7 +1183,7 @@ onUnmounted(() => {
 						Indexed media is being retained until the source returns and a healthy scan completes.
 					</p>
 				</div>
-				<button v-if="!isScanRunning()" class="button secondary" @click="scan">Scan again</button>
+				<button v-if="!isScanRunning()" class="button secondary" @click="scan">Scan Again</button>
 			</div>
 			<div
 				v-if="reconciliation && reconciliation.status !== 'idle'"
@@ -1219,7 +1219,7 @@ onUnmounted(() => {
 						>
 							<i class="scan-progress-fill" :style="{ width: `${scanProgressPercent}%` }"></i>
 						</div>
-						<button v-if="isScanRunning()" class="status-inline-action" @click="cancelScan">Cancel scan</button>
+						<button v-if="isScanRunning()" class="status-inline-action" @click="cancelScan">Cancel Scan</button>
 					</div>
 				</div>
 				<div class="status-stat status-indexed">
@@ -1257,7 +1257,7 @@ onUnmounted(() => {
 					<button class="catalog-select wide" :aria-expanded="showSort" @click="showSort = !showSort">{{ sortLabel }} <ChevronDown :size="16" /></button>
 					<div v-if="showSort" class="action-popover sort-popover">
 						<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
-						<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse order</button>
+						<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse Order</button>
 					</div>
 				</div>
 				<button class="toolbar-button" :class="{ active: activeFilterCount > 0 }" @click="openFilters"><Filter :size="16" /> Filter <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
@@ -1292,7 +1292,7 @@ onUnmounted(() => {
 							:disabled="selectedItemIds.length === 0"
 							@click="addSelectedItems"
 						>
-							<ListPlus :size="15" /> Add selected
+							<ListPlus :size="15" /> Add Selected
 						</button>
 						<button
 							type="button"
@@ -1300,7 +1300,7 @@ onUnmounted(() => {
 							:disabled="mediaLoading || !browse || entries.length === 0"
 							@click="addAllMatchingItems"
 						>
-							<Layers3 :size="15" /> Add all
+							<Layers3 :size="15" /> Add All
 						</button>
 					</div>
 					<button
@@ -1309,7 +1309,7 @@ onUnmounted(() => {
 						:disabled="pageItemIds.length === 0"
 						@click="togglePageSelection"
 					>
-						{{ allPageItemsSelected ? 'Clear page' : 'Select page' }}
+						{{ allPageItemsSelected ? 'Clear Page' : 'Select Page' }}
 					</button>
 				</div>
 			</Transition>

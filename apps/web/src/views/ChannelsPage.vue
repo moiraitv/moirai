@@ -697,7 +697,7 @@ onBeforeUnmount(() => {
 			eyebrow="Weekly playout"
 			title="Channels"
 			description="Review each channel against a seven-day broadcast timeline and manage its normalization profile."
-		><button class="button" @click="add"><Plus :size="18" />New channel</button></PageHeader
+		><button class="button" @click="add"><Plus :size="18" />New Channel</button></PageHeader
 		>
 		<p v-if="error && !showForm" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading channels and guide…" />
@@ -779,7 +779,7 @@ onBeforeUnmount(() => {
 				description="Create a channel, tune normalization, and stream it directly from Moirai."
 			>
 				<template #icon><RadioTower :size="37" /></template>
-				<button class="button" type="button" @click="add"><Plus :size="18" />Create channel</button>
+				<button class="button" type="button" @click="add"><Plus :size="18" />Create Channel</button>
 			</ResourceEmptyState>
 		</template>
 		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">
@@ -808,7 +808,7 @@ onBeforeUnmount(() => {
 								class="button secondary"
 								:to="`/schedules/channels/${editingId}`"
 							>
-								Manage layered schedule
+								Manage Layered Schedule
 							</RouterLink>
 							<small v-else>Save the channel before configuring its schedule.</small>
 						</div>
@@ -865,7 +865,7 @@ onBeforeUnmount(() => {
 									</p>
 									<div class="channel-logo-buttons">
 										<button type="button" class="button secondary" @click="logoInput?.click()">
-											<ImagePlus :size="16" />Choose another
+											<ImagePlus :size="16" />Choose Another
 										</button>
 										<button type="button" class="button secondary" @click="removeSelectedLogo">
 											<Trash2 :size="16" />Remove
@@ -880,7 +880,7 @@ onBeforeUnmount(() => {
 								</div>
 								<div>
 									<button type="button" class="button secondary" @click="logoInput?.click()">
-										<Upload :size="16" />Choose image
+										<Upload :size="16" />Choose Image
 									</button>
 									<button
 										v-if="existingLogoUrl() || removeLogoOnSave"
@@ -888,7 +888,7 @@ onBeforeUnmount(() => {
 										class="text-button danger-text"
 										@click="removeSelectedLogo"
 									>
-										Remove logo
+										Remove Logo
 									</button>
 									<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
 								</div>
@@ -995,7 +995,7 @@ onBeforeUnmount(() => {
 					<button type="button" class="button secondary" :disabled="saving" @click="closeForm">
 						Cancel</button
 					><button class="button" :disabled="saving">
-						{{ saving ? 'Saving…' : 'Save changes' }}
+						{{ saving ? 'Saving…' : 'Save Changes' }}
 					</button>
 				</div>
 			</form>

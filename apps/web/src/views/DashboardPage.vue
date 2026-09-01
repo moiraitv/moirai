@@ -274,7 +274,7 @@ onUnmounted(() => {
 					<h2>Library health</h2>
 				</div>
 				<RouterLink class="button secondary" to="/libraries"
-				>Manage libraries<ArrowRight :size="17"
+				>Manage Libraries<ArrowRight :size="17"
 				/></RouterLink>
 			</div>
 			<div v-if="libraries.length" class="list-panel">
@@ -296,7 +296,7 @@ onUnmounted(() => {
 				<Library :size="48" />
 				<h3>No libraries yet</h3>
 				<p>Add a media folder to begin building the index.</p>
-				<RouterLink class="button" to="/libraries">Add library</RouterLink>
+				<RouterLink class="button" to="/libraries">Add Library</RouterLink>
 			</div>
 			<div class="section-heading">
 				<div>

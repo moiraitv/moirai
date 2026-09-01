@@ -138,7 +138,7 @@ const roleLabel = computed(() => {
 						:to="`/libraries/${detail.media.libraryId}/items/${detail.media.id}`"
 						@click="emit('close')"
 					>
-						<Film :size="17" />View media details
+						<Film :size="17" />View Media Details
 					</RouterLink>
 				</div>
 			</div>

@@ -575,7 +575,7 @@ onBeforeUnmount(() => {
 					<div v-if="templates.length === 0" class="empty-state scheduling-modal-empty">
 						<h3>Create a template first</h3>
 						<p>A channel schedule needs an always-available base template.</p>
-						<RouterLink class="button" to="/schedules/templates/new">New template</RouterLink>
+						<RouterLink class="button" to="/schedules/templates/new">New Template</RouterLink>
 					</div>
 
 					<template v-else-if="draft && channel">
@@ -603,7 +603,7 @@ onBeforeUnmount(() => {
 									@click="applyTimelineNow"
 								>
 									<RefreshCw :size="17" :class="{ spinning: applyingTimeline }" />
-									{{ applyingTimeline ? 'Applying…' : 'Apply after current item' }}
+									{{ applyingTimeline ? 'Applying…' : 'Apply After Current Item' }}
 								</button>
 								<button
 									type="button"
@@ -611,10 +611,10 @@ onBeforeUnmount(() => {
 									:disabled="draft.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS"
 									@click="addLayer"
 								>
-									<Plus :size="17" />Add conditional template
+									<Plus :size="17" />Add Conditional Template
 								</button>
 								<button type="button" class="button" :disabled="saving || !isDirty" @click="save">
-									<Save :size="17" />{{ saving ? 'Saving…' : 'Save schedule' }}
+									<Save :size="17" />{{ saving ? 'Saving…' : 'Save Schedule' }}
 								</button>
 							</div>
 						</div>
@@ -743,7 +743,7 @@ onBeforeUnmount(() => {
 											:aria-label="`Edit ${templateName(selectedLayer.templateId)}`"
 											@click="editTemplate(selectedLayer.templateId)"
 										>
-											<Pencil :size="16" />Edit template
+											<Pencil :size="16" />Edit Template
 										</button>
 									</div>
 									<h3>Show this layer when</h3>
@@ -857,7 +857,7 @@ onBeforeUnmount(() => {
 											:aria-label="`Edit ${templateName(draft.defaultTemplateId)}`"
 											@click="editTemplate(draft.defaultTemplateId)"
 										>
-											<Pencil :size="16" />Edit template
+											<Pencil :size="16" />Edit Template
 										</button>
 									</div>
 									<p class="base-inspector-description">
@@ -887,7 +887,7 @@ onBeforeUnmount(() => {
 
 							<div class="schedule-remove-row">
 								<button type="button" class="button schedule-remove-button" @click="removeSchedule">
-									<Trash2 :size="17" />Remove channel schedule
+									<Trash2 :size="17" />Remove Channel Schedule
 								</button>
 							</div>
 						</div>
@@ -904,7 +904,7 @@ onBeforeUnmount(() => {
 									/></label>
 									<button class="toolbar-button" :disabled="previewing" @click="schedulePreview(0)">
 										<RefreshCw :size="16" :class="{ spinning: previewing }" />{{
-											previewing ? 'Updating…' : 'Refresh now'
+											previewing ? 'Updating…' : 'Refresh Now'
 										}}
 									</button>
 								</div>

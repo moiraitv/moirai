@@ -110,14 +110,14 @@ onMounted(() => nameInput.value?.focus());
 
 				<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
 				<p v-if="error" class="notice error">{{ error }}</p>
-				<div class="form-actions"><button type="button" class="button ghost" @click="emit('close')">Cancel</button><button class="button" :disabled="saving || deleting">{{ saving ? 'Saving…' : 'Save settings' }}</button></div>
+				<div class="form-actions"><button type="button" class="button ghost" @click="emit('close')">Cancel</button><button class="button" :disabled="saving || deleting">{{ saving ? 'Saving…' : 'Save Settings' }}</button></div>
 
 				<details class="library-danger-zone" @toggle="handleDangerToggle">
 					<summary class="library-danger-heading"><AlertTriangle :size="24" /><h3 id="library-delete-title">Permanently remove this library</h3><ChevronDown class="library-danger-chevron" :size="18" /></summary>
 					<div class="library-danger-content" aria-labelledby="library-delete-title">
 						<p><strong>This action cannot be undone.</strong> It deletes the library configuration, index, and cached artwork from Moirai. Your source media files will not be changed.</p>
 						<label><span>Type <strong>{{ library.name }}</strong> to confirm</span><input v-model="deleteConfirmation" autocomplete="off" /></label>
-						<button type="button" class="button danger" :disabled="!deletionConfirmed || deleting || saving" @click="remove"><Trash2 :size="17" />{{ deleting ? 'Removing…' : 'Remove library permanently' }}</button>
+						<button type="button" class="button danger" :disabled="!deletionConfirmed || deleting || saving" @click="remove"><Trash2 :size="17" />{{ deleting ? 'Removing…' : 'Remove Library Permanently' }}</button>
 					</div>
 				</details>
 			</form>

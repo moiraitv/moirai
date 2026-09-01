@@ -372,7 +372,9 @@
 
 .settings-toggle {
 	display: flex;
+	flex-direction: row;
 	align-items: center;
+	justify-self: start;
 	gap: 0.7rem;
 }
 

@@ -161,7 +161,7 @@ function handlePointerMove(event: PointerEvent): void {
 				>
 					<X v-if="addingSlot" :size="16" />
 					<Plus v-else :size="16" />
-					{{ addingSlot ? 'Cancel adding' : 'Add slot' }}
+					{{ addingSlot ? 'Cancel Adding' : 'Add Slot' }}
 				</button>
 				<span class="template-control-divider" aria-hidden="true"></span>
 				<div

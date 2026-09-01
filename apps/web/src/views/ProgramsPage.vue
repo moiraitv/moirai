@@ -151,7 +151,7 @@ onMounted(async () => {
 				<CircleHelp :size="20" />
 			</button>
 			<RouterLink class="button programs-primary-button" to="/schedules/programs/new"
-			><Plus :size="18" />New program</RouterLink
+			><Plus :size="18" />New Program</RouterLink
 			>
 		</PageHeader>
 		<p v-if="!embedded && !editorOpen && (error || scheduling.error)" class="notice error">
@@ -180,7 +180,7 @@ onMounted(async () => {
 						Use programs in your schedule slots to build your channel lineup.
 					</p>
 					<a class="programs-learn-link" href="#program-types">
-						Learn more about programs <ArrowRight :size="18" />
+						Learn More About Programs <ArrowRight :size="18" />
 					</a>
 				</div>
 			</div>
@@ -243,14 +243,14 @@ onMounted(async () => {
 						type="button"
 						@click="updateListQuery({ q: null, type: null, page: null })"
 					>
-						Clear filters
+						Clear Filters
 					</button>
 					<RouterLink v-else class="button" to="/schedules/programs/new">
-						<Plus :size="19" />Create your first program
+						<Plus :size="19" />Create Your First Program
 					</RouterLink>
 					<template #secondary>
 						<RouterLink v-if="programs.length" to="/schedules/programs/new">
-							<Plus :size="17" />New program
+							<Plus :size="17" />New Program
 						</RouterLink>
 						<a v-else href="#program-types" @click="showProgramHelp">
 							<FileText :size="17" />Browse example programs

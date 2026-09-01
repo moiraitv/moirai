@@ -328,7 +328,7 @@ onMounted(async () => {
 				<footer class="program-item-modal-footer">
 					<button type="button" class="button secondary" :disabled="saving" @click="close">Cancel</button>
 					<button class="button" type="submit" :disabled="saving || (destinationType === 'existing' && !selectedProgram)">
-						{{ saving ? 'Adding…' : 'Add to program' }}
+						{{ saving ? 'Adding…' : 'Add to Program' }}
 					</button>
 				</footer>
 			</form>

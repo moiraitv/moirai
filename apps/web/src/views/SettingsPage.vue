@@ -168,7 +168,7 @@ onUnmounted(() => {
 			description="Moirai serves the channel playlist, guide, and live streams directly."
 		>
 			<button class="button secondary" :disabled="initialLoading" @click="refreshStatus">
-				<RefreshCw :size="17" />Refresh status
+				<RefreshCw :size="17" />Refresh Status
 			</button>
 		</PageHeader>
 		<p v-if="error" class="notice error">{{ error }}</p>
@@ -204,7 +204,7 @@ onUnmounted(() => {
 					<small>Additional tune requests receive a retryable capacity response. Default: 4.</small>
 				</label>
 				<div class="form-actions span-2">
-					<button class="button" :disabled="saving"><Save :size="17" />Save settings</button>
+					<button class="button" :disabled="saving"><Save :size="17" />Save Settings</button>
 				</div>
 			</form>
 			<aside class="panel playback-card">
@@ -223,7 +223,7 @@ onUnmounted(() => {
 					<input v-model="settings.viewingPreferencesEnabled" type="checkbox" />
 					<span>Learn from channel viewing and apply it to Weighted Random programs</span>
 				</label>
-				<div><button type="button" class="button secondary" :disabled="saving" @click="save"><Save :size="17" />Save preference setting</button></div>
+				<div class="form-actions"><button type="button" class="button" :disabled="saving" @click="save"><Save :size="17" />Save Settings</button></div>
 				<p v-if="preferencesLoading">Loading learned preferences…</p>
 				<p v-else-if="preferencesError" class="notice error">{{ preferencesError }}</p>
 				<p v-else-if="preferences.length === 0" class="muted">No qualified viewing has been recorded yet.</p>
@@ -238,7 +238,7 @@ onUnmounted(() => {
 					<p>This permanently removes every learned preference. Type <code>CLEAR VIEWING HISTORY</code> to confirm.</p>
 					<div class="input-with-action">
 						<input v-model="clearConfirmation" autocomplete="off" aria-label="Viewing history confirmation" />
-						<button type="button" class="button danger" :disabled="clearingPreferences || clearConfirmation !== 'CLEAR VIEWING HISTORY'" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear history' }}</button>
+						<button type="button" class="button secondary" :disabled="clearingPreferences || clearConfirmation !== 'CLEAR VIEWING HISTORY'" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear History' }}</button>
 					</div>
 				</div>
 			</section>

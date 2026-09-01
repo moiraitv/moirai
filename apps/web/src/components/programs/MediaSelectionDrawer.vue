@@ -173,7 +173,7 @@ onMounted(async () => {
 						:disabled="selectionCount === 0"
 						@click="emit('clear')"
 					>
-						<Trash2 :size="16" />Clear all
+						<Trash2 :size="16" />Clear All
 					</button>
 					<button type="button" class="button" @click="emit('close')">Done</button>
 				</footer>

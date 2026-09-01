@@ -47,7 +47,7 @@ function timeRange(start: string, finish: string): string {
 			<div class="preview-controls">
 				<button type="button" class="toolbar-button" :disabled="updating" @click="emit('refresh')">
 					<RefreshCw :size="16" :class="{ spinning: updating }" />
-					{{ updating ? 'Updating…' : queued ? 'Update now' : 'Refresh now' }}
+					{{ updating ? 'Updating…' : queued ? 'Update Now' : 'Refresh Now' }}
 				</button>
 			</div>
 		</div>

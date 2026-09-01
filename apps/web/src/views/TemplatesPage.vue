@@ -196,7 +196,7 @@ onMounted(async () => {
 				<CircleHelp :size="20" />
 			</button>
 			<RouterLink class="button" to="/schedules/templates/new"
-			><Plus :size="18" />New template</RouterLink
+			><Plus :size="18" />New Template</RouterLink
 			>
 		</PageHeader>
 		<p v-if="!embedded && !editing && (error || scheduling.error)" class="notice error">
@@ -226,7 +226,7 @@ onMounted(async () => {
 						to manage.
 					</p>
 					<a class="templates-learn-link" href="#templates-help">
-						Learn more about templates <ArrowRight :size="18" />
+						Learn More About Templates <ArrowRight :size="18" />
 					</a>
 				</div>
 			</div>
@@ -402,13 +402,13 @@ onMounted(async () => {
 						type="button"
 						@click="updateListQuery({ q: null, channel: null, page: null })"
 					>
-						Clear filters
+						Clear Filters
 					</button>
 					<RouterLink v-else class="button" to="/schedules/templates/new">
-						<Plus :size="19" />Create your first template
+						<Plus :size="19" />Create Your First Template
 					</RouterLink>
 					<template v-if="templates.length" #secondary>
-						<RouterLink to="/schedules/templates/new"><Plus :size="17" />New template</RouterLink>
+						<RouterLink to="/schedules/templates/new"><Plus :size="17" />New Template</RouterLink>
 					</template>
 				</ResourceEmptyState>
 			</section>
@@ -420,7 +420,7 @@ onMounted(async () => {
 					<span>Create a template to structure a 24-hour day with reusable schedule slots.</span>
 				</p>
 				<RouterLink class="toolbar-button" to="/schedules/templates/new">
-					{{ templates.length ? 'Create another template' : 'Create your first template' }}
+					{{ templates.length ? 'Create Another Template' : 'Create Your First Template' }}
 				</RouterLink>
 			</aside>
 		</template>

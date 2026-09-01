@@ -115,8 +115,8 @@ test('keeps log rows compact and opens structured details on demand', async ({ p
 	await expect(dialog).toContainText('/api/v1/libraries/library-one/media');
 	await expect(dialog).toContainText('192.0.2.25');
 	await expect(dialog).toContainText('42.75 ms');
-	await expect(dialog.getByRole('button', { name: 'Copy context' })).toBeVisible();
-	await expect(dialog.getByRole('button', { name: 'Copy complete entry' })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Copy Context' })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Copy Complete Entry' })).toBeVisible();
 
 	await page.keyboard.press('Escape');
 	await expect(dialog).toBeHidden();

@@ -157,7 +157,7 @@ onUnmounted(() => {
 			description="Moirai watches each source, reconciles metadata, and keeps an index ready for scheduling."
 		><button class="button" @click="showForm = !showForm">
 			<Plus :size="18" />
-			{{ showForm ? 'Close' : 'Add library' }}
+			{{ showForm ? 'Close' : 'Add Library' }}
 		</button></PageHeader
 		>
 		<form v-if="showForm" class="panel form-grid" @submit.prevent="create">
@@ -192,7 +192,7 @@ onUnmounted(() => {
 			/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
 			<p v-if="error" class="notice error span-2">{{ error }}</p>
 			<div class="form-actions span-2">
-				<button class="button" :disabled="busy">{{ busy ? 'Adding…' : 'Add and scan' }}</button>
+				<button class="button" :disabled="busy">{{ busy ? 'Adding…' : 'Add and Scan' }}</button>
 			</div>
 		</form>
 		<p v-if="loadError" class="notice error">
@@ -257,7 +257,7 @@ onUnmounted(() => {
 		>
 			<template #icon><FolderOpen :size="37" /></template>
 			<button class="button" type="button" @click="showForm = true">
-				<Plus :size="18" />Add library
+				<Plus :size="18" />Add Library
 			</button>
 		</ResourceEmptyState>
 	</section>

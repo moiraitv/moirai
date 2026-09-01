@@ -110,7 +110,7 @@ async function saveCredentials(): Promise<void> {
 				</label>
 				<div class="form-actions span-2">
 					<button class="button" :disabled="savingCredentials">
-						<KeyRound :size="17" />{{ hasLocalAccount ? 'Update credentials' : 'Create local account' }}
+						<KeyRound :size="17" />{{ hasLocalAccount ? 'Update Credentials' : 'Create Local Account' }}
 					</button>
 				</div>
 			</form>

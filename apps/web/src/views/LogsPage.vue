@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
 				<button class="button secondary" type="button" @click="autoRefresh = !autoRefresh">
 					<Pause v-if="autoRefresh" :size="17" />
 					<Play v-else :size="17" />
-					{{ autoRefresh ? 'Pause live refresh' : 'Resume live refresh' }}
+					{{ autoRefresh ? 'Pause Live Refresh' : 'Resume Live Refresh' }}
 				</button>
 				<button class="button secondary" type="button" :disabled="loading" @click="refresh">
 					<RefreshCw :size="17" :class="{ spinning: loading }" />Refresh
@@ -168,7 +168,7 @@ onBeforeUnmount(() => {
 					:href="`/api/v1/logs/files/${encodeURIComponent(currentFile.name)}`"
 					download
 				>
-					<Download :size="17" />Download current
+					<Download :size="17" />Download Current
 				</a>
 			</div>
 
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 			</p>
 			<div v-if="nextCursor" class="logs-load-more">
 				<button class="button secondary" type="button" :disabled="loadingMore" @click="store.loadMore">
-					{{ loadingMore ? 'Loading…' : 'Load older entries' }}
+					{{ loadingMore ? 'Loading…' : 'Load Older Entries' }}
 				</button>
 			</div>
 

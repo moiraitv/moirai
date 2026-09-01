@@ -16,10 +16,10 @@ const emit = defineEmits<{ close: []; scan: []; reconcile: [action: Reconciliati
 			<p v-if="reconciliation.status === 'observing-removals'">Ordinary removals are applied after {{ reconciliation.requiredObservations }} conclusive observations at least {{ reconciliation.observationIntervalMinutes }} minutes apart.</p>
 			<div v-if="reconciliation.missingItems.length" class="reconciliation-items"><article v-for="item in reconciliation.missingItems" :key="item.id"><div class="reconciliation-item-detail"><strong>{{ item.title }}</strong><small>{{ item.relativePath }}</small></div><small class="reconciliation-missing-label">{{ missingSinceLabel(item.firstMissingAt) }}</small></article><small v-if="reconciliation.pendingRemovalCount > reconciliation.missingItems.length">Showing the first {{ reconciliation.missingItems.length }} of {{ reconciliation.pendingRemovalCount }} missing items.</small></div>
 			<div class="form-actions reconciliation-actions">
-				<button type="button" class="button ghost" :disabled="busy" @click="emit('scan')">Scan again</button>
-				<button v-if="reconciliation.sourceChangeCanBeCancelled" type="button" class="button secondary" :disabled="busy" @click="emit('reconcile', 'cancel-source-change')">Cancel source change</button>
-				<button v-if="reconciliation.status === 'source-approval-required'" type="button" class="button danger" :disabled="busy" @click="emit('reconcile', 'accept-source')">Accept and replace index</button>
-				<button v-if="reconciliation.pendingRemovalCount && reconciliation.status !== 'source-approval-required'" type="button" class="button danger" :disabled="busy" @click="emit('reconcile', 'confirm-removals')">Confirm {{ reconciliation.pendingRemovalCount }} removals</button>
+				<button type="button" class="button ghost" :disabled="busy" @click="emit('scan')">Scan Again</button>
+				<button v-if="reconciliation.sourceChangeCanBeCancelled" type="button" class="button secondary" :disabled="busy" @click="emit('reconcile', 'cancel-source-change')">Cancel Source Change</button>
+				<button v-if="reconciliation.status === 'source-approval-required'" type="button" class="button danger" :disabled="busy" @click="emit('reconcile', 'accept-source')">Accept and Replace Index</button>
+				<button v-if="reconciliation.pendingRemovalCount && reconciliation.status !== 'source-approval-required'" type="button" class="button danger" :disabled="busy" @click="emit('reconcile', 'confirm-removals')">Confirm {{ reconciliation.pendingRemovalCount }} Removals</button>
 			</div>
 		</section>
 	</div>

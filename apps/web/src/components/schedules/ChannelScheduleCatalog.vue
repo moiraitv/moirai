@@ -204,7 +204,7 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 						class="button"
 						:to="templates.length ? `/schedules/channels/${entry.id}` : '/schedules/templates/new'"
 					>
-						{{ templates.length ? 'Add template' : 'Create template' }}
+						{{ templates.length ? 'Add Template' : 'Create Template' }}
 					</RouterLink>
 				</div>
 				<div v-else class="schedule-channel-configured-stack">
@@ -236,7 +236,7 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 						</div>
 					</div>
 					<RouterLink class="button secondary" :to="`/schedules/channels/${entry.id}`">
-						<Pencil :size="16" />Edit schedule
+						<Pencil :size="16" />Edit Schedule
 					</RouterLink>
 				</div>
 			</article>
@@ -248,7 +248,7 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 				:heading-level="3"
 			>
 				<template #icon><TvMinimal :size="37" /></template>
-				<RouterLink class="button" to="/channels?new=1">Create channel</RouterLink>
+				<RouterLink class="button" to="/channels?new=1">Create Channel</RouterLink>
 			</ResourceEmptyState>
 			<ResourceEmptyState
 				v-else-if="filteredChannels.length === 0"
@@ -259,7 +259,7 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 			>
 				<template #icon><Search :size="35" /></template>
 				<button class="button" type="button" @click="updateListQuery({ q: null })">
-					Clear search
+					Clear Search
 				</button>
 			</ResourceEmptyState>
 		</div>

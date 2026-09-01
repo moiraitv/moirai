@@ -151,7 +151,7 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 						>
 							<Check v-if="copyStatus === 'context'" :size="15" />
 							<Copy v-else :size="15" />
-							Copy context
+							Copy Context
 						</button>
 					</div>
 					<pre v-if="Object.keys(combinedContext).length" tabindex="0">{{ formattedJson(combinedContext) }}</pre>
@@ -163,7 +163,7 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 					<button class="button secondary" type="button" @click="copyValue(copyableEntry, 'entry')">
 						<Check v-if="copyStatus === 'entry'" :size="17" />
 						<Copy v-else :size="17" />
-						Copy complete entry
+						Copy Complete Entry
 					</button>
 				</footer>
 			</section>

@@ -962,7 +962,7 @@ onBeforeUnmount(() => {
 												form.genres = [];
 											"
 										>
-											Clear all <Trash2 :size="14" />
+											Clear All <Trash2 :size="14" />
 										</button>
 									</template>
 									<template v-else>
@@ -1067,7 +1067,7 @@ onBeforeUnmount(() => {
 													"
 													@click="openSelectionDrawer"
 												>
-													Review selection
+													Review Selection
 												</button>
 											</div>
 										</div>
@@ -1097,7 +1097,7 @@ onBeforeUnmount(() => {
 												loadSourceOptions();
 											"
 										>
-											Back to library root
+											Back to Library Root
 										</button>
 										<LoadingState v-if="sourceLoading" label="Loading source media…" />
 										<div v-else-if="sourceEntries.length" class="source-picker-list">
@@ -1228,11 +1228,11 @@ onBeforeUnmount(() => {
 							:disabled="saving"
 							@click="save(true)"
 						>
-							Save and add another
+							Save and Add Another
 						</button>
 						<button type="submit" class="button" :disabled="saving">
 							<Check v-if="!saving" :size="18" />
-							{{ saving ? 'Saving…' : editingId ? 'Save changes' : 'Save ' + form.type + ' rule' }}
+							{{ saving ? 'Saving…' : editingId ? 'Save Changes' : form.type === 'content' ? 'Save Content Rule' : 'Save Sequence Rule' }}
 						</button>
 					</div>
 				</footer>

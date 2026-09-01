@@ -10,7 +10,7 @@ const emit = defineEmits<{ dismiss: []; learn: [] }>();
 		<button type="button" class="dismiss-help-button" aria-label="Dismiss channel schedule help" @click="emit('dismiss')"><X :size="18" /></button>
 		<div class="channel-schedules-about-copy">
 			<div class="channel-schedules-about-icon"><Layers3 :size="27" /></div>
-			<div><h2 id="channel-schedules-about-title">What is a channel schedule?</h2><p>A channel schedule layers reusable templates into one resolved lineup. Start with an always-available base, then add conditional programming for specific days, dates, seasons, or hours.</p><button type="button" class="channel-schedules-learn-link" @click="emit('learn')">Learn more about channel schedules <ExternalLink :size="18" /></button></div>
+			<div><h2 id="channel-schedules-about-title">What is a channel schedule?</h2><p>A channel schedule layers reusable templates into one resolved lineup. Start with an always-available base, then add conditional programming for specific days, dates, seasons, or hours.</p><button type="button" class="channel-schedules-learn-link" @click="emit('learn')">Learn More About Channel Schedules <ExternalLink :size="18" /></button></div>
 		</div>
 		<div class="channel-schedules-benefits">
 			<h2>Channel schedules help you</h2>
