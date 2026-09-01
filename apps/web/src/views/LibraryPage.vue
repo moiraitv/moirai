@@ -48,6 +48,7 @@ import type {
 import { api, type MediaQuery } from '../api';
 import { activeCatalogAnchor, breadcrumbTargetTrail } from '../catalog-navigation';
 import LoadingState from '../components/LoadingState.vue';
+import TransientToast from '../components/TransientToast.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
 import LibraryMediaCard from '../components/library/LibraryMediaCard.vue';
 import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
@@ -119,8 +120,10 @@ const catalogResults = ref<HTMLElement>();
 const navigationScroller = ref<HTMLElement>();
 const searchText = ref(queryString('q'));
 const message = ref('');
+const actionError = ref('');
 const initialLoading = ref(true);
 const mediaLoading = ref(false);
+const scanRequestPending = ref(false);
 const loadError = ref('');
 const showSettings = ref(false);
 const showSort = ref(false);
@@ -272,9 +275,13 @@ function pageGapBefore(index: number): boolean {
 /** Return whether the latest scan has started but not completed. */
 function isScanRunning(): boolean {
 	return Boolean(
-		library.value?.lastScanStartedAt
-		&& (!library.value.lastScanCompletedAt
-			|| library.value.lastScanStartedAt > library.value.lastScanCompletedAt),
+		scanRequestPending.value
+		|| activeScanId.value
+		|| (
+			library.value?.lastScanStartedAt
+			&& (!library.value.lastScanCompletedAt
+				|| library.value.lastScanStartedAt > library.value.lastScanCompletedAt)
+		),
 	);
 }
 
@@ -772,16 +779,38 @@ async function loadInitial(): Promise<void> {
 
 /** Request a library scan and surface its current status. */
 async function scan(): Promise<void> {
-	await api.scanLibrary(id.value);
-	message.value = 'Scan queued';
-	window.setTimeout(() => void loadLibrary(), 1200);
+	if (isScanRunning()) {
+		return;
+	}
+
+	scanRequestPending.value = true;
+	message.value = '';
+	actionError.value = '';
+	try {
+		await api.scanLibrary(id.value);
+		message.value = 'Library scan started';
+		window.setTimeout(() => void loadLibrary(), 300);
+	}
+	catch (cause) {
+		actionError.value = `Unable to start library scan: ${errorMessage(cause)}`;
+	}
+	finally {
+		scanRequestPending.value = false;
+	}
 }
 
 /** Ask the active scanner to stop without discarding the existing index. */
 async function cancelScan(): Promise<void> {
-	await api.cancelLibraryScan(id.value);
-	message.value = 'Scan cancellation requested';
-	window.setTimeout(() => void loadLibrary(), 300);
+	message.value = '';
+	actionError.value = '';
+	try {
+		await api.cancelLibraryScan(id.value);
+		message.value = 'Scan cancellation requested';
+		window.setTimeout(() => void loadLibrary(), 300);
+	}
+	catch (cause) {
+		actionError.value = `Unable to cancel library scan: ${errorMessage(cause)}`;
+	}
 }
 
 /** Apply the selected source or removal reconciliation action. */
@@ -808,6 +837,7 @@ async function reconcile(action: ReconciliationAction['action']): Promise<void> 
 	}
 
 	reconciliationBusy.value = true;
+	actionError.value = '';
 	try {
 		await api.reconcileLibrary(id.value, { action, revision: current.revision });
 		message.value
@@ -823,7 +853,7 @@ async function reconcile(action: ReconciliationAction['action']): Promise<void> 
 		}
 	}
 	catch (cause) {
-		loadError.value = errorMessage(cause);
+		actionError.value = errorMessage(cause);
 	}
 	finally {
 		reconciliationBusy.value = false;
@@ -939,6 +969,7 @@ function handleKeydown(event: KeyboardEvent): void {
 async function finishSettings(updated: Library): Promise<void> {
 	library.value = updated;
 	showSettings.value = false;
+	actionError.value = '';
 	message.value = 'Library settings saved. Sync the library to apply source changes to the index.';
 	await librariesStore.load();
 }
@@ -1131,7 +1162,7 @@ onUnmounted(() => {
 			</div>
 		</header>
 
-		<p v-if="message" class="notice">{{ message }}</p>
+		<p v-if="actionError" class="notice error" role="alert">{{ actionError }}</p>
 		<div v-if="library.warningCount > 0" class="reconciliation-banner library-warning-banner" role="alert">
 			<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
 			<div>
@@ -1325,5 +1356,6 @@ onUnmounted(() => {
 		<LibraryFilterModal v-if="showFilter" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
 		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />
+		<TransientToast v-if="message" :message="message" @close="message = ''" />
 	</section>
 </template>

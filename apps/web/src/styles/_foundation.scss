@@ -370,6 +370,47 @@ a.nav-link.router-link-exact-active {
 	padding: 28px clamp(24px, 2.6vw, 42px) 54px;
 }
 
+.transient-toast {
+	position: fixed;
+	right: 24px;
+	bottom: 24px;
+	z-index: 80;
+	max-width: min(460px, calc(100vw - 32px));
+	padding: 13px 14px;
+	display: flex;
+	align-items: center;
+	gap: 13px;
+	border: 1px solid rgba(37, 199, 156, 0.48);
+	border-radius: 11px;
+	background: #0b2923;
+	box-shadow: 0 18px 42px rgba(0, 0, 0, 0.44);
+}
+
+.transient-toast-neutral {
+	border-color: rgba(82, 127, 162, 0.52);
+	background: #122737;
+}
+
+.transient-toast > span {
+	min-width: 0;
+	flex: 1;
+}
+
+.transient-toast a {
+	color: var(--accent);
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.transient-toast > button {
+	padding: 3px;
+	cursor: pointer;
+	border: 0;
+	color: var(--muted-strong);
+	background: transparent;
+	font-size: 1.2rem;
+}
+
 .page-header {
 	display: flex;
 	justify-content: space-between;

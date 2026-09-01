@@ -81,6 +81,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		&& response.request().method() === 'POST');
 	await syncButton.click();
 	expect((await scanResponse).status()).toBe(202);
+	const scanStartedToast = page.getByText('Library scan started', { exact: true });
+	await expect(scanStartedToast).toBeVisible();
+	await expect(scanStartedToast).toBeHidden({ timeout: 7000 });
 	await settingsButton.click();
 	const librarySettings = page.getByRole('dialog', { name: `Library settings for ${libraryName}` });
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);

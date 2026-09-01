@@ -11,6 +11,7 @@ import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
+import TransientToast from '../components/TransientToast.vue';
 import { liveEvents } from '../live-events';
 
 const settings = reactive<PlaybackSettings>({
@@ -130,6 +131,8 @@ async function save(): Promise<void> {
 
 /** Copy a client URL to the clipboard. */
 async function copyUrl(value: string, label: string): Promise<void> {
+	message.value = '';
+	error.value = '';
 	try {
 		await navigator.clipboard.writeText(value);
 		message.value = `${label} copied.`;
@@ -168,7 +171,6 @@ onUnmounted(() => {
 				<RefreshCw :size="17" />Refresh status
 			</button>
 		</PageHeader>
-		<p v-if="message" class="notice success">{{ message }}</p>
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading playback settings…" />
 		<div v-else class="settings-layout">
@@ -241,5 +243,6 @@ onUnmounted(() => {
 				</div>
 			</section>
 		</div>
+		<TransientToast v-if="message" :message="message" @close="message = ''" />
 	</section>
 </template>
