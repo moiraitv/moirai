@@ -4,6 +4,9 @@ import { CirclePlus, ExternalLink, Layers3 } from '@lucide/vue';
 defineProps<{ expanded: boolean }>();
 const emit = defineEmits<{ show: [] }>();
 
+/** TODO: Enable once the layered-scheduling introduction has finalized guide content. */
+const introductoryCalloutVisible = false;
+
 /** Steps that introduce the layered scheduling workflow. */
 const guideItems = [
 	{ title: 'Choose a base', detail: 'The base template supplies normal programming.' },
@@ -13,7 +16,7 @@ const guideItems = [
 </script>
 
 <template>
-	<section class="layered-scheduling-callout">
+	<section v-if="introductoryCalloutVisible" class="layered-scheduling-callout">
 		<div class="layered-scheduling-illustration"><Layers3 :size="43" /><CirclePlus :size="20" /></div>
 		<div><h2>New to layered scheduling?</h2><p>Learn how templates, conditions, and overrides work together to build powerful, flexible programming.</p></div>
 		<button type="button" class="button secondary" @click="emit('show')">View guide <ExternalLink :size="17" /></button>

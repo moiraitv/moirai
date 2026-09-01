@@ -20,6 +20,9 @@ import { errorMessage } from '../error-message';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { hideBrokenImage } from '../image-error';
 
+/** TODO: Enable once the Programs catalog tip has been populated with finalized guidance. */
+const programsTipVisible = false;
+
 const props = withDefaults(defineProps<{ embedded?: boolean; programId?: string | null }>(), { embedded: false, programId: null });
 const emit = defineEmits<{ close: []; saved: [programId: string] }>();
 const route = useRoute();
@@ -257,7 +260,7 @@ onMounted(async () => {
 			</section>
 		</template>
 
-		<aside v-if="!embedded && !editorOpen" class="programs-tip">
+		<aside v-if="programsTipVisible && !embedded && !editorOpen" class="programs-tip">
 			<div><Lightbulb :size="21" /></div>
 			<p>
 				<strong>Tip</strong>
