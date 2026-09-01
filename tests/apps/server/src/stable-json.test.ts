@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { stableJson, stableJsonFingerprint } from '../../../../../apps/server/src/scheduling/stable-json.js';
+import { stableJson, stableJsonFingerprint } from '@server/stable-json.js';
 
 describe('stable JSON', () => {
 	it('orders object keys recursively while preserving array order', () => {

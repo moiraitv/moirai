@@ -10,7 +10,7 @@ import {
 	type TimelineIssue,
 	type ViewingPreferenceScores,
 } from '@moirai/shared';
-import { stableJson, stableJsonFingerprint } from './stable-json.js';
+import { stableJson, stableJsonFingerprint } from '../stable-json.js';
 
 /** Selected media item and the cursor state to persist after playback. */
 export interface SelectionResult {

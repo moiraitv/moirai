@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, opendir, readdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, opendir, readdir, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -263,6 +263,29 @@ describe('discoverOnDisk', () => {
 				sortOrder: 1,
 			},
 		]);
+	});
+
+	it('changes item fingerprints when normalized metadata changes without source stat changes', async () => {
+		const fixture = await library();
+		const mediaPath = path.join(fixture.sourceConfig.scanRoot, 'Credits.mp4');
+		const nfoPath = path.join(fixture.sourceConfig.scanRoot, 'Credits.nfo');
+		await writeFile(mediaPath, 'video');
+		await writeFile(
+			nfoPath,
+			'<movie><actor><name>Featured Actor</name><sortorder>9</sortorder></actor></movie>',
+		);
+		const originalNfoStat = await stat(nfoPath);
+		const first = await discoverOnDisk(fixture);
+
+		await writeFile(
+			nfoPath,
+			'<movie><actor><name>Featured Actor</name><sortorder>1</sortorder></actor></movie>',
+		);
+		await utimes(nfoPath, originalNfoStat.atime, originalNfoStat.mtime);
+		const second = await discoverOnDisk(fixture);
+
+		expect(second.items[0]?.people[0]?.sortOrder).toBe(1);
+		expect(second.items[0]?.fingerprint).not.toBe(first.items[0]?.fingerprint);
 	});
 
 	it('skips oversized sidecars with a bounded diagnostic', async () => {

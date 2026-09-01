@@ -16,7 +16,7 @@ import type { MaterializedSegmentRecord } from '../repository/contracts.js';
 import { generateTimelineDetailed } from './engine.js';
 import type { SchedulingWorkerPool } from './worker-pool.js';
 import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
-import { stableJsonFingerprint } from './stable-json.js';
+import { stableJsonFingerprint } from '../stable-json.js';
 import { currentTimestamp } from '../time.js';
 
 /** Delay between background checks of the durable rolling schedule window. */

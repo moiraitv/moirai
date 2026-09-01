@@ -188,6 +188,10 @@ Moirai normalizes values before persistence:
 - Release years fall back from documented release fields to filename years where appropriate.
 - Show groups derive an observed year range from show and episode metadata.
 
+Each scan fingerprints the final normalized item record as well as its source files and measured
+technical identity. A parser or normalization change that alters persisted metadata therefore
+refreshes the indexed item even when the source file sizes and modification times are unchanged.
+
 Multipart suffixes using `disc`, `part`, `cd`, `dvd`, or `disk` form one logical item. A valid
 sequence starts at 1, is contiguous, contains at least two parts, has no duplicate part numbers, and
 is limited to 128 files. Valid parts contribute one aggregate scheduling duration, which must remain

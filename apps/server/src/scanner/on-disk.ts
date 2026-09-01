@@ -34,11 +34,13 @@ import {
 } from '../media/media-probe.js';
 import type { MediaProbeCacheEntry } from '../repository/contracts.js';
 import { currentTimestamp } from '../time.js';
+import { stableJsonFingerprint } from '../stable-json.js';
 import {
 	discoverSidecarSubtitles,
 	embeddedSubtitleTracks,
 	type LocatedSubtitleTrack,
 } from './subtitles.js';
+import { normalizedItemMetadata } from './item-fingerprint.js';
 import {
 	parseCollectionFolder,
 	parseVideoFilename,
@@ -1019,6 +1021,12 @@ export async function discoverOnDisk(
 
 	// Collapse numbered physical files into one logical, schedulable catalog item.
 	collapseMultipartItems(items, issues, library.typeKey);
+	for (const item of items) {
+		item.fingerprint = stableJsonFingerprint({
+			sourceFingerprint: item.fingerprint,
+			normalizedMetadata: normalizedItemMetadata(item),
+		});
+	}
 	items.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 	issues.sort((left, right) =>
 		(left.path ?? '').localeCompare(right.path ?? '') || left.code.localeCompare(right.code));
