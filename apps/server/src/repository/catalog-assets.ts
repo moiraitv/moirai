@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type {
+	LibraryContentPreview,
 	MediaGenreFacet,
 	MediaGroup,
 	MediaGroupKind,
@@ -7,6 +8,7 @@ import type {
 	MediaItem,
 	MediaItemDetail,
 } from '@moirai/shared';
+import { MAX_LIBRARY_CONTENT_PREVIEW_ITEMS } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import {
 	libraries,
@@ -24,6 +26,7 @@ import type {
 import {
 	artworkUrl,
 	cacheVersion,
+	decodedMetadata,
 	mappedGroup,
 	mappedItem,
 	metadataNumber,
@@ -38,6 +41,18 @@ import type { RawGroupRow, RawItemRow } from './catalog-records.js';
 interface GenreSetCte {
 	sql: string;
 	params: string[];
+}
+
+/** Raw row returned by the bounded library-overview carousel query. */
+interface RawLibraryContentPreviewRow {
+	libraryId: string;
+	itemId: string | null;
+	title: string | null;
+	year: number | null;
+	availability: MediaItem['availability'] | null;
+	metadata: string | Record<string, unknown> | null;
+	artworkRelativePath: string | null;
+	fingerprint: string | null;
 }
 
 /** Build a parameterized SQLite CTE for a possibly empty set of genre keys. */
@@ -388,6 +403,57 @@ export class CatalogAssetsRepository {
 			primaryGenre: sourceGenres[0] ?? fallbackGenres[0]?.name ?? null,
 			actors: actors.map((actor) => actor.name),
 		};
+	}
+
+	/** Return one bounded recently indexed media carousel for every configured library. */
+	listLibraryContentPreviews(): LibraryContentPreview[] {
+		const rows = this.db.$client.prepare(
+			`WITH ranked_items AS (
+				SELECT i.id, i.library_id, i.title, i.year, i.availability, i.metadata,
+					i.artwork_relative_path, i.fingerprint,
+					row_number() OVER (
+						PARTITION BY i.library_id
+						ORDER BY i.date_added_at DESC, i.sort_title COLLATE NOCASE ASC, i.id ASC
+					) AS preview_rank
+				FROM media_items i
+			)
+			SELECT l.id AS libraryId, ranked.id AS itemId, ranked.title, ranked.year,
+				ranked.availability, ranked.metadata,
+				ranked.artwork_relative_path AS artworkRelativePath,
+				ranked.fingerprint
+			FROM libraries l
+			LEFT JOIN ranked_items ranked
+				ON ranked.library_id = l.id AND ranked.preview_rank <= ?
+			ORDER BY l.name COLLATE NOCASE ASC, l.id ASC, ranked.preview_rank ASC`,
+		).all(MAX_LIBRARY_CONTENT_PREVIEW_ITEMS) as RawLibraryContentPreviewRow[];
+		const previews = new Map<string, LibraryContentPreview>();
+		for (const row of rows) {
+			const preview = previews.get(row.libraryId) ?? { libraryId: row.libraryId, items: [] };
+			if (
+				row.itemId
+				&& row.title
+				&& row.availability
+				&& row.metadata
+				&& row.fingerprint
+			) {
+				const metadata = decodedMetadata(row.metadata);
+				preview.items.push({
+					id: row.itemId,
+					title: row.title,
+					year: row.year,
+					artworkUrl: artworkUrl(
+						'items',
+						row.itemId,
+						row.artworkRelativePath,
+						cacheVersion(metadata, row.fingerprint),
+					),
+					availability: row.availability,
+				});
+			}
+			previews.set(row.libraryId, preview);
+		}
+
+		return [...previews.values()];
 	}
 
 	/** Return the library source location that owns a media item. */

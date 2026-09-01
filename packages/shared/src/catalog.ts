@@ -249,6 +249,24 @@ export interface MediaCardPreview {
 	actors: string[];
 }
 
+/** Maximum recently indexed media items shown for each library overview row. */
+export const MAX_LIBRARY_CONTENT_PREVIEW_ITEMS = 12;
+
+/** Compact indexed media entry shown in a library overview carousel. */
+export interface LibraryContentPreviewItem {
+	id: string;
+	title: string;
+	year: number | null;
+	artworkUrl: string | null;
+	availability: MediaAvailability;
+}
+
+/** Bounded recently indexed media grouped under one configured library. */
+export interface LibraryContentPreview {
+	libraryId: string;
+	items: LibraryContentPreviewItem[];
+}
+
 /** Full media detail including credits and measured playback facts. */
 export interface MediaItemDetail extends MediaItem {
 	genres: string[];

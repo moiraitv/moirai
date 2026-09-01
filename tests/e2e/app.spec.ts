@@ -52,12 +52,15 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Path Moirai scans').fill(mediaRoot);
 	await page.getByRole('button', { name: 'Add and scan' }).click();
 
-	const libraryCard = page
-		.locator('.library-grid')
-		.getByRole('link', { name: new RegExp(libraryName) });
-	await expect(libraryCard).toBeVisible();
-	await expect(libraryCard).toContainText('2 indexed');
-	await libraryCard.click();
+	const libraryRow = page.locator('.library-row').filter({
+		has: page.getByRole('link', { name: libraryName, exact: true }),
+	});
+	await expect(libraryRow).toBeVisible();
+	await expect(libraryRow).toContainText('2 indexed');
+	const recentMedia = libraryRow.getByRole('link', { name: /Broadcast Fixture/ });
+	await expect(recentMedia).toBeVisible();
+	await expect(recentMedia).toHaveAttribute('href', /\/items\//);
+	await libraryRow.getByRole('link', { name: libraryName, exact: true }).click();
 	await expect(page.locator('.library-status-panel')).toContainText('Watcher');
 	await expect(page.locator('.status-watcher')).toContainText('ready');
 	await expect(page.locator('.library-status-panel')).toContainText('Indexed');

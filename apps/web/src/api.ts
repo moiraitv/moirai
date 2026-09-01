@@ -7,6 +7,7 @@ import type {
 	PlaybackEngineStatus,
 	PlaybackSettings,
 	Library,
+	LibraryContentPreview,
 	LibraryCreate,
 	LibraryUpdate,
 	LibraryReconciliation,
@@ -247,6 +248,7 @@ export const api = {
 	},
 	logFiles: () => request<LogFile[]>('/api/v1/logs/files'),
 	libraries: () => request<Library[]>('/api/v1/libraries'),
+	libraryContentPreviews: () => request<LibraryContentPreview[]>('/api/v1/libraries/content-previews'),
 	library: (id: string) => request<Library>(`/api/v1/libraries/${id}`),
 	createLibrary: (body: LibraryCreate) =>
 		request<Library>('/api/v1/libraries', { method: 'POST', body: JSON.stringify(body) }),

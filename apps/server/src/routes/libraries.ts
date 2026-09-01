@@ -8,6 +8,7 @@ import {
 } from '@moirai/shared';
 import {
 	acceptedStatusSchema,
+	libraryContentPreviewSchema,
 	libraryReconciliationSchema,
 	librarySchema,
 	scanHistorySchema,
@@ -67,6 +68,21 @@ export function registerLibraryRoutes(
 			errors: [500, 503],
 		}),
 	}, async () => repository.listLibraries());
+	app.get('/api/v1/libraries/content-previews', {
+		schema: apiOperation({
+			operationId: 'listLibraryContentPreviews',
+			tags: ['Libraries'],
+			summary: 'List bounded recently indexed media for library overview rows',
+			response: {
+				200: responseContent(
+					'Library content previews',
+					'application/json',
+					z.array(libraryContentPreviewSchema),
+				),
+			},
+			errors: [500, 503],
+		}),
+	}, async () => repository.listLibraryContentPreviews());
 	app.post('/api/v1/libraries', {
 		schema: apiOperation({
 			operationId: 'createLibrary',

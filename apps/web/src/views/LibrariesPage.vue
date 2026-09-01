@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Film, FolderOpen, Music2, Plus, TvMinimal, Unplug } from '@lucide/vue';
+import { FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
 import {
 	DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
 	type Library,
+	type LibraryContentPreview,
 	type LibraryCreate,
 } from '@moirai/shared';
 import { api } from '../api';
+import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { errorMessage } from '../error-message';
+import { hideBrokenImage } from '../image-error';
+import { liveEvents } from '../live-events';
 import LoadingState from '../components/LoadingState.vue';
+import MediaCardPreview from '../components/MediaCardPreview.vue';
 import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
 import { isLibrarySourceUnavailable, libraryStatusValue } from '../library-health';
@@ -20,6 +25,12 @@ const { libraries, loading, loaded, error: loadError } = storeToRefs(librariesSt
 const showForm = ref(false);
 const busy = ref(false);
 const error = ref('');
+const contentPreviews = ref(new Map<string, LibraryContentPreview>());
+const previewsLoading = ref(true);
+const previewsLoaded = ref(false);
+const previewsError = ref('');
+let previewLoadSequence = 0;
+let previewRefreshTimer: number | undefined;
 const form = reactive<LibraryCreate>({
 	name: '',
 	typeKey: 'movies',
@@ -52,6 +63,51 @@ function libraryIcon(typeKey: string) {
 
 	return FolderOpen;
 }
+
+/** Return the bounded recently indexed media currently loaded for one library. */
+function previewItems(libraryId: string): LibraryContentPreview['items'] {
+	return contentPreviews.value.get(libraryId)?.items ?? [];
+}
+
+/** Return the indexed items omitted after the bounded overview carousel. */
+function remainingItemCount(library: Library): number {
+	return Math.max(0, library.itemCount - previewItems(library.id).length);
+}
+
+/** Load all library carousels through one bounded overview request. */
+async function loadContentPreviews(): Promise<void> {
+	const sequence = ++previewLoadSequence;
+	if (!previewsLoaded.value) {
+		previewsLoading.value = true;
+	}
+
+	try {
+		const result = await api.libraryContentPreviews();
+		if (sequence !== previewLoadSequence) {
+			return;
+		}
+
+		contentPreviews.value = new Map(result.map((preview) => [preview.libraryId, preview]));
+		previewsLoaded.value = true;
+		previewsError.value = '';
+	}
+	catch (cause) {
+		if (sequence === previewLoadSequence) {
+			previewsError.value = errorMessage(cause);
+		}
+	}
+	finally {
+		if (sequence === previewLoadSequence) {
+			previewsLoading.value = false;
+		}
+	}
+}
+
+/** Coalesce content-preview refreshes after catalog-affecting events. */
+function schedulePreviewRefresh(): void {
+	window.clearTimeout(previewRefreshTimer);
+	previewRefreshTimer = window.setTimeout(() => void loadContentPreviews(), 100);
+}
 /** Create a library from the form and refresh the list. */
 async function create() {
 	busy.value = true;
@@ -65,6 +121,7 @@ async function create() {
 		form.name = '';
 		form.sourceConfig.scanRoot = '';
 		await librariesStore.load();
+		await loadContentPreviews();
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
@@ -73,7 +130,23 @@ async function create() {
 		busy.value = false;
 	}
 }
-onMounted(() => void librariesStore.load());
+const unsubscribe = liveEvents.subscribe((event) => {
+	if (
+		event.type === 'system.ready'
+		|| event.type === 'library.changed'
+		|| (event.type === 'scan.changed' && event.data.status !== 'running')
+	) {
+		schedulePreviewRefresh();
+	}
+});
+onMounted(() => {
+	void librariesStore.load();
+	void loadContentPreviews();
+});
+onUnmounted(() => {
+	window.clearTimeout(previewRefreshTimer);
+	unsubscribe();
+});
 </script>
 <template>
 	<section>
@@ -126,29 +199,55 @@ onMounted(() => void librariesStore.load());
 			<button class="button ghost" @click="librariesStore.load">Retry</button>
 		</p>
 		<LoadingState v-if="loading && !loaded" label="Loading libraries…" />
-		<div v-else-if="loaded && libraries.length" class="library-grid">
-			<RouterLink
+		<div v-else-if="loaded && libraries.length" class="library-list">
+			<article
 				v-for="library in libraries"
 				:key="library.id"
-				:to="`/libraries/${library.id}`"
-				class="library-card"
+				class="library-row"
 			>
-				<div class="library-art"><component :is="libraryIcon(library.typeKey)" :size="34" /></div>
-				<div>
-					<div class="card-title-row">
-						<h2>{{ library.name }}</h2>
-						<StatusPill :value="libraryStatusValue(library, isScanning(library))" />
+				<div class="library-row-heading">
+					<div class="library-art">
+						<RefreshCw v-if="isScanning(library)" class="spinning" :size="30" />
+						<component :is="libraryIcon(library.typeKey)" v-else :size="30" />
 					</div>
-					<p>{{ library.itemCount }} indexed</p>
-					<p
-						v-if="isLibrarySourceUnavailable(library) && !isScanning(library)"
-						class="library-source-warning"
-					>
-						<Unplug :size="15" />Source path unavailable; disk may be offline
-					</p>
-					<small>{{ library.sourceConfig.scanRoot }}</small>
+					<div class="library-row-copy">
+						<div class="card-title-row">
+							<h2><RouterLink :to="`/libraries/${library.id}`">{{ library.name }}</RouterLink></h2>
+							<StatusPill :value="libraryStatusValue(library, isScanning(library))" />
+						</div>
+						<p>{{ library.itemCount }} indexed</p>
+						<p
+							v-if="isLibrarySourceUnavailable(library) && !isScanning(library)"
+							class="library-source-warning"
+						>
+							<Unplug :size="15" />Source path unavailable; disk may be offline
+						</p>
+						<small>{{ library.sourceConfig.scanRoot }}</small>
+					</div>
 				</div>
-			</RouterLink>
+				<div class="library-content-carousel" :aria-label="`${library.name} recently added media`">
+					<div v-if="previewsLoading && !previewsLoaded" class="library-carousel-state">Loading recent media…</div>
+					<div v-else-if="previewsError" class="library-carousel-state error">Unable to load recent media. <button type="button" @click="loadContentPreviews">Retry</button></div>
+					<template v-else-if="previewItems(library.id).length">
+						<MediaCardPreview v-for="item in previewItems(library.id)" :key="item.id" :item="item" class="library-carousel-preview">
+							<RouterLink :to="`/libraries/${library.id}/items/${item.id}`" class="library-carousel-card" :class="{ unavailable: item.availability !== 'available' }">
+								<span>
+									<img v-if="item.artworkUrl" :src="artworkVariantUrl(item.artworkUrl, 'thumb')" :srcset="artworkSrcset(item.artworkUrl, 'thumb')" alt="" loading="lazy" decoding="async" @error="hideBrokenImage" />
+									<FileText v-else :size="23" />
+								</span>
+								<strong>{{ item.title }}</strong>
+								<small>{{ item.year ?? 'Year unknown' }}</small>
+							</RouterLink>
+						</MediaCardPreview>
+						<RouterLink v-if="remainingItemCount(library)" :to="`/libraries/${library.id}?sort=date-added`" class="library-carousel-more">
+							<span><Plus :size="25" /></span>
+							<strong>{{ remainingItemCount(library).toLocaleString() }} more</strong>
+							<small>indexed items</small>
+						</RouterLink>
+					</template>
+					<div v-else class="library-carousel-state">No indexed media yet.</div>
+				</div>
+			</article>
 		</div>
 		<div v-else-if="loaded && !showForm" class="empty-state">
 			<FolderOpen :size="48" />

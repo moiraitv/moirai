@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	MAX_LIBRARY_CONTENT_PREVIEW_ITEMS,
 	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
@@ -11,7 +13,7 @@ import {
 } from '@moirai/shared';
 import { loadConfig } from '@server/config.js';
 import { createDatabase } from '@server/db/index.js';
-import { scanRuns } from '@server/db/schema.js';
+import { mediaItems, scanRuns } from '@server/db/schema.js';
 import { type DiscoveredGroup, type DiscoveredItem, Repository } from '@server/repository/index.js';
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -64,6 +66,84 @@ afterEach(async () => {
 });
 
 describe('Repository scan reconciliation', () => {
+	it('returns one newest-first bounded content preview for every library', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-library-previews-'));
+		const config = loadConfig({
+			dataDir: root,
+			databasePath: path.join(root, 'test.sqlite'),
+			migrationsDir: path.resolve('drizzle'),
+		});
+		const database = createDatabase(config.databasePath, config.migrationsDir);
+		cleanups.push(async () => {
+			database.close();
+			await rm(root, { recursive: true, force: true });
+		});
+		const repository = new Repository(database.db);
+		const populated = await repository.createLibrary({
+			name: 'Populated',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: root, playbackRoot: '/media' },
+			scanIntervalMinutes: 15,
+			watcherEnabled: false,
+			enabled: true,
+		});
+		const empty = await repository.createLibrary({
+			name: 'Empty',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: path.join(root, 'empty'), playbackRoot: '/media/empty' },
+			scanIntervalMinutes: 15,
+			watcherEnabled: false,
+			enabled: true,
+		});
+		const older = { ...item(100), title: 'Older', sortTitle: 'Older' };
+		await repository.reconcileScan(
+			await repository.beginScan(populated.id, 'initial'),
+			[],
+			[older],
+			[],
+			true,
+		);
+
+		const recent = Array.from(
+			{ length: MAX_LIBRARY_CONTENT_PREVIEW_ITEMS + 1 },
+			(_, index) => ({
+				...item(index),
+				title: `Recent ${String(index).padStart(2, '0')}`,
+				sortTitle: `Recent ${String(index).padStart(2, '0')}`,
+				artworkRelativePath: index === 0 ? 'Recent 00/poster.jpg' : null,
+			}),
+		);
+		await repository.reconcileScan(
+			await repository.beginScan(populated.id, 'watcher'),
+			[],
+			[older, ...recent],
+			[],
+			true,
+		);
+		await database.db.update(mediaItems)
+			.set({ dateAddedAt: '2026-08-01T00:00:00.000Z' })
+			.where(eq(mediaItems.id, older.id));
+		for (const recentItem of recent) {
+			await database.db.update(mediaItems)
+				.set({ dateAddedAt: '2026-08-02T00:00:00.000Z' })
+				.where(eq(mediaItems.id, recentItem.id));
+		}
+
+		const previews = repository.listLibraryContentPreviews();
+		expect(previews.find((preview) => preview.libraryId === empty.id)?.items).toEqual([]);
+		const populatedItems = previews.find((preview) => preview.libraryId === populated.id)?.items;
+		expect(populatedItems).toHaveLength(MAX_LIBRARY_CONTENT_PREVIEW_ITEMS);
+		expect(populatedItems?.map((preview) => preview.title)).toEqual(
+			recent.slice(0, MAX_LIBRARY_CONTENT_PREVIEW_ITEMS).map((preview) => preview.title),
+		);
+		expect(populatedItems?.[0]).toMatchObject({
+			availability: 'available',
+			artworkUrl: expect.stringContaining(`/api/v1/artwork/items/${recent[0]!.id}`),
+		});
+	});
+
 	it('persists absorbed multipart IDs as catalog compatibility aliases', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-multipart-alias-'));
 		const config = loadConfig({

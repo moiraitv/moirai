@@ -953,6 +953,18 @@ describe('API', () => {
 		await services.scanner.scan(library.id, 'manual');
 		const media = (await app.inject({ url: `/api/v1/libraries/${library.id}/media` })).json();
 		const itemId = media.items[0].id as string;
+		const libraryPreviews = await app.inject({ url: '/api/v1/libraries/content-previews' });
+		expect(libraryPreviews.statusCode).toBe(200);
+		expect(libraryPreviews.json()).toEqual(expect.arrayContaining([
+			{
+				libraryId: library.id,
+				items: [expect.objectContaining({
+					id: itemId,
+					title: 'Preview Film',
+					availability: 'available',
+				})],
+			},
+		]));
 		const detailResponse = await app.inject({ url: `/api/v1/media/${itemId}` });
 		expect(detailResponse.statusCode).toBe(200);
 		expect(detailResponse.payload).not.toContain(mediaRoot);

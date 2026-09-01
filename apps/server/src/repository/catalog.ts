@@ -1,5 +1,6 @@
 import type {
 	CatalogProgramItemQuery,
+	LibraryContentPreview,
 	MediaBrowseResult,
 	MediaCardPreview,
 	MediaGenreFacet,
@@ -825,6 +826,11 @@ export class MediaCatalogRepository {
 	/** Return bounded indexed metadata for a compact media-card preview. */
 	async getMediaCardPreview(id: string): Promise<MediaCardPreview | null> {
 		return this.assets.getMediaCardPreview(id);
+	}
+
+	/** Return bounded recently indexed media grouped for every library overview row. */
+	listLibraryContentPreviews(): LibraryContentPreview[] {
+		return this.assets.listLibraryContentPreviews();
 	}
 
 	/** Return the library source location that owns a media item. */

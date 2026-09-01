@@ -4,6 +4,7 @@ import {
 	reconciliationStatusSchema,
 	sourceAvailabilitySchema,
 } from './availability.js';
+import { MAX_LIBRARY_CONTENT_PREVIEW_ITEMS } from './catalog.js';
 import {
 	channelCreateSchema,
 	concreteHardwareAccelerationSchema,
@@ -208,6 +209,18 @@ export const mediaCardPreviewSchema = z.object({
 	rating: z.number().min(0).max(10).nullable(),
 	primaryGenre: z.string().nullable(),
 	actors: z.array(z.string()).max(3),
+});
+
+/** Recently indexed media displayed in one library overview carousel. */
+export const libraryContentPreviewSchema = z.object({
+	libraryId: idSchema,
+	items: z.array(mediaItemSchema.pick({
+		id: true,
+		title: true,
+		year: true,
+		artworkUrl: true,
+		availability: true,
+	})).max(MAX_LIBRARY_CONTENT_PREVIEW_ITEMS),
 });
 
 /** One media item or hierarchy group returned by catalog browsing. */

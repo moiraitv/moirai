@@ -380,19 +380,14 @@ label.check input {
 	margin-top: -12px;
 }
 
-.library-grid {
+.library-list {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 	gap: 14px;
 }
 
-.library-card {
+.library-row {
 	min-width: 0;
-	min-height: 138px;
-	padding: 15px;
-	display: grid;
-	grid-template-columns: 102px minmax(0, 1fr);
-	gap: 17px;
+	padding: 16px;
 	border: 1px solid var(--line);
 	border-radius: 11px;
 	background: var(--panel);
@@ -401,17 +396,33 @@ label.check input {
 		border-color 0.15s ease;
 }
 
-.library-card:hover {
+.library-row:hover {
 	transform: translateY(-2px);
 	border-color: #3a566c;
 }
 
+.library-row-heading {
+	display: grid;
+	grid-template-columns: 74px minmax(0, 1fr);
+	align-items: stretch;
+	gap: 15px;
+}
+
 .library-art {
+	min-height: 74px;
 	display: grid;
 	place-items: center;
 	border-radius: 9px;
 	color: var(--accent);
 	background: radial-gradient(circle at 30% 20%, #245c52, #101c28 70%);
+}
+
+.library-art .spinning {
+	animation: loading-spin 1.4s linear infinite;
+}
+
+.library-row-copy {
+	min-width: 0;
 }
 
 .card-title-row {
@@ -423,17 +434,23 @@ label.check input {
 }
 
 .card-title-row h2 {
+	margin: 0;
 	overflow: hidden;
 	font-size: 1.08rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.library-card p {
+.card-title-row h2 a {
+	color: inherit;
+}
+
+.library-row p {
+	margin: 8px 0;
 	color: #b9c4cf;
 }
 
-.library-card .library-source-warning {
+.library-row .library-source-warning {
 	margin: -4px 0 7px;
 	display: flex;
 	align-items: center;
@@ -442,9 +459,116 @@ label.check input {
 	font-size: 0.7rem;
 }
 
-.library-card small {
+.library-row-copy > small {
 	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.library-content-carousel {
+	min-height: 128px;
+	margin-top: 15px;
+	padding: 3px 2px 8px;
+	display: grid;
+	grid-auto-columns: 112px;
+	grid-auto-flow: column;
+	align-items: stretch;
+	gap: 10px;
+	overflow-x: auto;
+	overscroll-behavior-inline: contain;
+	scroll-snap-type: inline proximity;
+	scrollbar-width: thin;
+}
+
+.library-carousel-preview,
+.library-carousel-card,
+.library-carousel-more {
+	width: 112px;
+	min-width: 112px;
+	scroll-snap-align: start;
+}
+
+.library-carousel-card,
+.library-carousel-more {
+	min-height: 120px;
+	padding: 7px;
+	display: grid;
+	grid-template-rows: 66px auto auto;
+	align-content: start;
+	gap: 5px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	color: inherit;
+	background: #0a1722;
+}
+
+.library-carousel-card > span,
+.library-carousel-more > span {
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border-radius: 6px;
+	color: #607689;
+	background: #112535;
+}
+
+.library-carousel-card img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.library-carousel-card strong,
+.library-carousel-more strong,
+.library-carousel-card small,
+.library-carousel-more small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.library-carousel-card strong,
+.library-carousel-more strong {
+	font-size: 0.7rem;
+}
+
+.library-carousel-card small,
+.library-carousel-more small {
+	color: var(--muted);
+	font-size: 0.61rem;
+}
+
+.library-carousel-card.unavailable {
+	border-color: rgba(239, 107, 107, 0.55);
+}
+
+.library-carousel-more > span {
+	color: var(--accent);
+	background: rgba(22, 214, 164, 0.08);
+}
+
+.library-carousel-state {
+	width: min(420px, calc(100vw - 64px));
+	min-height: 120px;
+	padding: 14px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	border: 1px dashed var(--line-bright);
+	border-radius: 9px;
+	color: var(--muted);
+	font-size: 0.78rem;
+}
+
+.library-carousel-state.error {
+	color: #ffd8df;
+}
+
+.library-carousel-state button {
+	padding: 0;
+	cursor: pointer;
+	border: 0;
+	color: var(--accent);
+	background: transparent;
 }

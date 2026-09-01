@@ -54,6 +54,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'listChannels',
 	'listDataConflicts',
 	'listLibraries',
+	'listLibraryContentPreviews',
 	'listLibraryGenres',
 	'listLibraryScans',
 	'listLogFiles',

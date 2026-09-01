@@ -5,6 +5,7 @@ import type {
 	ChannelSchedule,
 	ChannelScheduleConfig,
 	ChannelUpdate,
+	LibraryContentPreview,
 	MediaGroup,
 	MediaBrowseResult,
 	MediaCardPreview,
@@ -167,6 +168,11 @@ export class Repository extends LibraryRepository {
 	/** Return bounded indexed metadata for a compact media-card preview. */
 	async getMediaCardPreview(id: string): Promise<MediaCardPreview | null> {
 		return this.catalog.getMediaCardPreview(id);
+	}
+
+	/** Return bounded recently indexed media grouped for every library overview row. */
+	listLibraryContentPreviews(): LibraryContentPreview[] {
+		return this.catalog.listLibraryContentPreviews();
 	}
 
 	/** Return the library source location that owns a media item. */
