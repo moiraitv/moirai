@@ -1,419 +1,566 @@
-import { readFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
+import { createDatabase } from '@server/db/index.js';
+
+interface MigrationJournalEntry {
+	idx: number;
+	version: string;
+	when: number;
+	tag: string;
+	breakpoints: boolean;
+}
+
+interface MigrationJournal {
+	version: string;
+	dialect: string;
+	entries: MigrationJournalEntry[];
+}
+
+type SqliteDatabase = InstanceType<typeof Database>;
+type DatabaseStep = (sqlite: SqliteDatabase) => void;
+
+const migrationsDir = path.resolve('drizzle');
+
+async function migrationJournal(): Promise<MigrationJournal> {
+	return JSON.parse(
+		await readFile(path.join(migrationsDir, 'meta/_journal.json'), 'utf8'),
+	) as MigrationJournal;
+}
+
+async function createMigrationPrefix(
+	root: string,
+	journal: MigrationJournal,
+	priorTag: string,
+): Promise<{ dir: string; prior: MigrationJournalEntry }> {
+	const priorIndex = journal.entries.findIndex((entry) => entry.tag === priorTag);
+	if (priorIndex < 0) {
+		throw new Error(`Unknown prior migration ${priorTag}`);
+	}
+
+	const entries = journal.entries.slice(0, priorIndex + 1);
+	const dir = path.join(root, 'migrations');
+	await mkdir(path.join(dir, 'meta'), { recursive: true });
+	await writeFile(
+		path.join(dir, 'meta/_journal.json'),
+		`${JSON.stringify({ ...journal, entries }, null, 2)}\n`,
+	);
+	await Promise.all(entries.map((entry) =>
+		copyFile(path.join(migrationsDir, `${entry.tag}.sql`), path.join(dir, `${entry.tag}.sql`))));
+
+	return { dir, prior: entries.at(-1)! };
+}
+
+function migrationMarkers(sqlite: SqliteDatabase): number[] {
+	return sqlite.prepare(
+		'SELECT created_at AS createdAt FROM __drizzle_migrations ORDER BY created_at',
+	).all().map((row) => Number((row as { createdAt: number }).createdAt));
+}
+
+async function upgradeFrom(
+	priorTag: string,
+	seed: DatabaseStep,
+	verify: DatabaseStep,
+): Promise<void> {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'moirai-migration-'));
+	const databasePath = path.join(root, 'data', 'moirai.sqlite');
+	let priorDatabase: ReturnType<typeof createDatabase> | undefined;
+	let currentDatabase: ReturnType<typeof createDatabase> | undefined;
+
+	try {
+		const journal = await migrationJournal();
+		const prefix = await createMigrationPrefix(root, journal, priorTag);
+		priorDatabase = createDatabase(databasePath, prefix.dir);
+		expect(migrationMarkers(priorDatabase.sqlite)).toEqual(
+			journal.entries.slice(0, prefix.prior.idx + 1).map((entry) => entry.when),
+		);
+		seed(priorDatabase.sqlite);
+		priorDatabase.close();
+		priorDatabase = undefined;
+
+		currentDatabase = createDatabase(databasePath, migrationsDir);
+		expect(migrationMarkers(currentDatabase.sqlite)).toEqual(
+			journal.entries.map((entry) => entry.when),
+		);
+		verify(currentDatabase.sqlite);
+	}
+	finally {
+		priorDatabase?.close();
+		currentDatabase?.close();
+		await rm(root, { recursive: true, force: true });
+	}
+}
+
+function insertLibrary(sqlite: SqliteDatabase, id = 'library', name = 'Library'): void {
+	sqlite.prepare(
+		`INSERT INTO libraries (id, name, type_key, source_type, source_config)
+			VALUES (?, ?, 'movies', 'on-disk', '{}')`,
+	).run(id, name);
+}
+
+function insertChannel(sqlite: SqliteDatabase, id = 'channel', number = '1'): void {
+	sqlite.prepare(
+		'INSERT INTO channels (id, number, name, config) VALUES (?, ?, ?, ?)',
+	).run(id, number, `Channel ${number}`, '{}');
+}
+
+function insertMediaItem(
+	sqlite: SqliteDatabase,
+	id = 'item',
+	libraryId = 'library',
+): void {
+	sqlite.prepare(
+		`INSERT INTO media_items (
+			id, library_id, stable_key, kind, title, sort_title, relative_path, playback_path,
+			metadata_status, metadata, fingerprint
+		) VALUES (?, ?, ?, 'movie', 'Movie', 'movie', ?, ?, 'complete', '{}', 'fingerprint')`,
+	).run(id, libraryId, id, `${id}.mkv`, `/media/${id}.mkv`);
+}
+
+function insertScheduleFoundation(sqlite: SqliteDatabase): void {
+	insertChannel(sqlite);
+	sqlite.prepare(
+		"INSERT INTO scheduling_programs (id, name, config) VALUES ('program', 'Program', '{}')",
+	).run();
+	sqlite.prepare(
+		"INSERT INTO schedule_templates (id, name) VALUES ('template', 'Template')",
+	).run();
+}
 
 describe('database compatibility migrations', () => {
-	it('removes obsolete full-server publication data while preserving playback settings', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.exec(`
-      CREATE TABLE settings (
-        key text PRIMARY KEY NOT NULL,
-        value text NOT NULL,
-        updated_at text NOT NULL
-      );
-      CREATE TABLE publish_runs (
-        id text PRIMARY KEY NOT NULL,
-        status text NOT NULL
-      );
-      INSERT INTO settings VALUES
-        ('ersatztv', '{}', '2026-08-25T00:00:00Z'),
-        ('playback', '{"maxActiveSessions":4}', '2026-08-25T00:00:00Z');
-      INSERT INTO publish_runs VALUES ('run', 'succeeded');
-    `);
+	it('upgrades each recent migration boundary through the production installer', async () => {
+		const boundaries = [
+			['0010_no_program_filler', '0011_media_probe'],
+			['0011_media_probe', '0012_data_identity'],
+			['0012_data_identity', '0013_integrated_playback'],
+			['0013_integrated_playback', '0014_video_metadata'],
+			['0014_video_metadata', '0015_source_adapters'],
+			['0015_source_adapters', '0016_authentication'],
+		] as const;
 
-		const migration = await readFile(
-			path.resolve('drizzle/0013_integrated_playback.sql'),
-			'utf8',
-		);
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-
-		expect(sqlite.prepare('SELECT key FROM settings').all()).toEqual([{ key: 'playback' }]);
-		expect(
-			sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'publish_runs'").get(),
-		).toBeUndefined();
-		sqlite.close();
-	});
-
-	it('invalidates NFO-derived durations and generated output for technical probe backfill', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.exec(`
-      CREATE TABLE media_items (id text PRIMARY KEY NOT NULL, duration_seconds integer);
-      CREATE TABLE materialized_timeline_segments (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE timeline_materializations (channel_id text PRIMARY KEY NOT NULL);
-      INSERT INTO media_items VALUES ('item', 3600);
-      INSERT INTO materialized_timeline_segments VALUES ('segment');
-      INSERT INTO timeline_materializations VALUES ('channel');
-    `);
-		const migration = await readFile(path.resolve('drizzle/0011_media_probe.sql'), 'utf8');
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-
-		expect(sqlite.prepare(
-			'SELECT duration_seconds AS durationSeconds, duration_milliseconds AS durationMilliseconds, probe_status AS probeStatus FROM media_items',
-		).get()).toEqual({ durationSeconds: null, durationMilliseconds: null, probeStatus: 'pending' });
-		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM materialized_timeline_segments').get())
-			.toEqual({ count: 0 });
-		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM timeline_materializations').get())
-			.toEqual({ count: 0 });
-		sqlite.close();
-	});
-
-	it('adds channel ownership to the early selection-state table and preserves valid cursors', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.pragma('foreign_keys = ON');
-		const channelId = '00000000-0000-4000-8000-000000000001';
-		sqlite.exec('CREATE TABLE channels (id text PRIMARY KEY NOT NULL)');
-		sqlite.exec(
-			'CREATE TABLE selection_states (consumer_key text PRIMARY KEY NOT NULL, config_fingerprint text NOT NULL, value text NOT NULL, updated_at text NOT NULL)',
-		);
-		sqlite.prepare('INSERT INTO channels (id) VALUES (?)').run(channelId);
-		sqlite
-			.prepare(
-				'INSERT INTO selection_states (consumer_key, config_fingerprint, value, updated_at) VALUES (?, ?, ?, ?)',
-			)
-			.run(
-				`primary:${channelId}:template:slot:program`,
-				'fingerprint',
-				JSON.stringify({ type: 'sequential', nextIndex: 2, lastItemId: null }),
-				'2026-08-19T00:00:00.000Z',
+		for (const [priorTag, targetTag] of boundaries) {
+			await upgradeFrom(
+				priorTag,
+				(sqlite) => {
+					sqlite.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+						.run(`upgrade:${targetTag}`, JSON.stringify({ targetTag }));
+				},
+				(sqlite) => {
+					const value = sqlite.prepare('SELECT value FROM settings WHERE key = ?')
+						.get(`upgrade:${targetTag}`) as { value: string };
+					expect(JSON.parse(value.value)).toEqual({ targetTag });
+				},
 			);
-
-		const migration = await readFile(
-			path.resolve('drizzle/0003_selection_state_channel.sql'),
-			'utf8',
-		);
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-
-		expect(sqlite.prepare('SELECT channel_id AS channelId FROM selection_states').get()).toEqual({
-			channelId,
-		});
-		sqlite.prepare('DELETE FROM channels WHERE id = ?').run(channelId);
-		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM selection_states').get()).toEqual({
-			count: 0,
-		});
-		sqlite.close();
-	});
-
-	it('makes slot programs optional without losing existing slots or boundaries', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.pragma('foreign_keys = ON');
-		sqlite.exec(`
-      CREATE TABLE scheduling_programs (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE schedule_templates (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE channel_schedules (channel_id text PRIMARY KEY NOT NULL);
-      CREATE TABLE schedule_slots (
-        id text PRIMARY KEY NOT NULL,
-        template_id text NOT NULL REFERENCES schedule_templates(id) ON DELETE cascade,
-        position integer NOT NULL,
-        start_seconds integer NOT NULL,
-        program_id text NOT NULL REFERENCES scheduling_programs(id) ON DELETE restrict,
-        state_scope text NOT NULL,
-        start_eligibility text NOT NULL,
-        filler text NOT NULL
-      );
-      CREATE UNIQUE INDEX schedule_slots_template_position ON schedule_slots(template_id, position);
-      CREATE UNIQUE INDEX schedule_slots_template_start ON schedule_slots(template_id, start_seconds);
-      CREATE TABLE schedule_boundaries (
-        id text PRIMARY KEY NOT NULL,
-        template_id text NOT NULL REFERENCES schedule_templates(id) ON DELETE cascade,
-        position integer NOT NULL,
-        left_slot_id text NOT NULL REFERENCES schedule_slots(id) ON DELETE cascade,
-        right_slot_id text NOT NULL REFERENCES schedule_slots(id) ON DELETE cascade,
-        target_seconds integer NOT NULL,
-        policy text NOT NULL,
-        max_drift_seconds integer NOT NULL,
-        fallback text NOT NULL
-      );
-      CREATE UNIQUE INDEX schedule_boundaries_template_position ON schedule_boundaries(template_id, position);
-      CREATE UNIQUE INDEX schedule_boundaries_template_target ON schedule_boundaries(template_id, target_seconds);
-      INSERT INTO scheduling_programs VALUES ('program');
-      INSERT INTO schedule_templates VALUES ('template');
-      INSERT INTO channel_schedules VALUES ('channel');
-      INSERT INTO schedule_slots VALUES ('slot', 'template', 0, 0, 'program', 'persistent', '{}', '{}');
-      INSERT INTO schedule_boundaries VALUES ('boundary', 'template', 0, 'slot', 'slot', 86400, 'hard', 0, 'reject-start');
-    `);
-
-		const migration = await readFile(path.resolve('drizzle/0005_layered_schedules.sql'), 'utf8');
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-
-		expect(sqlite.prepare('SELECT id, program_id AS programId FROM schedule_slots').get()).toEqual({
-			id: 'slot',
-			programId: 'program',
-		});
-		expect(
-			sqlite.prepare('SELECT id, left_slot_id AS leftSlotId FROM schedule_boundaries').get(),
-		).toEqual({ id: 'boundary', leftSlotId: 'slot' });
-		expect(() =>
-			sqlite
-				.prepare(
-					"INSERT INTO schedule_slots VALUES ('fall-through', 'template', 1, 3600, NULL, 'persistent', '{}', '{}')",
-				)
-				.run()).not.toThrow();
-		expect(() =>
-			sqlite
-				.prepare(
-					"INSERT INTO channel_schedule_layers VALUES ('layer', 'channel', 0, 'template', '{}', '{}', '{}')",
-				)
-				.run()).not.toThrow();
-		sqlite.close();
-	});
-
-	it('makes template boundary drift nullable without losing finite drift values', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.pragma('foreign_keys = ON');
-		sqlite.exec(`
-      CREATE TABLE schedule_templates (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE schedule_slots (
-        id text PRIMARY KEY NOT NULL,
-        template_id text NOT NULL REFERENCES schedule_templates(id) ON DELETE cascade
-      );
-      CREATE TABLE schedule_boundaries (
-        id text PRIMARY KEY NOT NULL,
-        template_id text NOT NULL REFERENCES schedule_templates(id) ON DELETE cascade,
-        position integer NOT NULL,
-        left_slot_id text NOT NULL REFERENCES schedule_slots(id) ON DELETE cascade,
-        right_slot_id text NOT NULL REFERENCES schedule_slots(id) ON DELETE cascade,
-        target_seconds integer NOT NULL,
-        policy text NOT NULL,
-        max_drift_seconds integer NOT NULL,
-        fallback text NOT NULL
-      );
-      CREATE UNIQUE INDEX schedule_boundaries_template_position ON schedule_boundaries(template_id, position);
-      CREATE UNIQUE INDEX schedule_boundaries_template_target ON schedule_boundaries(template_id, target_seconds);
-      INSERT INTO schedule_templates VALUES ('template');
-      INSERT INTO schedule_slots VALUES ('left', 'template'), ('right', 'template');
-      INSERT INTO schedule_boundaries VALUES ('finite', 'template', 0, 'left', 'right', 3600, 'finish-left', 5400, 'reject-start');
-    `);
-
-		const migration = await readFile(
-			path.resolve('drizzle/0006_unlimited_boundary_drift.sql'),
-			'utf8',
-		);
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-
-		expect(
-			sqlite
-				.prepare('SELECT max_drift_seconds AS maxDriftSeconds FROM schedule_boundaries')
-				.get(),
-		).toEqual({ maxDriftSeconds: 5_400 });
-		expect(() =>
-			sqlite
-				.prepare(
-					"INSERT INTO schedule_boundaries VALUES ('unlimited', 'template', 1, 'left', 'right', 7200, 'finish-left', NULL, 'reject-start')",
-				)
-				.run()).not.toThrow();
-		sqlite.close();
-	});
-
-	it('adds channel-owned durable timeline tables with cascading cleanup', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.pragma('foreign_keys = ON');
-		sqlite.exec('CREATE TABLE channels (id text PRIMARY KEY NOT NULL)');
-		sqlite.prepare("INSERT INTO channels VALUES ('channel')").run();
-		const migration = await readFile(path.resolve('drizzle/0007_durable_timeline.sql'), 'utf8');
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-		sqlite
-			.prepare(
-				"INSERT INTO timeline_materializations (channel_id, status, window_start, window_end, continuation_at, input_fingerprint, base_state, issues, committed_at) VALUES ('channel', 'ready', 'start', 'end', 'end', 'hash', '[]', '[]', 'now')",
-			)
-			.run();
-		sqlite
-			.prepare(
-				"INSERT INTO materialized_timeline_segments VALUES ('segment', 'channel', NULL, 'template', 'slot', NULL, NULL, 'dead-air', 'Dead air', NULL, 'start', 'end', 0, NULL, 0, NULL, '[]')",
-			)
-			.run();
-
-		sqlite.prepare("DELETE FROM channels WHERE id = 'channel'").run();
-
-		expect(
-			sqlite.prepare('SELECT COUNT(*) AS count FROM timeline_materializations').get(),
-		).toEqual({ count: 0 });
-		expect(
-			sqlite.prepare('SELECT COUNT(*) AS count FROM materialized_timeline_segments').get(),
-		).toEqual({ count: 0 });
-		sqlite.close();
-	});
-
-	it('normalizes filler on existing no-program slots', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.exec(`
-      CREATE TABLE schedule_slots (
-        id text PRIMARY KEY NOT NULL,
-        program_id text,
-        filler text NOT NULL
-      );
-      INSERT INTO schedule_slots VALUES
-        ('fall-through', NULL, '{"mode":"configured","config":{"programId":"old"}}'),
-        ('programmed', 'program', '{"mode":"inherit"}');
-    `);
-		const migration = await readFile(path.resolve('drizzle/0010_no_program_filler.sql'), 'utf8');
-		sqlite.exec(migration);
-		expect(
-			sqlite.prepare('SELECT filler FROM schedule_slots WHERE id = ?').get('fall-through'),
-		).toEqual({ filler: '{"mode":"disabled"}' });
-		expect(sqlite.prepare('SELECT filler FROM schedule_slots WHERE id = ?').get('programmed')).toEqual(
-			{ filler: '{"mode":"inherit"}' },
-		);
-		sqlite.close();
-	});
-
-	it('adds typed video metadata, multipart aliases, and durable playback parts', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.pragma('foreign_keys = ON');
-		sqlite.exec(`
-      CREATE TABLE libraries (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE media_items (id text PRIMARY KEY NOT NULL);
-      CREATE TABLE materialized_timeline_segments (id text PRIMARY KEY NOT NULL);
-      INSERT INTO libraries VALUES ('library');
-      INSERT INTO media_items VALUES ('item');
-      INSERT INTO materialized_timeline_segments VALUES ('segment');
-    `);
-		const migration = await readFile(path.resolve('drizzle/0014_video_metadata.sql'), 'utf8');
-		sqlite.transaction(() => {
-			for (const statement of migration.split('--> statement-breakpoint')) {
-				if (statement.trim()) {
-					sqlite.exec(statement);
-				}
-			}
-		})();
-
-		expect(sqlite.prepare(
-			'SELECT external_ids AS externalIds, artists, multipart_status AS multipartStatus, parts, subtitle_tracks AS subtitleTracks FROM media_items',
-		).get()).toEqual({
-			externalIds: '[]',
-			artists: '[]',
-			multipartStatus: 'none',
-			parts: '[]',
-			subtitleTracks: '[]',
-		});
-		expect(sqlite.prepare(
-			'SELECT playback_parts AS playbackParts FROM materialized_timeline_segments',
-		).get()).toEqual({ playbackParts: '[]' });
-		sqlite.prepare(
-			"INSERT INTO media_item_aliases (alias_id, library_id, item_id) VALUES ('old-part', 'library', 'item')",
-		).run();
-		sqlite.prepare("DELETE FROM media_items WHERE id = 'item'").run();
-		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM media_item_aliases').get()).toEqual({
-			count: 0,
-		});
-		sqlite.close();
-	});
-
-	it('generalizes persisted source identities without changing their stable source key', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.exec(`
-      CREATE TABLE libraries (
-        id text PRIMARY KEY NOT NULL,
-        accepted_source_identity text,
-        candidate_source_identity text
-      );
-      INSERT INTO libraries VALUES (
-        'library',
-        '{"sourceType":"on-disk","canonicalRoot":"/media","device":"1","inode":"2"}',
-        '{"sourceType":"on-disk","canonicalRoot":"/replacement","device":"3","inode":"4"}'
-      );
-    `);
-		const migration = await readFile(path.resolve('drizzle/0015_source_adapters.sql'), 'utf8');
-		for (const statement of migration.split('--> statement-breakpoint')) {
-			if (statement.trim()) {
-				sqlite.exec(statement);
-			}
 		}
-
-		const row = sqlite.prepare(
-			'SELECT accepted_source_identity AS accepted, candidate_source_identity AS candidate FROM libraries',
-		).get() as { accepted: string; candidate: string };
-		expect(JSON.parse(row.accepted)).toEqual({
-			sourceType: 'on-disk',
-			sourceKey: '/media',
-			details: { canonicalRoot: '/media', device: '1', inode: '2' },
-		});
-		expect(JSON.parse(row.candidate)).toEqual({
-			sourceType: 'on-disk',
-			sourceKey: '/replacement',
-			details: { canonicalRoot: '/replacement', device: '3', inode: '4' },
-		});
-		sqlite.close();
 	});
 
-	it('creates the final bounded local and OIDC authentication schema', async () => {
-		const sqlite = new Database(':memory:');
-		sqlite.pragma('foreign_keys = ON');
-		const migration = await readFile(path.resolve('drizzle/0016_authentication.sql'), 'utf8');
-		for (const statement of migration.split('--> statement-breakpoint')) {
-			if (statement.trim()) {
-				sqlite.exec(statement);
-			}
-		}
+	it('upgrades pre-integrated playback data while preserving playback settings', async () => {
+		await upgradeFrom(
+			'0012_data_identity',
+			(sqlite) => {
+				sqlite.prepare("INSERT INTO settings (key, value) VALUES ('ersatztv', '{}')").run();
+				sqlite.prepare(
+					"INSERT INTO settings (key, value) VALUES ('playback', '{\"maxActiveSessions\":4}')",
+				).run();
+				sqlite.exec('CREATE TABLE publish_runs (id text PRIMARY KEY NOT NULL, status text NOT NULL)');
+				sqlite.prepare("INSERT INTO publish_runs VALUES ('run', 'succeeded')").run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare('SELECT key FROM settings ORDER BY key').all())
+					.toEqual([{ key: 'playback' }]);
+				expect(sqlite.prepare(
+					"SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'publish_runs'",
+				).get()).toBeUndefined();
+			},
+		);
+	});
 
-		sqlite.prepare(
-			"INSERT INTO authentication_identities (id, provider, display_name, username, username_key, password_hash) VALUES ('local', 'local', 'Admin', 'Admin', 'admin', 'hash')",
-		).run();
-		expect(() => sqlite.prepare(
-			"INSERT INTO authentication_identities (id, provider, display_name, username, username_key, password_hash) VALUES ('other', 'local', 'Other', 'Other', 'other', 'hash')",
-		).run()).toThrow();
-		sqlite.prepare(
-			"INSERT INTO authentication_sessions VALUES ('token', 'local', 'csrf', NULL, NULL, NULL, 'now', 'now', 'later')",
-		).run();
-		sqlite.prepare(
-			"INSERT INTO authentication_oidc_transactions VALUES ('state', 'binding', 'verifier', 'nonce', '/', 3, 'later')",
-		).run();
-		sqlite.prepare(
-			'INSERT INTO authentication_oidc_logout_generation (id, generation) VALUES (1, 3)',
-		).run();
-		expect(() => sqlite.prepare(
-			'INSERT INTO authentication_oidc_logout_generation (id, generation) VALUES (2, 4)',
-		).run()).toThrow();
-		sqlite.prepare(
-			"INSERT INTO authentication_oidc_logout_tokens (token_hash, expires_at) VALUES ('hash', 'later')",
-		).run();
-		expect(sqlite.prepare(
-			`SELECT binding_hash AS bindingHash, logout_generation AS logoutGeneration
-				FROM authentication_oidc_transactions`,
-		).get()).toEqual({ bindingHash: 'binding', logoutGeneration: 3 });
-		expect(sqlite.prepare(
-			`SELECT provider_configuration_hash AS providerConfigurationHash
-				FROM authentication_sessions`,
-		).get()).toEqual({ providerConfigurationHash: null });
-		sqlite.prepare("DELETE FROM authentication_identities WHERE id = 'local'").run();
-		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM authentication_sessions').get())
-			.toEqual({ count: 0 });
-		sqlite.close();
+	it('upgrades pre-probe media and invalidates generated output that used NFO durations', async () => {
+		await upgradeFrom(
+			'0010_no_program_filler',
+			(sqlite) => {
+				insertLibrary(sqlite);
+				insertMediaItem(sqlite);
+				insertChannel(sqlite);
+				sqlite.prepare('UPDATE media_items SET duration_seconds = 3600 WHERE id = ?').run('item');
+				sqlite.prepare(
+					`INSERT INTO timeline_materializations (
+						channel_id, status, window_start, window_end, continuation_at, input_fingerprint,
+						base_state, issues, committed_at
+					) VALUES ('channel', 'ready', 'start', 'end', 'end', 'hash', '[]', '[]', 'now')`,
+				).run();
+				sqlite.prepare(
+					`INSERT INTO materialized_timeline_segments (
+						id, channel_id, template_id, slot_id, role, title, starts_at, finishes_at,
+						source_start_seconds, truncated, state_delta
+					) VALUES ('segment', 'channel', 'template', 'slot', 'primary', 'Movie',
+						'start', 'end', 0, 0, '[]')`,
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					`SELECT duration_seconds AS durationSeconds,
+						duration_milliseconds AS durationMilliseconds, probe_status AS probeStatus
+					FROM media_items`,
+				).get()).toEqual({
+					durationSeconds: null,
+					durationMilliseconds: null,
+					probeStatus: 'pending',
+				});
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM materialized_timeline_segments').get())
+					.toEqual({ count: 0 });
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM timeline_materializations').get())
+					.toEqual({ count: 0 });
+			},
+		);
+	});
+
+	it('upgrades early selection state while preserving valid channel-owned cursors', async () => {
+		const channelId = '00000000-0000-4000-8000-000000000001';
+		await upgradeFrom(
+			'0002_scheduling_foundation',
+			(sqlite) => {
+				insertChannel(sqlite, channelId);
+				sqlite.exec(`
+					DROP TABLE selection_states;
+					CREATE TABLE selection_states (
+						consumer_key text PRIMARY KEY NOT NULL,
+						config_fingerprint text NOT NULL,
+						value text NOT NULL,
+						updated_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+					);
+				`);
+				sqlite.prepare(
+					`INSERT INTO selection_states (consumer_key, config_fingerprint, value)
+						VALUES (?, 'fingerprint', ?)`,
+				).run(
+					`primary:${channelId}:template:slot:program`,
+					JSON.stringify({ type: 'sequential', nextIndex: 2, lastItemId: null }),
+				);
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					'SELECT channel_id AS channelId, value FROM selection_states',
+				).get()).toEqual({
+					channelId,
+					value: JSON.stringify({ type: 'sequential', nextIndex: 2, lastItemId: null }),
+				});
+				sqlite.prepare('DELETE FROM channels WHERE id = ?').run(channelId);
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM selection_states').get())
+					.toEqual({ count: 0 });
+			},
+		);
+	});
+
+	it('upgrades fixed program slots to optional slots without losing boundaries', async () => {
+		await upgradeFrom(
+			'0004_media_availability',
+			(sqlite) => {
+				insertScheduleFoundation(sqlite);
+				sqlite.prepare(
+					`INSERT INTO channel_schedules (channel_id, default_template_id, config)
+						VALUES ('channel', 'template', '{}')`,
+				).run();
+				sqlite.prepare(
+					`INSERT INTO schedule_slots (
+						id, template_id, position, start_seconds, program_id, state_scope,
+						start_eligibility, filler
+					) VALUES ('slot', 'template', 0, 0, 'program', 'persistent', '{}', '{}')`,
+				).run();
+				sqlite.prepare(
+					`INSERT INTO schedule_boundaries (
+						id, template_id, position, left_slot_id, right_slot_id, target_seconds,
+						policy, max_drift_seconds, fallback
+					) VALUES ('boundary', 'template', 0, 'slot', 'slot', 86400,
+						'hard', 0, 'reject-start')`,
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare('SELECT id, program_id AS programId FROM schedule_slots').get())
+					.toEqual({ id: 'slot', programId: 'program' });
+				expect(sqlite.prepare(
+					'SELECT id, left_slot_id AS leftSlotId FROM schedule_boundaries',
+				).get()).toEqual({ id: 'boundary', leftSlotId: 'slot' });
+				expect(() => sqlite.prepare(
+					`INSERT INTO schedule_slots (
+						id, template_id, position, start_seconds, program_id, state_scope,
+						start_eligibility, filler
+					) VALUES ('fall-through', 'template', 1, 3600, NULL, 'persistent', '{}', '{}')`,
+				).run()).not.toThrow();
+				expect(() => sqlite.prepare(
+					`INSERT INTO channel_schedule_layers (
+						id, channel_id, position, template_id, predicate, entry_boundary, exit_boundary
+					) VALUES ('layer', 'channel', 0, 'template', '{}', '{}', '{}')`,
+				).run()).not.toThrow();
+			},
+		);
+	});
+
+	it('upgrades boundary drift to nullable while preserving finite limits', async () => {
+		await upgradeFrom(
+			'0005_layered_schedules',
+			(sqlite) => {
+				insertScheduleFoundation(sqlite);
+				for (const [id, position, start] of [['left', 0, 0], ['right', 1, 3600]] as const) {
+					sqlite.prepare(
+						`INSERT INTO schedule_slots (
+							id, template_id, position, start_seconds, program_id, state_scope,
+							start_eligibility, filler
+						) VALUES (?, 'template', ?, ?, 'program', 'persistent', '{}', '{}')`,
+					).run(id, position, start);
+				}
+				sqlite.prepare(
+					`INSERT INTO schedule_boundaries (
+						id, template_id, position, left_slot_id, right_slot_id, target_seconds,
+						policy, max_drift_seconds, fallback
+					) VALUES ('finite', 'template', 0, 'left', 'right', 3600,
+						'finish-left', 5400, 'reject-start')`,
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					'SELECT max_drift_seconds AS maxDriftSeconds FROM schedule_boundaries',
+				).get()).toEqual({ maxDriftSeconds: 5_400 });
+				expect(() => sqlite.prepare(
+					`INSERT INTO schedule_boundaries (
+						id, template_id, position, left_slot_id, right_slot_id, target_seconds,
+						policy, max_drift_seconds, fallback
+					) VALUES ('unlimited', 'template', 1, 'left', 'right', 7200,
+						'finish-left', NULL, 'reject-start')`,
+				).run()).not.toThrow();
+			},
+		);
+	});
+
+	it('upgrades to durable timelines with channel-owned cascading cleanup', async () => {
+		await upgradeFrom(
+			'0006_unlimited_boundary_drift',
+			(sqlite) => insertChannel(sqlite),
+			(sqlite) => {
+				sqlite.prepare(
+					`INSERT INTO timeline_materializations (
+						channel_id, status, window_start, window_end, continuation_at, input_fingerprint,
+						base_state, issues, committed_at
+					) VALUES ('channel', 'ready', 'start', 'end', 'end', 'hash', '[]', '[]', 'now')`,
+				).run();
+				sqlite.prepare(
+					`INSERT INTO materialized_timeline_segments (
+						id, channel_id, template_id, slot_id, role, title, starts_at, finishes_at,
+						source_start_seconds, truncated, state_delta
+					) VALUES ('segment', 'channel', 'template', 'slot', 'dead-air', 'Dead air',
+						'start', 'end', 0, 0, '[]')`,
+				).run();
+				sqlite.prepare("DELETE FROM channels WHERE id = 'channel'").run();
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM timeline_materializations').get())
+					.toEqual({ count: 0 });
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM materialized_timeline_segments').get())
+					.toEqual({ count: 0 });
+			},
+		);
+	});
+
+	it('upgrades no-program slots by disabling incompatible configured filler', async () => {
+		await upgradeFrom(
+			'0009_channel_tvg_index',
+			(sqlite) => {
+				insertScheduleFoundation(sqlite);
+				sqlite.prepare(
+					`INSERT INTO schedule_slots (
+						id, template_id, position, start_seconds, program_id, state_scope,
+						start_eligibility, filler
+					) VALUES ('fall-through', 'template', 0, 0, NULL, 'persistent', '{}',
+						'{"mode":"configured","config":{"programId":"old"}}')`,
+				).run();
+				sqlite.prepare(
+					`INSERT INTO schedule_slots (
+						id, template_id, position, start_seconds, program_id, state_scope,
+						start_eligibility, filler
+					) VALUES ('programmed', 'template', 1, 3600, 'program', 'persistent', '{}',
+						'{"mode":"inherit"}')`,
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare('SELECT filler FROM schedule_slots WHERE id = ?')
+					.get('fall-through')).toEqual({ filler: '{"mode":"disabled"}' });
+				expect(sqlite.prepare('SELECT filler FROM schedule_slots WHERE id = ?')
+					.get('programmed')).toEqual({ filler: '{"mode":"inherit"}' });
+			},
+		);
+	});
+
+	it('upgrades data identity fields without changing existing resource values', async () => {
+		await upgradeFrom(
+			'0011_media_probe',
+			(sqlite) => {
+				insertLibrary(sqlite);
+				insertChannel(sqlite);
+				sqlite.prepare(
+					`INSERT INTO media_groups (
+						id, library_id, stable_key, kind, title, sort_title, metadata
+					) VALUES ('group', 'library', 'group', 'show', 'Show', 'show', '{}')`,
+				).run();
+				sqlite.prepare(
+					"INSERT INTO scheduling_programs (id, name, config) VALUES ('program', 'Program', '{}')",
+				).run();
+				sqlite.prepare(
+					"INSERT INTO schedule_templates (id, name) VALUES ('template', 'Template')",
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					`SELECT l.name, l.name_key AS nameKey, g.title, g.source_key AS sourceKey,
+						c.number_key AS numberKey, p.name_key AS programNameKey,
+						t.name_key AS templateNameKey
+					FROM libraries l, media_groups g, channels c, scheduling_programs p,
+						schedule_templates t
+					WHERE l.id = 'library' AND g.id = 'group' AND c.id = 'channel'
+						AND p.id = 'program' AND t.id = 'template'`,
+				).get()).toEqual({
+					name: 'Library',
+					nameKey: null,
+					title: 'Show',
+					sourceKey: null,
+					numberKey: null,
+					programNameKey: null,
+					templateNameKey: null,
+				});
+				sqlite.prepare("UPDATE libraries SET name_key = 'library' WHERE id = 'library'").run();
+				expect(() => {
+					insertLibrary(sqlite, 'duplicate', 'Duplicate');
+					sqlite.prepare("UPDATE libraries SET name_key = 'library' WHERE id = 'duplicate'").run();
+				}).toThrow();
+			},
+		);
+	});
+
+	it('upgrades typed video metadata, aliases, and playback-part defaults', async () => {
+		await upgradeFrom(
+			'0013_integrated_playback',
+			(sqlite) => {
+				insertLibrary(sqlite);
+				insertMediaItem(sqlite);
+				insertChannel(sqlite);
+				sqlite.prepare(
+					`INSERT INTO materialized_timeline_segments (
+						id, channel_id, template_id, slot_id, role, title, starts_at, finishes_at,
+						source_start_seconds, truncated, state_delta
+					) VALUES ('segment', 'channel', 'template', 'slot', 'primary', 'Movie',
+						'start', 'end', 0, 0, '[]')`,
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					`SELECT external_ids AS externalIds, artists, multipart_status AS multipartStatus,
+						parts, subtitle_tracks AS subtitleTracks FROM media_items`,
+				).get()).toEqual({
+					externalIds: '[]',
+					artists: '[]',
+					multipartStatus: 'none',
+					parts: '[]',
+					subtitleTracks: '[]',
+				});
+				expect(sqlite.prepare(
+					'SELECT playback_parts AS playbackParts FROM materialized_timeline_segments',
+				).get()).toEqual({ playbackParts: '[]' });
+				sqlite.prepare(
+					`INSERT INTO media_item_aliases (alias_id, library_id, item_id)
+						VALUES ('old-part', 'library', 'item')`,
+				).run();
+				sqlite.prepare("DELETE FROM media_items WHERE id = 'item'").run();
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM media_item_aliases').get())
+					.toEqual({ count: 0 });
+			},
+		);
+	});
+
+	it('upgrades persisted source identities without changing their stable source keys', async () => {
+		await upgradeFrom(
+			'0014_video_metadata',
+			(sqlite) => {
+				insertLibrary(sqlite);
+				sqlite.prepare(
+					`UPDATE libraries SET accepted_source_identity = ?, candidate_source_identity = ?
+						WHERE id = 'library'`,
+				).run(
+					JSON.stringify({ sourceType: 'on-disk', canonicalRoot: '/media', device: '1', inode: '2' }),
+					JSON.stringify({ sourceType: 'on-disk', canonicalRoot: '/replacement', device: '3', inode: '4' }),
+				);
+			},
+			(sqlite) => {
+				const row = sqlite.prepare(
+					`SELECT accepted_source_identity AS accepted,
+						candidate_source_identity AS candidate FROM libraries`,
+				).get() as { accepted: string; candidate: string };
+				expect(JSON.parse(row.accepted)).toEqual({
+					sourceType: 'on-disk',
+					sourceKey: '/media',
+					details: { canonicalRoot: '/media', device: '1', inode: '2' },
+				});
+				expect(JSON.parse(row.candidate)).toEqual({
+					sourceType: 'on-disk',
+					sourceKey: '/replacement',
+					details: { canonicalRoot: '/replacement', device: '3', inode: '4' },
+				});
+			},
+		);
+	});
+
+	it('upgrades to the bounded local and OIDC authentication capabilities', async () => {
+		await upgradeFrom(
+			'0015_source_adapters',
+			(sqlite) => {
+				sqlite.prepare(
+					"INSERT INTO settings (key, value) VALUES ('authentication:fixture', '{\"enabled\":true}')",
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					"SELECT value FROM settings WHERE key = 'authentication:fixture'",
+				).get()).toEqual({ value: '{"enabled":true}' });
+				sqlite.prepare(
+					`INSERT INTO authentication_identities (
+						id, provider, display_name, username, username_key, password_hash
+					) VALUES ('local', 'local', 'Admin', 'Admin', 'admin', 'hash')`,
+				).run();
+				expect(() => sqlite.prepare(
+					`INSERT INTO authentication_identities (
+						id, provider, display_name, username, username_key, password_hash
+					) VALUES ('other', 'local', 'Other', 'Other', 'other', 'hash')`,
+				).run()).toThrow();
+				sqlite.prepare(
+					`INSERT INTO authentication_sessions (
+						token_hash, identity_id, csrf_token, created_at, last_seen_at, expires_at
+					) VALUES ('token', 'local', 'csrf', 'now', 'now', 'later')`,
+				).run();
+				sqlite.prepare(
+					`INSERT INTO authentication_oidc_transactions (
+						state_hash, binding_hash, code_verifier, nonce, return_to,
+						logout_generation, expires_at
+					) VALUES ('state', 'binding', 'verifier', 'nonce', '/', 3, 'later')`,
+				).run();
+				sqlite.prepare(
+					'INSERT INTO authentication_oidc_logout_generation (id, generation) VALUES (1, 3)',
+				).run();
+				expect(() => sqlite.prepare(
+					'INSERT INTO authentication_oidc_logout_generation (id, generation) VALUES (2, 4)',
+				).run()).toThrow();
+				sqlite.prepare(
+					"INSERT INTO authentication_oidc_logout_tokens (token_hash, expires_at) VALUES ('hash', 'later')",
+				).run();
+				expect(sqlite.prepare(
+					`SELECT binding_hash AS bindingHash, logout_generation AS logoutGeneration
+						FROM authentication_oidc_transactions`,
+				).get()).toEqual({ bindingHash: 'binding', logoutGeneration: 3 });
+				expect(sqlite.prepare(
+					`SELECT provider_configuration_hash AS providerConfigurationHash
+						FROM authentication_sessions`,
+				).get()).toEqual({ providerConfigurationHash: null });
+				sqlite.prepare("DELETE FROM authentication_identities WHERE id = 'local'").run();
+				expect(sqlite.prepare('SELECT COUNT(*) AS count FROM authentication_sessions').get())
+					.toEqual({ count: 0 });
+			},
+		);
 	});
 });

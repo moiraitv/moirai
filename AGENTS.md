@@ -42,6 +42,10 @@
 
 ## Testing
 
+- Prefer tests that exercise observable behavior over tests that inspect implementation source. A test’s name and stated coverage must match what its assertions actually prove. Do not use source-text or regular-expression assertions as the primary regression test for runtime behavior merely because nearby tests use that style. Source-text assertions may supplement behavioral coverage or verify genuinely static contracts.
+
+- For migration or upgrade behavior, execute the real migration or installation path from representative prior state and assert the resulting persisted settings, capabilities, and preserved values. Include the relevant prior schema/version markers and configuration in the fixture. If the current harness cannot exercise the behavior, extend it when practical; otherwise state the coverage gap instead of presenting a source-text assertion as a behavioral regression test.
+
 - When changing behavior, add or update focused tests when practical and worthwhile. Tests solely for string changes or simple layout changes are usually not useful, and tests should avoid fragile dependence on fixed text when reasonable.
 - Keep tests resilient to intentional configuration changes. Derive fixtures, boundary assertions, and generated-value expectations from the same public constants or documented contract values used by the behavior under test.
 - Avoid exact-string assertions for incidental implementation details. Use exact matches when the string itself is a stable API, wire-format, security, or compatibility contract.

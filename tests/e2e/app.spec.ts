@@ -927,7 +927,7 @@ test('does not expose playback controls before playback settings load', async ({
 		await route.continue();
 	});
 	await page.goto('/settings');
-	const save = page.getByRole('button', { name: 'Save Settings' });
+	const save = page.locator('form').getByRole('button', { name: 'Save Settings' });
 	await expect(page.getByRole('status')).toContainText('Loading playback settings');
 	await expect(save).toHaveCount(0);
 	releaseSettings?.();

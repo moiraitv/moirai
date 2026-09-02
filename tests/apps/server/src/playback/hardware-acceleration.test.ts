@@ -125,7 +125,7 @@ describe('HardwareAccelerationResolver', () => {
 
 	it('bounds time spent waiting behind a distinct probe target', async () => {
 		vi.useFakeTimers();
-		let releaseFirst = (_result: 'supported'): void => undefined;
+		let releaseFirst: (result: 'supported') => void = () => undefined;
 		let attempt = 0;
 		const resolver = new HardwareAccelerationResolver(logger, {
 			platform: 'darwin',
