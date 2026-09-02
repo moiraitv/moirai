@@ -6,11 +6,15 @@ const props = withDefaults(defineProps<{
 	message: string;
 	confirmLabel?: string;
 	destructive?: boolean;
+	requiredText?: string | null;
+	requiredTextLabel?: string | null;
 	alternateLabel?: string | null;
 	alternateDestructive?: boolean;
 }>(), {
 	confirmLabel: 'Confirm',
 	destructive: false,
+	requiredText: null,
+	requiredTextLabel: null,
 	alternateLabel: null,
 	alternateDestructive: false,
 });
@@ -22,6 +26,7 @@ const emit = defineEmits<{
 const dialog = useTemplateRef<HTMLElement>('dialog');
 const cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton');
 const visible = ref(true);
+const confirmationText = ref('');
 const result = ref<'confirm' | 'alternate' | 'cancel' | null>(null);
 const previouslyFocused = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
 	? document.activeElement
@@ -93,7 +98,10 @@ function finishClose(): void {
 onMounted(() => void focusSafestAction());
 watch(
 	() => [props.title, props.message, props.confirmLabel],
-	() => void focusSafestAction(),
+	() => {
+		confirmationText.value = '';
+		void focusSafestAction();
+	},
 );
 onUnmounted(() => {
 	if (previouslyFocused?.isConnected) {
@@ -120,6 +128,10 @@ onUnmounted(() => {
 						<h2 id="confirmation-modal-title">{{ title }}</h2>
 					</header>
 					<p id="confirmation-modal-message">{{ message }}</p>
+					<label v-if="requiredText" class="confirmation-required-text">
+						<span>{{ requiredTextLabel ?? `Type ${requiredText} to confirm` }}</span>
+						<input v-model="confirmationText" autocomplete="off" />
+					</label>
 					<footer>
 						<button ref="cancelButton" type="button" class="button secondary" @click="requestClose('cancel')">
 							Cancel
@@ -137,6 +149,7 @@ onUnmounted(() => {
 							type="button"
 							class="button"
 							:class="{ danger: props.destructive }"
+							:disabled="requiredText !== null && confirmationText !== requiredText"
 							@click="requestClose('confirm')"
 						>
 							{{ confirmLabel }}

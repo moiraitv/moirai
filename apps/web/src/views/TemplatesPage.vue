@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, MoreVertical, Plus, Repeat2, Search, X } from '@lucide/vue';
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Plus, Repeat2, Search, X } from '@lucide/vue';
 import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../api';
-import { requestConfirmation } from '../confirmation';
 import { templateSlotStyle } from '../channel-schedule-display';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
 import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
-import ActionMenu from '../components/ActionMenu.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import TemplateEditor from '../components/templates/TemplateEditor.vue';
@@ -87,6 +84,16 @@ function updateListQuery(update: Record<string, string | number | null>, replace
 	}
 	void router[replace ? 'replace' : 'push']({ path: '/schedules/templates', query });
 }
+
+/** Open a template when its row surface, rather than a nested control, is clicked. */
+function openTemplateRow(event: MouseEvent, templateId: string): void {
+	const target = event.target;
+	if (!(target instanceof Element) || target.closest('a, button, input, select, textarea')) {
+		return;
+	}
+
+	void router.push(`/schedules/templates/${templateId}`);
+}
 /** Return whether a channel uses a template as either its base or a conditional layer. */
 function scheduleUsesTemplate(schedule: (typeof channelSchedules.value)[number], templateId: string): boolean {
 	return schedule.defaultTemplateId === templateId || schedule.layers.some((layer) => layer.templateId === templateId); 
@@ -150,26 +157,6 @@ function programName(id: string | null): string {
 /** Return the user-facing label for time. */
 function timeLabel(seconds: number): string {
 	return scheduleClockLabel(seconds);
-}
-/** Confirm template deletion and refresh shared scheduling state. */
-async function removeTemplate(template: ScheduleTemplate): Promise<void> {
-	if (!(await requestConfirmation({
-		key: `delete-template:${template.id}`,
-		title: 'Delete Template?',
-		message: `Delete ${template.name}? This cannot be undone.`,
-		confirmLabel: 'Delete Template',
-		destructive: true,
-	}))) {
-		return; 
-	}
-
-	try {
-		await api.deleteScheduleTemplate(template.id);
-		await scheduling.load();
-	}
-	catch (cause) {
-		error.value = errorMessage(cause); 
-	}
 }
 onMounted(async () => {
 	if (!props.embedded && !editing.value && ('sort' in route.query || 'view' in route.query)) {
@@ -304,7 +291,7 @@ onMounted(async () => {
 				</div>
 
 				<div v-if="visibleTemplates.length" class="templates-list-panel">
-					<article v-for="template in visibleTemplates" :key="template.id" class="template-row">
+					<article v-for="template in visibleTemplates" :key="template.id" class="template-row" @click="openTemplateRow($event, template.id)">
 						<span class="template-row-grip" aria-hidden="true">⠿</span>
 						<div
 							class="template-row-icon"
@@ -342,11 +329,7 @@ onMounted(async () => {
 							<span>Last updated</span>
 							<small>{{ updatedLabel(template.updatedAt) }}</small>
 						</div>
-						<ActionMenu class="template-row-menu" :label="`Actions for ${template.name}`">
-							<template #trigger><MoreVertical :size="19" /></template>
-							<RouterLink :to="`/schedules/templates/${template.id}`">Edit</RouterLink>
-							<button type="button" class="danger-action" @click="removeTemplate(template)">Delete</button>
-						</ActionMenu>
+						<RouterLink class="icon-button template-row-menu" :to="`/schedules/templates/${template.id}`" :aria-label="`Edit ${template.name}`"><ChevronRight :size="18" /></RouterLink>
 					</article>
 					<footer class="templates-pagination">
 						<span>

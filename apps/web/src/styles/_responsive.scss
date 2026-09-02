@@ -1,35 +1,3 @@
-body:has(.standalone-editor-backdrop) {
-	overflow: auto;
-}
-
-.standalone-editor-backdrop {
-	position: static;
-	inset: auto;
-	width: 100%;
-	min-height: 0;
-	padding: 0;
-	display: block;
-	background: transparent;
-	backdrop-filter: none;
-}
-
-.standalone-editor-backdrop,
-.standalone-editor-backdrop > .moirai-dialog {
-	animation: none;
-}
-
-.standalone-editor-backdrop > .moirai-dialog {
-	width: 100%;
-	height: auto;
-	max-height: none;
-	overflow: visible;
-}
-
-.standalone-editor-backdrop .program-editor-scroll,
-.standalone-editor-backdrop .scheduling-workspace-scroll {
-	overflow: visible;
-}
-
 @media (max-width: 1220px) {
 	.programs-intro,
 	.templates-intro {
@@ -123,14 +91,6 @@ body:has(.standalone-editor-backdrop) {
 		grid-template-columns: 1fr;
 	}
 
-	.schedule-remove-row {
-		grid-template-columns: 1fr;
-	}
-
-	.schedule-remove-button {
-		grid-column: 1;
-	}
-
 	.schedule-editor-columns > .schedule-stack {
 		position: static;
 		max-height: none;
@@ -154,15 +114,6 @@ body:has(.standalone-editor-backdrop) {
 
 	.template-toolbar {
 		grid-template-columns: minmax(240px, 1fr) auto;
-	}
-
-	.template-toolbar-actions {
-		grid-column: 1 / -1;
-		justify-self: stretch;
-	}
-
-	.template-toolbar-actions > * {
-		flex: 1;
 	}
 
 	.template-schedule-main {
@@ -854,19 +805,23 @@ body:has(.standalone-editor-backdrop) {
 		justify-self: start;
 	}
 
-	.program-editor-actions {
+	.resource-editor-action-bar {
 		padding: 12px;
 		align-items: stretch;
-		flex-direction: column-reverse;
-	}
-
-	.program-editor-actions > div {
 		flex-direction: column;
 	}
 
-	.program-editor-actions .button,
-	.program-editor-actions .toolbar-button {
+	.resource-editor-danger-actions,
+	.resource-editor-save-actions {
 		width: 100%;
+	}
+
+	.resource-editor-save-actions {
+		margin-left: 0;
+	}
+
+	.resource-editor-action-bar .button {
+		flex: 1 1 0;
 	}
 
 	.moirai-dialog fieldset {

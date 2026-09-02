@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Asterisk, Check, Layers3, Plus, Trash2, X } from '@lucide/vue';
+import { Asterisk, Layers3, Plus, Trash2, X } from '@lucide/vue';
 import {
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	type MediaGroup,
@@ -15,6 +15,8 @@ import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import { cloneContractValue } from '../../reactive-clone';
 import LoadingState from '../../components/LoadingState.vue';
+import ResourceEditorActionBar from '../../components/ResourceEditorActionBar.vue';
+import ResourceEditorHeader from '../../components/ResourceEditorHeader.vue';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import { useLibrariesStore } from '../../stores/libraries';
 import { useChannelsStore } from '../../stores/channels';
@@ -31,7 +33,8 @@ import { itemsInReferenceOrder, manualOrderFromDisplay, mergeVisibleManualOrder 
 import { useSelectedMediaOrderState } from './selected-media-order-state';
 import { subscribeToSelectedMediaRefresh } from './selected-media-refresh';
 import { isProgramDraftValid } from './program-save-state';
-import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
+import { useProgramResourceActions } from './program-resource-actions';
+import TwoStepActionButton from '../TwoStepActionButton.vue';
 
 const props = withDefaults(
 	defineProps<{
@@ -763,12 +766,34 @@ function payload(): ProgramCreate {
 						} as const);
 	return { name: form.name, config: { type: 'content', source, strategy } };
 }
+const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
+	program: () => programs.value.find((candidate) => candidate.id === editingId.value),
+	embedded: () => props.embedded,
+	saving: () => saving.value,
+	resetDraft: (program) => {
+		resetForm(program);
+		error.value = '';
+	},
+	reloadDraft: async () => await Promise.all([
+		loadSourceOptions(), loadSelectedItems(), loadSelectedGroups(),
+	]).then(() => undefined),
+	onDeleted: async () => {
+		await scheduling.load();
+		await router.push('/schedules/programs');
+	},
+	onError: (cause) => error.value = errorMessage(cause),
+});
 
 const programSaveDisabled = computed(() =>
-	saving.value || !isProgramDraftValid(payload) || (Boolean(editingId.value) && !isDirty.value));
+	saving.value || deleting.value || !isProgramDraftValid(payload)
+	|| (Boolean(editingId.value) && !isDirty.value));
 
-/** Validate and save the program draft, optionally starting another draft. */
-async function save(addAnother = false): Promise<void> {
+/** Validate and save the program draft. */
+async function save(): Promise<void> {
+	if (programSaveDisabled.value) {
+		return;
+	}
+
 	saving.value = true;
 	error.value = '';
 	try {
@@ -777,12 +802,6 @@ async function save(addAnother = false): Promise<void> {
 			: api.createProgram(payload());
 		const saved = await operation;
 		await scheduling.load();
-		if (addAnother && !editingId.value) {
-			resetForm();
-			await Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
-			return;
-		}
-
 		if (props.embedded) {
 			emit('saved', saved.id);
 		}
@@ -801,7 +820,7 @@ async function save(addAnother = false): Promise<void> {
 /** Save, discard, or retain an edited program before closing its editor. */
 async function closeEditor(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value,
+		blocked: saving.value || deleting.value,
 		dirty: isDirty.value,
 		key: `unsaved-program:${editingId.value ?? 'new'}`,
 		message: 'Save this program before closing?',
@@ -853,55 +872,42 @@ onBeforeUnmount(() => {
 <template>
 	<section>
 		<div
-			v-if="editorOpen && initialLoading"
+			v-if="editorOpen"
 			class="moirai-dialog-backdrop"
-			:class="{ 'nested-modal-backdrop': embedded, 'standalone-editor-backdrop': !embedded }"
-			@click.self="closeEditor"
-		>
-			<div class="moirai-dialog schedule-editor-modal" role="dialog" aria-modal="true" aria-label="Program editor">
-				<LoadingState label="Loading program editor…" />
-			</div>
-		</div>
-		<div
-			v-else-if="editorOpen"
-			class="moirai-dialog-backdrop"
-			:class="{ 'nested-modal-backdrop': embedded, 'standalone-editor-backdrop': !embedded }"
+			:class="{ 'nested-modal-backdrop': embedded }"
 			@click.self="closeEditor"
 		>
 			<form
 				class="moirai-dialog schedule-editor-modal"
 				role="dialog"
 				aria-modal="true"
-				aria-labelledby="program-editor-title"
+				:aria-label="initialLoading ? 'Program editor' : undefined"
+				:aria-labelledby="initialLoading ? undefined : 'program-editor-title'"
 				@submit.prevent="save()"
 			>
-				<header class="program-editor-header">
-					<div>
-						<p class="eyebrow">
-							{{ editingId ? `Edit ${form.type} rule` : 'New program' }}
-						</p>
-						<h2 id="program-editor-title">
-							{{ editingId ? 'Edit program' : `Create ${form.type} rule` }}
-						</h2>
-						<p>
-							{{
-								form.type === 'content'
-									? 'Define what content can play and how it should be selected.'
-									: 'Arrange reusable programs in a custom repeating order.'
-							}}
-						</p>
-					</div>
-					<button
-						type="button"
-						class="program-editor-close"
-						aria-label="Close"
-						:disabled="saving"
-						@click="closeEditor"
-					>
-						×
-					</button>
-				</header>
-				<div class="program-editor-scroll">
+				<template v-if="initialLoading">
+					<ResourceEditorHeader close-label="Close program editor" @close="closeEditor">
+						<p class="eyebrow">Program editor</p>
+						<h2>Loading Program</h2>
+					</ResourceEditorHeader>
+					<LoadingState label="Loading program editor…" />
+				</template>
+				<ResourceEditorHeader v-else close-label="Close program editor" :disabled="saving || deleting" @close="closeEditor">
+					<p class="eyebrow">
+						{{ editingId ? `Edit ${form.type} rule` : 'New program' }}
+					</p>
+					<h2 id="program-editor-title">
+						{{ editingId ? 'Edit program' : `Create ${form.type} rule` }}
+					</h2>
+					<p>
+						{{
+							form.type === 'content'
+								? 'Define what content can play and how it should be selected.'
+								: 'Arrange reusable programs in a custom repeating order.'
+						}}
+					</p>
+				</ResourceEditorHeader>
+				<div v-if="!initialLoading" class="program-editor-scroll">
 					<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
 					<div class="program-editor-main">
 						<p v-if="error" class="notice error">{{ error }}</p>
@@ -1030,7 +1036,7 @@ onBeforeUnmount(() => {
 												</select>
 											</div>
 										</label>
-										<TwoStepDeleteButton
+										<TwoStepActionButton
 											v-if="form.kinds.length || form.genres.length"
 											class="program-clear-filters"
 											label="Clear all program filters"
@@ -1039,7 +1045,7 @@ onBeforeUnmount(() => {
 											@confirm="form.kinds = []; form.genres = []"
 										>
 											Clear All <Trash2 :size="14" />
-										</TwoStepDeleteButton>
+										</TwoStepActionButton>
 									</template>
 									<template v-else>
 										<p
@@ -1294,24 +1300,15 @@ onBeforeUnmount(() => {
 						/>
 					</div>
 				</div>
-				<footer class="program-editor-actions">
-					<button type="button" class="toolbar-button" :disabled="saving" @click="closeEditor">Cancel</button>
-					<div>
-						<button
-							v-if="!editingId"
-							type="button"
-							class="button ghost"
-							:disabled="programSaveDisabled"
-							@click="save(true)"
-						>
-							Save and Add Another
-						</button>
-						<button type="submit" class="button" :disabled="programSaveDisabled">
-							<Check v-if="!saving" :size="18" />
-							{{ saving ? 'Saving…' : editingId ? 'Save Changes' : form.type === 'content' ? 'Save Content Rule' : 'Save Sequence Rule' }}
-						</button>
-					</div>
-				</footer>
+				<ResourceEditorActionBar
+					v-if="!initialLoading"
+					resource-type="Program"
+					:show-delete="!embedded && Boolean(editingId)" :busy="saving || deleting"
+					:deleting="deleting" :reset-disabled="!isDirty"
+					:save-disabled="programSaveDisabled" :saving="saving"
+					save-submits
+					@delete="deleteProgram" @reset="resetProgram"
+				/>
 			</form>
 		</div>
 		<MediaSelectionDrawer

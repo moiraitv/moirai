@@ -1069,49 +1069,6 @@ a.media-card {
 	line-height: 1.5;
 }
 
-.library-danger-zone {
-	margin-top: 26px;
-	padding: 18px;
-	border: 1px solid rgba(239, 83, 104, 0.55);
-	border-radius: 11px;
-	background: rgba(91, 24, 34, 0.2);
-}
-
-.library-danger-heading {
-	cursor: pointer;
-	list-style: none;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	color: #ff8292;
-}
-
-.library-danger-heading h3 {
-	flex: 1;
-	margin: 0;
-}
-
-.library-danger-chevron {
-	transition: transform 0.15s ease;
-}
-
-.library-danger-zone.is-open .library-danger-chevron {
-	transform: rotate(180deg);
-}
-
-.library-danger-content > p {
-	margin: 14px 0 0;
-	color: #d6adb3;
-	font-size: 0.82rem;
-	line-height: 1.45;
-}
-
-.library-danger-content > label {
-	margin: 16px 0 12px;
-	display: grid;
-	gap: 7px;
-}
-
 .catalog-footer > :last-child {
 	justify-self: end;
 }

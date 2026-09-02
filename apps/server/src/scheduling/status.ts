@@ -191,6 +191,7 @@ function contentStatus(
 		availableItemCount: available.length,
 		previewItems: matches.slice(0, PROGRAM_PREVIEW_ITEM_LIMIT).map((media) => ({
 			id: media.id,
+			libraryId: media.libraryId,
 			title: media.title,
 			year: media.year,
 			artworkUrl: media.artworkUrl,

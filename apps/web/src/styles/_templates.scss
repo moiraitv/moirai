@@ -230,6 +230,7 @@
 	align-items: center;
 	gap: 14px;
 	border-bottom: 1px solid var(--line);
+	cursor: pointer;
 }
 
 .template-row:hover {
@@ -306,6 +307,7 @@
 	justify-self: end;
 }
 
+.template-row-menu.icon-button,
 .template-row-menu > .context-menu-trigger {
 	width: 32px;
 	height: 36px;

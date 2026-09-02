@@ -7,6 +7,8 @@ export interface ConfirmationOptions {
 	message: string;
 	confirmLabel?: string;
 	destructive?: boolean;
+	requiredText?: string;
+	requiredTextLabel?: string;
 	alternateLabel?: string;
 	alternateDestructive?: boolean;
 }
@@ -26,12 +28,17 @@ export interface UnsavedChangesOptions {
 }
 
 /** Complete modal options exposed to the application shell. */
-interface ResolvedConfirmationOptions extends Omit<ConfirmationOptions, 'alternateLabel'> {
+interface ResolvedConfirmationOptions extends Omit<
+	ConfirmationOptions,
+	'alternateLabel' | 'requiredText' | 'requiredTextLabel'
+> {
 	instanceId: number;
 	confirmLabel: string;
 	destructive: boolean;
 	alternateLabel: string | null;
 	alternateDestructive: boolean;
+	requiredText: string | null;
+	requiredTextLabel: string | null;
 }
 
 /** Queued confirmation paired with its eventual caller result. */
@@ -77,6 +84,8 @@ function enqueueConfirmation(options: ConfirmationOptions): Promise<Confirmation
 			destructive: options.destructive ?? false,
 			alternateLabel: options.alternateLabel ?? null,
 			alternateDestructive: options.alternateDestructive ?? false,
+			requiredText: options.requiredText ?? null,
+			requiredTextLabel: options.requiredTextLabel ?? null,
 		},
 		promise,
 		resolve,

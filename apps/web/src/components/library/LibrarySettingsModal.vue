@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, useTemplateRef, watch } from 'vue';
-import { AlertTriangle, ChevronDown, Trash2, X } from '@lucide/vue';
-import type { Library, LibraryUpdate } from '@moirai/shared';
+import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
+import { libraryUpdateSchema, type Library, type LibraryUpdate } from '@moirai/shared';
 import { api } from '../../api';
+import { requestConfirmation } from '../../confirmation';
 import { errorMessage } from '../../error-message';
 import { useAnimatedDismissal } from '../../motion';
+import { cloneContractValue } from '../../reactive-clone';
 import { closeUnsavedEditor } from '../../unsaved-editor';
-import AnimatedDisclosure from '../AnimatedDisclosure.vue';
+import ResourceEditorActionBar from '../ResourceEditorActionBar.vue';
+import ResourceEditorHeader from '../ResourceEditorHeader.vue';
 
 const props = defineProps<{ library: Library }>();
 const emit = defineEmits<{
@@ -18,9 +20,7 @@ const nameInput = useTemplateRef<HTMLInputElement>('nameInput');
 const saving = ref(false);
 const deleting = ref(false);
 const error = ref('');
-const deleteConfirmation = ref('');
-const dangerOpen = ref(false);
-const form = reactive<LibraryUpdate>({
+const baseline: LibraryUpdate = {
 	name: props.library.name,
 	typeKey: props.library.typeKey,
 	sourceType: props.library.sourceType,
@@ -28,14 +28,24 @@ const form = reactive<LibraryUpdate>({
 	scanIntervalMinutes: props.library.scanIntervalMinutes,
 	watcherEnabled: props.library.watcherEnabled,
 	enabled: props.library.enabled,
-});
-const deletionConfirmed = computed(() => deleteConfirmation.value === props.library.name);
-const originalSnapshot = JSON.stringify(form);
+};
+const form = reactive<LibraryUpdate>(cloneContractValue(baseline));
+const originalSnapshot = JSON.stringify(baseline);
 const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot);
+const formValid = computed(() => libraryUpdateSchema.safeParse({
+	...form,
+	sourceConfig: form.sourceConfig
+		? { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null }
+		: undefined,
+}).success);
 const { visible, requestClose: dismiss, finishClose } = useAnimatedDismissal(() => emit('close'));
 
 /** Save the editable library configuration and return the authoritative record. */
 async function save(): Promise<void> {
+	if (saving.value || deleting.value || !isDirty.value || !formValid.value) {
+		return;
+	}
+
 	saving.value = true;
 	error.value = '';
 	try {
@@ -55,6 +65,12 @@ async function save(): Promise<void> {
 	}
 }
 
+/** Restore every editable library setting to the baseline captured on open. */
+function reset(): void {
+	Object.assign(form, cloneContractValue(baseline));
+	error.value = '';
+}
+
 /** Save, discard, or retain library settings before closing the modal. */
 async function closeEditor(): Promise<void> {
 	await closeUnsavedEditor({
@@ -68,9 +84,17 @@ async function closeEditor(): Promise<void> {
 	});
 }
 
-/** Permanently remove the configured library after exact-name confirmation. */
+/** Permanently remove the configured library after exact-name modal confirmation. */
 async function remove(): Promise<void> {
-	if (!deletionConfirmed.value) {
+	if (saving.value || deleting.value || !(await requestConfirmation({
+		key: `delete-library:${props.library.id}`,
+		title: 'Delete Library?',
+		message: 'This permanently deletes the library configuration, index, and cached artwork from Moirai. Source media files are not changed.',
+		confirmLabel: 'Delete Library',
+		destructive: true,
+		requiredText: props.library.name,
+		requiredTextLabel: `Type ${props.library.name} to confirm`,
+	}))) {
 		return;
 	}
 
@@ -88,13 +112,6 @@ async function remove(): Promise<void> {
 	}
 }
 
-/** Clear destructive confirmation whenever its disclosure is collapsed. */
-watch(dangerOpen, (open) => {
-	if (!open) {
-		deleteConfirmation.value = '';
-	}
-});
-
 onMounted(() => nameInput.value?.focus());
 </script>
 
@@ -103,44 +120,46 @@ onMounted(() => nameInput.value?.focus());
 		<Transition name="moirai-overlay" appear @after-leave="finishClose">
 			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
 				<form
-					class="moirai-dialog library-settings-modal"
+					class="moirai-dialog resource-editor-modal library-settings-modal"
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby="library-settings-title"
 					@submit.prevent="save"
 				>
-					<header class="modal-heading">
-						<div>
-							<p class="eyebrow">Library settings</p>
-							<h2 id="library-settings-title">Library settings for {{ library.name }}</h2>
-						</div>
-						<button type="button" class="icon-button" aria-label="Close library settings" :disabled="saving || deleting" @click="closeEditor"><X :size="22" /></button>
-					</header>
+					<ResourceEditorHeader close-label="Close library editor" :disabled="saving || deleting" @close="closeEditor">
+						<p class="eyebrow">Library settings</p>
+						<h2 id="library-settings-title">Library settings for {{ library.name }}</h2>
+					</ResourceEditorHeader>
 
-					<div class="form-grid library-settings-fields">
-						<label><span>Name</span><input ref="nameInput" v-model="form.name" required maxlength="120" autocapitalize="words" /></label>
-						<label><span>Type</span><select v-model="form.typeKey"><option value="movies">Movies</option><option value="shows">Shows</option><option value="music-videos">Music videos</option><option value="other">Other</option></select></label>
-						<label class="span-2"><span>Path Moirai scans</span><input v-model="form.sourceConfig!.scanRoot" required /></label>
-						<label class="span-2"><span>Path playback engine sees <small>optional</small></span><input v-model="form.sourceConfig!.playbackRoot" /></label>
-						<label><span>Fallback scan, minutes</span><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080" required /><small>Used when live watching is unavailable.</small></label>
-						<div class="library-settings-checks">
-							<label class="check"><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label>
-							<label class="check"><input v-model="form.enabled" type="checkbox" /> Enabled for scheduling</label>
+					<div class="resource-editor-scroll library-settings-scroll">
+						<div class="form-grid library-settings-fields">
+							<label><span>Name</span><input ref="nameInput" v-model="form.name" required maxlength="120" autocapitalize="words" /></label>
+							<label><span>Type</span><select v-model="form.typeKey"><option value="movies">Movies</option><option value="shows">Shows</option><option value="music-videos">Music videos</option><option value="other">Other</option></select></label>
+							<label class="span-2"><span>Path Moirai scans</span><input v-model="form.sourceConfig!.scanRoot" required /></label>
+							<label class="span-2"><span>Path playback engine sees <small>optional</small></span><input v-model="form.sourceConfig!.playbackRoot" /></label>
+							<label><span>Fallback scan, minutes</span><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080" required /><small>Used when live watching is unavailable.</small></label>
+							<div class="library-settings-checks">
+								<label class="check"><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label>
+								<label class="check"><input v-model="form.enabled" type="checkbox" /> Enabled for scheduling</label>
+							</div>
 						</div>
+
+						<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
+						<p v-if="error" class="notice error">{{ error }}</p>
 					</div>
 
-					<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
-					<p v-if="error" class="notice error">{{ error }}</p>
-					<div class="form-actions"><button type="button" class="button ghost" :disabled="saving || deleting" @click="closeEditor">Cancel</button><button class="button" :disabled="saving || deleting || !isDirty">{{ saving ? 'Saving…' : 'Save Settings' }}</button></div>
-
-					<AnimatedDisclosure v-model="dangerOpen" class="library-danger-zone">
-						<template #summary><span class="library-danger-heading"><AlertTriangle :size="24" /><h3 id="library-delete-title">Permanently remove this library</h3><ChevronDown class="library-danger-chevron" :size="18" /></span></template>
-						<div class="library-danger-content" aria-labelledby="library-delete-title">
-							<p><strong>This action cannot be undone.</strong> It deletes the library configuration, index, and cached artwork from Moirai. Your source media files will not be changed.</p>
-							<label><span>Type <strong>{{ library.name }}</strong> to confirm</span><input v-model="deleteConfirmation" autocomplete="off" /></label>
-							<button type="button" class="button danger" :disabled="!deletionConfirmed || deleting || saving" @click="remove"><Trash2 :size="17" />{{ deleting ? 'Removing…' : 'Remove Library Permanently' }}</button>
-						</div>
-					</AnimatedDisclosure>
+					<ResourceEditorActionBar
+						resource-type="Library"
+						show-delete
+						:busy="saving || deleting"
+						:deleting="deleting"
+						:reset-disabled="!isDirty"
+						:save-disabled="!isDirty || !formValid"
+						save-submits
+						:saving="saving"
+						@delete="remove"
+						@reset="reset"
+					/>
 				</form>
 			</div>
 		</Transition>

@@ -734,6 +734,7 @@ export type SchedulingProgramHealth = 'ready' | 'degraded' | 'unavailable' | 'mi
 /** Compact indexed media entry used by program catalog carousels. */
 export interface SchedulingProgramPreviewItem {
 	id: string;
+	libraryId: string;
 	title: string;
 	year: number | null;
 	artworkUrl: string | null;

@@ -21,7 +21,9 @@ import { requestConfirmation } from '../../confirmation';
 import { errorMessage } from '../../error-message';
 import LoadingState from '../LoadingState.vue';
 import AnimatedDisclosure from '../AnimatedDisclosure.vue';
-import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
+import ResourceEditorActionBar from '../ResourceEditorActionBar.vue';
+import ResourceEditorHeader from '../ResourceEditorHeader.vue';
+import TwoStepActionButton from '../TwoStepActionButton.vue';
 import ProgramsPage from '../../views/ProgramsPage.vue';
 import { cloneContractValue } from '../../reactive-clone';
 import { randomUuid } from '../../random-uuid';
@@ -70,6 +72,7 @@ const selectedSlotId = ref('');
 const assignedChannelIds = ref<string[]>([]);
 const originalSnapshot = ref('');
 const saving = ref(false);
+const deleting = ref(false);
 const error = ref('');
 const preview = ref<TimelinePreview | null>(null);
 const previewStale = ref(false);
@@ -624,7 +627,7 @@ function templatePayload(): ScheduleTemplateCreate | null {
 const templateFormValid = computed(() =>
 	scheduleTemplateCreateSchema.safeParse(templatePayload()).success);
 const templateSaveDisabled = computed(() =>
-	saving.value || !hasPendingSave.value || !templateFormValid.value);
+	saving.value || deleting.value || !hasPendingSave.value || !templateFormValid.value);
 
 /** Validate and save the template draft. */
 async function save(): Promise<boolean> {
@@ -667,6 +670,42 @@ async function save(): Promise<boolean> {
 	}
 }
 
+/** Restore the template and preview state to the baseline captured when it opened. */
+function resetTemplate(): void {
+	loadDraft();
+	error.value = '';
+	refreshPreviewNow();
+}
+
+/** Confirm and delete the standalone template being edited. */
+async function deleteTemplate(): Promise<void> {
+	const id = editingId.value;
+	const template = templates.value.find((candidate) => candidate.id === id);
+	if (props.embedded || !id || !template || saving.value || deleting.value || !(await requestConfirmation({
+		key: `delete-template:${id}`,
+		title: 'Delete Template?',
+		message: `Delete ${template.name} and discard any unsaved changes? This cannot be undone.`,
+		confirmLabel: 'Delete Template',
+		destructive: true,
+	}))) {
+		return;
+	}
+
+	deleting.value = true;
+	error.value = '';
+	try {
+		await api.deleteScheduleTemplate(id);
+		await scheduling.load();
+		await leaveEditor();
+	}
+	catch (cause) {
+		error.value = errorMessage(cause);
+	}
+	finally {
+		deleting.value = false;
+	}
+}
+
 /** Leave the current template route or dismiss its embedded editor. */
 async function leaveEditor(): Promise<void> {
 	if (props.embedded) {
@@ -686,7 +725,7 @@ async function leaveEditor(): Promise<void> {
 /** Save, discard, or retain an edited template before closing its editor. */
 async function closeEditor(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value,
+		blocked: saving.value || deleting.value,
 		dirty: hasPendingSave.value,
 		key: `unsaved-template:${editingId.value ?? 'new'}`,
 		message: 'Save this template before closing?',
@@ -812,11 +851,8 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 		event.preventDefault();
 		if (props.embedded) {
 			event.stopImmediatePropagation();
-			void closeEditor();
 		}
-		else {
-			void router.push('/schedules/templates');
-		}
+		void closeEditor();
 	}
 }
 
@@ -878,336 +914,340 @@ onBeforeUnmount(() => {
 <template>
 	<section>
 		<div
-			v-if="editing && !draft"
+			v-if="editing"
 			class="moirai-dialog-backdrop"
-			:class="{ 'nested-modal-backdrop': embedded, 'standalone-editor-backdrop': !embedded }"
+			:class="{ 'nested-modal-backdrop': embedded }"
 			@click.self="closeEditor"
 		>
 			<div class="moirai-dialog scheduling-workspace-modal template-workspace" role="dialog" aria-modal="true" aria-label="Template editor">
-				<LoadingState label="Loading template editor…" />
-			</div>
-		</div>
-		<div
-			v-else-if="editing && draft"
-			class="moirai-dialog-backdrop"
-			:class="{ 'nested-modal-backdrop': embedded, 'standalone-editor-backdrop': !embedded }"
-			@click.self="closeEditor"
-		>
-			<div
-				class="moirai-dialog scheduling-workspace-modal template-workspace"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Template editor"
-			>
-				<section class="template-toolbar editor-surface">
-					<label>
-						<span>Template name</span>
-						<input v-model="draft.name" aria-label="Template name" autocapitalize="words" @input="markChanged" />
-					</label>
-					<span v-if="hasPendingSave" class="draft-badge">Unsaved changes</span>
-					<div class="template-toolbar-actions">
-						<button type="button" class="toolbar-button" :disabled="saving" @click="closeEditor">Close</button>
-						<button class="button" :disabled="templateSaveDisabled" @click="save">
-							{{ saving ? 'Saving…' : 'Save Template' }}
-						</button>
-					</div>
-				</section>
+				<template v-if="!draft">
+					<ResourceEditorHeader close-label="Close template editor" @close="closeEditor">
+						<p class="eyebrow">Template editor</p>
+						<h2>Loading Template</h2>
+					</ResourceEditorHeader>
+					<LoadingState label="Loading template editor…" />
+				</template>
+				<template v-else>
+					<ResourceEditorHeader close-label="Close template editor" :disabled="saving || deleting" @close="closeEditor">
+						<p class="eyebrow">{{ editingId ? 'Edit template' : 'New template' }}</p>
+						<h2>{{ editingId ? draft.name : 'Create Template' }}</h2>
+					</ResourceEditorHeader>
+					<section class="template-toolbar editor-surface">
+						<label>
+							<span>Template name</span>
+							<input v-model="draft.name" aria-label="Template name" autocapitalize="words" @input="markChanged" />
+						</label>
+						<span v-if="hasPendingSave" class="draft-badge">Unsaved changes</span>
+					</section>
 
-				<div class="scheduling-workspace-scroll">
-					<TemplateTimelineEditor
-						ref="timelineEditor"
-						v-model:selected-slot-id="selectedSlotId"
-						:draft="draft"
-						:sorted-slots="sortedSlots"
-						:editor-view="editorView"
-						:adding-slot="addingSlot"
-						:slot-placement="slotPlacement"
-						:placement-style="placementStyle"
-						:used-programs="usedPrograms"
-						:can-add-slot="canAddSlot"
-						:placement-announcement="placementAnnouncement"
-						:program-name="programName"
-						:time-label="timeLabel"
-						:slot-end="slotEnd"
-						:slot-duration-label="slotDurationLabel"
-						@begin-slot-placement="beginSlotPlacement"
-						@set-editor-view="setEditorView"
-						@pointer-move="addingSlot ? updateSlotPlacementFromPointer($event) : dragBoundary($event)"
-						@pointer-up="endBoundaryDrag"
-						@placement-keydown="handlePlacementKeydown"
-						@slot-click="handleSlotClick"
-						@boundary-pointer-down="startBoundaryDrag"
-					/>
+					<div class="scheduling-workspace-scroll">
+						<TemplateTimelineEditor
+							ref="timelineEditor"
+							v-model:selected-slot-id="selectedSlotId"
+							:draft="draft"
+							:sorted-slots="sortedSlots"
+							:editor-view="editorView"
+							:adding-slot="addingSlot"
+							:slot-placement="slotPlacement"
+							:placement-style="placementStyle"
+							:used-programs="usedPrograms"
+							:can-add-slot="canAddSlot"
+							:placement-announcement="placementAnnouncement"
+							:program-name="programName"
+							:time-label="timeLabel"
+							:slot-end="slotEnd"
+							:slot-duration-label="slotDurationLabel"
+							@begin-slot-placement="beginSlotPlacement"
+							@set-editor-view="setEditorView"
+							@pointer-move="addingSlot ? updateSlotPlacementFromPointer($event) : dragBoundary($event)"
+							@pointer-up="endBoundaryDrag"
+							@placement-keydown="handlePlacementKeydown"
+							@slot-click="handleSlotClick"
+							@boundary-pointer-down="startBoundaryDrag"
+						/>
 
-					<section v-if="selectedSlot" class="slot-inspector editor-surface">
-						<div class="slot-inspector-main">
-							<div class="template-panel-heading">
-								<div>
-									<p class="eyebrow">Selected slot</p>
-									<div class="selected-slot-title">
-										<h2>
-											{{ timeLabel(selectedSlot.startSeconds) }} –
-											{{ timeLabel(slotEnd(selectedSlot)) }}
-										</h2>
-										<span>{{ slotDurationLabel(selectedSlot) }}</span>
+						<section v-if="selectedSlot" class="slot-inspector editor-surface">
+							<div class="slot-inspector-main">
+								<div class="template-panel-heading">
+									<div>
+										<p class="eyebrow">Selected slot</p>
+										<div class="selected-slot-title">
+											<h2>
+												{{ timeLabel(selectedSlot.startSeconds) }} –
+												{{ timeLabel(slotEnd(selectedSlot)) }}
+											</h2>
+											<span>{{ slotDurationLabel(selectedSlot) }}</span>
+										</div>
+									</div>
+									<div class="card-actions">
+										<TwoStepActionButton
+											class="template-delete-button"
+											:disabled="draft.slots.length <= 1"
+											label="Delete selected slot"
+											confirm-label="Confirm delete selected slot"
+											@confirm="deleteSelected"
+										>
+											<Trash2 :size="17" />
+										</TwoStepActionButton>
 									</div>
 								</div>
-								<div class="card-actions">
-									<TwoStepDeleteButton
-										class="template-delete-button"
-										:disabled="draft.slots.length <= 1"
-										label="Delete selected slot"
-										confirm-label="Confirm delete selected slot"
-										@confirm="deleteSelected"
-									>
-										<Trash2 :size="17" />
-									</TwoStepDeleteButton>
+								<div class="template-slot-fields">
+									<label>
+										<span>Program</span>
+										<span class="template-program-control">
+											<span class="template-input-with-icon">
+												<Monitor :size="17" />
+												<select v-model="selectedSlot.programId" @change="updateSlotProgram">
+													<option :value="null">No program — fall through</option>
+													<option v-for="program in programs" :key="program.id" :value="program.id">
+														{{ program.name }}
+													</option>
+												</select>
+											</span>
+											<button
+												v-if="selectedSlot.programId"
+												type="button"
+												class="template-edit-program-button"
+												:aria-label="`Edit ${programName(selectedSlot.programId)}`"
+												@click="editProgram(selectedSlot.programId)"
+											>
+												<Pencil :size="16" />Edit
+											</button>
+										</span>
+									</label>
+									<label>
+										<span>Starts</span>
+										<span class="template-input-with-icon">
+											<Clock3 :size="17" />
+											<input
+												type="time"
+												:value="timeLabel(selectedSlot.startSeconds)"
+												:disabled="selectedSlot.startSeconds === 0"
+												@change="
+													changeStart(selectedSlot, ($event.target as HTMLInputElement).value)
+												"
+											/>
+										</span>
+									</label>
 								</div>
 							</div>
-							<div class="template-slot-fields">
-								<label>
-									<span>Program</span>
-									<span class="template-program-control">
-										<span class="template-input-with-icon">
-											<Monitor :size="17" />
-											<select v-model="selectedSlot.programId" @change="updateSlotProgram">
-												<option :value="null">No program — fall through</option>
-												<option v-for="program in programs" :key="program.id" :value="program.id">
-													{{ program.name }}
-												</option>
-											</select>
-										</span>
-										<button
-											v-if="selectedSlot.programId"
-											type="button"
-											class="template-edit-program-button"
-											:aria-label="`Edit ${programName(selectedSlot.programId)}`"
-											@click="editProgram(selectedSlot.programId)"
-										>
-											<Pencil :size="16" />Edit
-										</button>
-									</span>
-								</label>
-								<label>
-									<span>Starts</span>
-									<span class="template-input-with-icon">
-										<Clock3 :size="17" />
-										<input
-											type="time"
-											:value="timeLabel(selectedSlot.startSeconds)"
-											:disabled="selectedSlot.startSeconds === 0"
-											@change="
-												changeStart(selectedSlot, ($event.target as HTMLInputElement).value)
-											"
-										/>
-									</span>
-								</label>
-							</div>
-						</div>
-						<AnimatedDisclosure
-							v-if="selectedSlot.programId !== null"
-							v-model="advancedOpen"
-							class="slot-advanced"
-						>
-							<template #summary><span>Advanced scheduling behavior</span></template>
-							<div class="form-grid">
-								<label
-								><span>Playback state</span
-								><select v-model="selectedSlot.stateScope" @change="markChanged">
-									<option value="persistent">Continue persistently</option>
-									<option value="occurrence">Restart each day</option>
-								</select></label
-								><label
-								><span>Item start rule</span
-								><select
-									:value="selectedSlot.startEligibility.type"
-									@change="
-										updateStartEligibility(
-											($event.target as HTMLSelectElement)
-												.value as ScheduleSlot['startEligibility']['type'],
-										)
-									"
-								>
-									<option value="require-fit">Require complete fit</option>
-									<option value="allow-truncate">Allow truncation</option>
-									<option value="allow-overrun">Allow overrun</option>
-									<option value="within-drift">Within drift</option>
-								</select></label
-								><label v-if="selectedSlot.startEligibility.type === 'within-drift'"
-								><span>Start drift (minutes)</span
-								><input
-									:value="selectedSlot.startEligibility.maxDriftSeconds / 60"
-									type="number"
-									min="0"
-									max="1440"
-									@input="
-										selectedSlot.startEligibility.maxDriftSeconds =
-											Number(($event.target as HTMLInputElement).value) * 60;
-										markChanged();
-									"
-								/></label>
-							</div>
-							<fieldset v-if="selectedBoundary">
-								<legend>
-									Outgoing boundary at {{ timeLabel(selectedBoundary.targetSeconds) }}
-								</legend>
+							<AnimatedDisclosure
+								v-if="selectedSlot.programId !== null"
+								v-model="advancedOpen"
+								class="slot-advanced"
+							>
+								<template #summary><span>Advanced scheduling behavior</span></template>
 								<div class="form-grid">
 									<label
-									><span>Policy</span
+									><span>Playback state</span
+									><select v-model="selectedSlot.stateScope" @change="markChanged">
+										<option value="persistent">Continue persistently</option>
+										<option value="occurrence">Restart each day</option>
+									</select></label
+									><label
+									><span>Item start rule</span
 									><select
-										:value="selectedBoundary.policy"
+										:value="selectedSlot.startEligibility.type"
 										@change="
-											updateBoundaryPolicy(
+											updateStartEligibility(
 												($event.target as HTMLSelectElement)
-													.value as ScheduleBoundary['policy'],
+													.value as ScheduleSlot['startEligibility']['type'],
 											)
 										"
 									>
-										<option value="hard">Hard boundary</option>
-										<option value="finish-left">Finish left item</option>
-										<option value="favor-right">Favor right slot</option>
+										<option value="require-fit">Require complete fit</option>
+										<option value="allow-truncate">Allow truncation</option>
+										<option value="allow-overrun">Allow overrun</option>
+										<option value="within-drift">Within drift</option>
 									</select></label
-									><label
-									><span>Maximum drift (minutes)</span
+									><label v-if="selectedSlot.startEligibility.type === 'within-drift'"
+									><span>Start drift (minutes)</span
 									><input
+										:value="selectedSlot.startEligibility.maxDriftSeconds / 60"
 										type="number"
 										min="0"
 										max="1440"
-										:disabled="selectedBoundary.maxDriftSeconds === null"
-										:value="(selectedBoundary.maxDriftSeconds ?? 0) / 60"
 										@input="
-											updateBoundaryDrift(Number(($event.target as HTMLInputElement).value))
-										" /></label
-									><label
-										v-if="selectedBoundary.policy === 'finish-left'"
-										class="check-row boundary-unlimited-control"
+											selectedSlot.startEligibility.maxDriftSeconds =
+												Number(($event.target as HTMLInputElement).value) * 60;
+											markChanged();
+										"
+									/></label>
+								</div>
+								<fieldset v-if="selectedBoundary">
+									<legend>
+										Outgoing boundary at {{ timeLabel(selectedBoundary.targetSeconds) }}
+									</legend>
+									<div class="form-grid">
+										<label
+										><span>Policy</span
+										><select
+											:value="selectedBoundary.policy"
+											@change="
+												updateBoundaryPolicy(
+													($event.target as HTMLSelectElement)
+														.value as ScheduleBoundary['policy'],
+												)
+											"
+										>
+											<option value="hard">Hard boundary</option>
+											<option value="finish-left">Finish left item</option>
+											<option value="favor-right">Favor right slot</option>
+										</select></label
+										><label
+										><span>Maximum drift (minutes)</span
+										><input
+											type="number"
+											min="0"
+											max="1440"
+											:disabled="selectedBoundary.maxDriftSeconds === null"
+											:value="(selectedBoundary.maxDriftSeconds ?? 0) / 60"
+											@input="
+												updateBoundaryDrift(Number(($event.target as HTMLInputElement).value))
+											" /></label
+										><label
+											v-if="selectedBoundary.policy === 'finish-left'"
+											class="check-row boundary-unlimited-control"
+										><input
+											type="checkbox"
+											:checked="selectedBoundary.maxDriftSeconds === null"
+											@change="
+												toggleUnlimitedBoundaryDrift(($event.target as HTMLInputElement).checked)
+											"
+										/><span>No limit — always finish outgoing item</span></label
+										><label
+										><span>Fallback</span
+										><select
+											:disabled="selectedBoundary.maxDriftSeconds === null"
+											:value="selectedBoundary.fallback"
+											@change="
+												updateBoundary({
+													fallback: ($event.target as HTMLSelectElement)
+														.value as ScheduleBoundary['fallback'],
+												})
+											"
+										>
+											<option value="reject-start">Reject item start</option>
+											<option value="truncate-left">Truncate left item</option>
+										</select></label
+										>
+									</div>
+								</fieldset>
+								<fieldset>
+									<legend>Filler</legend>
+									<label
+									><span>Mode</span
+									><select
+										:value="selectedSlot.filler.mode"
+										@change="
+											updateSlotFiller(
+												($event.target as HTMLSelectElement)
+													.value as ScheduleSlot['filler']['mode'],
+											)
+										"
+									>
+										<option value="inherit">Inherit template/channel</option>
+										<option value="disabled">Disabled</option>
+										<option value="configured">Slot override</option>
+									</select></label
+									>
+									<div v-if="selectedSlot.filler.mode === 'configured'" class="form-grid">
+										<label>
+											<span>Program</span>
+											<span class="template-program-control">
+												<select
+													v-model="selectedSlot.filler.config.programId"
+													@change="markChanged"
+												>
+													<option v-for="program in programs" :key="program.id" :value="program.id">
+														{{ program.name }}
+													</option>
+												</select>
+												<button
+													type="button"
+													class="template-edit-program-button"
+													:aria-label="`Edit ${programName(selectedSlot.filler.config.programId)}`"
+													@click="editProgram(selectedSlot.filler.config.programId)"
+												>
+													<Pencil :size="16" />Edit
+												</button>
+											</span> </label
+										><label
+										><span>Selection policy</span
+										><select v-model="selectedSlot.filler.config.policy" @change="markChanged">
+											<option value="best-fit-or-truncate">Best fit or truncate</option>
+											<option value="best-fit-only">Best fit only</option>
+											<option value="next-truncate">Next and truncate</option>
+											<option value="next-fit-only">Next only if it fits</option>
+										</select></label
+										>
+									</div>
+								</fieldset>
+								<fieldset>
+									<legend>Template default filler</legend>
+									<label class="check-row"
 									><input
 										type="checkbox"
-										:checked="selectedBoundary.maxDriftSeconds === null"
-										@change="
-											toggleUnlimitedBoundaryDrift(($event.target as HTMLInputElement).checked)
-										"
-									/><span>No limit — always finish outgoing item</span></label
-									><label
-									><span>Fallback</span
-									><select
-										:disabled="selectedBoundary.maxDriftSeconds === null"
-										:value="selectedBoundary.fallback"
-										@change="
-											updateBoundary({
-												fallback: ($event.target as HTMLSelectElement)
-													.value as ScheduleBoundary['fallback'],
-											})
-										"
+										:checked="draft.defaultFiller !== null"
+										@change="toggleTemplateFiller(($event.target as HTMLInputElement).checked)"
+									/>Configure default filler</label
 									>
-										<option value="reject-start">Reject item start</option>
-										<option value="truncate-left">Truncate left item</option>
-									</select></label
-									>
-								</div>
-							</fieldset>
-							<fieldset>
-								<legend>Filler</legend>
-								<label
-								><span>Mode</span
-								><select
-									:value="selectedSlot.filler.mode"
-									@change="
-										updateSlotFiller(
-											($event.target as HTMLSelectElement)
-												.value as ScheduleSlot['filler']['mode'],
-										)
-									"
-								>
-									<option value="inherit">Inherit template/channel</option>
-									<option value="disabled">Disabled</option>
-									<option value="configured">Slot override</option>
-								</select></label
-								>
-								<div v-if="selectedSlot.filler.mode === 'configured'" class="form-grid">
-									<label>
-										<span>Program</span>
-										<span class="template-program-control">
-											<select
-												v-model="selectedSlot.filler.config.programId"
-												@change="markChanged"
-											>
-												<option v-for="program in programs" :key="program.id" :value="program.id">
-													{{ program.name }}
-												</option>
-											</select>
-											<button
-												type="button"
-												class="template-edit-program-button"
-												:aria-label="`Edit ${programName(selectedSlot.filler.config.programId)}`"
-												@click="editProgram(selectedSlot.filler.config.programId)"
-											>
-												<Pencil :size="16" />Edit
-											</button>
-										</span> </label
-									><label
-									><span>Selection policy</span
-									><select v-model="selectedSlot.filler.config.policy" @change="markChanged">
-										<option value="best-fit-or-truncate">Best fit or truncate</option>
-										<option value="best-fit-only">Best fit only</option>
-										<option value="next-truncate">Next and truncate</option>
-										<option value="next-fit-only">Next only if it fits</option>
-									</select></label
-									>
-								</div>
-							</fieldset>
-							<fieldset>
-								<legend>Template default filler</legend>
-								<label class="check-row"
-								><input
-									type="checkbox"
-									:checked="draft.defaultFiller !== null"
-									@change="toggleTemplateFiller(($event.target as HTMLInputElement).checked)"
-								/>Configure default filler</label
-								>
-								<div v-if="draft.defaultFiller" class="form-grid">
-									<label>
-										<span>Program</span>
-										<span class="template-program-control">
-											<select v-model="draft.defaultFiller.programId" @change="markChanged">
-												<option v-for="program in programs" :key="program.id" :value="program.id">
-													{{ program.name }}
-												</option>
-											</select>
-											<button
-												type="button"
-												class="template-edit-program-button"
-												:aria-label="`Edit ${programName(draft.defaultFiller.programId)}`"
-												@click="editProgram(draft.defaultFiller.programId)"
-											>
-												<Pencil :size="16" />Edit
-											</button>
-										</span> </label
-									><label
-									><span>Selection policy</span
-									><select v-model="draft.defaultFiller.policy" @change="markChanged">
-										<option value="best-fit-or-truncate">Best fit or truncate</option>
-										<option value="best-fit-only">Best fit only</option>
-										<option value="next-truncate">Next and truncate</option>
-										<option value="next-fit-only">Next only if it fits</option>
-									</select></label
-									>
-								</div>
-							</fieldset>
-						</AnimatedDisclosure>
-					</section>
+									<div v-if="draft.defaultFiller" class="form-grid">
+										<label>
+											<span>Program</span>
+											<span class="template-program-control">
+												<select v-model="draft.defaultFiller.programId" @change="markChanged">
+													<option v-for="program in programs" :key="program.id" :value="program.id">
+														{{ program.name }}
+													</option>
+												</select>
+												<button
+													type="button"
+													class="template-edit-program-button"
+													:aria-label="`Edit ${programName(draft.defaultFiller.programId)}`"
+													@click="editProgram(draft.defaultFiller.programId)"
+												>
+													<Pencil :size="16" />Edit
+												</button>
+											</span> </label
+										><label
+										><span>Selection policy</span
+										><select v-model="draft.defaultFiller.policy" @change="markChanged">
+											<option value="best-fit-or-truncate">Best fit or truncate</option>
+											<option value="best-fit-only">Best fit only</option>
+											<option value="next-truncate">Next and truncate</option>
+											<option value="next-fit-only">Next only if it fits</option>
+										</select></label
+										>
+									</div>
+								</fieldset>
+							</AnimatedDisclosure>
+						</section>
 
-					<TemplateAssignments :channels="assignedChannels" />
-				</div>
+						<TemplateAssignments :channels="assignedChannels" />
+					</div>
 
-				<ResolvedSchedulePreview
-					:preview="preview"
-					:stale="previewStale"
-					:updating="previewing"
-					:queued="previewQueued"
-					:error="previewError"
-					@refresh="refreshPreviewNow"
-				/>
+					<ResolvedSchedulePreview
+						:preview="preview"
+						:stale="previewStale"
+						:updating="previewing"
+						:queued="previewQueued"
+						:error="previewError"
+						@refresh="refreshPreviewNow"
+					/>
+					<ResourceEditorActionBar
+						resource-type="Template"
+						:show-delete="!embedded && Boolean(editingId)"
+						:busy="saving || deleting"
+						:deleting="deleting"
+						:reset-disabled="!isDirty"
+						:save-disabled="templateSaveDisabled"
+						:saving="saving"
+						@delete="deleteTemplate"
+						@reset="resetTemplate"
+						@save="save"
+					/>
+				</template>
 			</div>
 		</div>
 		<Teleport to="body">

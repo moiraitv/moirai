@@ -8,7 +8,7 @@ import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import MediaCardPreview from '../MediaCardPreview.vue';
-import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
+import TwoStepActionButton from '../TwoStepActionButton.vue';
 
 const props = defineProps<{
 	selectingGroups: boolean;
@@ -170,13 +170,13 @@ onMounted(async () => {
 										<strong>{{ group.title }}</strong>
 										<small>{{ mediaGroupSubtitle(libraryType, group) || group.kind }}</small>
 									</span>
-									<TwoStepDeleteButton
+									<TwoStepActionButton
 										:label="`Remove ${group.title}`"
 										:confirm-label="`Confirm remove ${group.title}`"
 										@confirm="emit('removeGroup', group.id)"
 									>
 										<X :size="15" />
-									</TwoStepDeleteButton>
+									</TwoStepActionButton>
 								</article>
 							</div>
 							<VueDraggable
@@ -249,14 +249,14 @@ onMounted(async () => {
 												Temporarily unavailable
 											</small>
 										</span>
-										<TwoStepDeleteButton
+										<TwoStepActionButton
 											class="selected-item-remove"
 											:label="`Remove ${item.title}`"
 											:confirm-label="`Confirm remove ${item.title}`"
 											@confirm="emit('removeItem', item.id)"
 										>
 											<X :size="15" />
-										</TwoStepDeleteButton>
+										</TwoStepActionButton>
 									</article>
 								</MediaCardPreview>
 							</VueDraggable>
@@ -280,7 +280,7 @@ onMounted(async () => {
 						</template>
 					</div>
 					<footer class="selection-drawer-footer">
-						<TwoStepDeleteButton
+						<TwoStepActionButton
 							class="toolbar-button danger-button"
 							:disabled="selectionCount === 0"
 							label="Clear All"
@@ -289,7 +289,7 @@ onMounted(async () => {
 							@confirm="emit('clear')"
 						>
 							<Trash2 :size="16" />Clear All
-						</TwoStepDeleteButton>
+						</TwoStepActionButton>
 						<button type="button" class="button" @click="close">Done</button>
 					</footer>
 				</aside>

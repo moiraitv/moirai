@@ -650,6 +650,7 @@ export const schedulingProgramStatusSchema = z.object({
 	availableItemCount: z.number().int().nonnegative(),
 	previewItems: z.array(mediaItemSchema.pick({
 		id: true,
+		libraryId: true,
 		title: true,
 		year: true,
 		artworkUrl: true,

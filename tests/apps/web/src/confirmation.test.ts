@@ -81,11 +81,18 @@ describe('application confirmations', () => {
 			key: 'delete-library:one',
 			title: 'Delete Library?',
 			message: 'Delete the library?',
+			requiredText: 'Movies',
+			requiredTextLabel: 'Type Movies to confirm',
 		});
 		const queued = requestConfirmation({
 			key: 'delete-channel:two',
 			title: 'Delete Channel?',
 			message: 'Delete the channel?',
+		});
+
+		expect(activeConfirmation.value).toMatchObject({
+			requiredText: 'Movies',
+			requiredTextLabel: 'Type Movies to confirm',
 		});
 
 		cancelConfirmations();

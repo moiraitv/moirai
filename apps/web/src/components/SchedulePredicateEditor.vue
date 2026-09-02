@@ -2,7 +2,7 @@
 import { Plus, Trash2 } from '@lucide/vue';
 import type { SchedulePredicate } from '@moirai/shared';
 import { dateKey } from '../date-key';
-import TwoStepDeleteButton from './TwoStepDeleteButton.vue';
+import TwoStepActionButton from './TwoStepActionButton.vue';
 
 const props = defineProps<{
 	modelValue: SchedulePredicate;
@@ -176,7 +176,7 @@ function toggleNumber(value: number): void {
 				/>
 				Exclude
 			</label>
-			<TwoStepDeleteButton
+			<TwoStepActionButton
 				v-if="removable"
 				class="icon-button danger-icon"
 				label="Remove predicate"
@@ -184,7 +184,7 @@ function toggleNumber(value: number): void {
 				@confirm="emit('remove')"
 			>
 				<Trash2 :size="15" />
-			</TwoStepDeleteButton>
+			</TwoStepActionButton>
 		</div>
 
 		<div v-if="modelValue.type === 'all' || modelValue.type === 'any'" class="predicate-children">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowUp, Plus, Trash2 } from '@lucide/vue';
 import type { SchedulingProgram } from '@moirai/shared';
-import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
+import TwoStepActionButton from '../TwoStepActionButton.vue';
 
 /** One counted program reference in a composite sequence. */
 interface SequenceEntry {
@@ -37,14 +37,14 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 				</select>
 				<button type="button" class="icon-button" @click="emit('move', index, -1)"><ArrowUp :size="15" /></button>
 				<button type="button" class="icon-button" @click="emit('move', index, 1)"><ArrowDown :size="15" /></button>
-				<TwoStepDeleteButton
+				<TwoStepActionButton
 					class="icon-button danger-icon"
 					:label="`Remove sequence step ${index + 1}`"
 					:confirm-label="`Confirm remove sequence step ${index + 1}`"
 					@confirm="emit('remove', index)"
 				>
 					<Trash2 :size="15" />
-				</TwoStepDeleteButton>
+				</TwoStepActionButton>
 			</div>
 			<button type="button" class="toolbar-button" @click="emit('add')"><Plus :size="16" />Add Step</button>
 			<label class="check-row"><input :checked="repeat" type="checkbox" @change="emit('update:repeat', ($event.target as HTMLInputElement).checked)" />Repeat sequence</label>

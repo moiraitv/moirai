@@ -575,27 +575,6 @@
 	color: #e5a352;
 }
 
-.schedule-remove-row {
-	display: grid;
-	grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.45fr);
-	gap: 16px;
-}
-
-.schedule-remove-button {
-	grid-column: 2;
-	justify-self: center;
-	color: #ff5a5f;
-	border-color: rgba(255, 70, 75, 0.82);
-	background: transparent;
-	box-shadow: none;
-}
-
-.schedule-remove-button:hover:not(:disabled) {
-	color: #ff8589;
-	border-color: #ff5a5f;
-	background: rgba(255, 70, 75, 0.08);
-}
-
 @media (max-width: 780px) {
 	.layered-scheduling-callout {
 		grid-template-columns: auto minmax(0, 1fr);

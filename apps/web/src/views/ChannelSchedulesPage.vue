@@ -13,7 +13,6 @@ import {
 	Pencil,
 	Plus,
 	RefreshCw,
-	Save,
 	Trash2,
 } from '@lucide/vue';
 import {
@@ -35,7 +34,9 @@ import { randomUuid } from '../random-uuid';
 import LoadingState from '../components/LoadingState.vue';
 import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
 import DisabledActionHint from '../components/DisabledActionHint.vue';
-import TwoStepDeleteButton from '../components/TwoStepDeleteButton.vue';
+import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
+import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
+import TwoStepActionButton from '../components/TwoStepActionButton.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
 import ChannelSchedulesAbout from '../components/schedules/ChannelSchedulesAbout.vue';
 import LayeredSchedulingGuide from '../components/schedules/LayeredSchedulingGuide.vue';
@@ -83,6 +84,7 @@ const original = ref('');
 const selectedLayerId = ref<string | null>(null);
 const quickEditingTemplateId = ref<string | null>(null);
 const saving = ref(false);
+const deleting = ref(false);
 const error = ref('');
 const preview = ref<TimelinePreview | null>(null);
 const previewWindowMilliseconds = computed(() => preview.value
@@ -118,6 +120,7 @@ const isDirty = computed(
 );
 const scheduleNeedsSave = computed(() =>
 	Boolean(draft.value) && (!hasPersistedSchedule.value || isDirty.value));
+const scheduleFormValid = computed(() => channelScheduleConfigSchema.safeParse(draft.value).success);
 const previewLegend = computed(() =>
 	schedulePreviewLegend(preview.value, templates.value, draft.value?.defaultTemplateId ?? null));
 
@@ -372,7 +375,7 @@ async function leaveScheduleEditor(): Promise<void> {
 /** Save, discard, or retain a channel schedule before closing its editor. */
 async function closeScheduleEditor(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value,
+		blocked: saving.value || deleting.value,
 		dirty: scheduleNeedsSave.value,
 		key: `unsaved-channel-schedule:${channel.value?.id ?? 'new'}`,
 		message: 'Save this channel schedule before closing?',
@@ -383,6 +386,13 @@ async function closeScheduleEditor(): Promise<void> {
 		},
 		discard: leaveScheduleEditor,
 	});
+}
+
+/** Restore the authored schedule and preview to the baseline captured on open. */
+function resetSchedule(): void {
+	loadDraft();
+	error.value = '';
+	schedulePreview(0);
 }
 
 /** Refresh committed timeline health for pending-change controls. */
@@ -431,19 +441,29 @@ async function applyTimelineNow(): Promise<void> {
 /** Confirm and remove the selected channel's authored and generated schedule state. */
 async function removeSchedule(): Promise<void> {
 	const selectedChannel = channel.value;
-	if (!selectedChannel || !(await requestConfirmation({
+	if (!selectedChannel || !hasPersistedSchedule.value || saving.value || deleting.value || !(await requestConfirmation({
 		key: `remove-channel-schedule:${selectedChannel.id}`,
-		title: 'Remove Channel Schedule?',
-		message: `Remove the authored and generated schedule for ${selectedChannel.name}?`,
-		confirmLabel: 'Remove Schedule',
+		title: 'Delete Channel Schedule?',
+		message: `Delete the authored and generated schedule for ${selectedChannel.name} and discard any unsaved changes?`,
+		confirmLabel: 'Delete Channel Schedule',
 		destructive: true,
 	}))) {
 		return;
 	}
 
-	await api.deleteChannelSchedule(selectedChannel.id);
-	await scheduling.load();
-	await router.push('/schedules/channels');
+	deleting.value = true;
+	error.value = '';
+	try {
+		await api.deleteChannelSchedule(selectedChannel.id);
+		await scheduling.load();
+		await leaveScheduleEditor();
+	}
+	catch (cause) {
+		error.value = errorMessage(cause);
+	}
+	finally {
+		deleting.value = false;
+	}
 }
 
 /** Validate and materialize the layered draft unless a newer preview superseded it. */
@@ -630,16 +650,11 @@ onBeforeUnmount(() => {
 					aria-modal="true"
 					aria-label="Channel schedule editor"
 				>
-					<header class="scheduling-modal-header">
-						<div>
-							<p class="eyebrow">Layered channel programming</p>
-							<h2>{{ channel?.name ?? 'Channel schedule' }}</h2>
-							<p>Stack conditional templates above an always-available base template.</p>
-						</div>
-						<button type="button" class="program-editor-close" aria-label="Close" :disabled="saving" @click="closeScheduleEditor">
-							×
-						</button>
-					</header>
+					<ResourceEditorHeader close-label="Close channel schedule editor" :disabled="saving || deleting" @close="closeScheduleEditor">
+						<p class="eyebrow">Layered channel programming</p>
+						<h2>{{ channel?.name ?? 'Channel schedule' }}</h2>
+						<p>Stack conditional templates above an always-available base template.</p>
+					</ResourceEditorHeader>
 
 					<div v-if="templates.length === 0" class="empty-state scheduling-modal-empty">
 						<h3>Create a template first</h3>
@@ -682,9 +697,6 @@ onBeforeUnmount(() => {
 								>
 									<RefreshCw :size="17" :class="{ spinning: applyingTimeline }" />
 									{{ applyingTimeline ? 'Applying…' : 'Apply After Current Item' }}
-								</button>
-								<button type="button" class="button" :disabled="saving || !scheduleNeedsSave" @click="save">
-									<Save :size="17" />{{ saving ? 'Saving…' : 'Save Schedule' }}
 								</button>
 							</div>
 						</div>
@@ -752,7 +764,7 @@ onBeforeUnmount(() => {
 											></span>
 										</div>
 										<div class="schedule-layer-actions">
-											<TwoStepDeleteButton
+											<TwoStepActionButton
 												class="icon-button danger-icon layer-remove-button"
 												label="Remove layer"
 												confirm-label="Confirm remove layer"
@@ -760,7 +772,7 @@ onBeforeUnmount(() => {
 												@confirm="removeLayer(layer.id)"
 											>
 												<Trash2 :size="16" />
-											</TwoStepDeleteButton>
+											</TwoStepActionButton>
 										</div>
 									</article>
 									<article
@@ -966,11 +978,6 @@ onBeforeUnmount(() => {
 								</section>
 							</div>
 
-							<div class="schedule-remove-row">
-								<button type="button" class="button schedule-remove-button" @click="removeSchedule">
-									<Trash2 :size="17" />Remove Channel Schedule
-								</button>
-							</div>
 						</div>
 
 						<section class="resolved-preview scheduling-preview-dock editor-surface">
@@ -1052,6 +1059,18 @@ onBeforeUnmount(() => {
 								</ul>
 							</AnimatedDisclosure>
 						</section>
+						<ResourceEditorActionBar
+							resource-type="Channel Schedule"
+							:show-delete="hasPersistedSchedule"
+							:busy="saving || deleting"
+							:deleting="deleting"
+							:reset-disabled="!isDirty"
+							:save-disabled="!scheduleNeedsSave || !scheduleFormValid"
+							:saving="saving"
+							@delete="removeSchedule"
+							@reset="resetSchedule"
+							@save="save"
+						/>
 					</template>
 				</div>
 			</div>

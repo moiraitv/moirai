@@ -821,7 +821,7 @@ a.nav-link.router-link-exact-active {
 	border-color: rgba(255, 111, 127, 0.42);
 }
 
-.two-step-delete-button {
+.two-step-action-button {
 	transition:
 		color var(--motion-fast) ease,
 		border-color var(--motion-fast) ease,
@@ -829,13 +829,22 @@ a.nav-link.router-link-exact-active {
 		box-shadow var(--motion-fast) ease;
 }
 
-.two-step-delete-button.two-step-delete-button.is-armed,
-.two-step-delete-button.two-step-delete-button.is-armed:hover,
-.two-step-delete-button.two-step-delete-button.is-armed:focus-visible {
+.two-step-action-button.two-step-action-button.is-armed.tone-danger,
+.two-step-action-button.two-step-action-button.is-armed.tone-danger:hover,
+.two-step-action-button.two-step-action-button.is-armed.tone-danger:focus-visible {
 	color: #fff;
 	border-color: rgba(255, 139, 151, 0.82);
 	background: rgba(190, 55, 70, 0.9);
 	box-shadow: 0 0 0 2px rgba(255, 111, 127, 0.28);
+}
+
+.two-step-action-button.two-step-action-button.is-armed.tone-caution,
+.two-step-action-button.two-step-action-button.is-armed.tone-caution:hover,
+.two-step-action-button.two-step-action-button.is-armed.tone-caution:focus-visible {
+	color: #fff7e8;
+	border-color: rgba(240, 183, 92, 0.78);
+	background: rgba(120, 79, 25, 0.92);
+	box-shadow: 0 0 0 2px rgba(240, 183, 92, 0.24);
 }
 
 .disabled-action-hint {
@@ -874,6 +883,99 @@ a.nav-link.router-link-exact-active {
 	transform: translate(-50%, 0);
 }
 
+.resource-editor-header {
+	position: relative;
+	z-index: 4;
+	min-height: 82px;
+	padding: 19px 24px;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+	border-bottom: 1px solid var(--line);
+	background: rgba(8, 20, 30, 0.99);
+}
+
+.moirai-dialog.resource-editor-modal {
+	padding: 0;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	overflow: hidden;
+}
+
+.resource-editor-scroll {
+	min-height: 0;
+	padding: 24px;
+	overflow: auto;
+}
+
+.resource-editor-heading-copy {
+	min-width: 0;
+}
+
+.resource-editor-heading-copy h2,
+.resource-editor-heading-copy p {
+	margin: 0;
+}
+
+.resource-editor-heading-copy h2 {
+	margin-top: 4px;
+	font-size: 1.65rem;
+}
+
+.resource-editor-heading-copy > p:last-child:not(.eyebrow) {
+	margin-top: 6px;
+	color: var(--muted);
+	font-size: 0.78rem;
+}
+
+.resource-editor-close {
+	flex: 0 0 auto;
+}
+
+.resource-editor-action-bar {
+	position: relative;
+	z-index: 5;
+	min-height: 76px;
+	padding: 14px 20px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	border-top: 1px solid var(--line);
+	background: rgba(8, 20, 30, 0.99);
+	box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.resource-editor-danger-actions,
+.resource-editor-save-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.resource-editor-save-actions {
+	margin-left: auto;
+}
+
+.resource-editor-action-bar .button {
+	min-width: 94px;
+}
+
+.resource-editor-action-bar .resource-editor-delete {
+	color: #fff;
+	border-color: rgba(255, 111, 127, 0.72);
+	background: linear-gradient(180deg, #a94452, #812d39);
+	box-shadow: 0 8px 18px rgba(90, 20, 32, 0.24);
+}
+
+.resource-editor-action-bar .resource-editor-delete:hover:not(:disabled),
+.resource-editor-action-bar .resource-editor-delete:focus-visible {
+	color: #fff;
+	border-color: #ff8b97;
+	background: linear-gradient(180deg, #bd5060, #933542);
+}
+
 .moirai-dialog-backdrop.confirmation-modal-backdrop {
 	z-index: 140;
 }
@@ -907,6 +1009,15 @@ a.nav-link.router-link-exact-active {
 .confirmation-modal > p {
 	margin: 18px 0 24px;
 	color: var(--muted);
+}
+
+.confirmation-required-text {
+	margin: -8px 24px 24px;
+	display: grid;
+	gap: 7px;
+	color: var(--muted);
+	font-size: 0.78rem;
+	font-weight: 650;
 }
 
 .confirmation-modal footer {

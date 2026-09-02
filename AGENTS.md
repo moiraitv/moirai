@@ -43,7 +43,16 @@
   modal. For nested, draft-local removals that can be undone by cancelling or discarding the editor,
   use a compact two-step action instead: the first activation must visibly arm the control and change
   its accessible label, while the second performs the removal. Allow the armed state to be cancelled
-  with Escape, an outside interaction, another armed delete action, or a short timeout.
+  with Escape, an outside interaction, another armed action, or a short timeout.
+- Give transient resource editors a consistent header with an accessible close icon at the upper
+  right. Route the close icon, backdrop dismissal, and Escape through the same unsaved-changes flow
+  whenever the editor owns a saveable draft.
+- Keep saveable resource-editor actions in a persistent bottom bar outside the scrolling content.
+  Place `Delete <Type>` at the left for existing standalone resources and group `Reset` then `Save`
+  at the right. Enable Save only for a valid pending draft, enable Reset only when the draft differs
+  from its captured baseline, and keep both disabled during conflicting work. Require a compact
+  two-step confirmation before Reset discards the draft; keep permanent Delete behind a styled modal
+  confirmation and available even when unsaved edits will be discarded.
 - Use subtle, context-appropriate motion when it clarifies presentation, dismissal, expansion,
   collapse, spatial relationships, or asynchronous state changes. Do not add animation solely for
   decoration or animate frequently changing data when doing so would add noise or imply false

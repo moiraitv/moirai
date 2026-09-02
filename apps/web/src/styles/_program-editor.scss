@@ -10,40 +10,6 @@
 	background: radial-gradient(circle at 15% 0%, rgba(20, 67, 83, 0.17), transparent 31rem), #091722;
 }
 
-.program-editor-header {
-	padding: 25px 27px 20px;
-	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
-	gap: 20px;
-	border-bottom: 1px solid var(--line);
-}
-
-.program-editor-header h2 {
-	margin-bottom: 6px;
-	font-size: 1.65rem;
-	text-transform: capitalize;
-}
-
-.program-editor-header > div > p:last-child {
-	margin: 0;
-	color: var(--muted-strong);
-	font-size: 0.83rem;
-}
-
-.program-editor-close {
-	padding: 0 3px;
-	border: 0;
-	color: #a7a298;
-	background: transparent;
-	font-size: 2rem;
-	line-height: 1;
-}
-
-.program-editor-close:hover {
-	color: #fff;
-}
-
 .program-editor-scroll {
 	min-height: 0;
 	display: grid;
@@ -432,26 +398,6 @@
 
 .program-sequence-panel .sequence-entry:first-child {
 	border-top: 1px solid var(--line);
-}
-
-.program-editor-actions {
-	padding: 17px 27px;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 14px;
-	border-top: 1px solid var(--line);
-	background: rgba(8, 20, 30, 0.98);
-}
-
-.program-editor-actions > div {
-	display: flex;
-	gap: 10px;
-}
-
-.program-editor-actions .button,
-.program-editor-actions .toolbar-button {
-	min-height: 44px;
 }
 
 .segmented-control {

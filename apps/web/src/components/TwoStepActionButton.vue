@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { CircleAlert } from '@lucide/vue';
 import { onBeforeUnmount, ref } from 'vue';
-import { claimInlineDelete, releaseInlineDelete } from '../inline-delete-coordination';
+import { claimInlineAction, releaseInlineAction } from '../inline-action-coordination';
 
-/** Props for a compact destructive action that requires a deliberate second activation. */
-interface TwoStepDeleteButtonProps {
+/** Props for a compact action that requires a deliberate second activation. */
+interface TwoStepActionButtonProps {
 	label: string;
 	confirmLabel: string;
 	confirmText?: string;
 	disabled?: boolean;
 	timeoutMilliseconds?: number;
+	tone?: 'danger' | 'caution';
 }
 
-const props = withDefaults(defineProps<TwoStepDeleteButtonProps>(), {
+const props = withDefaults(defineProps<TwoStepActionButtonProps>(), {
 	confirmText: '',
 	disabled: false,
 	timeoutMilliseconds: 5_000,
+	tone: 'danger',
 });
 const emit = defineEmits<{ confirm: [] }>();
 
@@ -23,10 +25,10 @@ const button = ref<HTMLButtonElement | null>(null);
 const armed = ref(false);
 let disarmTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Return the control to its initial non-destructive state. */
+/** Return the control to its initial state. */
 function disarm(): void {
 	armed.value = false;
-	releaseInlineDelete(disarm);
+	releaseInlineAction(disarm);
 	document.removeEventListener('pointerdown', handleDocumentPointer);
 	if (disarmTimer !== undefined) {
 		clearTimeout(disarmTimer);
@@ -34,7 +36,7 @@ function disarm(): void {
 	}
 }
 
-/** Arm the destructive action, or confirm it on a deliberate second activation. */
+/** Arm the action, or confirm it on a deliberate second activation. */
 function activate(): void {
 	if (props.disabled) {
 		return;
@@ -46,7 +48,7 @@ function activate(): void {
 		return;
 	}
 
-	claimInlineDelete(disarm);
+	claimInlineAction(disarm);
 	armed.value = true;
 	document.addEventListener('pointerdown', handleDocumentPointer);
 	disarmTimer = setTimeout(disarm, props.timeoutMilliseconds);
@@ -59,7 +61,7 @@ function handleDocumentPointer(event: PointerEvent): void {
 	}
 }
 
-/** Let Escape safely cancel the pending destructive action. */
+/** Let Escape safely cancel the pending action. */
 function handleKeydown(event: KeyboardEvent): void {
 	if (armed.value && event.key === 'Escape') {
 		event.stopPropagation();
@@ -77,8 +79,8 @@ onBeforeUnmount(() => {
 	<button
 		ref="button"
 		type="button"
-		class="two-step-delete-button"
-		:class="{ 'is-armed': armed }"
+		class="two-step-action-button"
+		:class="[`tone-${tone}`, { 'is-armed': armed }]"
 		:disabled="disabled"
 		:aria-label="armed ? confirmLabel : label"
 		:aria-pressed="armed"

@@ -13,7 +13,6 @@ import {
 	RadioTower,
 	Trash2,
 	Upload,
-	X,
 } from '@lucide/vue';
 import {
 	CHANNEL_LOGO_MAX_BYTES,
@@ -34,8 +33,10 @@ import GuideTimeline from '../components/GuideTimeline.vue';
 import DisabledActionHint from '../components/DisabledActionHint.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
+import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
+import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
-import TwoStepDeleteButton from '../components/TwoStepDeleteButton.vue';
+import TwoStepActionButton from '../components/TwoStepActionButton.vue';
 import { liveEvents } from '../live-events';
 import { affectsGuide } from '../guide-events';
 import { cloneContractValue } from '../reactive-clone';
@@ -67,7 +68,9 @@ const logoInput = ref<HTMLInputElement>();
 const externalLogoUrl = ref('');
 const removeLogoOnSave = ref(false);
 const saving = ref(false);
+const deleting = ref(false);
 const originalFormSnapshot = ref('');
+const formBaseline = ref<ChannelCreate | null>(null);
 const accelerationPrediction = ref<HardwareAccelerationPrediction>();
 const accelerationPredictionLoading = ref(false);
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -251,13 +254,21 @@ function finishCloseForm(): void {
 /** Save, discard, or retain a channel draft before closing its editor. */
 async function closeForm(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value,
+		blocked: saving.value || deleting.value,
 		dirty: channelFormDirty.value,
 		key: `unsaved-channel:${editingId.value ?? 'new'}`,
 		message: 'Save this channel before closing?',
 		save,
 		discard: finishCloseForm,
 	});
+}
+
+/** Close the channel editor with Escape when no confirmation owns the event. */
+function handleEditorKeydown(event: KeyboardEvent): void {
+	if (!event.defaultPrevented && showForm.value && event.key === 'Escape') {
+		event.preventDefault();
+		void closeForm();
+	}
 }
 
 /** Debounce a server-side prediction and discard responses for superseded form values. */
@@ -607,6 +618,7 @@ function add() {
 	Object.assign(form, defaults());
 	resetLogoEditor(null);
 	editingId.value = undefined;
+	formBaseline.value = cloneContractValue(form) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
 }
@@ -620,6 +632,7 @@ function edit(channel: Channel) {
 	Object.assign(form, cloneContractValue(config) as ChannelCreate);
 	resetLogoEditor(channel.logo);
 	editingId.value = channel.id;
+	formBaseline.value = cloneContractValue(config) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
 }
@@ -668,24 +681,53 @@ async function save() {
 		saving.value = false;
 	}
 }
-/** Confirm and remove a channel. */
-async function remove(id: string): Promise<void> {
+/** Restore the editor to the channel values captured when it opened. */
+function resetChannel(): void {
+	if (!formBaseline.value) {
+		return;
+	}
+
+	const baseline = cloneContractValue(formBaseline.value) as ChannelCreate;
+	Object.assign(form, baseline);
+	resetLogoEditor(baseline.logo);
+	error.value = '';
+}
+
+/** Confirm and delete the channel being edited. */
+async function deleteChannel(): Promise<void> {
+	const id = editingId.value;
+	if (!id || saving.value || deleting.value) {
+		return;
+	}
+
 	const selected = channels.value.find((channel) => channel.id === id);
 	if (!(await requestConfirmation({
 		key: `delete-channel:${id}`,
-		title: 'Remove Channel?',
+		title: 'Delete Channel?',
 		message: selected
-			? `Remove ${selected.name} and its generated schedule?`
-			: 'Remove this channel and its generated schedule?',
-		confirmLabel: 'Remove Channel',
+			? `Delete ${selected.name} and its generated schedule, and discard any unsaved changes?`
+			: 'Delete this channel and its generated schedule, and discard any unsaved changes?',
+		confirmLabel: 'Delete Channel',
 		destructive: true,
 	}))) {
 		return;
 	}
 
-	suppressChannelEventsUntil = Date.now() + 5_000;
-	await api.deleteChannel(id);
-	await loadChannels();
+	deleting.value = true;
+	error.value = '';
+	try {
+		suppressChannelEventsUntil = Date.now() + 5_000;
+		await api.deleteChannel(id);
+		finishCloseForm();
+		await Promise.all([loadChannels(), scheduling.load()]);
+		await loadGuide();
+	}
+	catch (cause) {
+		error.value = errorMessage(cause);
+	}
+	finally {
+		deleting.value = false;
+	}
 }
 const unsubscribe = liveEvents.subscribe((event) => {
 	if (event.type === 'channel.changed' && Date.now() < suppressChannelEventsUntil) {
@@ -728,9 +770,13 @@ watch(
 	{ immediate: true },
 );
 
-onMounted(() => void loadInitial());
+onMounted(() => {
+	document.addEventListener('keydown', handleEditorKeydown);
+	void loadInitial();
+});
 onBeforeUnmount(() => {
 	unsubscribe();
+	document.removeEventListener('keydown', handleEditorKeydown);
 	accelerationPredictionSequence += 1;
 	if (accelerationPredictionTimer) {
 		clearTimeout(accelerationPredictionTimer);
@@ -813,13 +859,6 @@ onBeforeUnmount(() => {
 					>
 						<Pencil :size="16" />
 					</button>
-					<button
-						class="icon-button danger-icon"
-						:aria-label="`Remove ${channel.name}`"
-						@click="remove(channel.id)"
-					>
-						<Trash2 :size="16" />
-					</button>
 				</template>
 			</GuideTimeline>
 			<ResourceEmptyState
@@ -832,237 +871,245 @@ onBeforeUnmount(() => {
 			</ResourceEmptyState>
 		</div>
 		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">
-			<form class="moirai-dialog" @submit.prevent="save">
-				<div class="modal-heading">
-					<div>
-						<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>
-						<h2>Broadcast profile</h2>
-					</div>
-					<button type="button" class="icon-button" aria-label="Close" :disabled="saving" @click="closeForm">
-						<X :size="20" />
-					</button>
-				</div>
-				<fieldset>
-					<legend>Lineup</legend>
-					<div class="form-grid">
-						<label
-						><span>Number</span
-						><input v-model="form.number" required pattern="[A-Za-z0-9._-]+" /></label
-						><label><span>Name</span><input v-model="form.name" autocapitalize="words" required /></label
-						><label><span>Group</span><input v-model="form.group" autocapitalize="words" /></label>
-						<div class="span-2 channel-schedule-link">
-							<span>Schedule</span>
-							<RouterLink
-								v-if="editingId && !channelFormDirty"
-								class="button secondary"
-								:to="`/schedules/channels/${editingId}`"
-							>
-								Manage Layered Schedule
-							</RouterLink>
-							<DisabledActionHint
-								v-else
-								label="Manage Layered Schedule"
-								message="Save the channel before configuring its schedule."
-							>
-								<button type="button" class="button secondary" disabled>
+			<form
+				class="moirai-dialog resource-editor-modal channel-editor-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="channel-editor-title"
+				@submit.prevent="save"
+			>
+				<ResourceEditorHeader close-label="Close channel editor" :disabled="saving || deleting" @close="closeForm">
+					<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>
+					<h2 id="channel-editor-title">Broadcast profile</h2>
+				</ResourceEditorHeader>
+				<div class="resource-editor-scroll">
+					<fieldset>
+						<legend>Lineup</legend>
+						<div class="form-grid">
+							<label
+							><span>Number</span
+							><input v-model="form.number" required pattern="[A-Za-z0-9._-]+" /></label
+							><label><span>Name</span><input v-model="form.name" autocapitalize="words" required /></label
+							><label><span>Group</span><input v-model="form.group" autocapitalize="words" /></label>
+							<div class="span-2 channel-schedule-link">
+								<span>Schedule</span>
+								<RouterLink
+									v-if="editingId && !channelFormDirty"
+									class="button secondary"
+									:to="`/schedules/channels/${editingId}`"
+								>
 									Manage Layered Schedule
-								</button>
-							</DisabledActionHint>
-						</div>
-						<div class="channel-logo-editor span-2">
-							<div class="channel-logo-heading">
-								<span>Channel logo</span>
-								<small>PNG on save · maximum {{ configuredLogoLimit }}</small>
+								</RouterLink>
+								<DisabledActionHint
+									v-else
+									label="Manage Layered Schedule"
+									message="Save the channel before configuring its schedule."
+								>
+									<button type="button" class="button secondary" disabled>
+										Manage Layered Schedule
+									</button>
+								</DisabledActionHint>
 							</div>
-							<input
-								ref="logoInput"
-								class="visually-hidden"
-								type="file"
-								accept="image/*"
-								@change="selectLogo"
-							/>
-							<div v-if="cropSource" class="channel-logo-workspace">
-								<div class="channel-logo-crop-area">
-									<div
-										class="channel-logo-crop-stage"
-										:class="{ dragging: logoDrag.active }"
-										:style="cropStageStyle"
-										role="img"
-										aria-label="Channel logo crop preview"
-										@pointermove="moveCropInteraction"
-										@pointerup="endCropInteraction"
-										@pointercancel="endCropInteraction"
-									>
-										<img :src="cropSource.url" alt="" draggable="false" />
+							<div class="channel-logo-editor span-2">
+								<div class="channel-logo-heading">
+									<span>Channel logo</span>
+									<small>PNG on save · maximum {{ configuredLogoLimit }}</small>
+								</div>
+								<input
+									ref="logoInput"
+									class="visually-hidden"
+									type="file"
+									accept="image/*"
+									@change="selectLogo"
+								/>
+								<div v-if="cropSource" class="channel-logo-workspace">
+									<div class="channel-logo-crop-area">
 										<div
-											class="channel-logo-selection"
-											:style="cropSelectionStyle"
-											@pointerdown="startCropInteraction($event, 'move')"
+											class="channel-logo-crop-stage"
+											:class="{ dragging: logoDrag.active }"
+											:style="cropStageStyle"
+											role="img"
+											aria-label="Channel logo crop preview"
+											@pointermove="moveCropInteraction"
+											@pointerup="endCropInteraction"
+											@pointercancel="endCropInteraction"
 										>
-											<button
-												v-for="handle in cropHandles"
-												:key="handle"
-												type="button"
-												class="channel-logo-crop-handle"
-												:class="`handle-${handle}`"
-												:aria-label="`Resize crop ${handle}`"
-												@pointerdown.stop="startCropInteraction($event, handle)"
-											></button>
+											<img :src="cropSource.url" alt="" draggable="false" />
+											<div
+												class="channel-logo-selection"
+												:style="cropSelectionStyle"
+												@pointerdown="startCropInteraction($event, 'move')"
+											>
+												<button
+													v-for="handle in cropHandles"
+													:key="handle"
+													type="button"
+													class="channel-logo-crop-handle"
+													:class="`handle-${handle}`"
+													:aria-label="`Resize crop ${handle}`"
+													@pointerdown.stop="startCropInteraction($event, handle)"
+												></button>
+											</div>
+										</div>
+									</div>
+									<div class="channel-logo-controls">
+										<p>
+											Drag the selection to move it. Resize any edge or corner freely; its aspect
+											ratio is not constrained.
+										</p>
+										<p class="channel-logo-crop-size">
+											Selected: {{ Math.round(logoCrop.width) }}×{{ Math.round(logoCrop.height) }}
+											source pixels
+										</p>
+										<div class="channel-logo-buttons">
+											<button type="button" class="button secondary" @click="logoInput?.click()">
+												<ImagePlus :size="16" />Choose Another
+											</button>
+											<TwoStepActionButton
+												class="button secondary"
+												label="Remove selected logo"
+												confirm-label="Confirm remove selected logo"
+												confirm-text="Confirm Remove"
+												@confirm="removeSelectedLogo"
+											>
+												<Trash2 :size="16" />Remove
+											</TwoStepActionButton>
 										</div>
 									</div>
 								</div>
-								<div class="channel-logo-controls">
-									<p>
-										Drag the selection to move it. Resize any edge or corner freely; its aspect
-										ratio is not constrained.
-									</p>
-									<p class="channel-logo-crop-size">
-										Selected: {{ Math.round(logoCrop.width) }}×{{ Math.round(logoCrop.height) }}
-										source pixels
-									</p>
-									<div class="channel-logo-buttons">
+								<div v-else class="channel-logo-picker">
+									<div class="channel-logo-current">
+										<img v-if="existingLogoUrl()" :src="existingLogoUrl() ?? undefined" alt="" />
+										<ImagePlus v-else :size="30" />
+									</div>
+									<div>
 										<button type="button" class="button secondary" @click="logoInput?.click()">
-											<ImagePlus :size="16" />Choose Another
+											<Upload :size="16" />Choose Image
 										</button>
-										<TwoStepDeleteButton
-											class="button secondary"
-											label="Remove selected logo"
-											confirm-label="Confirm remove selected logo"
+										<TwoStepActionButton
+											v-if="existingLogoUrl()"
+											class="text-button danger-text"
+											label="Remove logo"
+											confirm-label="Confirm remove logo"
 											confirm-text="Confirm Remove"
 											@confirm="removeSelectedLogo"
 										>
-											<Trash2 :size="16" />Remove
-										</TwoStepDeleteButton>
+											Remove Logo
+										</TwoStepActionButton>
+										<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
 									</div>
 								</div>
+								<label class="channel-logo-url">
+									<span>Or use an external logo URL</span>
+									<input
+										v-model="externalLogoUrl"
+										type="url"
+										placeholder="https://…"
+										:disabled="Boolean(cropSource)"
+										@input="removeLogoOnSave = false"
+									/>
+								</label>
 							</div>
-							<div v-else class="channel-logo-picker">
-								<div class="channel-logo-current">
-									<img v-if="existingLogoUrl()" :src="existingLogoUrl() ?? undefined" alt="" />
-									<ImagePlus v-else :size="30" />
-								</div>
-								<div>
-									<button type="button" class="button secondary" @click="logoInput?.click()">
-										<Upload :size="16" />Choose Image
-									</button>
-									<TwoStepDeleteButton
-										v-if="existingLogoUrl()"
-										class="text-button danger-text"
-										label="Remove logo"
-										confirm-label="Confirm remove logo"
-										confirm-text="Confirm Remove"
-										@confirm="removeSelectedLogo"
-									>
-										Remove Logo
-									</TwoStepDeleteButton>
-									<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
-								</div>
-							</div>
-							<label class="channel-logo-url">
-								<span>Or use an external logo URL</span>
-								<input
-									v-model="externalLogoUrl"
-									type="url"
-									placeholder="https://…"
-									:disabled="Boolean(cropSource)"
-									@input="removeLogoOnSave = false"
-								/>
-							</label>
 						</div>
-					</div>
-				</fieldset>
-				<fieldset>
-					<legend>Video normalization</legend>
-					<div class="form-grid three">
-						<label
-						><span>Format</span
-						><select v-model="form.video.format">
-							<option value="h264">H.264</option>
-							<option value="hevc">HEVC</option>
-						</select></label
-						><label
-						><span>Width</span><input v-model.number="form.video.width" type="number" /></label
-						><label
-						><span>Height</span><input v-model.number="form.video.height" type="number" /></label
-						><label
-						><span>Bitrate kbps</span
-						><input v-model.number="form.video.bitrateKbps" type="number" /></label
-						><label
-						><span>Buffer kbps</span
-						><input v-model.number="form.video.bufferKbps" type="number" /></label
-						><label
-						><span>Bit depth</span
-						><input v-model.number="form.video.bitDepth" type="number" /></label
-						><label
-						><span>Scaling</span
-						><select v-model="form.video.scalingMode">
-							<option value="scale_and_pad">Scale and pad</option>
-							<option value="stretch">Stretch</option>
-							<option value="crop">Crop</option>
-						</select></label
-						><label class="acceleration-field"
-						><span>Acceleration</span
-						><select v-model="form.video.accel">
-							<option value="automatic">Automatic</option>
-							<option :value="null">None</option>
-							<option value="amf">AMF</option>
-							<option value="cuda">CUDA</option>
-							<option value="qsv">QSV</option>
-							<option value="rkmpp">RKMPP</option>
-							<option value="vaapi">VAAPI</option>
-							<option value="videotoolbox">VideoToolbox</option>
-							<option value="vulkan">Vulkan</option>
-						</select
-						><small
-							v-if="form.video.accel === 'automatic' && accelerationPredictionText"
-							class="acceleration-prediction"
-							role="status"
-							:title="accelerationPrediction?.detail"
-						>{{ accelerationPredictionText }}</small
-						></label
-						><label class="check"
-						><input v-model="form.video.deinterlace" type="checkbox" /> Deinterlace</label
-						>
-					</div>
-				</fieldset>
-				<fieldset>
-					<legend>Audio normalization</legend>
-					<div class="form-grid three">
-						<label
-						><span>Format</span
-						><select v-model="form.audio.format">
-							<option value="aac">AAC</option>
-							<option value="ac3">AC3</option>
-						</select></label
-						><label
-						><span>Bitrate kbps</span
-						><input v-model.number="form.audio.bitrateKbps" type="number" /></label
-						><label
-						><span>Channels</span
-						><input v-model.number="form.audio.channels" type="number" /></label
-						><label
-						><span>Sample rate</span
-						><input v-model.number="form.audio.sampleRateHz" type="number" /></label
-						><label class="check"
-						><input v-model="form.audio.normalizeLoudness" type="checkbox" /> Normalize
-							loudness</label
-						><label
-						><span>Subtitle mode</span
-						><select v-model="form.subtitleMode">
-							<option value="burn">Burn</option>
-							<option value="convert">Convert</option>
-						</select></label
-						>
-					</div>
-				</fieldset>
-				<p v-if="error" class="notice error">{{ error }}</p>
-				<div class="form-actions">
-					<button type="button" class="button secondary" :disabled="saving" @click="closeForm">
-						Cancel</button
-					><button class="button" :disabled="channelSaveDisabled">
-						{{ saving ? 'Saving…' : 'Save Changes' }}
-					</button>
+					</fieldset>
+					<fieldset>
+						<legend>Video normalization</legend>
+						<div class="form-grid three">
+							<label
+							><span>Format</span
+							><select v-model="form.video.format">
+								<option value="h264">H.264</option>
+								<option value="hevc">HEVC</option>
+							</select></label
+							><label
+							><span>Width</span><input v-model.number="form.video.width" type="number" /></label
+							><label
+							><span>Height</span><input v-model.number="form.video.height" type="number" /></label
+							><label
+							><span>Bitrate kbps</span
+							><input v-model.number="form.video.bitrateKbps" type="number" /></label
+							><label
+							><span>Buffer kbps</span
+							><input v-model.number="form.video.bufferKbps" type="number" /></label
+							><label
+							><span>Bit depth</span
+							><input v-model.number="form.video.bitDepth" type="number" /></label
+							><label
+							><span>Scaling</span
+							><select v-model="form.video.scalingMode">
+								<option value="scale_and_pad">Scale and pad</option>
+								<option value="stretch">Stretch</option>
+								<option value="crop">Crop</option>
+							</select></label
+							><label class="acceleration-field"
+							><span>Acceleration</span
+							><select v-model="form.video.accel">
+								<option value="automatic">Automatic</option>
+								<option :value="null">None</option>
+								<option value="amf">AMF</option>
+								<option value="cuda">CUDA</option>
+								<option value="qsv">QSV</option>
+								<option value="rkmpp">RKMPP</option>
+								<option value="vaapi">VAAPI</option>
+								<option value="videotoolbox">VideoToolbox</option>
+								<option value="vulkan">Vulkan</option>
+							</select
+							><small
+								v-if="form.video.accel === 'automatic' && accelerationPredictionText"
+								class="acceleration-prediction"
+								role="status"
+								:title="accelerationPrediction?.detail"
+							>{{ accelerationPredictionText }}</small
+							></label
+							><label class="check"
+							><input v-model="form.video.deinterlace" type="checkbox" /> Deinterlace</label
+							>
+						</div>
+					</fieldset>
+					<fieldset>
+						<legend>Audio normalization</legend>
+						<div class="form-grid three">
+							<label
+							><span>Format</span
+							><select v-model="form.audio.format">
+								<option value="aac">AAC</option>
+								<option value="ac3">AC3</option>
+							</select></label
+							><label
+							><span>Bitrate kbps</span
+							><input v-model.number="form.audio.bitrateKbps" type="number" /></label
+							><label
+							><span>Channels</span
+							><input v-model.number="form.audio.channels" type="number" /></label
+							><label
+							><span>Sample rate</span
+							><input v-model.number="form.audio.sampleRateHz" type="number" /></label
+							><label class="check"
+							><input v-model="form.audio.normalizeLoudness" type="checkbox" /> Normalize
+								loudness</label
+							><label
+							><span>Subtitle mode</span
+							><select v-model="form.subtitleMode">
+								<option value="burn">Burn</option>
+								<option value="convert">Convert</option>
+							</select></label
+							>
+						</div>
+					</fieldset>
+					<p v-if="error" class="notice error">{{ error }}</p>
 				</div>
+				<ResourceEditorActionBar
+					resource-type="Channel"
+					:show-delete="Boolean(editingId)"
+					:busy="saving || deleting"
+					:deleting="deleting"
+					:reset-disabled="!channelFormDirty"
+					:save-disabled="channelSaveDisabled"
+					save-submits
+					:saving="saving"
+					@delete="deleteChannel"
+					@reset="resetChannel"
+				/>
 			</form>
 		</div>
 	</section>

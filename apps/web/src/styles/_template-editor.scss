@@ -1,5 +1,6 @@
 .template-workspace {
 	display: grid;
+	grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 	gap: 16px;
 }
 
@@ -12,26 +13,13 @@
 .template-toolbar {
 	padding: 13px 18px;
 	display: grid;
-	grid-template-columns: minmax(280px, 560px) auto 1fr;
+	grid-template-columns: minmax(280px, 560px) auto;
 	align-items: end;
 	gap: 14px;
 }
 
 .template-toolbar label {
 	min-width: 0;
-}
-
-.template-toolbar-actions {
-	justify-self: end;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-}
-
-.template-toolbar-actions .toolbar-button,
-.template-toolbar-actions .button {
-	min-width: 96px;
-	min-height: 46px;
 }
 
 .draft-badge {
@@ -751,9 +739,13 @@
 	background: #07131d;
 }
 
+.moirai-dialog.scheduling-workspace-modal.template-workspace {
+	grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+
 .moirai-dialog.channel-schedule-modal {
 	width: min(1180px, calc(100vw - 32px));
-	grid-template-rows: auto auto minmax(0, 1fr) auto;
+	grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 }
 
 .scheduling-modal-header {

@@ -372,6 +372,11 @@
 .program-row {
 	padding: 15px;
 	border-bottom: 1px solid var(--line);
+	cursor: pointer;
+}
+
+.program-row:hover {
+	background: rgba(23, 49, 63, 0.3);
 }
 
 .program-row-heading {
@@ -407,6 +412,7 @@
 	position: relative;
 }
 
+.program-row-menu.icon-button,
 .program-row-menu > .context-menu-trigger {
 	width: 32px;
 	height: 36px;
@@ -424,7 +430,8 @@
 }
 
 .program-carousel > article,
-.program-carousel > .program-carousel-preview > article {
+.program-carousel > .program-carousel-card,
+.program-carousel > .program-carousel-preview > .program-carousel-card {
 	position: relative;
 	width: 112px;
 	min-width: 112px;
@@ -433,8 +440,10 @@
 	gap: 4px;
 	border: 1px solid var(--line-bright);
 	border-radius: 8px;
+	color: inherit;
 	background: #0b1a27;
 	scroll-snap-align: start;
+	text-decoration: none;
 }
 
 .program-carousel > .program-carousel-preview {
@@ -443,13 +452,14 @@
 	scroll-snap-align: start;
 }
 
-.program-carousel > .program-carousel-preview > article {
+.program-carousel > .program-carousel-preview > .program-carousel-card {
 	width: 100%;
 	min-width: 0;
 }
 
 .program-carousel > article > span,
-.program-carousel > .program-carousel-preview > article > span {
+.program-carousel > .program-carousel-card > span,
+.program-carousel > .program-carousel-preview > .program-carousel-card > span {
 	height: 66px;
 	display: grid;
 	place-items: center;
@@ -499,7 +509,8 @@
 }
 
 .program-carousel > article.unavailable,
-.program-carousel > .program-carousel-preview > article.unavailable {
+.program-carousel > .program-carousel-card.unavailable,
+.program-carousel > .program-carousel-preview > .program-carousel-card.unavailable {
 	border-color: rgba(239, 107, 107, 0.55);
 }
 

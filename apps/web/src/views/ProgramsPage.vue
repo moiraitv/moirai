@@ -2,13 +2,12 @@
 import { computed, onMounted, ref } from 'vue';
 import {
 	ArrowRight, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Dices, FileText,
-	Layers3, Lightbulb, ListOrdered, MoreVertical, Plus, Search, Shuffle, X, Zap,
+	Layers3, Lightbulb, ListOrdered, Plus, Search, Shuffle, X, Zap,
 } from '@lucide/vue';
 import type { SchedulingProgram } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
 import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
-import ActionMenu from '../components/ActionMenu.vue';
 import LoadingState from '../components/LoadingState.vue';
 import MediaCardPreview from '../components/MediaCardPreview.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
@@ -17,8 +16,6 @@ import { countProgramUsages } from '../program-usage';
 import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { useLibrariesStore } from '../stores/libraries';
 import { useSchedulingStore } from '../stores/scheduling';
-import { api } from '../api';
-import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { hideBrokenImage } from '../image-error';
@@ -99,6 +96,16 @@ function updateListQuery(update: Record<string, string | number | null>, replace
 	void router[replace ? 'replace' : 'push']({ query });
 }
 
+/** Open a program when its row surface, rather than a nested control, is clicked. */
+function openProgramRow(event: MouseEvent, programId: string): void {
+	const target = event.target;
+	if (!(target instanceof Element) || target.closest('a, button, input, select, textarea')) {
+		return;
+	}
+
+	void router.push(`/schedules/programs/${programId}`);
+}
+
 /** Return the child program represented by one sequence entry. */
 function childProgram(programId: string): SchedulingProgram | undefined {
 	return programById.value.get(programId);
@@ -108,26 +115,6 @@ function childProgram(programId: string): SchedulingProgram | undefined {
 function remainingPreviewCount(programId: string): number {
 	const status = statuses.value.get(programId);
 	return Math.max(0, (status?.indexedItemCount ?? 0) - (status?.previewItems.length ?? 0));
-}
-/** Confirm and delete a program that is not in use. */
-async function remove(program: SchedulingProgram): Promise<void> {
-	if (!(await requestConfirmation({
-		key: `delete-program:${program.id}`,
-		title: 'Delete Program?',
-		message: `Delete ${program.name}? This cannot be undone.`,
-		confirmLabel: 'Delete Program',
-		destructive: true,
-	}))) {
-		return; 
-	}
-
-	try {
-		await api.deleteProgram(program.id);
-		await scheduling.load();
-	}
-	catch (cause) {
-		error.value = errorMessage(cause); 
-	}
 }
 onMounted(async () => {
 	try {
@@ -217,17 +204,20 @@ onMounted(async () => {
 				</div>
 
 				<div v-if="visiblePrograms.length" class="programs-list-panel">
-					<article v-for="program in visiblePrograms" :key="program.id" class="program-row">
-						<div class="program-row-heading"><span class="status-dot" :class="`health-${healthLabel(program)}`"></span><div><RouterLink :to="`/schedules/programs/${program.id}`">{{ program.name }}</RouterLink><small>{{ program.config.type }} · {{ statuses.get(program.id)?.sourceLabel }}</small></div><span class="program-row-counts">{{ statuses.get(program.id)?.availableItemCount ?? 0 }}/{{ statuses.get(program.id)?.indexedItemCount ?? 0 }} playable · {{ usages.get(program.id) ?? 0 }} uses</span><ActionMenu class="program-row-menu" :label="`Actions for ${program.name}`"><template #trigger><MoreVertical :size="19" /></template><RouterLink :to="`/schedules/programs/${program.id}`">Edit</RouterLink><button type="button" class="danger-action" @click="remove(program)">Delete</button></ActionMenu></div>
+					<article v-for="program in visiblePrograms" :key="program.id" class="program-row" @click="openProgramRow($event, program.id)">
+						<div class="program-row-heading"><span class="status-dot" :class="`health-${healthLabel(program)}`"></span><div><RouterLink :to="`/schedules/programs/${program.id}`">{{ program.name }}</RouterLink><small>{{ program.config.type }} · {{ statuses.get(program.id)?.sourceLabel }}</small></div><span class="program-row-counts">{{ statuses.get(program.id)?.availableItemCount ?? 0 }}/{{ statuses.get(program.id)?.indexedItemCount ?? 0 }} playable · {{ usages.get(program.id) ?? 0 }} uses</span><RouterLink class="icon-button program-row-menu" :to="`/schedules/programs/${program.id}`" :aria-label="`Edit ${program.name}`"><ChevronRight :size="18" /></RouterLink></div>
 						<div v-if="program.config.type === 'content'" class="program-carousel" :aria-label="`${program.name} media preview`">
 							<MediaCardPreview v-for="item in statuses.get(program.id)?.previewItems ?? []" :key="item.id" :item="item" class="program-carousel-preview">
-								<article class="program-carousel-card" :class="{ unavailable: item.availability !== 'available' }"><span><img v-if="item.artworkUrl" :src="artworkVariantUrl(item.artworkUrl, 'thumb')" :srcset="artworkSrcset(item.artworkUrl, 'thumb')" alt="" loading="lazy" @error="hideBrokenImage" /><FileText v-else :size="23" /></span><strong>{{ item.title }}</strong><small>{{ item.year ?? 'Year unknown' }}</small><em v-if="item.availability !== 'available'">Unavailable</em></article>
+								<RouterLink :to="`/libraries/${item.libraryId}/items/${item.id}`" class="program-carousel-card" :class="{ unavailable: item.availability !== 'available' }"><span><img v-if="item.artworkUrl" :src="artworkVariantUrl(item.artworkUrl, 'thumb')" :srcset="artworkSrcset(item.artworkUrl, 'thumb')" alt="" loading="lazy" @error="hideBrokenImage" /><FileText v-else :size="23" /></span><strong>{{ item.title }}</strong><small>{{ item.year ?? 'Year unknown' }}</small><em v-if="item.availability !== 'available'">Unavailable</em></RouterLink>
 							</MediaCardPreview>
 							<article v-if="remainingPreviewCount(program.id)" class="program-carousel-more"><span><Plus :size="26" /></span><strong>{{ remainingPreviewCount(program.id).toLocaleString() }} more</strong><small>matching items</small></article>
 							<p v-if="!(statuses.get(program.id)?.previewItems.length)">No indexed media matches this program.</p>
 						</div>
 						<div v-else class="program-carousel sequence-carousel" :aria-label="`${program.name} child programs`">
-							<article v-for="entry in program.config.entries" :key="entry.id" :class="{ unavailable: !childProgram(entry.programId) }"><span><Layers3 :size="23" /></span><strong>{{ childProgram(entry.programId)?.name ?? 'Missing program' }}</strong><small>{{ entry.count.toLocaleString() }} {{ entry.count === 1 ? 'item' : 'items' }}</small></article>
+							<template v-for="entry in program.config.entries" :key="entry.id">
+								<RouterLink v-if="childProgram(entry.programId)" :to="`/schedules/programs/${entry.programId}`" class="program-carousel-card"><span><Layers3 :size="23" /></span><strong>{{ childProgram(entry.programId)?.name }}</strong><small>{{ entry.count.toLocaleString() }} {{ entry.count === 1 ? 'item' : 'items' }}</small></RouterLink>
+								<article v-else class="unavailable"><span><Layers3 :size="23" /></span><strong>Missing program</strong><small>{{ entry.count.toLocaleString() }} {{ entry.count === 1 ? 'item' : 'items' }}</small></article>
+							</template>
 							<p v-if="program.config.entries.length === 0">No child programs in this sequence.</p>
 						</div>
 					</article>

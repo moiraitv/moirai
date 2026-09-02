@@ -77,6 +77,7 @@ describe('scheduling program status', () => {
 		const status = schedulingProgramStatuses([program], fixture)[0]!;
 		expect(status.previewItems).toHaveLength(12);
 		expect(status.previewItems[0]).toMatchObject({
+			libraryId: '00000000-0000-4000-8000-000000000002',
 			title: 'Film 1',
 			availability: 'unconfirmed',
 		});

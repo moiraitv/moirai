@@ -107,28 +107,36 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await settingsButton.click();
 	const librarySettings = page.getByRole('dialog', { name: `Library settings for ${libraryName}` });
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
-	const saveLibrarySettings = librarySettings.getByRole('button', { name: 'Save Settings' });
+	const saveLibrarySettings = librarySettings.getByRole('button', { name: 'Save', exact: true });
+	const resetLibrarySettings = librarySettings.getByRole('button', { name: 'Reset', exact: true });
 	await expect(saveLibrarySettings).toBeDisabled();
+	await expect(resetLibrarySettings).toBeDisabled();
 	await librarySettings.getByLabel('Name').fill(`${libraryName} Draft`);
 	await expect(saveLibrarySettings).toBeEnabled();
-	await librarySettings.getByLabel('Name').fill(libraryName);
+	await expect(resetLibrarySettings).toBeEnabled();
+	await resetLibrarySettings.click();
+	await expect(librarySettings.getByRole('button', { name: 'Confirm Reset' })).toBeVisible();
+	await librarySettings.getByRole('button', { name: 'Confirm Reset' }).click();
+	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
 	await expect(saveLibrarySettings).toBeDisabled();
-	const deleteLibrary = librarySettings.getByRole('button', { name: 'Remove library permanently' });
-	await expect(deleteLibrary).toBeHidden();
-	const deleteDisclosure = librarySettings.getByText('Permanently remove this library', { exact: true });
-	await deleteDisclosure.click();
-	await expect(deleteLibrary).toBeVisible();
-	await expect(deleteLibrary).toBeDisabled();
-	const deleteConfirmation = librarySettings.getByLabel(new RegExp(`Type ${libraryName} to confirm`));
+	await expect(resetLibrarySettings).toBeDisabled();
+	const deleteLibrary = librarySettings.getByRole('button', { name: 'Delete Library' });
+	await deleteLibrary.click();
+	const deleteLibraryDialog = page.getByRole('alertdialog', { name: 'Delete Library?' });
+	await expect(deleteLibraryDialog).toBeVisible();
+	const confirmDeleteLibrary = deleteLibraryDialog.getByRole('button', { name: 'Delete Library' });
+	const deleteConfirmation = deleteLibraryDialog.getByLabel(new RegExp(`Type ${libraryName} to confirm`));
+	await expect(confirmDeleteLibrary).toBeDisabled();
+	await deleteConfirmation.fill(`${libraryName} mismatch`);
+	await expect(confirmDeleteLibrary).toBeDisabled();
 	await deleteConfirmation.fill(libraryName);
-	await expect(deleteLibrary).toBeEnabled();
-	await deleteDisclosure.click();
-	await expect(deleteLibrary).toBeHidden();
-	await deleteDisclosure.click();
-	await expect(deleteConfirmation).toHaveValue('');
-	await expect(deleteLibrary).toBeDisabled();
-	await librarySettings.getByRole('button', { name: 'Cancel' }).click();
+	await expect(confirmDeleteLibrary).toBeEnabled();
+	await deleteLibraryDialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(deleteLibraryDialog).toBeHidden();
+	await expect(deleteLibrary).toBeVisible();
+	await librarySettings.getByRole('button', { name: 'Close library editor' }).click();
 	const movieLibraryUrl = page.url();
+	const movieLibraryId = new URL(movieLibraryUrl).pathname.split('/').at(-1)!;
 
 	const librarySortButton = page.getByRole('button', { name: /Sort by: Title/ });
 	await librarySortButton.click();
@@ -310,9 +318,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await expect(page.locator('.acceleration-prediction')).toBeVisible();
-	const saveChannel = page.getByRole('button', { name: 'Save Changes' });
+	const saveChannel = page.getByRole('button', { name: 'Save', exact: true });
 	const disabledScheduleAction = page.getByRole('button', { name: 'Manage Layered Schedule' });
 	await expect(saveChannel).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Delete Channel' })).toHaveCount(0);
 	await expect(disabledScheduleAction).toBeDisabled();
 	await disabledScheduleAction.locator('..').focus();
 	await expect(disabledScheduleAction.locator('..')).toHaveAttribute(
@@ -332,13 +341,26 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await expect(page.getByLabel('Name')).toHaveValue(channelName);
-	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
 	await page.getByLabel('Name').fill(`${channelName} Draft`);
-	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Manage Layered Schedule' })).toBeDisabled();
-	await page.getByLabel('Name').fill(channelName);
-	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await page.keyboard.press('Escape');
+	const unsavedChannelDialog = page.getByRole('alertdialog', { name: 'Save Changes?' });
+	await expect(unsavedChannelDialog.getByRole('button', { name: 'Save Changes' })).toBeVisible();
+	await expect(unsavedChannelDialog.getByRole('button', { name: 'Discard Changes' })).toBeVisible();
+	await unsavedChannelDialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(unsavedChannelDialog).toBeHidden();
+	await expect(page.getByLabel('Name')).toHaveValue(`${channelName} Draft`);
+	await page.getByRole('button', { name: 'Delete Channel' }).click();
+	const deleteChannelDialog = page.getByRole('alertdialog', { name: 'Delete Channel?' });
+	await expect(deleteChannelDialog).toContainText('discard any unsaved changes');
+	await deleteChannelDialog.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset' }).click();
+	await expect(page.getByLabel('Name')).toHaveValue(channelName);
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
 	await page.getByLabel('Name').fill(`${channelName} Edited`);
 	await page.locator('input[type="file"]').setInputFiles({
@@ -355,7 +377,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.mouse.down();
 	await page.mouse.move(handleBox!.x - 60, handleBox!.y + handleBox!.height / 2);
 	await page.mouse.up();
-	await page.getByRole('button', { name: 'Save Changes' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByText(`${channelName} Edited`)).toBeVisible();
 
 	const savedLogo = page
@@ -373,7 +395,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.getByRole('button', { name: `Edit ${channelName} Edited` }).click();
 	await page.getByLabel('Name').fill(`${channelName} Preserved`);
-	await page.getByRole('button', { name: 'Save Changes' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	const preservedLogo = page
 		.locator('.guide-channel-cell')
 		.filter({ hasText: `${channelName} Preserved` })
@@ -459,11 +481,18 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await page.getByRole('link', { name: 'New Program' }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
+	const newProgramActionBar = page.locator('.resource-editor-action-bar');
+	const newProgramBackdrop = page.locator('.moirai-dialog-backdrop').filter({
+		has: newProgramActionBar,
+	});
+	await expect(newProgramBackdrop).toHaveCSS('position', 'fixed');
+	await expect(newProgramBackdrop).toHaveCSS('background-color', 'rgba(2, 7, 12, 0.8)');
+	await expect(newProgramActionBar).toHaveCSS('position', 'relative');
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const programTypes = page.getByRole('radiogroup', { name: 'Program type' });
 	await expect(programTypes).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Content/ })).toBeChecked();
-	const saveProgram = page.locator('.program-editor-actions button[type="submit"]');
+	const saveProgram = page.getByRole('button', { name: 'Save', exact: true });
 	await expect(saveProgram).toBeDisabled();
 	await expect(
 		page.getByLabel('Source type').getByRole('option', { name: /Exact item/ }),
@@ -574,9 +603,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(selectionDrawer.getByText('No media selected.')).toBeVisible();
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
 	await sourceMovie.getByRole('button', { name: 'Add' }).click();
-	await page.getByRole('button', { name: 'Save and add another' }).click();
-	await expect(page.getByLabel('Name')).toHaveValue('');
-	await expect(page.getByLabel('Source type')).toHaveValue('library-query');
+	await page.getByLabel('Name').focus();
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/\/schedules\/programs$/);
+	await page.getByRole('link', { name: 'New Program' }).click();
 	await page.getByLabel('Source type').selectOption('group-collection');
 	await expect(page.getByLabel('Library', { exact: true })).toHaveValue(showLibrary.id);
 	await expect(page.locator('.source-picker-list')).toContainText('Space Station');
@@ -598,12 +628,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.source-picker-list img').first()).toBeVisible();
 	const seasonProgramName = `${programName} Selected Seasons`;
 	await page.getByLabel('Name').fill(seasonProgramName);
-	await page.getByRole('button', { name: 'Save and add another' }).click();
-	await expect(page.getByLabel('Name')).toHaveValue('');
-	await expect(page.getByLabel('Source type')).toHaveValue('library-query');
-	await page.getByLabel('Source type').selectOption('library-query');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page).toHaveURL(/\/schedules\/programs$/);
+	await page.getByRole('link', { name: 'New Program' }).click();
 	await page.getByLabel('Name').fill(`${programName} Follow-up`);
-	await page.locator('.program-editor-actions button[type="submit"]').click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	const programCard = page.locator('.program-row').filter({
 		has: page.getByRole('link', { name: programName, exact: true }),
 	});
@@ -615,56 +644,42 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Clear Filters' }).click();
 	await expect(programCard).toBeVisible();
 	await expect(seasonProgramCard).toContainText('1 selected media groups');
-	const programActions = programCard.getByRole('button', { name: `Actions for ${programName}` });
-	const seasonProgramActions = seasonProgramCard.getByRole('button', {
-		name: `Actions for ${seasonProgramName}`,
-	});
-	await programActions.click();
-	const programEditAction = programCard.getByRole('link', { name: 'Edit' });
-	const programDeleteAction = programCard.getByRole('button', { name: 'Delete' });
+	const programCarouselItem = programCard.getByRole('link', { name: /Broadcast Fixture/ });
+	await expect(programCarouselItem).toHaveCSS('display', 'grid');
+	await expect(programCarouselItem).toHaveCSS('background-color', 'rgb(11, 26, 39)');
+	await programCarouselItem.click();
+	await expect(page).toHaveURL(new RegExp(`/libraries/${movieLibraryId}/items/`));
+	await page.goBack();
+	await expect(programCard).toBeVisible();
+	const programEditAction = programCard.getByRole('link', { name: `Edit ${programName}` });
 	await expect(programEditAction).toBeVisible();
-	await expect.poll(async () => {
-		const editWidth = (await programEditAction.boundingBox())?.width ?? 0;
-		const deleteWidth = (await programDeleteAction.boundingBox())?.width ?? 0;
-		return Math.abs(editWidth - deleteWidth);
-	}).toBeLessThan(1);
 	await programEditAction.hover();
 	await expect.poll(() => programEditAction.evaluate((element) =>
 		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
-	await page.getByRole('heading', { name: 'Your programs' }).hover();
-	await programActions.focus();
-	await page.keyboard.press('Tab');
-	await expect(programEditAction).toBeFocused();
-	await expect.poll(() => programEditAction.evaluate((element) =>
-		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
-	await page.keyboard.press('Escape');
-	await expect(programEditAction).toBeHidden();
-	await expect(programActions).toBeFocused();
-	await programActions.click();
-	await seasonProgramActions.click();
-	await expect(programEditAction).toBeHidden();
-	await expect(seasonProgramCard.getByRole('link', { name: 'Edit' })).toBeVisible();
-	await page.getByRole('heading', { name: 'Your programs' }).click();
-	await expect(seasonProgramCard.getByRole('link', { name: 'Edit' })).toBeHidden();
-	await programActions.click();
-	await programDeleteAction.click();
-	await expect(programEditAction).toBeHidden();
-	await expect(page.getByRole('alertdialog', { name: 'Delete Program?' })).toBeVisible();
-	await page.getByRole('alertdialog', { name: 'Delete Program?' })
-		.getByRole('button', { name: 'Cancel' }).click();
-	await expect(programActions).toBeFocused();
-	await seasonProgramCard.getByRole('link', { name: seasonProgramName, exact: true }).click();
+	await seasonProgramCard.locator('.program-row-counts').click();
 	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
 	await page.getByRole('button', { name: 'Done' }).click();
-	await page.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'Close program editor' }).click();
 	await expect(programCard).toContainText(`1 selected from ${libraryName}`);
 	await programCard.getByRole('link', { name: programName, exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Delete Program' })).toBeVisible();
+	await expect(page.locator('.resource-editor-action-bar').getByRole('button')).toHaveText([
+		'Delete Program',
+		'Reset',
+		'Save',
+	]);
 	await page.getByLabel('Name').fill(`${programName} Draft`);
-	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
-	await page.getByLabel('Name').fill(programName);
-	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await page.getByRole('button', { name: 'Delete Program' }).click();
+	const deleteProgramDialog = page.getByRole('alertdialog', { name: 'Delete Program?' });
+	await expect(deleteProgramDialog).toContainText('discard any unsaved changes');
+	await deleteProgramDialog.getByRole('button', { name: 'Cancel' }).click();
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset' }).click();
+	await expect(page.getByLabel('Name')).toHaveValue(programName);
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('radio', { name: /Content/ })).toHaveCount(0);
 	await expect(page.getByLabel('Source type')).toHaveCount(0);
 	await expect(page.getByLabel('Library')).toHaveCount(0);
@@ -777,7 +792,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'No templates yet' })).toBeVisible();
 	await page.getByRole('link', { name: 'Create Your First Template' }).click();
 	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Save Template' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Delete Template' })).toHaveCount(0);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByLabel('Template name').fill(templateName);
 	await expect(page.getByLabel('Preview as channel')).toHaveCount(0);
@@ -855,8 +871,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: `Edit ${programName}` }).click();
 	const nestedProgramEditor = page.getByRole('dialog', { name: 'Edit program' });
 	await expect(nestedProgramEditor).toBeVisible();
+	await expect(nestedProgramEditor.getByRole('button', { name: 'Delete Program' })).toHaveCount(0);
 	await nestedProgramEditor.getByLabel('Name').fill(`${programName} Quick Edit`);
-	await nestedProgramEditor.getByRole('button', { name: 'Save Changes' }).click();
+	await nestedProgramEditor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(nestedProgramEditor).toBeHidden();
 	await expect(page.getByLabel('Template name')).toHaveValue(unsavedTemplateName);
 	await expect(page.getByLabel('Program').first()).toContainText(`${programName} Quick Edit`);
@@ -873,16 +890,23 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateBoundary.getByLabel('Maximum drift (minutes)')).toBeDisabled();
 	await expect(templateBoundary.getByLabel('Fallback')).toBeDisabled();
 	await expect(page.getByRole('heading', { name: 'Preview resolved schedule' })).toBeVisible();
-	await page.getByRole('button', { name: 'Save Template' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/templates\/[0-9a-f-]+$/);
 	await expect(page.locator('.notice.error')).toHaveCount(0);
 	await page.reload();
 	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
-	await expect(page.getByRole('button', { name: 'Save Template' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Delete Template' })).toBeVisible();
 	await page.getByLabel('Template name').fill(`${templateName} Draft`);
-	await expect(page.getByRole('button', { name: 'Save Template' })).toBeEnabled();
-	await page.getByLabel('Template name').fill(templateName);
-	await expect(page.getByRole('button', { name: 'Save Template' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset' }).click();
+	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await page.getByRole('button', { name: 'Delete Template' }).click();
+	const deleteTemplateDialog = page.getByRole('alertdialog', { name: 'Delete Template?' });
+	await expect(deleteTemplateDialog).toBeVisible();
+	await deleteTemplateDialog.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
 	await expect(
 		page
@@ -908,7 +932,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(channelScheduleCard.locator('.schedule-channel-title a')).toHaveCount(0);
 	await expect(channelScheduleCard.locator('.schedule-channel-open')).toHaveCount(0);
 	await channelScheduleCard.getByRole('link', { name: 'Add template' }).click();
-	await expect(page.getByRole('button', { name: 'Save Schedule' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Delete Channel Schedule' })).toHaveCount(0);
 	const applyAfterCurrent = page.getByRole('button', { name: 'Apply After Current Item' });
 	await expect(applyAfterCurrent).toBeDisabled();
 	await applyAfterCurrent.locator('..').focus();
@@ -935,9 +960,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: `Edit ${templateName}` }).click();
 	const nestedTemplateEditor = page.getByRole('dialog', { name: 'Template editor' });
 	await expect(nestedTemplateEditor).toBeVisible();
+	await expect(nestedTemplateEditor.getByRole('button', { name: 'Delete Template' })).toHaveCount(0);
 	const quickTemplateName = `${templateName} Quick Edit`;
 	await nestedTemplateEditor.getByLabel('Template name').fill(quickTemplateName);
-	await nestedTemplateEditor.getByRole('button', { name: 'Save Template' }).click();
+	await nestedTemplateEditor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(nestedTemplateEditor).toBeHidden();
 	templateName = quickTemplateName;
 	await expect(conditionalLayer).toContainText(templateName);
@@ -1020,9 +1046,16 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			}),
 		});
 	});
-	await page.getByRole('button', { name: 'Save Schedule' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Save Schedule' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
+	await page.getByRole('button', { name: 'Delete Channel Schedule' }).click();
+	const deleteScheduleDialog = page.getByRole('alertdialog', {
+		name: 'Delete Channel Schedule?',
+	});
+	await expect(deleteScheduleDialog).toBeVisible();
+	await deleteScheduleDialog.getByRole('button', { name: 'Cancel' }).click();
 	await expect(page.getByRole('button', { name: 'Apply After Current Item' })).toBeEnabled();
 	await page.unroute('**/api/v1/scheduling/overview');
 	await page.unroute('**/api/v1/scheduling/materializations');
@@ -1045,7 +1078,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(configuredScheduleCard.locator('.schedule-channel-stack-summary')).toContainText(
 		'Base',
 	);
-	await expect(configuredScheduleCard.getByRole('link', { name: 'Edit schedule' })).toBeVisible();
+	const editSchedule = configuredScheduleCard.getByRole('link', { name: 'Edit schedule' });
+	await expect(editSchedule).toBeVisible();
+	await expectControlHeight(editSchedule, 42);
 	await page.goto('/schedules/templates?sort=name&view=grid');
 	await expect(page).not.toHaveURL(/(?:sort|view)=/);
 	const templateHelpHeading = page.getByRole('heading', { name: 'What is a template?' });
@@ -1069,15 +1104,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const templateRow = page.locator('.template-row').filter({ hasText: templateName });
 	await expect(templateRow).toContainText(`${channelName} Preserved`);
 	await expect(templateRow).toContainText('2 slots');
-	const templateActions = templateRow.getByRole('button', { name: `Actions for ${templateName}` });
-	await templateActions.click();
-	const templateEditAction = templateRow.getByRole('link', { name: 'Edit', exact: true });
+	const templateEditAction = templateRow.getByRole('link', { name: `Edit ${templateName}` });
 	await expect(templateEditAction).toBeVisible();
 	await templateEditAction.hover();
 	await expect.poll(() => templateEditAction.evaluate((element) =>
 		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
-	await page.getByRole('heading', { name: 'Your templates' }).click();
-	await expect(templateEditAction).toBeHidden();
 	const miniSegments = templateRow.locator('.template-mini-track > span');
 	await expect(miniSegments).toHaveCount(2);
 	expect(
@@ -1090,6 +1121,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			.nth(1)
 			.evaluate((element) => getComputedStyle(element).getPropertyValue('--program-color').trim()),
 	).toBe(editorColor);
+	await templateRow.locator('.template-row-duration').click();
+	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
+	await page.getByRole('button', { name: 'Close template editor' }).click();
+	await expect(templateRow).toBeVisible();
 	await page.getByRole('searchbox', { name: 'Search templates' }).fill(templateName);
 	await expect(page).toHaveURL(/q=E2E(?:\+|%20)Daily/);
 	await expect(templateRow).toBeVisible();
