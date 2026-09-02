@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
 	CalendarClock,
 	CirclePlus,
-	Grid2X2,
 	Layers3,
-	List,
 	Pencil,
 	Search,
 	TvMinimal,
@@ -35,8 +33,6 @@ const channelSearch = computed(() => {
 	const value = route.query.q;
 	return typeof value === 'string' ? value : '';
 });
-const channelView = computed<'list' | 'grid'>(() =>
-	route.query.view === 'grid' ? 'grid' : 'list');
 const filteredChannels = computed(() => {
 	const search = channelSearch.value.trim().toLocaleLowerCase();
 	if (!search) {
@@ -121,6 +117,12 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 
 	void router[replace ? 'replace' : 'push']({ path: '/schedules/channels', query });
 }
+
+onMounted(() => {
+	if ('view' in route.query) {
+		updateListQuery({ view: null }, true);
+	}
+});
 </script>
 
 <template>
@@ -139,27 +141,9 @@ function updateListQuery(update: Record<string, string | null>, replace = false)
 					@input="updateListQuery({ q: ($event.target as HTMLInputElement).value || null }, true)"
 				/>
 			</label>
-			<div class="channel-schedules-view-toggle" role="group" aria-label="Channel view">
-				<button
-					type="button"
-					:class="{ active: channelView === 'list' }"
-					:aria-pressed="channelView === 'list'"
-					@click="updateListQuery({ view: null })"
-				>
-					<List :size="18" />List
-				</button>
-				<button
-					type="button"
-					:class="{ active: channelView === 'grid' }"
-					:aria-pressed="channelView === 'grid'"
-					@click="updateListQuery({ view: 'grid' })"
-				>
-					<Grid2X2 :size="18" />Grid
-				</button>
-			</div>
 		</div>
 
-		<div class="schedule-channel-list" :class="`view-${channelView}`">
+		<div class="schedule-channel-list">
 			<article v-for="entry in filteredChannels" :key="entry.id" class="schedule-channel-card">
 				<div class="schedule-channel-card-main">
 					<span class="schedule-channel-icon">

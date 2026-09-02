@@ -586,7 +586,7 @@
 	}
 
 	.channel-schedules-catalog-toolbar {
-		grid-template-columns: 1fr auto;
+		grid-template-columns: 1fr;
 	}
 
 	.channel-schedules-search {
@@ -598,13 +598,11 @@
 		padding: 18px;
 	}
 
-	.schedule-channel-card-main,
-	.schedule-channel-list.view-grid .schedule-channel-card-main {
+	.schedule-channel-card-main {
 		grid-template-columns: 68px minmax(0, 1fr);
 	}
 
-	.schedule-channel-icon,
-	.schedule-channel-list.view-grid .schedule-channel-icon {
+	.schedule-channel-icon {
 		width: 68px;
 		height: 68px;
 	}
@@ -618,15 +616,12 @@
 		flex-wrap: wrap;
 	}
 
-	.schedule-channel-metric,
-	.schedule-channel-list.view-grid .schedule-channel-metric {
+	.schedule-channel-metric {
 		grid-column: 1 / -1;
 	}
 
 	.schedule-channel-empty-stack,
-	.schedule-channel-configured-stack,
-	.schedule-channel-list.view-grid .schedule-channel-empty-stack,
-	.schedule-channel-list.view-grid .schedule-channel-configured-stack {
+	.schedule-channel-configured-stack {
 		margin-left: 0;
 		align-items: flex-start;
 		flex-wrap: wrap;

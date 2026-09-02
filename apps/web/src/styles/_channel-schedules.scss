@@ -146,7 +146,7 @@
 
 .channel-schedules-catalog-toolbar {
 	display: grid;
-	grid-template-columns: minmax(130px, 1fr) minmax(260px, 320px) auto;
+	grid-template-columns: minmax(130px, 1fr) minmax(260px, 320px);
 	align-items: center;
 	gap: 14px;
 }
@@ -170,46 +170,9 @@
 	padding-left: 45px;
 }
 
-.channel-schedules-view-toggle {
-	display: flex;
-}
-
-.channel-schedules-view-toggle button {
-	min-width: 100px;
-	height: 46px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 9px;
-	border: 1px solid var(--line-bright);
-	border-radius: 0;
-	color: var(--muted-strong);
-	background: rgba(7, 18, 29, 0.78);
-}
-
-.channel-schedules-view-toggle button:first-child {
-	border-radius: 8px 0 0 8px;
-}
-
-.channel-schedules-view-toggle button:last-child {
-	margin-left: -1px;
-	border-radius: 0 8px 8px 0;
-}
-
-.channel-schedules-view-toggle button.active {
-	z-index: 1;
-	border-color: var(--accent);
-	color: var(--text);
-	background: rgba(15, 74, 62, 0.48);
-}
-
 .schedule-channel-list {
 	display: grid;
 	gap: 16px;
-}
-
-.schedule-channel-list.view-grid {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .schedule-channel-card {
@@ -433,37 +396,6 @@
 	font-size: 0.7rem;
 }
 
-.schedule-channel-list.view-grid .schedule-channel-card-main {
-	grid-template-columns: 82px minmax(0, 1fr);
-	gap: 18px;
-}
-
-.schedule-channel-list.view-grid .schedule-channel-icon {
-	width: 82px;
-	height: 82px;
-	border-radius: 14px;
-}
-
-.schedule-channel-list.view-grid .schedule-channel-metric {
-	min-height: 54px;
-	padding: 12px 0 0;
-	border-top: 1px solid var(--line);
-	border-left: 0;
-}
-
-.schedule-channel-list.view-grid .schedule-channel-metric:not(.next-day) {
-	grid-column: 1 / -1;
-}
-
-.schedule-channel-list.view-grid .schedule-channel-metric.next-day {
-	grid-column: 1 / -1;
-}
-
-.schedule-channel-list.view-grid .schedule-channel-empty-stack,
-.schedule-channel-list.view-grid .schedule-channel-configured-stack {
-	margin-left: 0;
-}
-
 .layered-scheduling-callout {
 	padding: 25px 27px;
 	display: grid;
@@ -551,10 +483,6 @@
 	.channel-schedules-benefits {
 		border-top: 1px solid var(--line);
 		border-left: 0;
-	}
-
-	.schedule-channel-list.view-grid {
-		grid-template-columns: 1fr;
 	}
 
 	.schedule-channel-card-main {
