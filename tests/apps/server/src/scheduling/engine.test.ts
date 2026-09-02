@@ -575,7 +575,8 @@ describe('schedule timeline engine', () => {
 		);
 		expect(result.segments.some((segment) => segment.mediaItemId === short.id)).toBe(false);
 		expect(result.proposedState.some((record) => record.consumerKey.includes(base.id))).toBe(false);
-		expect(result.issues.some((issue) => issue.code === 'boundary-start-rejected')).toBe(true);
+		expect(result.issues.find((issue) => issue.code === 'boundary-start-rejected')?.message)
+			.toBe('No outgoing item can finish within 90 minutes of the conditional boundary. Selection state was preserved.');
 	});
 
 	it('uses a layer truncate fallback without requiring the outgoing template to allow truncation', () => {
@@ -1215,12 +1216,8 @@ describe('schedule timeline engine', () => {
 				.filter((segment) => segment.role === 'primary')
 				.every((segment) => segment.mediaItemId === surviving.id),
 		).toBe(true);
-		expect(
-			result.issues.some(
-				(issue) =>
-					issue.code === 'source-reference-missing' && issue.message.includes('1 selected item'),
-			),
-		).toBe(true);
+		expect(result.issues.find((issue) => issue.code === 'source-reference-missing')?.message)
+			.toBe('1 selected item is no longer indexed.');
 		expect(result.proposedState.length).toBeGreaterThan(0);
 	});
 
@@ -1389,28 +1386,34 @@ describe('schedule timeline engine', () => {
 	});
 
 	it('uses available members without dropping temporarily unavailable collection members', () => {
-		const unavailable = media(1, 60 * 60, { availability: 'unconfirmed' });
+		const firstUnavailable = media(1, 60 * 60, { availability: 'unconfirmed' });
 		const available = media(2, 60 * 60);
+		const secondUnavailable = media(3, 60 * 60, { availability: 'unconfirmed' });
 		const collection = program(10, {
 			type: 'content',
 			source: {
 				type: 'collection',
 				libraryId: uuid(900),
-				itemIds: [unavailable.id, available.id],
+				itemIds: [firstUnavailable.id, available.id, secondUnavailable.id],
 				sort: { type: 'date-added', direction: 'asc' },
 			},
 			strategy: { type: 'sequential' },
 		});
 		const daily = template([{ programId: collection.id, startSeconds: 0 }]);
 
-		const result = generateTimeline(input([collection], [unavailable, available], daily));
+		const result = generateTimeline(input(
+			[collection],
+			[firstUnavailable, available, secondUnavailable],
+			daily,
+		));
 
 		expect(
 			result.segments
 				.filter((segment) => segment.role === 'primary')
 				.every((segment) => segment.mediaItemId === available.id),
 		).toBe(true);
-		expect(result.issues.some((issue) => issue.code === 'source-unavailable')).toBe(true);
+		expect(result.issues.find((issue) => issue.code === 'source-unavailable')?.message)
+			.toBe('2 indexed items are temporarily unavailable.');
 	});
 
 	it('uses dead air without advancing state when an indexed source is temporarily unavailable', () => {
@@ -1421,7 +1424,8 @@ describe('schedule timeline engine', () => {
 		const result = generateTimeline(input([movies], [unavailable], daily));
 
 		expect(result.segments.every((segment) => segment.role === 'dead-air')).toBe(true);
-		expect(result.issues.some((issue) => issue.code === 'source-unavailable')).toBe(true);
+		expect(result.issues.find((issue) => issue.code === 'source-unavailable')?.message)
+			.toBe('1 indexed item is temporarily unavailable.');
 		expect(result.proposedState).toHaveLength(0);
 	});
 

@@ -47,6 +47,7 @@ import type {
 } from '@moirai/shared';
 import { api, type MediaQuery } from '../api';
 import { activeCatalogAnchor, breadcrumbTargetTrail } from '../catalog-navigation';
+import { countLabel } from '../count-label';
 import {
 	buildCatalogVirtualRows,
 	catalogAnchorRowIndex,
@@ -837,7 +838,7 @@ async function reconcile(action: ReconciliationAction['action']): Promise<void> 
 		&& !(await requestConfirmation({
 			key: `confirm-library-removals:${libraryId}:${current.revision}`,
 			title: 'Permanently Remove Missing Items?',
-			message: `Permanently remove ${current.pendingRemovalCount} missing item(s) from the index?`,
+			message: `Permanently remove ${countLabel(current.pendingRemovalCount, 'missing item')} from the index?`,
 			confirmLabel: 'Remove Missing Items',
 			destructive: true,
 		}))
@@ -1225,7 +1226,7 @@ onUnmounted(() => {
 				<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
 				<div>
 					<strong>Library index needs review</strong>
-					<p>{{ reconciliation.pendingRemovalCount }} indexed item(s) are awaiting reconciliation.</p>
+					<p>{{ countLabel(reconciliation.pendingRemovalCount, 'indexed item') }} {{ reconciliation.pendingRemovalCount === 1 ? 'is' : 'are' }} awaiting reconciliation.</p>
 				</div>
 				<button class="button secondary" @click="showReconciliation = true">Review</button>
 			</div>

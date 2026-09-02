@@ -977,12 +977,16 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		.scrollIntoViewIfNeeded();
 	const predicateType = page.locator('.schedule-layer-inspector').getByLabel('Predicate type').last();
 	await predicateType.selectOption('time-range');
+	await expect(conditionalLayer.locator('.schedule-layer-copy small')).toHaveText(
+		'12–5 PM timeslot',
+	);
 	await expectControlHeight(page.locator('.predicate-time-range').getByLabel('Starts'), 42);
 	await expectControlHeight(page.locator('.predicate-time-range').getByLabel('Ends'), 42);
 	await predicateType.selectOption('date-range');
 	await expectControlHeight(page.locator('.predicate-date-range').getByLabel('Starts'), 42);
 	await expectControlHeight(page.locator('.predicate-date-range').getByLabel('Ends'), 42);
 	await predicateType.selectOption('weekdays');
+	await expect(conditionalLayer.locator('.schedule-layer-copy small')).toHaveText('weekdays');
 	const entryBoundary = page.getByRole('group', { name: 'Entry boundary' });
 	await expect(entryBoundary).toContainText('When this layer starts');
 	await expect(entryBoundary).toContainText('lower-priority programming');
@@ -1081,6 +1085,79 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const editSchedule = configuredScheduleCard.getByRole('link', { name: 'Edit schedule' });
 	await expect(editSchedule).toBeVisible();
 	await expectControlHeight(editSchedule, 42);
+	const warningMessages = [
+		'Missing media reference',
+		'Temporarily unavailable item',
+		'Temporarily unavailable item',
+		'Boundary could not be satisfied',
+		'Program has no playable media',
+	];
+	await page.route('**/api/v1/schedule-guide?*', async (route) => {
+		const response = await route.fetch();
+		const body = (await response.json()) as {
+			channels: Array<{
+				channelId: string;
+				preview: { issues: Array<Record<string, unknown>> };
+			}>;
+		};
+		for (const channelPreview of body.channels) {
+			channelPreview.preview.issues = warningMessages.map((message, index) => ({
+				code: `e2e-warning-${index}`,
+				message,
+				scheduleLayerId: null,
+				templateId: null,
+				slotId: null,
+				programId: null,
+				mediaItemId: null,
+			}));
+		}
+		await route.fulfill({ response, json: body });
+	});
+	await page.goto('/channels');
+	const channelGuideCell = page
+		.locator('.guide-channel-cell')
+		.filter({ hasText: `${channelName} Preserved` });
+	await expect(channelGuideCell.locator('.guide-channel-copy > p')).toContainText('1920×1080');
+	await expect(channelGuideCell.locator('.channel-schedule-summary')).toContainText(templateName);
+	await expect(channelGuideCell.locator('.channel-schedule-summary')).toHaveCSS(
+		'-webkit-line-clamp',
+		'2',
+	);
+	const warningBadge = channelGuideCell.getByRole('button', {
+		name: '5 warnings; show details',
+	});
+	await warningBadge.hover();
+	const warningTooltip = page.getByRole('tooltip');
+	await expect(warningTooltip).toContainText(warningMessages[0]!);
+	await expect(warningTooltip).toContainText(warningMessages[1]!);
+	await expect(warningTooltip).toContainText(warningMessages[3]!);
+	await expect(warningTooltip).not.toContainText(warningMessages[4]!);
+	await expect(warningTooltip).toContainText('2 additional warnings');
+	const warningTooltipBox = await warningTooltip.boundingBox();
+	expect(warningTooltipBox).not.toBeNull();
+	expect(warningTooltipBox!.x).toBeGreaterThanOrEqual(0);
+	expect(warningTooltipBox!.y).toBeGreaterThanOrEqual(0);
+	expect(warningTooltipBox!.x + warningTooltipBox!.width).toBeLessThanOrEqual(
+		page.viewportSize()!.width,
+	);
+	expect(warningTooltipBox!.y + warningTooltipBox!.height).toBeLessThanOrEqual(
+		page.viewportSize()!.height,
+	);
+	await page.keyboard.press('Escape');
+	await expect(warningTooltip).toBeHidden();
+	await warningBadge.focus();
+	await expect(warningTooltip).toBeVisible();
+	await warningBadge.click();
+	await page.locator('.guide-toolbar').click();
+	await expect(warningTooltip).toBeHidden();
+	await page.goto('/guide');
+	const guideChannelCell = page
+		.locator('.guide-channel-cell')
+		.filter({ hasText: `${channelName} Preserved` });
+	await expect(guideChannelCell.locator('.guide-channel-copy > p')).toHaveCount(0);
+	await expect(guideChannelCell.getByRole('button', { name: '5 warnings; show details' }))
+		.toBeVisible();
+	await page.unroute('**/api/v1/schedule-guide?*');
 	await page.goto('/schedules/templates?sort=name&view=grid');
 	await expect(page).not.toHaveURL(/(?:sort|view)=/);
 	const templateHelpHeading = page.getByRole('heading', { name: 'What is a template?' });

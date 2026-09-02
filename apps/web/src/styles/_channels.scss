@@ -98,6 +98,15 @@
 	font-size: 0.64rem;
 }
 
+.channel-schedule-summary {
+	margin-top: 4px;
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-height: 1.35;
+}
+
 .guide-channel-actions {
 	display: flex;
 	gap: 1px;

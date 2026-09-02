@@ -9,6 +9,7 @@ import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import MediaCardPreview from '../MediaCardPreview.vue';
 import TwoStepActionButton from '../TwoStepActionButton.vue';
+import { countLabel } from '../../count-label';
 
 const props = defineProps<{
 	selectingGroups: boolean;
@@ -148,8 +149,10 @@ onMounted(async () => {
 								v-if="selectingGroups ? missingGroupCount > 0 : missingItemCount > 0"
 								class="notice warning compact-notice"
 							>
-								{{ selectingGroups ? missingGroupCount : missingItemCount }} selected
-								{{ selectingGroups ? 'media group' : 'item' }} reference(s) no longer indexed.
+								{{ countLabel(
+									selectingGroups ? missingGroupCount : missingItemCount,
+									selectingGroups ? 'selected media group reference' : 'selected item reference',
+								) }} {{ (selectingGroups ? missingGroupCount : missingItemCount) === 1 ? 'is' : 'are' }} no longer indexed.
 								Saving preserves these references unless you clear the selection.
 							</p>
 							<div v-if="selectingGroups && groups.length" class="selected-item-grid">

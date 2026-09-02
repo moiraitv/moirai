@@ -9,6 +9,11 @@ export * from './normalization.js';
 export * from './catalog.js';
 export * from './availability.js';
 
+/** Format a numeric count with the matching singular or plural noun. */
+export function countLabel(count: number, singular: string, plural = `${singular}s`): string {
+	return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+}
+
 /** Built-in library categories advertised by the server. */
 export const LIBRARY_TYPE_KEYS = ['movies', 'shows', 'music-videos', 'other'] as const;
 /** Built-in media provider identifiers advertised by the server. */

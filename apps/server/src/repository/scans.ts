@@ -8,6 +8,7 @@ import type {
 	SourceIdentity,
 } from '@moirai/shared';
 import {
+	countLabel,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 } from '@moirai/shared';
@@ -386,8 +387,15 @@ export abstract class ScanRepository {
 				path: null,
 				code: majorRemoval ? 'removal_approval_required' : 'removal_confirmation_pending',
 				message: majorRemoval
-					? `${pendingRemovalCount} missing item(s) require explicit reconciliation.`
-					: `${pendingRemovalCount} missing item(s) are awaiting ${REMOVAL_CONFIRMATION_OBSERVATIONS} healthy observations at least ${REMOVAL_CONFIRMATION_INTERVAL_MINUTES} minutes apart.`,
+					? `${countLabel(pendingRemovalCount, 'missing item')} ${
+						pendingRemovalCount === 1 ? 'requires' : 'require'
+					} explicit reconciliation.`
+					: `${countLabel(pendingRemovalCount, 'missing item')} ${
+						pendingRemovalCount === 1 ? 'is' : 'are'
+					} awaiting ${countLabel(
+						REMOVAL_CONFIRMATION_OBSERVATIONS,
+						'healthy observation',
+					)} at least ${countLabel(REMOVAL_CONFIRMATION_INTERVAL_MINUTES, 'minute')} apart.`,
 				severity: majorRemoval ? 'error' : 'warning',
 			});
 		}

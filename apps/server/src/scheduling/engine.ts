@@ -15,7 +15,7 @@ import type {
 	TimelineSegment,
 	ViewingPreferenceScores,
 } from '@moirai/shared';
-import { MAX_TIMELINE_SEGMENTS, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
+import { countLabel, MAX_TIMELINE_SEGMENTS, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 import { predicateTimeBoundaries, schedulePredicateMatches } from './predicate.js';
 import {
 	addIssue,
@@ -417,7 +417,10 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					if (layerFinishesOutgoing && boundary.maxDriftSeconds !== null) {
 						addIssue(context, {
 							code: 'boundary-start-rejected',
-							message: `No outgoing item can finish within ${Math.round(boundary.maxDriftSeconds / 60)} minute(s) of the conditional boundary. Selection state was preserved.`,
+							message: `No outgoing item can finish within ${countLabel(
+								Math.round(boundary.maxDriftSeconds / 60),
+								'minute',
+							)} of the conditional boundary. Selection state was preserved.`,
 							programId: slot.programId,
 							mediaItemId: null,
 						});

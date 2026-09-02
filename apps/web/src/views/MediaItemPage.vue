@@ -28,6 +28,7 @@ import { hideBrokenImage } from '../image-error';
 import { compactDurationLabel } from '../duration-format';
 import AddItemsToProgramModal from '../components/programs/AddItemsToProgramModal.vue';
 import ProgramAdditionToast from '../components/programs/ProgramAdditionToast.vue';
+import { countLabel } from '../count-label';
 
 const route = useRoute();
 const router = useRouter();
@@ -350,7 +351,7 @@ onUnmounted(closePlayer);
 					</dd>
 					<template v-if="item.parts.length > 1">
 						<dt><File :size="18" />Multipart sequence</dt>
-						<dd>{{ kindLabel(item.multipartStatus) }} · {{ item.parts.length }} parts</dd>
+						<dd>{{ kindLabel(item.multipartStatus) }} · {{ countLabel(item.parts.length, 'part') }}</dd>
 						<template v-for="part in item.parts" :key="part.relativePath">
 							<dt>Part {{ part.number }}</dt>
 							<dd>{{ part.relativePath }} · {{ duration(part.durationSeconds) }}</dd>

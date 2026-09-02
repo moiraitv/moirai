@@ -11,6 +11,7 @@ import {
 } from '@lucide/vue';
 import type { Channel, ChannelSchedule, ScheduleGuide, ScheduleTemplate } from '@moirai/shared';
 import { channelLogoUrl } from '../../channel-logo';
+import { countLabel } from '../../count-label';
 import ResourceEmptyState from '../ResourceEmptyState.vue';
 import {
 	schedulePredicateSummary,
@@ -92,7 +93,9 @@ function scheduleStatus(id: string): string {
 	}
 
 	const layerCount = schedule.layers.length;
-	return `${scheduleTemplateName(props.templates, schedule.defaultTemplateId)} base${layerCount ? ` · ${layerCount} conditional` : ''}`;
+	return `${scheduleTemplateName(props.templates, schedule.defaultTemplateId)} base${
+		layerCount ? ` · ${countLabel(layerCount, 'conditional template')}` : ''
+	}`;
 }
 
 /** Report the total number of configured template layers. */
@@ -206,7 +209,8 @@ onMounted(() => {
 							</span>
 						</div>
 						<div v-if="channelSchedule(entry.id)!.layers.length > 3" class="schedule-channel-stack-more">
-							+{{ channelSchedule(entry.id)!.layers.length - 3 }} more conditional templates
+							+{{ channelSchedule(entry.id)!.layers.length - 3 }} more conditional
+							{{ channelSchedule(entry.id)!.layers.length - 3 === 1 ? 'template' : 'templates' }}
 						</div>
 						<div class="schedule-channel-stack-row base">
 							<i

@@ -16,6 +16,7 @@ import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissibl
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { scheduleClockLabel } from '../time-format';
+import { countLabel } from '../count-label';
 
 const props = withDefaults(defineProps<{ embedded?: boolean; templateId?: string | null }>(), { embedded: false, templateId: null });
 const emit = defineEmits<{ close: []; saved: [templateId: string] }>();
@@ -113,7 +114,7 @@ function templateChannelSummary(templateId: string): string {
 		return channels.value.find((channel) => channel.id === assignments[0])?.name ?? '1 channel'; 
 	}
 
-	return String(assignments.length) + ' channels';
+	return countLabel(assignments.length, 'channel');
 }
 /** Resolve a template slot's nominal outgoing boundary. */
 function templateSlotEnd(template: ScheduleTemplate, slot: ScheduleSlot): number {
@@ -305,12 +306,12 @@ onMounted(async () => {
 							}}</RouterLink>
 							<small
 							>{{ templateChannelSummary(template.id) }} ·
-								{{ template.slots.length }} slots</small
+								{{ countLabel(template.slots.length, 'slot') }}</small
 							>
 						</div>
 						<div class="template-row-duration">
 							<span>{{ nominalDurationLabel(template) }}</span>
-							<small>{{ template.slots.length }} slots</small>
+							<small>{{ countLabel(template.slots.length, 'slot') }}</small>
 						</div>
 						<div
 							class="template-mini-track"
@@ -334,7 +335,7 @@ onMounted(async () => {
 					<footer class="templates-pagination">
 						<span>
 							Showing {{ templateRangeStart }}–{{ templateRangeEnd }} of
-							{{ filteredTemplates.length }} templates
+							{{ countLabel(filteredTemplates.length, 'template') }}
 						</span>
 						<div class="template-page-buttons">
 							<button

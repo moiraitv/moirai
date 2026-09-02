@@ -43,6 +43,7 @@ import { cloneContractValue } from '../reactive-clone';
 import { closeUnsavedEditor } from '../unsaved-editor';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
+import { channelScheduleSummary } from '../channel-schedule-display';
 
 const channelsStore = useChannelsStore();
 const route = useRoute();
@@ -149,6 +150,14 @@ const scheduleByChannel = computed(
 			]),
 		),
 );
+
+/** Summarize one channel's base and conditional schedule for its guide row. */
+function scheduleSummary(channelId: string): string {
+	return channelScheduleSummary(
+		scheduleByChannel.value.get(channelId),
+		scheduling.overview?.templates ?? [],
+	);
+}
 
 const cropDisplayScale = computed(() => {
 	const source = cropSource.value;
@@ -834,22 +843,10 @@ onBeforeUnmount(() => {
 				:start-date="weekStart"
 				:days="displayedDays"
 				empty-message="No template assigned"
+				show-technical-details
 			>
-				<template #detail="{ channel, preview }">
-					<small v-if="scheduleByChannel.get(channel.id)">
-						{{
-							scheduling.overview?.templates.find(
-								(template) =>
-									template.id === scheduleByChannel.get(channel.id)?.defaultTemplateId,
-							)?.name ?? 'Missing template'
-						}}
-						<template v-if="scheduleByChannel.get(channel.id)?.layers.length">
-							· {{ scheduleByChannel.get(channel.id)?.layers.length }} conditional
-						</template>
-						<span v-if="preview?.issues.length" class="guide-warning">
-							· {{ preview.issues.length }} warnings
-						</span>
-					</small>
+				<template #detail="{ channel }">
+					<small class="channel-schedule-summary">{{ scheduleSummary(channel.id) }}</small>
 				</template>
 				<template #actions="{ channel }">
 					<button

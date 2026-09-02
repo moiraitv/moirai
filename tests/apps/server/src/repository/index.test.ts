@@ -658,6 +658,9 @@ describe('Repository scan reconciliation', () => {
 		const empty = await repository.beginScan(library.id, 'periodic');
 		const result = await repository.reconcileScan(empty, [], [], [], true);
 		expect(result).toMatchObject({ status: 'partial', removedCount: 0 });
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			message: '1 missing item requires explicit reconciliation.',
+		}));
 		const reconciliation = await repository.getLibraryReconciliation(library.id);
 		expect(reconciliation).toMatchObject({
 			status: 'removal-approval-required',

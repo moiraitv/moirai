@@ -54,7 +54,8 @@ const playbackDetail = computed(() => {
 		return 'Loading status';
 	}
 
-	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} channels active`;
+	const noun = playback.value.activeSessionCount === 1 ? 'channel' : 'channels';
+	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} ${noun} active`;
 });
 
 /** Load integrated playback state from the authoritative source. */

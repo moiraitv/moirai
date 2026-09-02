@@ -1,5 +1,6 @@
 import type { MediaCardPreview } from '@moirai/shared';
 import { api } from './api';
+import { viewportTooltipPosition } from './viewport-tooltip';
 
 /** Successful card previews retained for the lifetime of the current application session. */
 const previewCache = new Map<string, MediaCardPreview>();
@@ -62,17 +63,12 @@ export function clearMediaCardPreviewCache(): void {
 export function mediaCardPreviewPosition(
 	geometry: MediaCardPreviewGeometry,
 ): MediaCardPreviewPosition {
-	const margin = 12;
-	const gap = 12;
 	const { anchor, previewWidth, previewHeight, viewportWidth, viewportHeight } = geometry;
-	const fitsRight = anchor.right + gap + previewWidth <= viewportWidth - margin;
-	const preferredLeft = fitsRight
-		? anchor.right + gap
-		: anchor.left - gap - previewWidth;
-	const maximumLeft = Math.max(margin, viewportWidth - previewWidth - margin);
-	const left = Math.min(Math.max(margin, preferredLeft), maximumLeft);
-	const centeredTop = anchor.top + anchor.height / 2 - previewHeight / 2;
-	const maximumTop = Math.max(margin, viewportHeight - previewHeight - margin);
-	const top = Math.min(Math.max(margin, centeredTop), maximumTop);
-	return { left, top };
+	return viewportTooltipPosition({
+		anchor,
+		tooltipWidth: previewWidth,
+		tooltipHeight: previewHeight,
+		viewportWidth,
+		viewportHeight,
+	});
 }

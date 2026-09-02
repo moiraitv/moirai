@@ -257,7 +257,10 @@ onUnmounted(() => {
 			<aside class="panel playback-card">
 				<p class="eyebrow">Playback engine</p>
 				<StatusPill :value="status?.status ?? 'degraded'" />
-				<h2>{{ status?.activeSessionCount ?? 0 }}/{{ status?.maxActiveSessions ?? settings.maxActiveSessions }} channels active</h2>
+				<h2>
+					{{ status?.activeSessionCount ?? 0 }}/{{ status?.maxActiveSessions ?? settings.maxActiveSessions }}
+					{{ (status?.activeSessionCount ?? 0) === 1 ? 'channel' : 'channels' }} active
+				</h2>
 				<p v-if="status?.engineVersion">{{ status.engineVersion }}</p>
 				<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
 				<code>{{ status?.contractRevision.slice(0, 12) }}</code>

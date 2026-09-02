@@ -15,6 +15,7 @@ import { useLibrariesStore } from '../stores/libraries';
 import { liveEvents } from '../live-events';
 import { errorMessage } from '../error-message';
 import { hideBrokenImage } from '../image-error';
+import { countLabel } from '../count-label';
 import {
 	playbackAccelerationLabel,
 	playbackClientDurationLabel,
@@ -49,6 +50,16 @@ const POSITION_CLOCK_INTERVAL_MS = 1_000;
 const mediaCount = computed(() =>
 	libraries.value.reduce((total, library) => total + library.itemCount, 0));
 const channelsById = computed(() => new Map(channels.value.map((channel) => [channel.id, channel])));
+
+/** Format active playback capacity with a noun matching the active count. */
+function playbackCapacity(): string {
+	if (!playback.value) {
+		return 'Loading playback engine';
+	}
+
+	const noun = playback.value.activeSessionCount === 1 ? 'channel' : 'channels';
+	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} ${noun} active`;
+}
 /** Return whether any configured library currently has an active scan. */
 function isScanning(library: LibraryRecord): boolean {
 	return Boolean(
@@ -254,7 +265,7 @@ onUnmounted(() => {
 				<article class="metric">
 					<span class="metric-icon green"><Library :size="20" /></span><span>Libraries</span
 					><strong>{{ libraries.length }}</strong
-					><small>{{ mediaCount.toLocaleString() }} indexed items</small>
+					><small>{{ countLabel(mediaCount, 'indexed item') }}</small>
 				</article>
 				<article class="metric">
 					<span class="metric-icon blue"><TvMinimal :size="20" /></span><span>Channels</span
@@ -265,7 +276,7 @@ onUnmounted(() => {
 					<span class="metric-icon purple"><RadioTower :size="20" /></span
 					><span>IPTV service</span
 					><strong class="metric-status">{{ playback?.status ?? 'Checking' }}</strong
-					><small class="playback-capacity">{{ playback ? `${playback.activeSessionCount}/${playback.maxActiveSessions} channels active` : 'Loading playback engine' }}</small>
+					><small class="playback-capacity">{{ playbackCapacity() }}</small>
 				</article>
 			</div>
 			<div class="section-heading">
@@ -287,7 +298,7 @@ onUnmounted(() => {
 					<span class="media-glyph"><Library :size="18" /></span>
 					<span class="grow"
 					><strong>{{ library.name }}</strong
-					><small>{{ library.typeKey }} · {{ library.itemCount }} items</small></span
+					><small>{{ library.typeKey }} · {{ countLabel(library.itemCount, 'item') }}</small></span
 					>
 					<StatusPill :value="isScanning(library) ? 'running' : library.watcherStatus" />
 				</RouterLink>

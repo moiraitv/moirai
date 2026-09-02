@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch 
 import { CalendarDays, Check, Filter, Search, Star, UserRound, X } from '@lucide/vue';
 import { MAX_MEDIA_GENRE_RULES, type MediaGenreFacet } from '@moirai/shared';
 import { api } from '../../api';
+import { countLabel } from '../../count-label';
 import { useAnimatedDismissal } from '../../motion';
 import {
 	emptyLibraryFilterDraft,
@@ -101,7 +102,7 @@ function genreActionLabel(
 	const action = rule === 'include' ? 'Require' : 'Disallow';
 	return count === null
 		? `${action} ${genre.name}`
-		: `${action} ${genre.name}, ${count.toLocaleString()} matching items`;
+		: `${action} ${genre.name}, ${countLabel(count, 'matching item')}`;
 }
 
 /**

@@ -13,6 +13,7 @@ import {
 } from '@moirai/shared/api-contracts';
 import { api, ApiError } from '../../api';
 import { errorMessage } from '../../error-message';
+import { countLabel } from '../../count-label';
 import { useSchedulingStore } from '../../stores/scheduling';
 import LoadingState from '../LoadingState.vue';
 import ProgramAdditionConfirmationModal from './ProgramAdditionConfirmationModal.vue';
@@ -309,7 +310,7 @@ onMounted(async () => {
 							@change="selectProgram(program.id)"
 						/>
 						<span class="program-destination-icon"><ListPlus :size="19" /></span>
-						<span><strong>{{ program.name }}</strong><small>{{ programItemCount(program).toLocaleString() }} items</small></span>
+						<span><strong>{{ program.name }}</strong><small>{{ countLabel(programItemCount(program), 'item') }}</small></span>
 						<Check v-if="destinationType === 'existing' && programId === program.id" :size="18" />
 					</label>
 					<label class="program-create-option" :class="{ selected: destinationType === 'new' }">

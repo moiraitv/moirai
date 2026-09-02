@@ -19,6 +19,7 @@ import { useSchedulingStore } from '../stores/scheduling';
 import { errorMessage } from '../error-message';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { hideBrokenImage } from '../image-error';
+import { countLabel } from '../count-label';
 
 /** TODO: Enable once the Programs catalog tip has been populated with finalized guidance. */
 const programsTipVisible = false;
@@ -205,12 +206,12 @@ onMounted(async () => {
 
 				<div v-if="visiblePrograms.length" class="programs-list-panel">
 					<article v-for="program in visiblePrograms" :key="program.id" class="program-row" @click="openProgramRow($event, program.id)">
-						<div class="program-row-heading"><span class="status-dot" :class="`health-${healthLabel(program)}`"></span><div><RouterLink :to="`/schedules/programs/${program.id}`">{{ program.name }}</RouterLink><small>{{ program.config.type }} · {{ statuses.get(program.id)?.sourceLabel }}</small></div><span class="program-row-counts">{{ statuses.get(program.id)?.availableItemCount ?? 0 }}/{{ statuses.get(program.id)?.indexedItemCount ?? 0 }} playable · {{ usages.get(program.id) ?? 0 }} uses</span><RouterLink class="icon-button program-row-menu" :to="`/schedules/programs/${program.id}`" :aria-label="`Edit ${program.name}`"><ChevronRight :size="18" /></RouterLink></div>
+						<div class="program-row-heading"><span class="status-dot" :class="`health-${healthLabel(program)}`"></span><div><RouterLink :to="`/schedules/programs/${program.id}`">{{ program.name }}</RouterLink><small>{{ program.config.type }} · {{ statuses.get(program.id)?.sourceLabel }}</small></div><span class="program-row-counts">{{ statuses.get(program.id)?.availableItemCount ?? 0 }}/{{ statuses.get(program.id)?.indexedItemCount ?? 0 }} playable · {{ countLabel(usages.get(program.id) ?? 0, 'use') }}</span><RouterLink class="icon-button program-row-menu" :to="`/schedules/programs/${program.id}`" :aria-label="`Edit ${program.name}`"><ChevronRight :size="18" /></RouterLink></div>
 						<div v-if="program.config.type === 'content'" class="program-carousel" :aria-label="`${program.name} media preview`">
 							<MediaCardPreview v-for="item in statuses.get(program.id)?.previewItems ?? []" :key="item.id" :item="item" class="program-carousel-preview">
 								<RouterLink :to="`/libraries/${item.libraryId}/items/${item.id}`" class="program-carousel-card" :class="{ unavailable: item.availability !== 'available' }"><span><img v-if="item.artworkUrl" :src="artworkVariantUrl(item.artworkUrl, 'thumb')" :srcset="artworkSrcset(item.artworkUrl, 'thumb')" alt="" loading="lazy" @error="hideBrokenImage" /><FileText v-else :size="23" /></span><strong>{{ item.title }}</strong><small>{{ item.year ?? 'Year unknown' }}</small><em v-if="item.availability !== 'available'">Unavailable</em></RouterLink>
 							</MediaCardPreview>
-							<article v-if="remainingPreviewCount(program.id)" class="program-carousel-more"><span><Plus :size="26" /></span><strong>{{ remainingPreviewCount(program.id).toLocaleString() }} more</strong><small>matching items</small></article>
+							<article v-if="remainingPreviewCount(program.id)" class="program-carousel-more"><span><Plus :size="26" /></span><strong>{{ remainingPreviewCount(program.id).toLocaleString() }} more</strong><small>{{ remainingPreviewCount(program.id) === 1 ? 'matching item' : 'matching items' }}</small></article>
 							<p v-if="!(statuses.get(program.id)?.previewItems.length)">No indexed media matches this program.</p>
 						</div>
 						<div v-else class="program-carousel sequence-carousel" :aria-label="`${program.name} child programs`">
@@ -221,7 +222,7 @@ onMounted(async () => {
 							<p v-if="program.config.entries.length === 0">No child programs in this sequence.</p>
 						</div>
 					</article>
-					<footer class="programs-pagination"><span>Showing {{ programRangeStart }}–{{ programRangeEnd }} of {{ filteredPrograms.length }} programs</span><div class="program-page-buttons"><button type="button" aria-label="Previous program page" :disabled="programPage <= 1" @click="updateListQuery({ page: programPage - 1 || null })"><ChevronLeft :size="18" /></button><button type="button" class="active" aria-current="page">{{ programPage }}</button><button type="button" aria-label="Next program page" :disabled="programPage >= programTotalPages" @click="updateListQuery({ page: programPage + 1 })"><ChevronRight :size="18" /></button></div><select aria-label="Programs per page" :value="programPageSize" @change="updateListQuery({ pageSize: Number(($event.target as HTMLSelectElement).value) === 20 ? null : Number(($event.target as HTMLSelectElement).value), page: null })"><option :value="10">10 per page</option><option :value="20">20 per page</option><option :value="50">50 per page</option></select></footer>
+					<footer class="programs-pagination"><span>Showing {{ programRangeStart }}–{{ programRangeEnd }} of {{ countLabel(filteredPrograms.length, 'program') }}</span><div class="program-page-buttons"><button type="button" aria-label="Previous program page" :disabled="programPage <= 1" @click="updateListQuery({ page: programPage - 1 || null })"><ChevronLeft :size="18" /></button><button type="button" class="active" aria-current="page">{{ programPage }}</button><button type="button" aria-label="Next program page" :disabled="programPage >= programTotalPages" @click="updateListQuery({ page: programPage + 1 })"><ChevronRight :size="18" /></button></div><select aria-label="Programs per page" :value="programPageSize" @change="updateListQuery({ pageSize: Number(($event.target as HTMLSelectElement).value) === 20 ? null : Number(($event.target as HTMLSelectElement).value), page: null })"><option :value="10">10 per page</option><option :value="20">20 per page</option><option :value="50">50 per page</option></select></footer>
 				</div>
 				<ResourceEmptyState
 					v-else

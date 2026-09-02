@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+	countLabel,
 	MAX_MEDIA_DURATION_MILLISECONDS,
 	orderSelectedMedia,
 	type ProgramConfig,
@@ -248,7 +249,9 @@ function candidatesFor(
 		if (cached.unavailableCount > 0) {
 			addIssue(context, {
 				code: 'source-unavailable',
-				message: `${cached.unavailableCount} indexed item(s) are temporarily unavailable.`,
+				message: `${countLabel(cached.unavailableCount, 'indexed item')} ${
+					cached.unavailableCount === 1 ? 'is' : 'are'
+				} temporarily unavailable.`,
 				programId,
 				mediaItemId: null,
 			});
@@ -373,7 +376,9 @@ function candidatesFor(
 	if (source.type === 'collection' && !missingReferenceMessage) {
 		const count = source.itemIds.length - matching.length;
 		if (count > 0) {
-			missingMemberMessage = `${count} selected item(s) are no longer indexed.`;
+			missingMemberMessage = `${countLabel(count, 'selected item')} ${
+				count === 1 ? 'is' : 'are'
+			} no longer indexed.`;
 		}
 	}
 	if (source.type === 'group-collection' && !missingReferenceMessage) {
@@ -381,7 +386,9 @@ function candidatesFor(
 			(groupId) => !Object.prototype.hasOwnProperty.call(context.catalog.groupParents, groupId),
 		).length;
 		if (count > 0) {
-			missingMemberMessage = `${count} selected media-group reference(s) are no longer indexed.`;
+			missingMemberMessage = `${countLabel(count, 'selected media-group reference')} ${
+				count === 1 ? 'is' : 'are'
+			} no longer indexed.`;
 		}
 		if (count === source.groupIds.length) {
 			missingReferenceMessage = 'All selected media groups are no longer indexed.';
@@ -436,7 +443,9 @@ function candidatesFor(
 	if (unavailable.length > 0) {
 		addIssue(context, {
 			code: 'source-unavailable',
-			message: `${unavailable.length} indexed item(s) are temporarily unavailable.`,
+			message: `${countLabel(unavailable.length, 'indexed item')} ${
+				unavailable.length === 1 ? 'is' : 'are'
+			} temporarily unavailable.`,
 			programId,
 			mediaItemId: null,
 		});

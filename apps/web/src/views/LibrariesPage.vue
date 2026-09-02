@@ -266,7 +266,7 @@ onUnmounted(() => {
 						<RouterLink v-if="remainingItemCount(library)" :to="`/libraries/${library.id}?sort=date-added`" class="library-carousel-more">
 							<span><Plus :size="25" /></span>
 							<strong>{{ remainingItemCount(library).toLocaleString() }} more</strong>
-							<small>indexed items</small>
+							<small>{{ remainingItemCount(library) === 1 ? 'indexed item' : 'indexed items' }}</small>
 						</RouterLink>
 					</template>
 					<div v-else class="library-carousel-state">No indexed media yet.</div>

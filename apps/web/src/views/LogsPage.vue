@@ -11,6 +11,7 @@ import PageHeader from '../components/PageHeader.vue';
 import { condenseRequestLogs, logRequestDetails } from '../log-entry-context';
 import { requestDurationLabel } from '../log-format';
 import { useLogsStore } from '../stores/logs';
+import { countLabel } from '../count-label';
 
 const store = useLogsStore();
 const {
@@ -228,7 +229,7 @@ onBeforeUnmount(() => {
 					<span>
 						<FileText :size="18" />
 						<strong>Retained files</strong>
-						<small>{{ files.length }} files · {{ formatBytes(retainedBytes) }}</small>
+						<small>{{ countLabel(files.length, 'file') }} · {{ formatBytes(retainedBytes) }}</small>
 					</span>
 					<ChevronDown :size="18" />
 				</span></template>

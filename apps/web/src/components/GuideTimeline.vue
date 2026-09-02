@@ -14,6 +14,7 @@ import {
 import { channelGuideRows } from '../channel-groups';
 import { programColorStyle } from '../program-colors';
 import GuideSegmentPreviewModal from './GuideSegmentPreviewModal.vue';
+import ScheduleWarningBadge from './ScheduleWarningBadge.vue';
 
 const props = withDefaults(
 	defineProps<{
@@ -23,8 +24,9 @@ const props = withDefaults(
 		startDate: string;
 		days?: number;
 		emptyMessage?: string;
+		showTechnicalDetails?: boolean;
 	}>(),
-	{ days: 7, emptyMessage: 'No schedule assigned' },
+	{ days: 7, emptyMessage: 'No schedule assigned', showTechnicalDetails: false },
 );
 
 defineSlots<{
@@ -218,19 +220,15 @@ onMounted(() => scrollToCurrentTime());
 								<span v-else class="channel-number">{{ channel.number }}</span>
 								<div class="guide-channel-copy">
 									<h2>{{ channel.name }}</h2>
-									<p>
+									<p v-if="showTechnicalDetails">
 										{{ channel.video.width }}×{{ channel.video.height }}
 										{{ channel.video.format?.toUpperCase() }} ·
 										{{ channel.audio.format?.toUpperCase() }}
 									</p>
-									<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)">
-										<small
-											v-if="guideByChannel.get(channel.id)?.issues.length"
-											class="guide-warning"
-										>
-											{{ guideByChannel.get(channel.id)?.issues.length }} schedule warnings
-										</small>
-									</slot>
+									<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)"></slot>
+									<ScheduleWarningBadge
+										:issues="guideByChannel.get(channel.id)?.issues ?? []"
+									/>
 								</div>
 								<div v-if="$slots.actions" class="guide-channel-actions">
 									<slot name="actions" :channel="channel"></slot>
