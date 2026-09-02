@@ -527,11 +527,14 @@
 }
 
 .schedule-remove-row {
-	display: flex;
-	justify-content: center;
+	display: grid;
+	grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.45fr);
+	gap: 16px;
 }
 
 .schedule-remove-button {
+	grid-column: 2;
+	justify-self: center;
 	color: #ff5a5f;
 	border-color: rgba(255, 70, 75, 0.82);
 	background: transparent;

@@ -123,6 +123,14 @@ body:has(.standalone-editor-backdrop) {
 		grid-template-columns: 1fr;
 	}
 
+	.schedule-remove-row {
+		grid-template-columns: 1fr;
+	}
+
+	.schedule-remove-button {
+		grid-column: 1;
+	}
+
 	.schedule-editor-columns > .schedule-stack {
 		position: static;
 		max-height: none;
