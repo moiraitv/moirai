@@ -1,10 +1,11 @@
-import type {
-	ProgramConfig,
-	SchedulableMedia,
-	SchedulingCatalog,
-	SchedulingProgram,
-	SchedulingProgramHealth,
-	SchedulingProgramStatus,
+import {
+	orderSelectedMedia,
+	type ProgramConfig,
+	type SchedulableMedia,
+	type SchedulingCatalog,
+	type SchedulingProgram,
+	type SchedulingProgramHealth,
+	type SchedulingProgramStatus,
 } from '@moirai/shared';
 
 /** Maximum media entries embedded in one program overview row. */
@@ -41,11 +42,16 @@ function contentMatches(
 	const byId = catalog.mediaById ?? new Map(catalog.media.map((media) => [media.id, media]));
 	const byLibrary = catalog.mediaByLibrary;
 	const source = config.source;
+	const collectionItemIds = source.type === 'collection' && source.sort.type === 'manual'
+		? source.sort.itemIds
+		: source.type === 'collection'
+			? source.itemIds
+			: [];
 	const pool
 		= source.type === 'item'
 			? [byId.get(source.itemId)].filter((media): media is SchedulableMedia => Boolean(media))
 			: source.type === 'collection'
-				? source.itemIds.flatMap((itemId) => {
+				? collectionItemIds.flatMap((itemId) => {
 					const media = byId.get(itemId);
 					return media ? [media] : [];
 				})
@@ -141,7 +147,10 @@ function contentStatus(
 	else {
 		missing = !(source.libraryId in catalog.libraryAvailability);
 	}
-	const matches = contentMatches(program.config, catalog);
+	const sourceMatches = contentMatches(program.config, catalog);
+	const matches = source.type === 'collection'
+		? orderSelectedMedia(sourceMatches, source.sort, source.additionBatches)
+		: sourceMatches;
 	const missingCollectionMembers
 		= source.type === 'collection' ? source.itemIds.length - matches.length : 0;
 	const missingGroupMembers

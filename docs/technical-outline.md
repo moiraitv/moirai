@@ -403,6 +403,8 @@ year fallback, descending variants of those automatic fields, or a manually drag
 date-added order reverses batches while preserving request order inside each batch. Automatic title and
 release ordering is derived from current indexed metadata for both review and sequential playback.
 Missing release dates sort last, and stable ties retain insertion order.
+The bounded program-overview carousel applies that same effective order before selecting its preview
+items, so a refreshed overview immediately reflects saved automatic or manual ordering changes.
 
 Adding more than five genuinely new items to an existing program requires confirmation of the
 server-calculated addition. Duplicate references do not count toward that threshold, new programs

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SchedulingCatalog, SchedulingProgram } from '@moirai/shared';
+import type { SchedulingCatalog, SchedulingProgram, SelectedMediaSort } from '@moirai/shared';
 import { schedulingProgramStatuses } from '@server/scheduling/status.js';
 
 const program: SchedulingProgram = {
@@ -104,6 +104,43 @@ describe('scheduling program status', () => {
 			indexedItemCount: 1,
 			availableItemCount: 1,
 		});
+	});
+
+	it('recomputes selected-media previews in the configured program order', () => {
+		const fixture = catalog('available');
+		const zuluId = '00000000-0000-4000-8000-000000000003';
+		const alphaId = '00000000-0000-4000-8000-000000000004';
+		const betaId = '00000000-0000-4000-8000-000000000005';
+		fixture.media = [
+			{ ...fixture.media[0]!, id: zuluId, title: 'The Zulu', sortTitle: 'Zulu', year: 2000, releaseDate: '2000-06-01' },
+			{ ...fixture.media[0]!, id: alphaId, title: 'Alpha', sortTitle: 'Alpha', year: 1990, releaseDate: '1990-04-01' },
+			{ ...fixture.media[0]!, id: betaId, title: 'Beta', sortTitle: 'Beta', year: null, releaseDate: null },
+		];
+		const previewTitles = (sort: SelectedMediaSort): string[] => schedulingProgramStatuses([{
+			...program,
+			config: {
+				type: 'content',
+				source: {
+					type: 'collection',
+					libraryId: '00000000-0000-4000-8000-000000000002',
+					itemIds: [zuluId, alphaId, betaId],
+					additionBatches: [[zuluId, alphaId], [betaId]],
+					sort,
+				},
+				strategy: { type: 'sequential' },
+			},
+		}], fixture)[0]!.previewItems.map((item) => item.title);
+
+		expect(previewTitles({ type: 'date-added', direction: 'asc' }))
+			.toEqual(['The Zulu', 'Alpha', 'Beta']);
+		expect(previewTitles({ type: 'date-added', direction: 'desc' }))
+			.toEqual(['Beta', 'The Zulu', 'Alpha']);
+		expect(previewTitles({ type: 'name', direction: 'asc' }))
+			.toEqual(['Alpha', 'Beta', 'The Zulu']);
+		expect(previewTitles({ type: 'release-date', direction: 'desc' }))
+			.toEqual(['The Zulu', 'Alpha', 'Beta']);
+		expect(previewTitles({ type: 'manual', itemIds: [betaId, alphaId, zuluId] }))
+			.toEqual(['Beta', 'Alpha', 'The Zulu']);
 	});
 
 	it('summarizes selected season groups and reports missing selections as degraded', () => {
