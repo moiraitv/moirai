@@ -219,39 +219,41 @@ onUnmounted(() => {
 			<Info :size="15" />
 		</button>
 		<Teleport to="body">
-			<aside
-				v-if="visible"
-				:id="tooltipId"
-				ref="tooltip"
-				class="media-card-preview-tooltip"
-				role="tooltip"
-				:style="{ left: `${position.left}px`, top: `${position.top}px` }"
-			>
-				<div class="media-card-preview-poster">
-					<Asterisk :size="32" />
-					<img
-						v-if="display.artworkUrl"
-						:src="artworkVariantUrl(display.artworkUrl, 'card')"
-						:srcset="artworkSrcset(display.artworkUrl, 'card')"
-						alt=""
-						decoding="async"
-						@error="hideBrokenImage"
-					/>
-				</div>
-				<div class="media-card-preview-copy">
-					<h3>{{ display.title }}</h3>
-					<div class="media-card-preview-facts">
-						<span v-if="display.year">{{ display.year }}</span>
-						<span v-if="display.rating !== null">★ {{ display.rating.toFixed(1) }}</span>
-						<span v-if="display.primaryGenre">{{ display.primaryGenre }}</span>
+			<Transition name="media-preview" appear>
+				<aside
+					v-if="visible"
+					:id="tooltipId"
+					ref="tooltip"
+					class="media-card-preview-tooltip"
+					role="tooltip"
+					:style="{ left: `${position.left}px`, top: `${position.top}px` }"
+				>
+					<div class="media-card-preview-poster">
+						<Asterisk :size="32" />
+						<img
+							v-if="display.artworkUrl"
+							:src="artworkVariantUrl(display.artworkUrl, 'card')"
+							:srcset="artworkSrcset(display.artworkUrl, 'card')"
+							alt=""
+							decoding="async"
+							@error="hideBrokenImage"
+						/>
 					</div>
-					<p v-if="display.plot" class="media-card-preview-plot">{{ display.plot }}</p>
-					<p v-else-if="loading" class="media-card-preview-loading">Loading details…</p>
-					<p v-if="display.actors.length" class="media-card-preview-actors">
-						<strong>Starring</strong> {{ display.actors.join(', ') }}
-					</p>
-				</div>
-			</aside>
+					<div class="media-card-preview-copy">
+						<h3>{{ display.title }}</h3>
+						<div class="media-card-preview-facts">
+							<span v-if="display.year">{{ display.year }}</span>
+							<span v-if="display.rating !== null">★ {{ display.rating.toFixed(1) }}</span>
+							<span v-if="display.primaryGenre">{{ display.primaryGenre }}</span>
+						</div>
+						<p v-if="display.plot" class="media-card-preview-plot">{{ display.plot }}</p>
+						<p v-else-if="loading" class="media-card-preview-loading">Loading details…</p>
+						<p v-if="display.actors.length" class="media-card-preview-actors">
+							<strong>Starring</strong> {{ display.actors.join(', ') }}
+						</p>
+					</div>
+				</aside>
+			</Transition>
 		</Teleport>
 	</div>
 </template>

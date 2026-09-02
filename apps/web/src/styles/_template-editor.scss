@@ -500,7 +500,7 @@
 	border-top: 1px solid var(--line);
 }
 
-.slot-advanced summary {
+.slot-advanced .animated-disclosure-trigger {
 	padding: 15px 4px 2px;
 	cursor: pointer;
 	color: #dbe7ef;
@@ -804,14 +804,14 @@
 	margin-top: 9px;
 }
 
-.compact-preview-issues summary {
+.compact-preview-issues .animated-disclosure-trigger {
 	cursor: pointer;
 	color: #edc889;
 	font-size: 0.7rem;
 	font-weight: 700;
 }
 
-.schedule-preview-issues.compact-preview-issues > ul {
+.schedule-preview-issues.compact-preview-issues .animated-disclosure-content > ul {
 	margin: 8px 0 0;
 	padding: 0;
 	display: grid;
@@ -825,6 +825,11 @@
 
 .timeline-issues {
 	margin-top: 10px;
+	display: grid;
+	gap: 6px;
+}
+
+.timeline-issues .animated-disclosure-content {
 	display: grid;
 	gap: 6px;
 }

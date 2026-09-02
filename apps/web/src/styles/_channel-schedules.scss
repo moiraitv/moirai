@@ -3,6 +3,15 @@
 	gap: 24px;
 }
 
+.channel-schedules-page > .async-state-surface {
+	display: grid;
+}
+
+.channel-schedules-content {
+	display: grid;
+	gap: 24px;
+}
+
 .channel-schedules-page > .page-header h1 {
 	font-size: clamp(2.75rem, 4vw, 4rem);
 }

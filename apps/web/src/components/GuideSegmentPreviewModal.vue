@@ -6,6 +6,7 @@ import type { GuideSegmentDetail } from '@moirai/shared';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { compactDurationLabel } from '../duration-format';
 import { instantLabel } from '../time-format';
+import { useAnimatedDismissal } from '../motion';
 
 const props = defineProps<{
 	detail: GuideSegmentDetail | null;
@@ -16,6 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLElement>();
+const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('close'));
 
 onMounted(() => dialog.value?.focus());
 
@@ -64,84 +66,89 @@ const roleLabel = computed(() => {
 </script>
 
 <template>
-	<div
-		class="moirai-dialog-backdrop guide-preview-backdrop"
-		role="presentation"
-		@mousedown.self="emit('close')"
-	>
-		<section
-			ref="dialog"
-			class="moirai-dialog guide-preview-modal"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="guide-preview-title"
-			tabindex="-1"
-			@keydown.esc="emit('close')"
+	<Transition name="moirai-overlay" appear @after-leave="finishClose">
+		<div
+			v-show="visible"
+			:inert="!visible"
+			:aria-hidden="!visible"
+			class="moirai-dialog-backdrop guide-preview-backdrop"
+			role="presentation"
+			@mousedown.self="requestClose"
 		>
-			<div class="modal-heading">
-				<div>
-					<p class="eyebrow">Schedule item</p>
-					<h2 id="guide-preview-title">{{ detail?.segment.title ?? 'Programme details' }}</h2>
+			<section
+				ref="dialog"
+				class="moirai-dialog guide-preview-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="guide-preview-title"
+				tabindex="-1"
+				@keydown.esc="requestClose"
+			>
+				<div class="modal-heading">
+					<div>
+						<p class="eyebrow">Schedule item</p>
+						<h2 id="guide-preview-title">{{ detail?.segment.title ?? 'Programme details' }}</h2>
+					</div>
+					<button class="icon-button" type="button" aria-label="Close" @click="requestClose">
+						<X :size="20" />
+					</button>
 				</div>
-				<button class="icon-button" type="button" aria-label="Close" @click="emit('close')">
-					<X :size="20" />
-				</button>
-			</div>
 
-			<div v-if="loading" class="guide-preview-loading" aria-live="polite">
-				Loading schedule item…
-			</div>
-			<p v-else-if="error" class="notice error">{{ error }}</p>
-			<div v-else-if="detail" class="guide-preview-layout">
-				<div class="guide-preview-poster">
-					<Asterisk :size="38" />
-					<img
-						v-if="detail.media?.artworkUrl"
-						:src="artworkVariantUrl(detail.media.artworkUrl, 'card')"
-						:srcset="artworkSrcset(detail.media.artworkUrl, 'card')"
-						:alt="`${detail.media.title} artwork`"
-					/>
+				<div v-if="loading" class="guide-preview-loading" aria-live="polite">
+					Loading schedule item…
 				</div>
-				<div class="guide-preview-copy">
-					<div class="guide-preview-badges">
-						<span>{{ roleLabel }}</span>
-						<span v-if="mediaCoordinates">{{ mediaCoordinates }}</span>
-						<span v-if="detail.media">{{ durationLabel(detail.media.durationSeconds) }}</span>
-						<span v-if="detail.segment.truncated">Truncated</span>
+				<p v-else-if="error" class="notice error">{{ error }}</p>
+				<div v-else-if="detail" class="guide-preview-layout">
+					<div class="guide-preview-poster">
+						<Asterisk :size="38" />
+						<img
+							v-if="detail.media?.artworkUrl"
+							:src="artworkVariantUrl(detail.media.artworkUrl, 'card')"
+							:srcset="artworkSrcset(detail.media.artworkUrl, 'card')"
+							:alt="`${detail.media.title} artwork`"
+						/>
 					</div>
-					<p class="guide-preview-airtime">
-						<Clock3 :size="16" />
-						{{ timeLabel(detail.segment.start) }} – {{ timeLabel(detail.segment.finish) }}
-					</p>
-					<p v-if="detail.media?.plot" class="guide-preview-plot">{{ detail.media.plot }}</p>
-					<div v-if="detail.media?.genreNames.length" class="guide-preview-genres">
-						<span v-for="genre in detail.media.genreNames" :key="genre">{{ genre }}</span>
+					<div class="guide-preview-copy">
+						<div class="guide-preview-badges">
+							<span>{{ roleLabel }}</span>
+							<span v-if="mediaCoordinates">{{ mediaCoordinates }}</span>
+							<span v-if="detail.media">{{ durationLabel(detail.media.durationSeconds) }}</span>
+							<span v-if="detail.segment.truncated">Truncated</span>
+						</div>
+						<p class="guide-preview-airtime">
+							<Clock3 :size="16" />
+							{{ timeLabel(detail.segment.start) }} – {{ timeLabel(detail.segment.finish) }}
+						</p>
+						<p v-if="detail.media?.plot" class="guide-preview-plot">{{ detail.media.plot }}</p>
+						<div v-if="detail.media?.genreNames.length" class="guide-preview-genres">
+							<span v-for="genre in detail.media.genreNames" :key="genre">{{ genre }}</span>
+						</div>
+						<p v-if="detail.media && !detail.catalogItemPresent" class="notice warning">
+							This item is no longer in the current index. Its committed guide metadata is shown.
+						</p>
+						<p
+							v-else-if="detail.media?.availability !== 'available'"
+							class="notice warning"
+						>
+							The media source is temporarily unavailable.
+						</p>
+						<div class="guide-preview-source">
+							<h3>Schedule source</h3>
+							<p><ListVideo :size="16" /><span>Program</span><strong>{{ detail.source.programName ?? 'None' }}</strong></p>
+							<p><Layers3 :size="16" /><span>Template</span><strong>{{ detail.source.templateName ?? 'Unavailable' }}</strong></p>
+							<p><Folder :size="16" /><span>Library</span><strong>{{ detail.source.libraryName ?? 'None' }}</strong></p>
+						</div>
+						<RouterLink
+							v-if="detail.media && detail.catalogItemPresent"
+							class="button guide-preview-details"
+							:to="`/libraries/${detail.media.libraryId}/items/${detail.media.id}`"
+							@click="emit('close')"
+						>
+							<Film :size="17" />View Media Details
+						</RouterLink>
 					</div>
-					<p v-if="detail.media && !detail.catalogItemPresent" class="notice warning">
-						This item is no longer in the current index. Its committed guide metadata is shown.
-					</p>
-					<p
-						v-else-if="detail.media?.availability !== 'available'"
-						class="notice warning"
-					>
-						The media source is temporarily unavailable.
-					</p>
-					<div class="guide-preview-source">
-						<h3>Schedule source</h3>
-						<p><ListVideo :size="16" /><span>Program</span><strong>{{ detail.source.programName ?? 'None' }}</strong></p>
-						<p><Layers3 :size="16" /><span>Template</span><strong>{{ detail.source.templateName ?? 'Unavailable' }}</strong></p>
-						<p><Folder :size="16" /><span>Library</span><strong>{{ detail.source.libraryName ?? 'None' }}</strong></p>
-					</div>
-					<RouterLink
-						v-if="detail.media && detail.catalogItemPresent"
-						class="button guide-preview-details"
-						:to="`/libraries/${detail.media.libraryId}/items/${detail.media.id}`"
-						@click="emit('close')"
-					>
-						<Film :size="17" />View Media Details
-					</RouterLink>
 				</div>
-			</div>
-		</section>
-	</div>
+			</section>
+		</div>
+	</Transition>
 </template>

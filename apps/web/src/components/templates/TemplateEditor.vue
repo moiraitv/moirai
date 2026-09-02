@@ -19,6 +19,7 @@ import { api } from '../../api';
 import { requestConfirmation } from '../../confirmation';
 import { errorMessage } from '../../error-message';
 import LoadingState from '../LoadingState.vue';
+import AnimatedDisclosure from '../AnimatedDisclosure.vue';
 import ProgramsPage from '../../views/ProgramsPage.vue';
 import { cloneContractValue } from '../../reactive-clone';
 import { randomUuid } from '../../random-uuid';
@@ -960,13 +961,12 @@ onBeforeUnmount(() => {
 								</label>
 							</div>
 						</div>
-						<details
+						<AnimatedDisclosure
 							v-if="selectedSlot.programId !== null"
+							v-model="advancedOpen"
 							class="slot-advanced"
-							:open="advancedOpen"
-							@toggle="advancedOpen = ($event.currentTarget as HTMLDetailsElement).open"
 						>
-							<summary>Advanced scheduling behavior</summary>
+							<template #summary><span>Advanced scheduling behavior</span></template>
 							<div class="form-grid">
 								<label
 								><span>Playback state</span
@@ -1151,7 +1151,7 @@ onBeforeUnmount(() => {
 									>
 								</div>
 							</fieldset>
-						</details>
+						</AnimatedDisclosure>
 					</section>
 
 					<TemplateAssignments :channels="assignedChannels" />

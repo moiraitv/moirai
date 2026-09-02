@@ -5,12 +5,14 @@ import type { LogEntry } from '@moirai/shared';
 import type { LogRequestCompletion } from '../log-entry-context';
 import { logRequestDetails } from '../log-entry-context';
 import { requestDurationLabel } from '../log-format';
+import { useAnimatedDismissal } from '../motion';
 
 const props = defineProps<{
 	entry: LogEntry;
 	completion: LogRequestCompletion | null;
 }>();
 const emit = defineEmits<{ close: [] }>();
+const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('close'));
 const dialog = ref<HTMLElement>();
 const copyStatus = ref<'entry' | 'context' | 'error' | ''>('');
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -80,93 +82,95 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 
 <template>
 	<Teleport to="body">
-		<div class="moirai-dialog-backdrop log-detail-backdrop" role="presentation" @mousedown.self="emit('close')">
-			<section
-				ref="dialog"
-				class="moirai-dialog log-detail-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="log-detail-title"
-				tabindex="-1"
-				@keydown.esc="emit('close')"
-			>
-				<div class="modal-heading">
-					<div>
-						<p class="eyebrow">Server log</p>
-						<h2 id="log-detail-title">Log entry details</h2>
-					</div>
-					<button class="icon-button" type="button" aria-label="Close log details" @click="emit('close')">
-						<X :size="20" />
-					</button>
-				</div>
-
-				<div class="log-detail-meta">
-					<span class="log-level" :class="`level-${entry.level}`">{{ entry.level }}</span>
-					<time :datetime="entry.time">{{ formatTimestamp(entry.time) }}</time>
-					<code v-if="entry.requestId">{{ entry.requestId }}</code>
-				</div>
-
-				<section class="log-detail-section">
-					<h3>Message</h3>
-					<p>{{ entry.message || 'Structured log entry' }}</p>
-				</section>
-
+		<Transition name="moirai-overlay" appear @after-leave="finishClose">
+			<div v-show="visible" class="moirai-dialog-backdrop log-detail-backdrop" :inert="!visible" :aria-hidden="!visible" role="presentation" @mousedown.self="requestClose">
 				<section
-					v-if="request.method || request.endpoint || request.sourceIp || completion"
-					class="log-detail-section log-detail-request"
+					ref="dialog"
+					class="moirai-dialog log-detail-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="log-detail-title"
+					tabindex="-1"
+					@keydown.esc="requestClose"
 				>
-					<h3>Request</h3>
-					<dl>
+					<div class="modal-heading">
 						<div>
-							<dt>Method</dt>
-							<dd>{{ request.method ?? 'Unavailable' }}</dd>
+							<p class="eyebrow">Server log</p>
+							<h2 id="log-detail-title">Log entry details</h2>
 						</div>
-						<div>
-							<dt>Endpoint</dt>
-							<dd><code>{{ request.endpoint ?? 'Unavailable' }}</code></dd>
-						</div>
-						<div>
-							<dt>Source IP</dt>
-							<dd><code>{{ request.sourceIp ?? 'Unavailable' }}</code></dd>
-						</div>
-						<div v-if="completion">
-							<dt>Status</dt>
-							<dd>{{ completion.statusCode ?? 'Unavailable' }}</dd>
-						</div>
-						<div v-if="completion">
-							<dt>Duration</dt>
-							<dd>{{ requestDurationLabel(completion.durationMs, 'detail') }}</dd>
-						</div>
-					</dl>
-				</section>
-
-				<section class="log-detail-section log-detail-context">
-					<div class="log-detail-section-heading">
-						<h3>Structured context</h3>
-						<button
-							v-if="Object.keys(combinedContext).length"
-							class="button secondary compact"
-							type="button"
-							@click="copyValue(combinedContext, 'context')"
-						>
-							<Check v-if="copyStatus === 'context'" :size="15" />
-							<Copy v-else :size="15" />
-							Copy Context
+						<button class="icon-button" type="button" aria-label="Close log details" @click="requestClose">
+							<X :size="20" />
 						</button>
 					</div>
-					<pre v-if="Object.keys(combinedContext).length" tabindex="0">{{ formattedJson(combinedContext) }}</pre>
-					<p v-else class="log-detail-empty">This entry has no additional structured context.</p>
-				</section>
 
-				<footer class="log-detail-actions">
-					<span role="status" aria-live="polite">{{ copyStatusLabel }}</span>
-					<button class="button secondary" type="button" @click="copyValue(copyableEntry, 'entry')">
-						<Check v-if="copyStatus === 'entry'" :size="17" />
-						<Copy v-else :size="17" />
-						Copy Complete Entry
-					</button>
-				</footer>
-			</section>
-		</div>
+					<div class="log-detail-meta">
+						<span class="log-level" :class="`level-${entry.level}`">{{ entry.level }}</span>
+						<time :datetime="entry.time">{{ formatTimestamp(entry.time) }}</time>
+						<code v-if="entry.requestId">{{ entry.requestId }}</code>
+					</div>
+
+					<section class="log-detail-section">
+						<h3>Message</h3>
+						<p>{{ entry.message || 'Structured log entry' }}</p>
+					</section>
+
+					<section
+						v-if="request.method || request.endpoint || request.sourceIp || completion"
+						class="log-detail-section log-detail-request"
+					>
+						<h3>Request</h3>
+						<dl>
+							<div>
+								<dt>Method</dt>
+								<dd>{{ request.method ?? 'Unavailable' }}</dd>
+							</div>
+							<div>
+								<dt>Endpoint</dt>
+								<dd><code>{{ request.endpoint ?? 'Unavailable' }}</code></dd>
+							</div>
+							<div>
+								<dt>Source IP</dt>
+								<dd><code>{{ request.sourceIp ?? 'Unavailable' }}</code></dd>
+							</div>
+							<div v-if="completion">
+								<dt>Status</dt>
+								<dd>{{ completion.statusCode ?? 'Unavailable' }}</dd>
+							</div>
+							<div v-if="completion">
+								<dt>Duration</dt>
+								<dd>{{ requestDurationLabel(completion.durationMs, 'detail') }}</dd>
+							</div>
+						</dl>
+					</section>
+
+					<section class="log-detail-section log-detail-context">
+						<div class="log-detail-section-heading">
+							<h3>Structured context</h3>
+							<button
+								v-if="Object.keys(combinedContext).length"
+								class="button secondary compact"
+								type="button"
+								@click="copyValue(combinedContext, 'context')"
+							>
+								<Check v-if="copyStatus === 'context'" :size="15" />
+								<Copy v-else :size="15" />
+								Copy Context
+							</button>
+						</div>
+						<pre v-if="Object.keys(combinedContext).length" tabindex="0">{{ formattedJson(combinedContext) }}</pre>
+						<p v-else class="log-detail-empty">This entry has no additional structured context.</p>
+					</section>
+
+					<footer class="log-detail-actions">
+						<span role="status" aria-live="polite">{{ copyStatusLabel }}</span>
+						<button class="button secondary" type="button" @click="copyValue(copyableEntry, 'entry')">
+							<Check v-if="copyStatus === 'entry'" :size="17" />
+							<Copy v-else :size="17" />
+							Copy Complete Entry
+						</button>
+					</footer>
+				</section>
+			</div>
+		</Transition>
 	</Teleport>
 </template>

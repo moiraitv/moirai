@@ -7,6 +7,7 @@ import {
 import type { SchedulingProgram } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
+import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
 import LoadingState from '../components/LoadingState.vue';
 import MediaCardPreview from '../components/MediaCardPreview.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
@@ -148,15 +149,17 @@ onMounted(async () => {
 			title="Programs"
 			description="Programs define how eligible media is selected and arranged. Reuse them across multiple schedules and channels."
 		>
-			<button
-				v-if="!programHelpVisible"
-				type="button"
-				class="page-help-button"
-				aria-label="Show program help"
-				@click="showProgramHelp"
-			>
-				<CircleHelp :size="20" />
-			</button>
+			<Transition name="context-popover">
+				<button
+					v-if="!programHelpVisible"
+					type="button"
+					class="page-help-button"
+					aria-label="Show program help"
+					@click="showProgramHelp"
+				>
+					<CircleHelp :size="20" />
+				</button>
+			</Transition>
 			<RouterLink class="button programs-primary-button" to="/schedules/programs/new"
 			><Plus :size="18" />New Program</RouterLink
 			>
@@ -165,49 +168,47 @@ onMounted(async () => {
 			{{ error || scheduling.error }}
 		</p>
 
-		<section
-			v-if="!embedded && !editorOpen && programHelpVisible"
-			class="programs-intro dismissible-help-panel"
-			aria-labelledby="programs-intro-title"
-		>
-			<button
-				type="button"
-				class="dismiss-help-button"
-				aria-label="Dismiss program help"
-				@click="dismissProgramHelp"
-			>
-				<X :size="18" />
-			</button>
-			<div class="programs-intro-copy">
-				<div class="programs-intro-icon"><CalendarDays :size="27" /></div>
-				<div>
-					<h2 id="programs-intro-title">What is a program?</h2>
-					<p>
-						A program is a reusable rule that tells Moirai what content to play and in what order.
-						Use programs in your schedule slots to build your channel lineup.
-					</p>
-					<a class="programs-learn-link" href="#program-types">
-						Learn More About Programs <ArrowRight :size="18" />
-					</a>
+		<AnimatedHelpPanel :visible="!embedded && !editorOpen && programHelpVisible">
+			<section class="programs-intro dismissible-help-panel" aria-labelledby="programs-intro-title">
+				<button
+					type="button"
+					class="dismiss-help-button"
+					aria-label="Dismiss program help"
+					@click="dismissProgramHelp"
+				>
+					<X :size="18" />
+				</button>
+				<div class="programs-intro-copy">
+					<div class="programs-intro-icon"><CalendarDays :size="27" /></div>
+					<div>
+						<h2 id="programs-intro-title">What is a program?</h2>
+						<p>
+							A program is a reusable rule that tells Moirai what content to play and in what order.
+							Use programs in your schedule slots to build your channel lineup.
+						</p>
+						<a class="programs-learn-link" href="#program-types">
+							Learn More About Programs <ArrowRight :size="18" />
+						</a>
+					</div>
 				</div>
-			</div>
-			<div id="program-types" class="programs-types">
-				<h2>Common program types</h2>
-				<div class="program-type-grid">
-					<article v-for="example in programExamples" :key="example.title">
-						<div class="program-type-icon" :class="`tone-${example.tone}`">
-							<component :is="example.icon" :size="26" />
-						</div>
-						<h3>{{ example.title }}</h3>
-						<p>{{ example.description }}</p>
-					</article>
+				<div id="program-types" class="programs-types">
+					<h2>Common program types</h2>
+					<div class="program-type-grid">
+						<article v-for="example in programExamples" :key="example.title">
+							<div class="program-type-icon" :class="`tone-${example.tone}`">
+								<component :is="example.icon" :size="26" />
+							</div>
+							<h3>{{ example.title }}</h3>
+							<p>{{ example.description }}</p>
+						</article>
+					</div>
 				</div>
-			</div>
-		</section>
+			</section>
+		</AnimatedHelpPanel>
 
 		<LoadingState v-if="!embedded && !editorOpen && initialLoading" label="Loading programs…" />
 		<template v-else-if="!embedded && !editorOpen && scheduling.loaded">
-			<section class="programs-catalog" aria-labelledby="your-programs-title">
+			<section class="programs-catalog async-state-surface" aria-labelledby="your-programs-title">
 				<h2 id="your-programs-title">Your programs</h2>
 				<div class="programs-catalog-toolbar">
 					<label class="program-search-control"><Search :size="20" /><input type="search" aria-label="Search programs" placeholder="Search programs…" :value="programSearch" @input="updateListQuery({ q: ($event.target as HTMLInputElement).value || null, page: null }, true)" /></label>

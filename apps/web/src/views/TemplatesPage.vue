@@ -9,6 +9,7 @@ import { requestConfirmation } from '../confirmation';
 import { templateSlotStyle } from '../channel-schedule-display';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
+import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import TemplateEditor from '../components/templates/TemplateEditor.vue';
@@ -193,15 +194,17 @@ onMounted(async () => {
 			title="Templates"
 			description="Allocate programs across a nominal day, then preview duration-aware resolution."
 		>
-			<button
-				v-if="!editing && !templateHelpVisible"
-				type="button"
-				class="page-help-button"
-				aria-label="Show template help"
-				@click="showTemplateHelp"
-			>
-				<CircleHelp :size="20" />
-			</button>
+			<Transition name="context-popover">
+				<button
+					v-if="!editing && !templateHelpVisible"
+					type="button"
+					class="page-help-button"
+					aria-label="Show template help"
+					@click="showTemplateHelp"
+				>
+					<CircleHelp :size="20" />
+				</button>
+			</Transition>
 			<RouterLink class="button" to="/schedules/templates/new"
 			><Plus :size="18" />New Template</RouterLink
 			>
@@ -210,59 +213,57 @@ onMounted(async () => {
 			{{ error || scheduling.error }}
 		</p>
 
-		<section
-			v-if="!embedded && !editing && templateHelpVisible"
-			class="templates-intro dismissible-help-panel"
-			aria-labelledby="templates-intro-title"
-		>
-			<button
-				type="button"
-				class="dismiss-help-button"
-				aria-label="Dismiss template help"
-				@click="dismissTemplateHelp"
-			>
-				<X :size="18" />
-			</button>
-			<div class="templates-intro-copy">
-				<div class="templates-intro-icon"><CalendarDays :size="27" /></div>
-				<div>
-					<h2 id="templates-intro-title">What is a template?</h2>
-					<p>
-						A template defines how a channel's 24-hour day is structured using reusable schedule
-						slots. Reuse templates across channels and dates to keep schedules consistent and easy
-						to manage.
-					</p>
-					<a class="templates-learn-link" href="#templates-help">
-						Learn More About Templates <ArrowRight :size="18" />
-					</a>
+		<AnimatedHelpPanel :visible="!embedded && !editing && templateHelpVisible">
+			<section class="templates-intro dismissible-help-panel" aria-labelledby="templates-intro-title">
+				<button
+					type="button"
+					class="dismiss-help-button"
+					aria-label="Dismiss template help"
+					@click="dismissTemplateHelp"
+				>
+					<X :size="18" />
+				</button>
+				<div class="templates-intro-copy">
+					<div class="templates-intro-icon"><CalendarDays :size="27" /></div>
+					<div>
+						<h2 id="templates-intro-title">What is a template?</h2>
+						<p>
+							A template defines how a channel's 24-hour day is structured using reusable schedule
+							slots. Reuse templates across channels and dates to keep schedules consistent and easy
+							to manage.
+						</p>
+						<a class="templates-learn-link" href="#templates-help">
+							Learn More About Templates <ArrowRight :size="18" />
+						</a>
+					</div>
 				</div>
-			</div>
-			<div id="templates-help" class="templates-benefits">
-				<h2>Templates help you</h2>
-				<div class="templates-benefit-grid">
-					<article>
-						<div class="template-benefit-icon tone-green"><Clock3 :size="24" /></div>
-						<h3>Plan a nominal day</h3>
-						<p>Allocate time across slots without worrying about actual media durations.</p>
-					</article>
-					<article>
-						<div class="template-benefit-icon tone-blue"><Eye :size="24" /></div>
-						<h3>Preview resolution</h3>
-						<p>See how slots resolve with real media durations and boundary policies.</p>
-					</article>
-					<article>
-						<div class="template-benefit-icon tone-purple"><Repeat2 :size="24" /></div>
-						<h3>Reuse everywhere</h3>
-						<p>Use the same template across channels, rotations, and seasons.</p>
-					</article>
+				<div id="templates-help" class="templates-benefits">
+					<h2>Templates help you</h2>
+					<div class="templates-benefit-grid">
+						<article>
+							<div class="template-benefit-icon tone-green"><Clock3 :size="24" /></div>
+							<h3>Plan a nominal day</h3>
+							<p>Allocate time across slots without worrying about actual media durations.</p>
+						</article>
+						<article>
+							<div class="template-benefit-icon tone-blue"><Eye :size="24" /></div>
+							<h3>Preview resolution</h3>
+							<p>See how slots resolve with real media durations and boundary policies.</p>
+						</article>
+						<article>
+							<div class="template-benefit-icon tone-purple"><Repeat2 :size="24" /></div>
+							<h3>Reuse everywhere</h3>
+							<p>Use the same template across channels, rotations, and seasons.</p>
+						</article>
+					</div>
 				</div>
-			</div>
-		</section>
+			</section>
+		</AnimatedHelpPanel>
 
 		<LoadingState v-if="!embedded && !editing && initialLoading" label="Loading templates…" />
 
 		<template v-else-if="!embedded && !editing && scheduling.loaded">
-			<section class="templates-catalog" aria-labelledby="your-templates-title">
+			<section class="templates-catalog async-state-surface" aria-labelledby="your-templates-title">
 				<h2 id="your-templates-title">Your templates</h2>
 				<div class="templates-catalog-toolbar">
 					<label class="template-search-control">

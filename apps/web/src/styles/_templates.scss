@@ -338,6 +338,10 @@
 	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 
+.template-row-menu[open] > div {
+	animation: moirai-context-enter var(--motion-fast) var(--motion-enter);
+}
+
 .template-row-menu a,
 .template-row-menu button {
 	width: 100%;

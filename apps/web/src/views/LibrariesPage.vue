@@ -160,47 +160,49 @@ onUnmounted(() => {
 			{{ showForm ? 'Close' : 'Add Library' }}
 		</button></PageHeader
 		>
-		<form v-if="showForm" class="panel form-grid" @submit.prevent="create">
-			<label
-			><span>Name</span><input v-model="form.name" required autocapitalize="words" placeholder="Cinema archive"
-			/></label>
-			<label
-			><span>Type</span
-			><select v-model="form.typeKey">
-				<option value="movies">Movies</option>
-				<option value="shows">Shows</option>
-				<option value="music-videos">Music videos</option>
-				<option value="other">Other</option>
-			</select></label
-			>
-			<div class="library-source-row span-2">
+		<Transition name="moirai-collapse">
+			<form v-if="showForm" class="panel form-grid" @submit.prevent="create">
 				<label
-				><span>Path Moirai scans</span
-				><input v-model="form.sourceConfig.scanRoot" required placeholder="/media/movies"
+				><span>Name</span><input v-model="form.name" required autocapitalize="words" placeholder="Cinema archive"
 				/></label>
-				<label class="check"
-				><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label
+				<label
+				><span>Type</span
+				><select v-model="form.typeKey">
+					<option value="movies">Movies</option>
+					<option value="shows">Shows</option>
+					<option value="music-videos">Music videos</option>
+					<option value="other">Other</option>
+				</select></label
 				>
-			</div>
-			<label class="span-2"
-			><span>Path playback engine sees <small>optional</small></span
-			><input v-model="form.sourceConfig.playbackRoot" placeholder="/media/movies"
-			/></label>
-			<label class="span-2"
-			><span>Fallback scan, minutes</span
-			><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080"
-			/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
-			<p v-if="error" class="notice error span-2">{{ error }}</p>
-			<div class="form-actions span-2">
-				<button class="button" :disabled="busy">{{ busy ? 'Adding…' : 'Add and Scan' }}</button>
-			</div>
-		</form>
+				<div class="library-source-row span-2">
+					<label
+					><span>Path Moirai scans</span
+					><input v-model="form.sourceConfig.scanRoot" required placeholder="/media/movies"
+					/></label>
+					<label class="check"
+					><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label
+					>
+				</div>
+				<label class="span-2"
+				><span>Path playback engine sees <small>optional</small></span
+				><input v-model="form.sourceConfig.playbackRoot" placeholder="/media/movies"
+				/></label>
+				<label class="span-2"
+				><span>Fallback scan, minutes</span
+				><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080"
+				/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
+				<p v-if="error" class="notice error span-2">{{ error }}</p>
+				<div class="form-actions span-2">
+					<button class="button" :disabled="busy">{{ busy ? 'Adding…' : 'Add and Scan' }}</button>
+				</div>
+			</form>
+		</Transition>
 		<p v-if="loadError" class="notice error">
 			{{ loadError }}
 			<button class="button ghost" @click="librariesStore.load">Retry</button>
 		</p>
 		<LoadingState v-if="loading && !loaded" label="Loading libraries…" />
-		<div v-else-if="loaded && libraries.length" class="library-list">
+		<div v-else-if="loaded && libraries.length" class="library-list async-state-surface">
 			<article
 				v-for="library in libraries"
 				:key="library.id"

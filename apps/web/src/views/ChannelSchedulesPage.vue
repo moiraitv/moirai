@@ -33,6 +33,7 @@ import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import { randomUuid } from '../random-uuid';
 import LoadingState from '../components/LoadingState.vue';
+import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
 import ChannelSchedulesAbout from '../components/schedules/ChannelSchedulesAbout.vue';
 import LayeredSchedulingGuide from '../components/schedules/LayeredSchedulingGuide.vue';
@@ -99,6 +100,7 @@ let previewRevision = 0;
 
 const channelId = computed(() => String(route.params.id ?? ''));
 const editing = computed(() => Boolean(channelId.value));
+const previewIssuesOpen = ref(false);
 const channel = computed(() => channels.value.find((entry) => entry.id === channelId.value));
 const materialization = computed(() =>
 	materializations.value.find((entry) => entry.channelId === channelId.value));
@@ -530,38 +532,42 @@ onBeforeUnmount(() => {
 			title="Channel schedules"
 			description="Choose a channel to configure its base and conditional template stack."
 		>
-			<button
-				v-if="!editing && !channelSchedulesHelpVisible"
-				type="button"
-				class="page-help-button"
-				aria-label="Show channel schedule help"
-				@click="showChannelSchedulesHelp"
-			>
-				<CircleHelp :size="20" />
-			</button>
+			<Transition name="context-popover">
+				<button
+					v-if="!editing && !channelSchedulesHelpVisible"
+					type="button"
+					class="page-help-button"
+					aria-label="Show channel schedule help"
+					@click="showChannelSchedulesHelp"
+				>
+					<CircleHelp :size="20" />
+				</button>
+			</Transition>
 		</PageHeader>
 		<LoadingState v-if="initialLoading" label="Loading channel schedules…" />
 		<p v-else-if="error && !editing" class="notice error">{{ error }}</p>
 
-		<template v-else>
+		<div v-else class="async-state-surface">
 			<ChannelSchedulesAbout
 				:visible="!editing && channelSchedulesHelpVisible"
 				@dismiss="dismissChannelSchedulesHelp"
 				@learn="showLayeredGuide"
 			/>
 
-			<p v-if="listGuideError" class="notice error">
-				Schedule previews are temporarily unavailable: {{ listGuideError }}
-			</p>
+			<div class="channel-schedules-content">
+				<p v-if="listGuideError" class="notice error">
+					Schedule previews are temporarily unavailable: {{ listGuideError }}
+				</p>
 
-			<ChannelScheduleCatalog
-				:channels="channels"
-				:schedules="schedules"
-				:templates="templates"
-				:guide="guide"
-			/>
-			<LayeredSchedulingGuide :expanded="guideExpanded" @show="showLayeredGuide" />
-		</template>
+				<ChannelScheduleCatalog
+					:channels="channels"
+					:schedules="schedules"
+					:templates="templates"
+					:guide="guide"
+				/>
+				<LayeredSchedulingGuide :expanded="guideExpanded" @show="showLayeredGuide" />
+			</div>
+		</div>
 
 		<Teleport to="body">
 			<div
@@ -963,16 +969,17 @@ onBeforeUnmount(() => {
 									<span> {{ entry.name }}<small v-if="entry.isBase"> (Base template)</small> </span>
 								</div>
 							</div>
-							<details
+							<AnimatedDisclosure
 								v-if="preview?.issues.length"
+								v-model="previewIssuesOpen"
 								class="schedule-preview-issues compact-preview-issues"
 								aria-label="Schedule preview issues"
 							>
-								<summary>
+								<template #summary><span>
 									{{ preview.issues.length }} preview issue{{
 										preview.issues.length === 1 ? '' : 's'
 									}}
-								</summary>
+								</span></template>
 								<ul>
 									<li
 										v-for="issue in preview.issues"
@@ -982,7 +989,7 @@ onBeforeUnmount(() => {
 										<span>{{ issue.message }}</span>
 									</li>
 								</ul>
-							</details>
+							</AnimatedDisclosure>
 						</section>
 					</template>
 				</div>

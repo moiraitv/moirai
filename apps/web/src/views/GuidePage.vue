@@ -303,7 +303,7 @@ onBeforeUnmount(() => {
 
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading the channel guide…" />
-		<template v-else>
+		<div v-else class="async-state-surface">
 			<div class="guide-toolbar">
 				<div class="guide-week-controls">
 					<button
@@ -349,6 +349,6 @@ onBeforeUnmount(() => {
 				<template #icon><RadioTower :size="37" /></template>
 				<RouterLink class="button" to="/channels?new=1">Create Channel</RouterLink>
 			</ResourceEmptyState>
-		</template>
+		</div>
 	</section>
 </template>

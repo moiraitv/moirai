@@ -60,6 +60,18 @@
 	background: rgba(5, 16, 25, 0.98);
 	box-shadow: 0 18px 52px rgba(0, 0, 0, 0.48);
 	pointer-events: none;
+	animation: moirai-context-enter var(--motion-fast) var(--motion-enter);
+}
+
+.media-preview-leave-active {
+	transition:
+		opacity var(--motion-fast) var(--motion-exit),
+		transform var(--motion-fast) var(--motion-exit);
+}
+
+.media-preview-leave-to {
+	opacity: 0;
+	transform: translateY(2px) scale(0.99);
 }
 
 .media-card-preview-poster {

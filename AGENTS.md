@@ -39,6 +39,35 @@
   auto-dismissing toasts with manual dismissal and enough time to read or interact. Keep failures,
   warnings, and states that require user attention persistent and in context instead of dismissing
   them automatically.
+- Use subtle, context-appropriate motion when it clarifies presentation, dismissal, expansion,
+  collapse, spatial relationships, or asynchronous state changes. Do not add animation solely for
+  decoration or animate frequently changing data when doing so would add noise or imply false
+  stability.
+- Keep UI motion brief and restrained, preserve focus and interaction behavior throughout animated
+  transitions, and provide an effectively immediate reduced-motion experience without meaningful
+  translation or scaling.
+- Model custom motion timing and easing on established platform conventions instead of choosing
+  arbitrary durations. For deliberate presentation transitions, prefer Apple-style system timing
+  as the touch-oriented baseline: approximately 350 ms with an ease-in-out curve. Use shorter
+  durations for frequent or lightweight feedback where the longer transition would impede use.
+- When presenting or dismissing a control changes the space occupied by surrounding content,
+  animate the affected layout in the same direction, duration, and easing as the control. Keep the
+  spatial relationship clear while containing layout work and avoiding animation-driven rendering
+  churn that causes stutter.
+- Treat smoothness and rendering performance as requirements for every animation. Prefer
+  compositor-friendly opacity and transform changes, keep animated layout work tightly contained,
+  and avoid per-frame measurements, reactive updates, or expensive rendering. Verify experiential
+  motion in a representative browser and device viewport when practical; simplify or remove an
+  animation that cannot remain consistently smooth.
+- When surrounding content must visibly move because a control changes occupied space, prefer a
+  FLIP-style transition: commit the final layout once, measure the displacement once, apply an
+  inverse visual offset before paint, and animate that offset to its final position using a
+  compositor transform. Reconcile sticky offsets, virtualized-list geometry, and other dependent
+  measurements once after completion instead of on every frame.
+- Animate presentation layers that accompany a FLIP transition, such as a newly exposed header or
+  panel background, as independent opacity or transform layers using the same duration, direction,
+  and easing. Avoid animating height, grid tracks, margins, or other layout properties when doing so
+  would continuously reflow substantial, sticky, or virtualized content.
 
 ## Testing
 

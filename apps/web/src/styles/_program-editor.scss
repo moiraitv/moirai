@@ -690,6 +690,7 @@
 	justify-content: flex-end;
 	background: rgba(2, 7, 12, 0.72);
 	backdrop-filter: blur(4px);
+	animation: moirai-backdrop-enter var(--motion-standard) ease-out;
 }
 
 .selection-drawer {
@@ -703,10 +704,30 @@
 	outline: 0;
 	background: radial-gradient(circle at 50% 0%, rgba(20, 67, 83, 0.2), transparent 30rem), #091722;
 	box-shadow: -24px 0 70px rgba(0, 0, 0, 0.52);
+	animation: moirai-drawer-enter var(--motion-panel) var(--motion-enter);
 }
 
 .selection-drawer.media-selection-drawer {
 	width: min(960px, 100%);
+}
+
+.selection-drawer-leave-active {
+	transition:
+		opacity var(--motion-standard) var(--motion-exit),
+		backdrop-filter var(--motion-standard) var(--motion-exit);
+}
+
+.selection-drawer-leave-active > .selection-drawer {
+	transition: transform var(--motion-panel) var(--motion-exit);
+}
+
+.selection-drawer-leave-to {
+	opacity: 0;
+	backdrop-filter: blur(0);
+}
+
+.selection-drawer-leave-to > .selection-drawer {
+	transform: translateX(100%);
 }
 
 .selection-drawer-header {

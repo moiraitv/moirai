@@ -26,6 +26,52 @@
 	--orange: #ff8a3d;
 	--gold: #e2a95b;
 	--danger: #ff6f7f;
+	--motion-fast: 110ms;
+	--motion-standard: 170ms;
+	--motion-panel: 220ms;
+	--motion-system: 350ms;
+	--motion-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--motion-exit: cubic-bezier(0.4, 0, 1, 1);
+	--motion-system-ease: cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+@keyframes moirai-backdrop-enter {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes moirai-dialog-enter {
+	from {
+		opacity: 0;
+		transform: translateY(7px) scale(0.985);
+	}
+}
+
+@keyframes moirai-drawer-enter {
+	from {
+		transform: translateX(100%);
+	}
+}
+
+@keyframes moirai-toast-enter {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+}
+
+@keyframes moirai-context-enter {
+	from {
+		opacity: 0;
+		transform: translateY(3px) scale(0.985);
+	}
+}
+
+@keyframes moirai-state-enter {
+	from {
+		opacity: 0;
+	}
 }
 
 * {
@@ -79,6 +125,12 @@ select {
 	border-radius: 13px;
 	background: rgba(5, 14, 23, 0.16);
 	text-align: center;
+	animation: moirai-state-enter var(--motion-standard) var(--motion-enter);
+}
+
+.loading-state,
+.async-state-surface {
+	animation: moirai-state-enter var(--motion-standard) var(--motion-enter);
 }
 
 .resource-empty-state.compact {
@@ -445,6 +497,16 @@ a.nav-link.router-link-exact-active {
 	display: none;
 }
 
+.sidebar-backdrop-enter-active,
+.sidebar-backdrop-leave-active {
+	transition: opacity var(--motion-standard) ease;
+}
+
+.sidebar-backdrop-enter-from,
+.sidebar-backdrop-leave-to {
+	opacity: 0;
+}
+
 .app-content {
 	--app-content-inline-padding: clamp(24px, 2.6vw, 42px);
 	width: 100%;
@@ -466,6 +528,112 @@ a.nav-link.router-link-exact-active {
 	border-radius: 11px;
 	background: #0b2923;
 	box-shadow: 0 18px 42px rgba(0, 0, 0, 0.44);
+	animation: moirai-toast-enter var(--motion-standard) var(--motion-enter);
+}
+
+.transient-toast-leave-active {
+	transition:
+		opacity var(--motion-fast) var(--motion-exit),
+		transform var(--motion-fast) var(--motion-exit);
+}
+
+.transient-toast-leave-to {
+	opacity: 0;
+	transform: translateY(5px);
+}
+
+.moirai-collapse-enter-active,
+.moirai-collapse-leave-active {
+	overflow: hidden;
+	transition:
+		max-height var(--motion-standard) var(--motion-enter),
+		opacity var(--motion-fast) ease,
+		transform var(--motion-standard) var(--motion-enter);
+}
+
+.moirai-collapse-enter-from,
+.moirai-collapse-leave-to {
+	max-height: 0 !important;
+	opacity: 0;
+	transform: translateY(-4px);
+}
+
+.moirai-collapse-enter-to,
+.moirai-collapse-leave-from {
+	max-height: 32rem;
+}
+
+.animated-disclosure-trigger {
+	width: 100%;
+	padding: 0;
+	cursor: pointer;
+	border: 0;
+	color: inherit;
+	background: transparent;
+	text-align: inherit;
+}
+
+.animated-disclosure-content {
+	overflow: hidden;
+	transition:
+		height var(--motion-standard) var(--motion-enter),
+		opacity var(--motion-fast) ease;
+}
+
+.animated-disclosure-enter-from,
+.animated-disclosure-leave-to {
+	opacity: 0;
+}
+
+.async-state-enter-active,
+.async-state-leave-active {
+	transition: opacity var(--motion-fast) ease;
+}
+
+.async-state-enter-from,
+.async-state-leave-to {
+	opacity: 0;
+}
+
+.animated-help-panel {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr);
+}
+
+.animated-help-panel-content {
+	min-height: 0;
+}
+
+.animated-help-panel.with-following-space .animated-help-panel-content {
+	padding-bottom: 24px;
+}
+
+.help-panel-enter-active,
+.help-panel-leave-active {
+	overflow: hidden;
+	transition:
+		grid-template-rows var(--motion-system) var(--motion-system-ease),
+		opacity var(--motion-panel) var(--motion-system-ease);
+}
+
+.help-panel-enter-from,
+.help-panel-leave-to {
+	grid-template-rows: minmax(0, 0fr);
+	opacity: 0;
+}
+
+.context-popover-enter-active,
+.context-popover-leave-active {
+	transition:
+		opacity var(--motion-fast) ease,
+		transform var(--motion-fast) var(--motion-enter);
+	transform-origin: top right;
+}
+
+.context-popover-enter-from,
+.context-popover-leave-to {
+	opacity: 0;
+	transform: translateY(-2px) scale(0.98);
 }
 
 .transient-toast-neutral {

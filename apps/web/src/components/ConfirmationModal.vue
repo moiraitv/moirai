@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, useTemplateRef, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 
 const props = withDefaults(defineProps<{
 	title: string;
@@ -16,6 +16,8 @@ const emit = defineEmits<{
 }>();
 const dialog = useTemplateRef<HTMLElement>('dialog');
 const cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton');
+const visible = ref(true);
+const result = ref<boolean | null>(null);
 const previouslyFocused = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
 	? document.activeElement
 	: null;
@@ -31,7 +33,7 @@ function handleKeydown(event: KeyboardEvent): void {
 	if (event.key === 'Escape') {
 		event.stopPropagation();
 		event.preventDefault();
-		emit('cancel');
+		requestClose(false);
 		return;
 	}
 	if (event.key !== 'Tab') {
@@ -60,6 +62,26 @@ function handleKeydown(event: KeyboardEvent): void {
 	}
 }
 
+/** Begin dismissal and remember which confirmation result to emit after the exit transition. */
+function requestClose(confirmed: boolean): void {
+	if (!visible.value) {
+		return;
+	}
+
+	result.value = confirmed;
+	visible.value = false;
+}
+
+/** Settle the confirmation only after its dialog has visually left the page. */
+function finishClose(): void {
+	if (result.value) {
+		emit('confirm');
+	}
+	else {
+		emit('cancel');
+	}
+}
+
 onMounted(() => void focusSafestAction());
 watch(
 	() => [props.title, props.message, props.confirmLabel],
@@ -74,35 +96,37 @@ onUnmounted(() => {
 
 <template>
 	<Teleport to="body">
-		<div class="moirai-dialog-backdrop confirmation-modal-backdrop" @click.self="emit('cancel')">
-			<section
-				ref="dialog"
-				class="moirai-dialog confirmation-modal"
-				role="alertdialog"
-				aria-modal="true"
-				aria-labelledby="confirmation-modal-title"
-				aria-describedby="confirmation-modal-message"
-				@keydown="handleKeydown"
-			>
-				<header>
-					<p class="eyebrow">Confirmation required</p>
-					<h2 id="confirmation-modal-title">{{ title }}</h2>
-				</header>
-				<p id="confirmation-modal-message">{{ message }}</p>
-				<footer>
-					<button ref="cancelButton" type="button" class="button secondary" @click="emit('cancel')">
-						Cancel
-					</button>
-					<button
-						type="button"
-						class="button"
-						:class="{ danger: props.destructive }"
-						@click="emit('confirm')"
-					>
-						{{ confirmLabel }}
-					</button>
-				</footer>
-			</section>
-		</div>
+		<Transition name="moirai-overlay" appear @after-leave="finishClose">
+			<div v-show="visible" class="moirai-dialog-backdrop confirmation-modal-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose(false)">
+				<section
+					ref="dialog"
+					class="moirai-dialog confirmation-modal"
+					role="alertdialog"
+					aria-modal="true"
+					aria-labelledby="confirmation-modal-title"
+					aria-describedby="confirmation-modal-message"
+					@keydown="handleKeydown"
+				>
+					<header>
+						<p class="eyebrow">Confirmation required</p>
+						<h2 id="confirmation-modal-title">{{ title }}</h2>
+					</header>
+					<p id="confirmation-modal-message">{{ message }}</p>
+					<footer>
+						<button ref="cancelButton" type="button" class="button secondary" @click="requestClose(false)">
+							Cancel
+						</button>
+						<button
+							type="button"
+							class="button"
+							:class="{ danger: props.destructive }"
+							@click="requestClose(true)"
+						>
+							{{ confirmLabel }}
+						</button>
+					</footer>
+				</section>
+			</div>
+		</Transition>
 	</Teleport>
 </template>

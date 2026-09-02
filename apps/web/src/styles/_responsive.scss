@@ -13,6 +13,11 @@ body:has(.standalone-editor-backdrop) {
 	backdrop-filter: none;
 }
 
+.standalone-editor-backdrop,
+.standalone-editor-backdrop > .moirai-dialog {
+	animation: none;
+}
+
 .standalone-editor-backdrop > .moirai-dialog {
 	width: 100%;
 	height: auto;
@@ -111,10 +116,6 @@ body:has(.standalone-editor-backdrop) {
 		align-self: flex-start;
 	}
 
-	.catalog-selection-enter-active,
-	.catalog-selection-leave-active {
-		max-height: 104px;
-	}
 }
 
 @media (max-width: 900px) {
@@ -1009,5 +1010,12 @@ body:has(.standalone-editor-backdrop) {
 		transition-duration: 0.01ms !important;
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
+	}
+
+	.moirai-dialog,
+	.selection-drawer,
+	.media-card-preview-tooltip,
+	.transient-toast {
+		transform: none !important;
 	}
 }

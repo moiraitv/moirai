@@ -711,7 +711,7 @@ onBeforeUnmount(() => {
 		>
 		<p v-if="error && !showForm" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading channels and guide…" />
-		<template v-else>
+		<div v-else class="async-state-surface">
 			<div class="guide-toolbar">
 				<div class="guide-week-controls">
 					<button
@@ -791,7 +791,7 @@ onBeforeUnmount(() => {
 				<template #icon><RadioTower :size="37" /></template>
 				<button class="button" type="button" @click="add"><Plus :size="18" />Create Channel</button>
 			</ResourceEmptyState>
-		</template>
+		</div>
 		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">
 			<form class="moirai-dialog" @submit.prevent="save">
 				<div class="modal-heading">

@@ -173,7 +173,7 @@ onUnmounted(() => {
 		</PageHeader>
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading playback settings…" />
-		<div v-else class="settings-layout">
+		<div v-else class="settings-layout async-state-surface">
 			<form class="panel form-grid" @submit.prevent="save">
 				<div class="span-2">
 					<p class="eyebrow">Client setup</p>

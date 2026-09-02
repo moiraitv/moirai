@@ -3,6 +3,11 @@
 	gap: 1.15rem;
 }
 
+.logs-page > .async-state-surface {
+	display: grid;
+	gap: inherit;
+}
+
 .logs-toolbar {
 	display: grid;
 	grid-template-columns: minmax(16rem, 1fr) minmax(10rem, 12rem) auto;
@@ -314,36 +319,30 @@
 	overflow: hidden;
 }
 
-.log-files > summary {
+.log-files-summary {
 	padding: 0.85rem 1rem;
 	display: flex;
 	justify-content: space-between;
 	gap: 1rem;
 	align-items: center;
-	cursor: pointer;
-	list-style: none;
 }
 
-.log-files > summary::-webkit-details-marker {
-	display: none;
-}
-
-.log-files > summary > span {
+.log-files-summary > span {
 	display: flex;
 	gap: 0.65rem;
 	align-items: center;
 }
 
-.log-files > summary small {
+.log-files-summary small {
 	color: var(--muted);
 }
 
-.log-files > summary > svg {
+.log-files-summary > svg {
 	color: var(--muted);
 	transition: transform 160ms ease;
 }
 
-.log-files[open] > summary > svg {
+.log-files.is-open .log-files-summary > svg {
 	transform: rotate(180deg);
 }
 
@@ -424,12 +423,12 @@
 		display: none;
 	}
 
-	.log-files > summary > span {
+	.log-files-summary > span {
 		min-width: 0;
 		flex-wrap: wrap;
 	}
 
-	.log-files > summary small {
+	.log-files-summary small {
 		width: 100%;
 		padding-left: 1.95rem;
 	}

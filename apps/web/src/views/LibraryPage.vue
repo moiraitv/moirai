@@ -48,11 +48,17 @@ import type {
 } from '@moirai/shared';
 import { api, type MediaQuery } from '../api';
 import { activeCatalogAnchor, breadcrumbTargetTrail } from '../catalog-navigation';
+import {
+	buildCatalogVirtualRows,
+	catalogAnchorRowIndex,
+	catalogColumnCount,
+} from '../catalog-virtualization';
 import LoadingState from '../components/LoadingState.vue';
+import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
 import TransientToast from '../components/TransientToast.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
-import LibraryMediaCard from '../components/library/LibraryMediaCard.vue';
 import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
+import VirtualLibraryCatalog from '../components/library/VirtualLibraryCatalog.vue';
 import {
 	emptyLibraryFilterDraft,
 	type LibraryFilterDraft,
@@ -64,6 +70,7 @@ import ProgramAdditionToast from '../components/programs/ProgramAdditionToast.vu
 import { liveEvents } from '../live-events';
 import { isLibrarySourceUnavailable } from '../library-health';
 import { shiftCalendarMonths } from '../date-key';
+import { useSelectionToolbarTransition } from '../selection-toolbar-transition';
 import { useLibrariesStore } from '../stores/libraries';
 
 const route = useRoute();
@@ -72,6 +79,8 @@ const librariesStore = useLibrariesStore();
 const id = computed(() => String(route.params.id));
 const library = ref<Library>();
 const scans = ref<ScanRun[]>([]);
+const scanHistoryOpen = ref(false);
+const filterModalInstance = ref(0);
 const reconciliation = ref<LibraryReconciliation>();
 const genres = ref<MediaGenreFacet[]>([]);
 const browse = ref<MediaBrowseResult>();
@@ -116,7 +125,12 @@ const searchInput = ref<HTMLInputElement>();
 const libraryPage = ref<HTMLElement>();
 const libraryHeader = ref<HTMLElement>();
 const catalogControlsStack = ref<HTMLElement>();
+const selectionToolbarSlot = ref<HTMLElement>();
 const catalogResults = ref<HTMLElement>();
+const virtualCatalog = ref<InstanceType<typeof VirtualLibraryCatalog>>();
+const catalogWidth = ref(0);
+const catalogScrollMargin = ref(0);
+const catalogScrollPadding = ref(0);
 const navigationScroller = ref<HTMLElement>();
 const searchText = ref(queryString('q'));
 const message = ref('');
@@ -129,13 +143,23 @@ const showSettings = ref(false);
 const showSort = ref(false);
 const showFilter = ref(false);
 const showReconciliation = ref(false);
-const selectionMode = ref(false);
+const {
+	active: selectionMode,
+	mounted: selectionToolbarMounted,
+	revealed: selectionToolbarRevealed,
+	show: showSelectionToolbar,
+	hide: hideSelectionToolbar,
+	finish: finishSelectionToolbarState,
+	reset: resetSelectionToolbar,
+	dispose: disposeSelectionToolbar,
+} = useSelectionToolbarTransition();
+const selectionToolbarMotionActive = ref(false);
+const selectionToolbarShift = ref(0);
 const selectedItemIds = ref<string[]>([]);
 const programSelection = ref<ProgramItemAddition['selection'] | null>(null);
 const programAdditionResult = ref<ProgramItemAdditionResult | null>(null);
 const reconciliationBusy = ref(false);
 const alphabet = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-const anchorElements = new Map<string, HTMLElement>();
 const navigationButtons = new Map<string, HTMLElement>();
 const activeScrollAnchor = ref('');
 /** Breadcrumb entry stored in route state for hierarchical catalog browsing. */
@@ -170,6 +194,10 @@ const parentId = computed(() => queryString('parent') || undefined);
 const dateWindow = computed(() => queryString('dateWindow'));
 const routeAnchor = computed(() => queryString('anchor'));
 const entries = computed(() => browse.value?.entries ?? []);
+const paginationWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth);
+const catalogColumns = computed(() =>
+	catalogColumnCount(catalogWidth.value, paginationWidth.value));
+const catalogRows = computed(() => buildCatalogVirtualRows(entries.value, catalogColumns.value));
 const pageItemIds = computed(() => [
 	...new Set(entries.value.flatMap((entry) => entry.item ? [entry.item.id] : [])),
 ]);
@@ -247,7 +275,6 @@ const anchorKeys = computed(() => [
 	...new Set(entries.value.map((entry) => entry.navigationKey).filter(Boolean)),
 ]);
 
-const paginationWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth);
 const pageButtons = computed(() => {
 	const total = pagination.value?.totalPages ?? 1;
 	const current = page.value;
@@ -407,13 +434,29 @@ function currentProgramItemQuery(): CatalogProgramItemQuery {
 /** Enter page-local item selection without retaining an earlier catalog page. */
 function beginSelection(): void {
 	selectedItemIds.value = [];
-	selectionMode.value = true;
+	selectionToolbarMotionActive.value = true;
+	showSelectionToolbar();
+	void nextTick(() => {
+		selectionToolbarShift.value = selectionToolbarSlot.value?.getBoundingClientRect().height ?? 0;
+	});
 }
 
 /** Leave selection mode and discard its page-local identifiers. */
 function cancelSelection(): void {
 	selectedItemIds.value = [];
-	selectionMode.value = false;
+	selectionToolbarMotionActive.value = selectionToolbarMounted.value;
+	hideSelectionToolbar();
+}
+
+/** Reconcile sticky geometry once selection-toolbar motion has finished. */
+function finishSelectionToolbarTransition(event: TransitionEvent): void {
+	finishSelectionToolbarState(event);
+	if (event.target !== event.currentTarget || event.propertyName !== 'opacity') {
+		return;
+	}
+
+	selectionToolbarMotionActive.value = false;
+	requestAnimationFrame(updateStickyMetrics);
 }
 
 /** Toggle one item in the current page-local selection. */
@@ -454,38 +497,6 @@ function mediaStateSignature(): string {
 			.filter(([key]) => key !== 'anchor')
 			.sort(([left], [right]) => left.localeCompare(right)),
 	);
-}
-
-/** Return whether an entry starts a new navigation section on the current page. */
-function isAnchorStart(index: number): boolean {
-	const key = entries.value[index]?.navigationKey;
-	return Boolean(
-		sort.value !== 'date-added' && key && key !== entries.value[index - 1]?.navigationKey,
-	);
-}
-
-/** Retain the rendered element that begins a catalog navigation section. */
-function setAnchorElement(key: string, element: Element | ComponentPublicInstance | null): void {
-	const resolved
-		= element instanceof HTMLElement
-			? element
-			: element && '$el' in element
-				? (element.$el as unknown)
-				: null;
-	if (resolved instanceof HTMLElement) {
-		anchorElements.set(key, resolved);
-	}
-}
-
-/** Register an entry as a section anchor when it starts an unlabeled section. */
-function setEntryAnchor(
-	index: number,
-	key: string,
-	element: Element | ComponentPublicInstance | null,
-): void {
-	if (isAnchorStart(index) && !entries.value[index]?.sectionLabel) {
-		setAnchorElement(key, element);
-	}
 }
 
 /** Retain a rendered navigation button so the active choice can be revealed. */
@@ -533,6 +544,11 @@ function updateStickyMetrics(): void {
 		'--catalog-controls-height',
 		`${controlsHeight}px`,
 	);
+	catalogScrollPadding.value = stickyBoundary();
+	if (catalogResults.value) {
+		catalogScrollMargin.value
+			= window.scrollY + catalogResults.value.getBoundingClientRect().top;
+	}
 	scheduleAnchorUpdate();
 }
 
@@ -586,8 +602,8 @@ async function scrollToAnchor(
 ): Promise<boolean> {
 	await nextTick();
 	await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-	const target = anchorElements.get(key);
-	if (!target) {
+	const rowIndex = catalogAnchorRowIndex(catalogRows.value, key);
+	if (rowIndex < 0) {
 		return false;
 	}
 
@@ -598,10 +614,7 @@ async function scrollToAnchor(
 	revealNavigationButton(key, behavior);
 	programmaticScroll = true;
 	window.clearTimeout(programmaticScrollTimer);
-	window.scrollTo({
-		top: Math.max(0, window.scrollY + target.getBoundingClientRect().top - stickyBoundary() - 4),
-		behavior,
-	});
+	virtualCatalog.value?.scrollToRow(rowIndex, behavior);
 	programmaticScrollTimer = window.setTimeout(
 		finishProgrammaticScroll,
 		behavior === 'smooth' ? 700 : 0,
@@ -629,10 +642,7 @@ function updateActiveAnchor(): void {
 		return;
 	}
 
-	const positions = anchorKeys.value.flatMap((key) => {
-		const element = anchorElements.get(key);
-		return element ? [{ key, top: element.getBoundingClientRect().top }] : [];
-	});
+	const positions = virtualCatalog.value?.anchorPositions(window.scrollY) ?? [];
 	const atDocumentEnd
 		= window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
 	const key = activeCatalogAnchor(positions, stickyBoundary() + 4, atDocumentEnd);
@@ -661,6 +671,7 @@ function scheduleAnchorUpdate(): void {
 }
 
 let resizeObserver: ResizeObserver | undefined;
+let catalogResizeObserver: ResizeObserver | undefined;
 /** Watch sticky header sizes and refresh catalog scroll geometry. */
 function observeStickyElements(): void {
 	resizeObserver?.disconnect();
@@ -672,6 +683,25 @@ function observeStickyElements(): void {
 	resizeObserver.observe(libraryHeader.value);
 	resizeObserver.observe(catalogControlsStack.value);
 	updateStickyMetrics();
+}
+
+/** Watch catalog width so responsive rows can be regrouped and remeasured. */
+function observeCatalogWidth(): void {
+	catalogResizeObserver?.disconnect();
+	if (!catalogResults.value) {
+		return;
+	}
+
+	catalogResizeObserver = new ResizeObserver(([entry]) => {
+		const nextWidth = entry?.contentRect.width ?? 0;
+		if (Math.abs(nextWidth - catalogWidth.value) < 0.5) {
+			return;
+		}
+
+		catalogWidth.value = nextWidth;
+	});
+	catalogResizeObserver.observe(catalogResults.value);
+	catalogWidth.value = catalogResults.value.getBoundingClientRect().width;
 }
 
 /** Restore the requested catalog anchor or settle on the first available section. */
@@ -768,6 +798,7 @@ async function loadInitial(): Promise<void> {
 	}
 	await nextTick();
 	observeStickyElements();
+	observeCatalogWidth();
 	await settleCatalogPosition('auto', false);
 }
 
@@ -922,6 +953,7 @@ async function jump(index: number): Promise<void> {
 
 /** Seed the filter draft from route state before opening the filter dialog. */
 function openFilters(): void {
+	filterModalInstance.value += 1;
 	filterDraft.name = queryString('q');
 	filterDraft.releaseFrom = queryString('releaseFrom');
 	filterDraft.releaseTo = queryString('releaseTo');
@@ -1054,13 +1086,10 @@ const unsubscribe = liveEvents.subscribe((event) => {
 });
 
 let loadedMediaState = mediaStateSignature();
-watch(
-	selectionMode,
-	async () => {
-		await nextTick();
-		observeStickyElements();
-	},
-);
+watch(catalogColumns, async () => {
+	await nextTick();
+	updateStickyMetrics();
+});
 watch(
 	() => route.fullPath,
 	async () => {
@@ -1103,7 +1132,8 @@ watch(searchText, (value) => {
 });
 watch(id, () => {
 	// Discard actions captured for the previous library before loading the new route.
-	selectionMode.value = false;
+	resetSelectionToolbar();
+	selectionToolbarMotionActive.value = false;
 	selectedItemIds.value = [];
 	programSelection.value = null;
 	programAdditionResult.value = null;
@@ -1111,7 +1141,6 @@ watch(id, () => {
 	void loadInitial();
 });
 onBeforeUpdate(() => {
-	anchorElements.clear();
 	navigationButtons.clear();
 });
 onMounted(() => {
@@ -1126,9 +1155,11 @@ onUnmounted(() => {
 	window.removeEventListener('resize', handleResize);
 	unsubscribe();
 	resizeObserver?.disconnect();
+	catalogResizeObserver?.disconnect();
 	if (anchorUpdateFrame !== undefined) {
 		cancelAnimationFrame(anchorUpdateFrame);
 	}
+	disposeSelectionToolbar();
 	window.clearTimeout(programmaticScrollTimer);
 	window.clearTimeout(liveRefreshTimer);
 	window.clearTimeout(searchTimer);
@@ -1174,10 +1205,12 @@ onUnmounted(() => {
 				<div>
 					<strong>Library scan needs attention</strong>
 					<p>{{ library.warningCount }} scan {{ library.warningCount === 1 ? 'issue requires' : 'issues require' }} review.</p>
-					<ul v-if="showScanIssues && currentScanIssues.length" class="library-warning-issues">
-						<li v-for="issue in currentScanIssues" :key="`${issue.code}:${issue.path}:${issue.message}`"><strong>{{ issue.code }}</strong><span>{{ issue.path ?? issue.message }}</span><small v-if="issue.path">{{ issue.message }}</small></li>
-					</ul>
-					<p v-else-if="showScanIssues">Detailed issues are no longer retained. Run a library sync to refresh the warning state.</p>
+					<Transition name="moirai-collapse">
+						<ul v-if="showScanIssues && currentScanIssues.length" class="library-warning-issues">
+							<li v-for="issue in currentScanIssues" :key="`${issue.code}:${issue.path}:${issue.message}`"><strong>{{ issue.code }}</strong><span>{{ issue.path ?? issue.message }}</span><small v-if="issue.path">{{ issue.message }}</small></li>
+						</ul>
+						<p v-else-if="showScanIssues">Detailed issues are no longer retained. Run a library sync to refresh the warning state.</p>
+					</Transition>
 				</div>
 				<button v-if="currentScanIssues.length" type="button" class="button secondary" :aria-expanded="showScanIssues" @click="showScanIssues = !showScanIssues">{{ showScanIssues ? 'Hide Issues' : 'Review Issues' }}</button>
 			</div>
@@ -1249,7 +1282,11 @@ onUnmounted(() => {
 			</section>
 		</div>
 
-		<div ref="catalogControlsStack" class="catalog-controls-stack">
+		<div
+			ref="catalogControlsStack"
+			class="catalog-controls-stack"
+			:style="{ '--selection-toolbar-shift': `${selectionToolbarMounted ? selectionToolbarShift : 0}px` }"
+		>
 			<nav v-if="trail.length > 1" class="breadcrumbs" aria-label="Library location">
 				<button v-for="(crumb, index) in trail" :key="crumb.id ?? 'root'" @click="jump(index)">{{ crumb.title }}</button>
 			</nav>
@@ -1267,86 +1304,105 @@ onUnmounted(() => {
 				</div>
 				<div class="action-menu sort-control">
 					<button class="catalog-select wide" :aria-expanded="showSort" @click="showSort = !showSort">{{ sortLabel }} <ChevronDown :size="16" /></button>
-					<div v-if="showSort" class="action-popover sort-popover">
-						<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
-						<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse Order</button>
-					</div>
+					<Transition name="context-popover">
+						<div v-if="showSort" class="action-popover sort-popover">
+							<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
+							<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse Order</button>
+						</div>
+					</Transition>
 				</div>
-				<button class="toolbar-button" :class="{ active: activeFilterCount > 0 }" @click="openFilters"><Filter :size="16" /> Filter <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
 				<button
 					type="button"
-					class="toolbar-button catalog-selection-toggle"
+					class="toolbar-button catalog-icon-button"
+					:class="{ active: activeFilterCount > 0 }"
+					aria-label="Filter media"
+					title="Filter media"
+					@click="openFilters"
+				>
+					<Filter :size="18" />
+					<span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
+				</button>
+				<button
+					type="button"
+					class="toolbar-button catalog-icon-button catalog-selection-toggle"
 					:class="{ active: selectionMode }"
 					:aria-pressed="selectionMode"
+					:aria-label="selectionMode ? 'Cancel item selection' : 'Select items'"
+					:title="selectionMode ? 'Cancel item selection' : 'Select items'"
 					@click="selectionMode ? cancelSelection() : beginSelection()"
 				>
-					<X v-if="selectionMode" :size="16" />
-					<ListPlus v-else :size="16" />
-					{{ selectionMode ? 'Cancel' : 'Select items' }}
+					<X v-if="selectionMode" :size="18" />
+					<ListPlus v-else :size="18" />
 				</button>
 			</div>
-			<Transition
-				name="catalog-selection"
-				@after-enter="observeStickyElements"
-				@after-leave="observeStickyElements"
-			>
-				<div
-					v-if="selectionMode"
-					class="catalog-selection-toolbar"
-					role="toolbar"
-					aria-label="Item selection"
-				>
-					<div class="catalog-selection-primary">
-						<strong>{{ selectedItemIds.length }} selected</strong>
+			<div v-show="selectionToolbarMounted" ref="selectionToolbarSlot" class="catalog-selection-toolbar-slot" :class="{ 'is-revealed': selectionToolbarRevealed }">
+				<div class="catalog-selection-toolbar-clip">
+					<div
+						class="catalog-selection-toolbar"
+						role="toolbar"
+						aria-label="Item selection"
+						@transitionend="finishSelectionToolbarTransition"
+					>
+						<div class="catalog-selection-primary">
+							<strong>{{ selectedItemIds.length }} selected</strong>
+							<button
+								type="button"
+								class="toolbar-button catalog-selection-action"
+								:disabled="selectedItemIds.length === 0"
+								@click="addSelectedItems"
+							>
+								<ListPlus :size="15" /> Add Selected
+							</button>
+							<button
+								type="button"
+								class="toolbar-button catalog-selection-action"
+								:disabled="mediaLoading || !browse || entries.length === 0"
+								@click="addAllMatchingItems"
+							>
+								<Layers3 :size="15" /> Add All
+							</button>
+						</div>
 						<button
 							type="button"
-							class="toolbar-button catalog-selection-action"
-							:disabled="selectedItemIds.length === 0"
-							@click="addSelectedItems"
+							class="toolbar-button catalog-selection-page-action"
+							:disabled="pageItemIds.length === 0"
+							@click="togglePageSelection"
 						>
-							<ListPlus :size="15" /> Add Selected
-						</button>
-						<button
-							type="button"
-							class="toolbar-button catalog-selection-action"
-							:disabled="mediaLoading || !browse || entries.length === 0"
-							@click="addAllMatchingItems"
-						>
-							<Layers3 :size="15" /> Add All
+							{{ allPageItemsSelected ? 'Clear Page' : 'Select Page' }}
 						</button>
 					</div>
-					<button
-						type="button"
-						class="toolbar-button catalog-selection-page-action"
-						:disabled="pageItemIds.length === 0"
-						@click="togglePageSelection"
-					>
-						{{ allPageItemsSelected ? 'Clear Page' : 'Select Page' }}
-					</button>
 				</div>
-			</Transition>
+			</div>
 		</div>
 
-		<section ref="catalogResults" class="catalog-results" :class="{ loading: mediaLoading }" aria-live="polite">
+		<section
+			ref="catalogResults"
+			class="catalog-results"
+			:class="{
+				loading: mediaLoading,
+				'selection-layout-entering': selectionToolbarMotionActive && selectionMode && !selectionToolbarRevealed,
+				'selection-layout-opening': selectionToolbarMotionActive && selectionMode && selectionToolbarRevealed,
+				'selection-layout-leaving': selectionToolbarMotionActive && !selectionMode && selectionToolbarMounted,
+			}"
+			:style="{ '--selection-toolbar-shift': `${selectionToolbarShift}px` }"
+			:aria-live="mediaLoading || !entries.length ? 'polite' : 'off'"
+		>
 			<LoadingState v-if="mediaLoading && !browse" label="Loading media…" />
-			<div v-else-if="entries.length" class="media-grid">
-				<template v-for="(entry, index) in entries" :key="entry.key">
-					<h2 v-if="entry.sectionLabel && isAnchorStart(index)" :ref="(element) => setAnchorElement(entry.navigationKey, element)" class="genre-heading catalog-anchor" :data-catalog-anchor="entry.navigationKey">{{ entry.sectionLabel }}</h2>
-					<LibraryMediaCard
-						:ref="(element) => setEntryAnchor(index, entry.navigationKey, element)"
-						class="media-card"
-						:class="{ 'catalog-anchor': isAnchorStart(index) && !entry.sectionLabel }"
-						:data-catalog-anchor="isAnchorStart(index) && !entry.sectionLabel ? entry.navigationKey : undefined"
-						:entry="entry"
-						:library-id="library.id"
-						:library-type="library.typeKey"
-						:selection-mode="selectionMode"
-						:selected="entry.item ? selectedItemIdSet.has(entry.item.id) : false"
-						@enter="enter"
-						@toggle="toggleSelectedItem"
-					/>
-				</template>
-			</div>
+			<VirtualLibraryCatalog
+				v-else-if="entries.length"
+				ref="virtualCatalog"
+				:rows="catalogRows"
+				:catalog-width="catalogWidth"
+				:column-count="catalogColumns"
+				:scroll-margin="catalogScrollMargin"
+				:scroll-padding="catalogScrollPadding"
+				:selection-mode="selectionMode"
+				:selected-item-ids="selectedItemIdSet"
+				:library-id="library.id"
+				:library-type="library.typeKey"
+				@enter="enter"
+				@toggle="toggleSelectedItem"
+			/>
 			<div v-else class="empty-state"><h3>No matching media</h3><p>Try changing the search or filters, or scan the library again.</p></div>
 		</section>
 
@@ -1356,11 +1412,11 @@ onUnmounted(() => {
 			<span>{{ pagination.pageSize }} per page</span>
 		</footer>
 
-		<details class="diagnostics"><summary>Scan history</summary><article v-for="run in scans" :key="run.id"><StatusPill :value="run.status" /><span>{{ new Date(run.startedAt).toLocaleString() }}</span><span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span><ul v-if="run.issues.length"><li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">{{ issue.code }} — {{ issue.path ?? issue.message }}</li></ul></article></details>
+		<AnimatedDisclosure v-model="scanHistoryOpen" class="diagnostics"><template #summary><span>Scan history</span></template><article v-for="run in scans" :key="run.id"><StatusPill :value="run.status" /><span>{{ new Date(run.startedAt).toLocaleString() }}</span><span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span><ul v-if="run.issues.length"><li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">{{ issue.code }} — {{ issue.path ?? issue.message }}</li></ul></article></AnimatedDisclosure>
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
 		<LibrarySettingsModal v-if="showSettings" :library="library" @close="showSettings = false" @saved="finishSettings" @deleted="finishDeletion" />
-		<LibraryFilterModal v-if="showFilter" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
+		<LibraryFilterModal v-if="showFilter" :key="filterModalInstance" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
 		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />
 		<TransientToast v-if="message" :message="message" @close="message = ''" />

@@ -162,12 +162,14 @@ onUnmounted(() => {
 			</button>
 		</header>
 
-		<button
-			v-if="drawerOpen"
-			class="sidebar-backdrop"
-			aria-label="Close navigation"
-			@click="closeDrawer"
-		></button>
+		<Transition name="sidebar-backdrop">
+			<button
+				v-if="drawerOpen"
+				class="sidebar-backdrop"
+				aria-label="Close navigation"
+				@click="closeDrawer"
+			></button>
+		</Transition>
 		<aside id="primary-sidebar" class="sidebar" :class="{ 'sidebar-open': drawerOpen }">
 			<div class="sidebar-heading">
 				<RouterLink class="brand" to="/">
@@ -203,20 +205,22 @@ onUnmounted(() => {
 							<ChevronDown :size="16" :class="{ rotated: !scheduleNavOpen }" />
 						</button>
 					</div>
-					<div v-show="scheduleNavOpen" class="library-nav">
-						<RouterLink class="library-nav-link" to="/schedules/channels">
-							<span class="library-nav-icon"><TvMinimal :size="16" /></span>
-							<span>Channel Schedules</span>
-						</RouterLink>
-						<RouterLink class="library-nav-link" to="/schedules/templates">
-							<span class="library-nav-icon"><CalendarRange :size="16" /></span>
-							<span>Templates</span>
-						</RouterLink>
-						<RouterLink class="library-nav-link" to="/schedules/programs">
-							<span class="library-nav-icon"><CalendarDays :size="16" /></span>
-							<span>Programs</span>
-						</RouterLink>
-					</div>
+					<Transition name="moirai-collapse">
+						<div v-show="scheduleNavOpen" class="library-nav">
+							<RouterLink class="library-nav-link" to="/schedules/channels">
+								<span class="library-nav-icon"><TvMinimal :size="16" /></span>
+								<span>Channel Schedules</span>
+							</RouterLink>
+							<RouterLink class="library-nav-link" to="/schedules/templates">
+								<span class="library-nav-icon"><CalendarRange :size="16" /></span>
+								<span>Templates</span>
+							</RouterLink>
+							<RouterLink class="library-nav-link" to="/schedules/programs">
+								<span class="library-nav-icon"><CalendarDays :size="16" /></span>
+								<span>Programs</span>
+							</RouterLink>
+						</div>
+					</Transition>
 				</div>
 
 				<div class="nav-section">
@@ -234,18 +238,20 @@ onUnmounted(() => {
 							<ChevronDown :size="16" :class="{ rotated: !libraryNavOpen }" />
 						</button>
 					</div>
-					<div v-if="!loaded || libraries.length > 0" v-show="libraryNavOpen" class="library-nav">
-						<RouterLink
-							v-for="library in libraries"
-							:key="library.id"
-							:to="`/libraries/${library.id}`"
-							class="library-nav-link"
-						>
-							<span class="library-nav-icon"><LayoutGrid :size="16" /></span>
-							<span>{{ library.name }}</span>
-						</RouterLink>
-						<span v-if="!loaded" class="library-nav-empty">Loading libraries…</span>
-					</div>
+					<Transition name="moirai-collapse">
+						<div v-if="!loaded || libraries.length > 0" v-show="libraryNavOpen" class="library-nav">
+							<RouterLink
+								v-for="library in libraries"
+								:key="library.id"
+								:to="`/libraries/${library.id}`"
+								class="library-nav-link"
+							>
+								<span class="library-nav-icon"><LayoutGrid :size="16" /></span>
+								<span>{{ library.name }}</span>
+							</RouterLink>
+							<span v-if="!loaded" class="library-nav-empty">Loading libraries…</span>
+						</div>
+					</Transition>
 				</div>
 
 				<RouterLink class="nav-link" to="/settings"
@@ -285,6 +291,7 @@ onUnmounted(() => {
 	</div>
 	<ConfirmationModal
 		v-if="activeConfirmation"
+		:key="activeConfirmation.instanceId"
 		:title="activeConfirmation.title"
 		:message="activeConfirmation.message"
 		:confirm-label="activeConfirmation.confirmLabel"

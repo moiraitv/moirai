@@ -180,6 +180,7 @@
 	place-items: center;
 	background: rgba(2, 7, 12, 0.8);
 	backdrop-filter: blur(8px);
+	animation: moirai-backdrop-enter var(--motion-standard) ease-out;
 }
 
 body:has(.moirai-dialog-backdrop) {
@@ -195,6 +196,29 @@ body:has(.moirai-dialog-backdrop) {
 	border-radius: 13px;
 	background: #0d1b28;
 	box-shadow: 0 30px 100px #000;
+	animation: moirai-dialog-enter var(--motion-panel) var(--motion-enter);
+}
+
+.moirai-overlay-leave-active {
+	transition:
+		opacity var(--motion-standard) var(--motion-exit),
+		backdrop-filter var(--motion-standard) var(--motion-exit);
+}
+
+.moirai-overlay-leave-active > .moirai-dialog {
+	transition:
+		opacity var(--motion-fast) var(--motion-exit),
+		transform var(--motion-standard) var(--motion-exit);
+}
+
+.moirai-overlay-leave-to {
+	opacity: 0;
+	backdrop-filter: blur(0);
+}
+
+.moirai-overlay-leave-to > .moirai-dialog {
+	opacity: 0;
+	transform: translateY(4px) scale(0.99);
 }
 
 .modal-heading {

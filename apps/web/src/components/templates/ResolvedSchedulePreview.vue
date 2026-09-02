@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { RefreshCw } from '@lucide/vue';
 import type { TimelinePreview } from '@moirai/shared';
 import { guideSegmentPercent, guideWindowMilliseconds } from '../../guide-geometry';
 import { programColorStyle } from '../../program-colors';
 import { instantLabel } from '../../time-format';
+import AnimatedDisclosure from '../AnimatedDisclosure.vue';
 
 const props = defineProps<{
 	preview: TimelinePreview | null;
@@ -14,6 +15,7 @@ const props = defineProps<{
 	error: string;
 }>();
 const emit = defineEmits<{ refresh: [] }>();
+const issuesOpen = ref(false);
 const previewWindowMilliseconds = computed(() => props.preview
 	? guideWindowMilliseconds(props.preview.startDate, props.preview.days, props.preview.timeZone)
 	: 0);
@@ -76,16 +78,16 @@ function timeRange(start: string, finish: string): string {
 				<small>{{ timeRange(segment.start, segment.finish) }}</small>
 			</div>
 		</div>
-		<details v-if="preview?.issues.length" class="timeline-issues compact-preview-issues">
-			<summary>
+		<AnimatedDisclosure v-if="preview?.issues.length" v-model="issuesOpen" class="timeline-issues compact-preview-issues">
+			<template #summary><span>
 				{{ preview.issues.length }} preview issue{{ preview.issues.length === 1 ? '' : 's' }}
-			</summary>
+			</span></template>
 			<article
 				v-for="issue in preview.issues"
 				:key="`${issue.slotId}-${issue.code}-${issue.programId}`"
 			>
 				<strong>{{ issue.code }}</strong><span>{{ issue.message }}</span>
 			</article>
-		</details>
+		</AnimatedDisclosure>
 	</section>
 </template>

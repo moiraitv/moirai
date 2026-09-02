@@ -66,6 +66,15 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.library-status-panel')).toContainText('Indexed');
 	await expect(page.getByRole('button', { name: 'B', exact: true })).toHaveClass(/active/);
 	await expect(page.locator('.catalog-footer')).toContainText('100 per page');
+	const scanHistoryToggle = page.getByRole('button', { name: 'Scan history' });
+	const firstScanHistoryEntry = page.locator('.diagnostics article').first();
+	await expect(scanHistoryToggle).toHaveAttribute('aria-expanded', 'false');
+	await expect(firstScanHistoryEntry).toBeHidden();
+	await scanHistoryToggle.click();
+	await expect(scanHistoryToggle).toHaveAttribute('aria-expanded', 'true');
+	await expect(firstScanHistoryEntry).toBeVisible();
+	await scanHistoryToggle.click();
+	await expect(firstScanHistoryEntry).toBeHidden();
 	const syncButton = page.getByRole('button', { name: 'Sync library' });
 	const settingsButton = page.getByRole('button', { name: 'Library settings' });
 	const libraryHeaderSearch = page.getByRole('textbox', { name: new RegExp(`Search ${libraryName}`) });
@@ -127,14 +136,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		});
 	}
 
-	await page.getByRole('button', { name: 'Filter' }).click();
+	await page.getByRole('button', { name: 'Filter media' }).click();
 	await expect(page.getByRole('heading', { name: 'Filter media' })).toBeVisible();
 	await expect(page.getByText('Narrow down your results using the filters below.')).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Match all/ })).toBeChecked();
 	await page.getByLabel('Actor').fill('Discarded draft');
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	const initialGenreFacets = waitForGenreFacets([]);
-	await page.getByRole('button', { name: 'Filter' }).click();
+	await page.getByRole('button', { name: 'Filter media' }).click();
 	await initialGenreFacets;
 	await expect(page.getByLabel('Actor')).toHaveValue('');
 	await page.getByLabel('Actor').fill('Ada');
@@ -567,7 +576,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.goto(movieLibraryUrl);
 	await page.getByRole('button', { name: 'Select items' }).click();
-	await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Cancel item selection' })).toBeVisible();
+	await expect(page.locator('a.media-card').filter({ hasText: 'Companion Fixture' })).toHaveAttribute('tabindex', '-1');
 	await expect(page.getByRole('button', { name: 'Add Selected' })).toBeDisabled();
 	await expect(page.locator('.catalog-controls-stack')).toHaveCSS('position', 'sticky');
 	await expect(page.getByRole('toolbar', { name: 'Item selection' })).toHaveCSS('background-color', 'rgb(8, 43, 37)');
@@ -747,8 +757,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(
 		page.getByRole('button', { name: 'Toggle advanced scheduling behavior' }),
 	).toHaveCount(0);
-	await page.locator('.slot-advanced summary').click();
-	await expect(page.locator('.slot-advanced')).toHaveAttribute('open', '');
+	const advancedScheduling = page.getByRole('button', { name: 'Advanced scheduling behavior' });
+	await advancedScheduling.click();
+	await expect(advancedScheduling).toHaveAttribute('aria-expanded', 'true');
 	const templateBoundary = page.getByRole('group', { name: /Outgoing boundary at/ });
 	await templateBoundary.getByLabel('Policy').selectOption('finish-left');
 	await templateBoundary.getByLabel('No limit — always finish outgoing item').check();
@@ -760,7 +771,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.notice.error')).toHaveCount(0);
 	await page.reload();
 	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
-	await page.locator('.slot-advanced summary').click();
+	await page.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
 	await expect(
 		page
 			.getByRole('group', { name: /Outgoing boundary at/ })
@@ -1027,6 +1038,9 @@ test('keeps catalog navigation sticky and synchronizes visible anchors with hist
 		}
 	});
 	await page.goto(`/libraries/${created.id}`);
+	await expect
+		.poll(() => page.locator('.virtual-media-card-grid .media-card').count())
+		.toBeLessThan(titles.length);
 	const titleA = page.getByRole('button', { name: 'A', exact: true });
 	const titleB = page.getByRole('button', { name: 'B', exact: true });
 	await expect(titleA).toHaveAttribute('aria-current', 'location');

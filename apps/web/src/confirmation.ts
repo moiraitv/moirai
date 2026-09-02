@@ -11,6 +11,7 @@ export interface ConfirmationOptions {
 
 /** Complete modal options exposed to the application shell. */
 interface ResolvedConfirmationOptions extends ConfirmationOptions {
+	instanceId: number;
 	confirmLabel: string;
 	destructive: boolean;
 }
@@ -26,6 +27,7 @@ interface PendingConfirmation {
 export const activeConfirmation = shallowRef<ResolvedConfirmationOptions | null>(null);
 const queue: PendingConfirmation[] = [];
 let active: PendingConfirmation | null = null;
+let nextInstanceId = 1;
 
 /** Present the next queued confirmation when no other request owns the modal. */
 function activateNextConfirmation(): void {
@@ -52,6 +54,7 @@ export function requestConfirmation(options: ConfirmationOptions): Promise<boole
 	queue.push({
 		options: {
 			...options,
+			instanceId: nextInstanceId++,
 			confirmLabel: options.confirmLabel ?? 'Confirm',
 			destructive: options.destructive ?? false,
 		},

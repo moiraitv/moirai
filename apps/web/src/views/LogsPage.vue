@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Download, FileText, Pause, Play, RefreshCw, 
 import type { LogLevel } from '@moirai/shared';
 import type { CondensedLogEntry } from '../log-entry-context';
 import LogEntryDetailsModal from '../components/LogEntryDetailsModal.vue';
+import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { condenseRequestLogs, logRequestDetails } from '../log-entry-context';
@@ -28,6 +29,7 @@ const level = ref<LogLevel | ''>(activeLevel.value);
 const search = ref(activeSearch.value);
 const autoRefresh = ref(true);
 const selectedEntry = ref<CondensedLogEntry | null>(null);
+const retainedFilesOpen = ref(false);
 let filterTimer: ReturnType<typeof setTimeout> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let selectedTrigger: HTMLElement | null = null;
@@ -144,7 +146,7 @@ onBeforeUnmount(() => {
 
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="loading && !loaded" label="Loading server logs…" />
-		<template v-else>
+		<div v-else class="async-state-surface">
 			<div class="logs-toolbar panel">
 				<label class="logs-search">
 					<Search :size="18" />
@@ -221,15 +223,15 @@ onBeforeUnmount(() => {
 				</button>
 			</div>
 
-			<details v-if="files.length" class="log-files panel">
-				<summary>
+			<AnimatedDisclosure v-if="files.length" v-model="retainedFilesOpen" class="log-files panel">
+				<template #summary><span class="log-files-summary">
 					<span>
 						<FileText :size="18" />
 						<strong>Retained files</strong>
 						<small>{{ files.length }} files · {{ formatBytes(retainedBytes) }}</small>
 					</span>
 					<ChevronDown :size="18" />
-				</summary>
+				</span></template>
 				<div class="log-file-list">
 					<a
 						v-for="file in files"
@@ -242,8 +244,8 @@ onBeforeUnmount(() => {
 						<Download :size="16" />
 					</a>
 				</div>
-			</details>
-		</template>
+			</AnimatedDisclosure>
+		</div>
 
 		<LogEntryDetailsModal
 			v-if="selectedEntry"

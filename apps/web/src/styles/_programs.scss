@@ -433,6 +433,10 @@
 	background: #0b1b28;
 }
 
+.program-row-menu[open] > div {
+	animation: moirai-context-enter var(--motion-fast) var(--motion-enter);
+}
+
 .program-row-menu a,
 .program-row-menu button {
 	width: 100%;

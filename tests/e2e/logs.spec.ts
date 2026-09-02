@@ -105,6 +105,10 @@ test('keeps log rows compact and opens structured details on demand', async ({ p
 	const rowBox = await rows.first().boundingBox();
 	expect(rowBox?.height).toBeLessThanOrEqual(48);
 	await expect(page.locator('.logs-list pre')).toHaveCount(0);
+	const toolbarBox = await page.locator('.logs-toolbar').boundingBox();
+	const listBox = await page.locator('.logs-list').boundingBox();
+	expect((listBox?.y ?? 0) - ((toolbarBox?.y ?? 0) + (toolbarBox?.height ?? 0)))
+		.toBeGreaterThan(10);
 
 	await rows.first().click();
 
@@ -122,11 +126,12 @@ test('keeps log rows compact and opens structured details on demand', async ({ p
 	await expect(dialog).toBeHidden();
 	await expect(rows.first()).toBeFocused();
 
-	const retainedFiles = page.locator('details.log-files');
-	await expect(retainedFiles).not.toHaveAttribute('open', '');
+	const retainedFiles = page.locator('.log-files');
+	const retainedFilesToggle = retainedFiles.getByRole('button', { name: /Retained files/ });
+	await expect(retainedFilesToggle).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.getByRole('link', { name: /moirai-2026-08-25\.jsonl/ })).toBeHidden();
-	await retainedFiles.locator('summary').click();
-	await expect(retainedFiles).toHaveAttribute('open', '');
+	await retainedFilesToggle.click();
+	await expect(retainedFilesToggle).toHaveAttribute('aria-expanded', 'true');
 	await expect(page.getByRole('link', { name: /moirai-2026-08-25\.jsonl/ })).toBeVisible();
 
 	await page.setViewportSize({ width: 390, height: 844 });

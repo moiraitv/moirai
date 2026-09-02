@@ -21,10 +21,12 @@ const guideItems = [
 		<div><h2>New to layered scheduling?</h2><p>Learn how templates, conditions, and overrides work together to build powerful, flexible programming.</p></div>
 		<button type="button" class="button secondary" @click="emit('show')">View Guide <ExternalLink :size="17" /></button>
 	</section>
-	<section v-if="expanded" id="layered-scheduling-guide" class="layered-scheduling-guide editor-surface">
-		<article v-for="(item, index) in guideItems" :key="item.title">
-			<span>{{ index + 1 }}</span>
-			<div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
-		</article>
-	</section>
+	<Transition name="moirai-collapse">
+		<section v-if="expanded" id="layered-scheduling-guide" class="layered-scheduling-guide editor-surface">
+			<article v-for="(item, index) in guideItems" :key="item.title">
+				<span>{{ index + 1 }}</span>
+				<div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
+			</article>
+		</section>
+	</Transition>
 </template>
