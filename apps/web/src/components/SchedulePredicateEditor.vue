@@ -175,7 +175,7 @@ function toggleNumber(value: number): void {
 				/>
 				Exclude
 			</label>
-			<button v-if="removable" type="button" aria-label="Remove predicate" @click="emit('remove')">
+			<button v-if="removable" type="button" class="icon-button danger-icon" aria-label="Remove predicate" @click="emit('remove')">
 				<Trash2 :size="15" />
 			</button>
 		</div>
@@ -191,10 +191,10 @@ function toggleNumber(value: number): void {
 				@remove="removeChild(index)"
 			/>
 			<div class="predicate-add-actions">
-				<button type="button" class="text-button" @click="addChild(false)">
+				<button type="button" class="predicate-add-button" @click="addChild(false)">
 					<Plus :size="14" />Condition
 				</button>
-				<button type="button" class="text-button" @click="addChild(true)">
+				<button type="button" class="predicate-add-button" @click="addChild(true)">
 					<Plus :size="14" />Group
 				</button>
 			</div>

@@ -656,14 +656,6 @@ onBeforeUnmount(() => {
 									<RefreshCw :size="17" :class="{ spinning: applyingTimeline }" />
 									{{ applyingTimeline ? 'Applying…' : 'Apply After Current Item' }}
 								</button>
-								<button
-									type="button"
-									class="button secondary"
-									:disabled="draft.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS"
-									@click="addLayer"
-								>
-									<Plus :size="17" />Add Conditional Template
-								</button>
 								<button type="button" class="button" :disabled="saving || !isDirty" @click="save">
 									<Save :size="17" />{{ saving ? 'Saving…' : 'Save Schedule' }}
 								</button>
@@ -677,6 +669,16 @@ onBeforeUnmount(() => {
 									<div class="schedule-stack-heading">
 										<div><Layers3 :size="20" /><strong>Template stack</strong></div>
 										<small>Highest priority</small>
+									</div>
+									<div class="schedule-layer-add-placeholder">
+										<button
+											type="button"
+											class="button secondary"
+											:disabled="draft.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS"
+											@click="addLayer"
+										>
+											<Plus :size="17" />Add Conditional Template
+										</button>
 									</div>
 									<article
 										v-for="(layer, index) in draft.layers"

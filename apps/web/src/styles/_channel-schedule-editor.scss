@@ -74,6 +74,22 @@
 	letter-spacing: 0.1em;
 }
 
+.schedule-layer-add-placeholder {
+	min-height: 62px;
+	margin-top: 12px;
+	padding: 9px;
+	display: grid;
+	place-items: center;
+	border: 1px dashed rgba(83, 118, 140, 0.72);
+	border-radius: 9px;
+	background: rgba(7, 20, 30, 0.42);
+}
+
+.schedule-layer-add-placeholder .button {
+	width: 100%;
+	min-height: 42px;
+}
+
 .schedule-layer {
 	margin-top: 10px;
 	padding: 11px 12px;
@@ -306,11 +322,42 @@
 }
 
 .predicate-node-heading,
-.predicate-add-actions,
 .predicate-field-grid {
 	display: flex;
 	align-items: end;
 	gap: 10px;
+}
+
+.predicate-add-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.predicate-add-button {
+	min-height: 32px;
+	padding: 0 10px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	border: 1px solid rgba(92, 117, 135, 0.42);
+	border-radius: 7px;
+	color: var(--muted-strong);
+	background: rgba(16, 34, 48, 0.48);
+	cursor: pointer;
+}
+
+.predicate-add-button svg {
+	flex: 0 0 auto;
+	display: block;
+}
+
+.predicate-add-button:hover,
+.predicate-add-button:focus-visible {
+	border-color: var(--line-bright);
+	color: #eef3f8;
+	background: var(--panel-hover);
 }
 
 .predicate-node-heading > select {
@@ -329,6 +376,7 @@
 	padding: 0 2px;
 	color: var(--muted-strong);
 	font-size: 0.75rem;
+	white-space: nowrap;
 }
 
 .predicate-children {
