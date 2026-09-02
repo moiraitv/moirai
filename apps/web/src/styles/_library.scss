@@ -50,46 +50,6 @@
 	box-shadow: none;
 }
 
-.action-menu {
-	position: relative;
-}
-
-.action-popover {
-	position: absolute;
-	top: calc(100% + 8px);
-	left: 0;
-	z-index: 15;
-	width: 245px;
-	padding: 7px;
-	display: grid;
-	border: 1px solid var(--line-bright);
-	border-radius: 10px;
-	background: #0b1824;
-	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
-}
-
-.action-popover button {
-	cursor: pointer;
-	min-height: 38px;
-	padding: 0 9px;
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	border: 0;
-	border-radius: 7px;
-	color: #e8edf3;
-	background: transparent;
-	text-align: left;
-}
-
-.action-popover button:hover {
-	background: var(--panel-hover);
-}
-
-.action-popover .danger-action {
-	color: var(--danger);
-}
-
 .source-path {
 	margin: 5px 3px;
 	padding: 8px 7px;
@@ -697,8 +657,19 @@
 }
 
 .sort-control .sort-popover {
+	top: calc(100% + 8px);
 	right: 0;
-	left: auto;
+	width: 245px;
+	padding: 7px;
+	border-radius: 10px;
+	background: #0b1824;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.sort-control .sort-popover button {
+	min-height: 38px;
+	border-radius: 7px;
+	color: #e8edf3;
 }
 
 .sort-popover button.selected {

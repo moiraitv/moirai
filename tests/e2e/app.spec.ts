@@ -121,7 +121,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await librarySettings.getByRole('button', { name: 'Cancel' }).click();
 	const movieLibraryUrl = page.url();
 
-	await page.getByRole('button', { name: /Sort by: Title/ }).click();
+	const librarySortButton = page.getByRole('button', { name: /Sort by: Title/ });
+	await librarySortButton.click();
+	await expect(page.getByRole('button', { name: 'Date Added', exact: true })).toBeVisible();
+	await page.locator('.library-status-panel').click();
+	await expect(page.getByRole('button', { name: 'Date Added', exact: true })).toBeHidden();
+	await librarySortButton.click();
 	await page.getByRole('button', { name: 'Date Added', exact: true }).click();
 	await expect(page).toHaveURL(/sort=date-added/);
 	await page.getByRole('button', { name: 'Today', exact: true }).click();
@@ -583,6 +588,44 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Clear Filters' }).click();
 	await expect(programCard).toBeVisible();
 	await expect(seasonProgramCard).toContainText('1 selected media groups');
+	const programActions = programCard.getByRole('button', { name: `Actions for ${programName}` });
+	const seasonProgramActions = seasonProgramCard.getByRole('button', {
+		name: `Actions for ${seasonProgramName}`,
+	});
+	await programActions.click();
+	const programEditAction = programCard.getByRole('link', { name: 'Edit' });
+	const programDeleteAction = programCard.getByRole('button', { name: 'Delete' });
+	await expect(programEditAction).toBeVisible();
+	await expect.poll(async () => {
+		const editWidth = (await programEditAction.boundingBox())?.width ?? 0;
+		const deleteWidth = (await programDeleteAction.boundingBox())?.width ?? 0;
+		return Math.abs(editWidth - deleteWidth);
+	}).toBeLessThan(1);
+	await programEditAction.hover();
+	await expect.poll(() => programEditAction.evaluate((element) =>
+		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+	await page.getByRole('heading', { name: 'Your programs' }).hover();
+	await programActions.focus();
+	await page.keyboard.press('Tab');
+	await expect(programEditAction).toBeFocused();
+	await expect.poll(() => programEditAction.evaluate((element) =>
+		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+	await page.keyboard.press('Escape');
+	await expect(programEditAction).toBeHidden();
+	await expect(programActions).toBeFocused();
+	await programActions.click();
+	await seasonProgramActions.click();
+	await expect(programEditAction).toBeHidden();
+	await expect(seasonProgramCard.getByRole('link', { name: 'Edit' })).toBeVisible();
+	await page.getByRole('heading', { name: 'Your programs' }).click();
+	await expect(seasonProgramCard.getByRole('link', { name: 'Edit' })).toBeHidden();
+	await programActions.click();
+	await programDeleteAction.click();
+	await expect(programEditAction).toBeHidden();
+	await expect(page.getByRole('alertdialog', { name: 'Delete Program?' })).toBeVisible();
+	await page.getByRole('alertdialog', { name: 'Delete Program?' })
+		.getByRole('button', { name: 'Cancel' }).click();
+	await expect(programActions).toBeFocused();
 	await seasonProgramCard.getByRole('link', { name: seasonProgramName, exact: true }).click();
 	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
@@ -944,6 +987,15 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const templateRow = page.locator('.template-row').filter({ hasText: templateName });
 	await expect(templateRow).toContainText(`${channelName} Preserved`);
 	await expect(templateRow).toContainText('2 slots');
+	const templateActions = templateRow.getByRole('button', { name: `Actions for ${templateName}` });
+	await templateActions.click();
+	const templateEditAction = templateRow.getByRole('link', { name: 'Edit' });
+	await expect(templateEditAction).toBeVisible();
+	await templateEditAction.hover();
+	await expect.poll(() => templateEditAction.evaluate((element) =>
+		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+	await page.getByRole('heading', { name: 'Your templates' }).click();
+	await expect(templateEditAction).toBeHidden();
 	const miniSegments = templateRow.locator('.template-mini-track > span');
 	await expect(miniSegments).toHaveCount(2);
 	expect(

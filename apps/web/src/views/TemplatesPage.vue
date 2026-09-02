@@ -10,6 +10,7 @@ import { templateSlotStyle } from '../channel-schedule-display';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
 import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
+import ActionMenu from '../components/ActionMenu.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import TemplateEditor from '../components/templates/TemplateEditor.vue';
@@ -341,15 +342,11 @@ onMounted(async () => {
 							<span>Last updated</span>
 							<small>{{ updatedLabel(template.updatedAt) }}</small>
 						</div>
-						<details class="template-row-menu">
-							<summary :aria-label="`Actions for ${template.name}`">
-								<MoreVertical :size="19" />
-							</summary>
-							<div>
-								<RouterLink :to="`/schedules/templates/${template.id}`">Edit</RouterLink>
-								<button type="button" @click="removeTemplate(template)">Delete</button>
-							</div>
-						</details>
+						<ActionMenu class="template-row-menu" :label="`Actions for ${template.name}`">
+							<template #trigger><MoreVertical :size="19" /></template>
+							<RouterLink :to="`/schedules/templates/${template.id}`">Edit</RouterLink>
+							<button type="button" class="danger-action" @click="removeTemplate(template)">Delete</button>
+						</ActionMenu>
 					</article>
 					<footer class="templates-pagination">
 						<span>

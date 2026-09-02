@@ -407,51 +407,11 @@
 	position: relative;
 }
 
-.program-row-menu summary {
+.program-row-menu > .context-menu-trigger {
 	width: 32px;
 	height: 36px;
 	display: grid;
 	place-items: center;
-	border-radius: 6px;
-	color: #cad5dc;
-	cursor: pointer;
-	list-style: none;
-}
-
-.program-row-menu summary::-webkit-details-marker {
-	display: none;
-}
-
-.program-row-menu > div {
-	position: absolute;
-	right: 0;
-	z-index: 8;
-	min-width: 120px;
-	padding: 5px;
-	border: 1px solid var(--line-bright);
-	border-radius: 7px;
-	background: #0b1b28;
-}
-
-.program-row-menu[open] > div {
-	animation: moirai-context-enter var(--motion-fast) var(--motion-enter);
-}
-
-.program-row-menu a,
-.program-row-menu button {
-	width: 100%;
-	min-height: 34px;
-	padding: 7px 9px;
-	display: block;
-	border: 0;
-	border-radius: 5px;
-	color: #dce6ec;
-	background: transparent;
-	text-align: left;
-}
-
-.program-row-menu button {
-	color: #ff9d9d;
 }
 
 .program-carousel {

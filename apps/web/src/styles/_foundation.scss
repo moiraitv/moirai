@@ -636,6 +636,71 @@ a.nav-link.router-link-exact-active {
 	transform: translateY(-2px) scale(0.98);
 }
 
+.context-menu {
+	position: relative;
+}
+
+.context-menu-trigger {
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	color: #cad5dc;
+	background: transparent;
+	cursor: pointer;
+}
+
+.context-menu.open > .context-menu-trigger,
+.context-menu-trigger:hover,
+.context-menu-trigger:focus-visible {
+	background: rgba(38, 67, 82, 0.55);
+}
+
+.context-menu-popover {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	z-index: 15;
+	min-width: 120px;
+	padding: 5px;
+	display: grid;
+	border: 1px solid var(--line-bright);
+	border-radius: 7px;
+	background: #0b1b28;
+	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.context-menu .context-menu-popover a,
+.context-menu .context-menu-popover button {
+	width: 100%;
+	min-height: 34px;
+	padding: 7px 9px;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	border: 0;
+	border-radius: 5px;
+	color: #dce6ec;
+	background: transparent;
+	cursor: pointer;
+	text-align: left;
+}
+
+.context-menu .context-menu-popover a:hover,
+.context-menu .context-menu-popover a:focus-visible,
+.context-menu .context-menu-popover button:hover,
+.context-menu .context-menu-popover button:focus-visible {
+	background: var(--panel-hover);
+}
+
+.context-menu .context-menu-popover .danger-action {
+	color: #ff9d9d;
+}
+
+.context-menu .context-menu-popover .danger-action:hover,
+.context-menu .context-menu-popover .danger-action:focus-visible {
+	background: rgba(145, 43, 55, 0.32);
+}
+
 .transient-toast-neutral {
 	border-color: rgba(82, 127, 162, 0.52);
 	background: #122737;

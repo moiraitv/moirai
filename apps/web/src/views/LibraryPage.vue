@@ -53,6 +53,7 @@ import {
 	catalogColumnCount,
 } from '../catalog-virtualization';
 import LoadingState from '../components/LoadingState.vue';
+import ActionMenu from '../components/ActionMenu.vue';
 import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
 import TransientToast from '../components/TransientToast.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
@@ -140,7 +141,6 @@ const mediaLoading = ref(false);
 const scanRequestPending = ref(false);
 const loadError = ref('');
 const showSettings = ref(false);
-const showSort = ref(false);
 const showFilter = ref(false);
 const showReconciliation = ref(false);
 const {
@@ -884,7 +884,6 @@ async function reconcile(action: ReconciliationAction['action']): Promise<void> 
 
 /** Change catalog ordering, restore its default direction, and return to the first page. */
 async function selectSort(value: MediaSort): Promise<void> {
-	showSort.value = false;
 	await navigate({
 		sort: value === 'title' ? undefined : value,
 		direction: value === 'date-added' ? 'desc' : 'asc',
@@ -986,7 +985,6 @@ function handleKeydown(event: KeyboardEvent): void {
 	}
 	if (event.key === 'Escape') {
 		showSettings.value = false;
-		showSort.value = false;
 		showFilter.value = false;
 		showReconciliation.value = false;
 	}
@@ -1292,15 +1290,11 @@ onUnmounted(() => {
 						<button v-for="option in browse?.navigation ?? []" :key="option.key" :ref="(element) => setNavigationButton(option.key, element)" class="genre-option" :class="{ active: activeNavigationKey === option.key }" :aria-current="activeNavigationKey === option.key ? 'location' : undefined" @click="navigateToKey(option.key)">{{ option.label }}</button>
 					</template>
 				</div>
-				<div class="action-menu sort-control">
-					<button class="catalog-select wide" :aria-expanded="showSort" @click="showSort = !showSort">{{ sortLabel }} <ChevronDown :size="16" /></button>
-					<Transition name="context-popover">
-						<div v-if="showSort" class="action-popover sort-popover">
-							<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
-							<button @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse Order</button>
-						</div>
-					</Transition>
-				</div>
+				<ActionMenu class="sort-control" :label="`Sort by: ${sortLabel}`" trigger-class="catalog-select wide" menu-class="sort-popover">
+					<template #trigger>{{ sortLabel }} <ChevronDown :size="16" /></template>
+					<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" type="button" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
+					<button type="button" @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse Order</button>
+				</ActionMenu>
 				<button
 					type="button"
 					class="toolbar-button catalog-icon-button"
