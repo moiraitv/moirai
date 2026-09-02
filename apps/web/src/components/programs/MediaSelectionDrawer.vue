@@ -4,11 +4,11 @@ import { ChevronLeft, ChevronRight, GripVertical, Asterisk, Layers3, Trash2, X }
 import type { MediaGroup, MediaItem, SelectedMediaSort } from '@moirai/shared';
 import { VueDraggable } from 'vue-draggable-plus';
 import LoadingState from '../LoadingState.vue';
-import { requestConfirmation } from '../../confirmation';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import MediaCardPreview from '../MediaCardPreview.vue';
+import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
 
 const props = defineProps<{
 	selectingGroups: boolean;
@@ -62,22 +62,6 @@ function directionLabel(value: 'asc' | 'desc'): string {
 /** Begin closing the drawer while preserving it for the spatial exit transition. */
 function close(): void {
 	visible.value = false;
-}
-
-/** Close the confirmation and clear every selected reference. */
-async function confirmClear(): Promise<void> {
-	const groups = props.selectingGroups;
-	if (await requestConfirmation({
-		key: groups ? 'clear-selected-media-groups' : 'clear-selected-media',
-		title: groups ? 'Clear Selected Media Groups?' : 'Clear Selected Media?',
-		message: groups
-			? 'Remove every selected media group from this program?'
-			: 'Remove every selected media item from this program?',
-		confirmLabel: 'Clear All',
-		destructive: true,
-	})) {
-		emit('clear');
-	}
 }
 
 onMounted(async () => {
@@ -186,13 +170,13 @@ onMounted(async () => {
 										<strong>{{ group.title }}</strong>
 										<small>{{ mediaGroupSubtitle(libraryType, group) || group.kind }}</small>
 									</span>
-									<button
-										type="button"
-										:aria-label="`Remove ${group.title}`"
-										@click="emit('removeGroup', group.id)"
+									<TwoStepDeleteButton
+										:label="`Remove ${group.title}`"
+										:confirm-label="`Confirm remove ${group.title}`"
+										@confirm="emit('removeGroup', group.id)"
 									>
 										<X :size="15" />
-									</button>
+									</TwoStepDeleteButton>
 								</article>
 							</div>
 							<VueDraggable
@@ -265,14 +249,14 @@ onMounted(async () => {
 												Temporarily unavailable
 											</small>
 										</span>
-										<button
-											type="button"
+										<TwoStepDeleteButton
 											class="selected-item-remove"
-											:aria-label="`Remove ${item.title}`"
-											@click="emit('removeItem', item.id)"
+											:label="`Remove ${item.title}`"
+											:confirm-label="`Confirm remove ${item.title}`"
+											@confirm="emit('removeItem', item.id)"
 										>
 											<X :size="15" />
-										</button>
+										</TwoStepDeleteButton>
 									</article>
 								</MediaCardPreview>
 							</VueDraggable>
@@ -296,14 +280,16 @@ onMounted(async () => {
 						</template>
 					</div>
 					<footer class="selection-drawer-footer">
-						<button
-							type="button"
+						<TwoStepDeleteButton
 							class="toolbar-button danger-button"
 							:disabled="selectionCount === 0"
-							@click="confirmClear"
+							label="Clear All"
+							confirm-label="Confirm Clear All"
+							confirm-text="Confirm Clear"
+							@confirm="emit('clear')"
 						>
 							<Trash2 :size="16" />Clear All
-						</button>
+						</TwoStepDeleteButton>
 						<button type="button" class="button" @click="close">Done</button>
 					</footer>
 				</aside>

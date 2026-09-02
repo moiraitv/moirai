@@ -30,6 +30,8 @@ import SequenceProgramEditor from './SequenceProgramEditor.vue';
 import { itemsInReferenceOrder, manualOrderFromDisplay, mergeVisibleManualOrder } from './selected-media-order';
 import { useSelectedMediaOrderState } from './selected-media-order-state';
 import { subscribeToSelectedMediaRefresh } from './selected-media-refresh';
+import { isProgramDraftValid } from './program-save-state';
+import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
 
 const props = withDefaults(
 	defineProps<{
@@ -85,7 +87,6 @@ const editingId = computed(() =>
 		: route.params.id === 'new'
 			? null
 			: String(route.params.id ?? ''));
-const structureLocked = computed(() => Boolean(editingId.value));
 const programs = computed(() => scheduling.overview?.programs ?? []);
 const statuses = computed(
 	() =>
@@ -100,10 +101,6 @@ const selectionCount = computed(() =>
 	selectingGroups.value ? form.selectedGroupIds.length : form.selectedItemIds.length);
 const selectionLimit = computed(() =>
 	selectingGroups.value ? MAX_EXPLICIT_MEDIA_GROUPS : channelsStore.maxExplicitMediaItems);
-const selectionLoading = computed(() =>
-	selectingGroups.value ? selectedGroupsLoading.value : selectedItemsLoading.value);
-const selectionLoaded = computed(() =>
-	selectingGroups.value ? selectedGroupsLoaded.value : selectedItemsLoaded.value);
 const missingSelectedCount = computed(() => form.selectedItemIds.length - selectedItems.value.length);
 const selectedItemSort = computed<SelectedMediaSort>(() => form.selectedItemSort === 'manual'
 	? { type: 'manual', itemIds: form.manualItemIds }
@@ -767,6 +764,9 @@ function payload(): ProgramCreate {
 	return { name: form.name, config: { type: 'content', source, strategy } };
 }
 
+const programSaveDisabled = computed(() =>
+	saving.value || !isProgramDraftValid(payload) || (Boolean(editingId.value) && !isDirty.value));
+
 /** Validate and save the program draft, optionally starting another draft. */
 async function save(addAnother = false): Promise<void> {
 	saving.value = true;
@@ -902,7 +902,7 @@ onBeforeUnmount(() => {
 					</button>
 				</header>
 				<div class="program-editor-scroll">
-					<ProgramTypeRail v-model="form.type" :disabled="structureLocked" />
+					<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
 					<div class="program-editor-main">
 						<p v-if="error" class="notice error">{{ error }}</p>
 						<label class="program-name-field">
@@ -929,7 +929,7 @@ onBeforeUnmount(() => {
 								</div>
 								<div class="program-source-panel">
 									<div class="form-grid">
-										<div v-if="structureLocked" class="program-fixed-field">
+										<div v-if="editingId" class="program-fixed-field">
 											<span>Source type</span>
 											<strong>{{ sourceTypeLabel }}</strong>
 										</div>
@@ -951,7 +951,7 @@ onBeforeUnmount(() => {
 											</option>
 										</select></label
 										>
-										<div v-if="structureLocked" class="program-fixed-field">
+										<div v-if="editingId" class="program-fixed-field">
 											<span>Library</span>
 											<strong>{{ sourceLibraryLabel }}</strong>
 										</div>
@@ -1030,17 +1030,16 @@ onBeforeUnmount(() => {
 												</select>
 											</div>
 										</label>
-										<button
+										<TwoStepDeleteButton
 											v-if="form.kinds.length || form.genres.length"
-											type="button"
 											class="program-clear-filters"
-											@click="
-												form.kinds = [];
-												form.genres = [];
-											"
+											label="Clear all program filters"
+											confirm-label="Confirm clear all program filters"
+											confirm-text="Confirm Clear"
+											@confirm="form.kinds = []; form.genres = []"
 										>
 											Clear All <Trash2 :size="14" />
-										</button>
+										</TwoStepDeleteButton>
 									</template>
 									<template v-else>
 										<p
@@ -1302,12 +1301,12 @@ onBeforeUnmount(() => {
 							v-if="!editingId"
 							type="button"
 							class="button ghost"
-							:disabled="saving"
+							:disabled="programSaveDisabled"
 							@click="save(true)"
 						>
 							Save and Add Another
 						</button>
-						<button type="submit" class="button" :disabled="saving">
+						<button type="submit" class="button" :disabled="programSaveDisabled">
 							<Check v-if="!saving" :size="18" />
 							{{ saving ? 'Saving…' : editingId ? 'Save Changes' : form.type === 'content' ? 'Save Content Rule' : 'Save Sequence Rule' }}
 						</button>
@@ -1320,8 +1319,8 @@ onBeforeUnmount(() => {
 			:selecting-groups="selectingGroups"
 			:selection-count="selectionCount"
 			:selection-limit="selectionLimit"
-			:loading="selectionLoading"
-			:loaded="selectionLoaded"
+			:loading="selectingGroups ? selectedGroupsLoading : selectedItemsLoading"
+			:loaded="selectingGroups ? selectedGroupsLoaded : selectedItemsLoaded"
 			:missing-item-count="missingSelectedCount"
 			:missing-group-count="missingSelectedGroupCount"
 			:items="filteredSelectedItems"

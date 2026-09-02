@@ -205,6 +205,13 @@ a {
 	-webkit-tap-highlight-color: transparent;
 }
 
+button:disabled {
+	cursor: not-allowed;
+	opacity: 0.48;
+	filter: saturate(0.6);
+	box-shadow: none;
+}
+
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -814,6 +821,59 @@ a.nav-link.router-link-exact-active {
 	border-color: rgba(255, 111, 127, 0.42);
 }
 
+.two-step-delete-button {
+	transition:
+		color var(--motion-fast) ease,
+		border-color var(--motion-fast) ease,
+		background-color var(--motion-fast) ease,
+		box-shadow var(--motion-fast) ease;
+}
+
+.two-step-delete-button.two-step-delete-button.is-armed,
+.two-step-delete-button.two-step-delete-button.is-armed:hover,
+.two-step-delete-button.two-step-delete-button.is-armed:focus-visible {
+	color: #fff;
+	border-color: rgba(255, 139, 151, 0.82);
+	background: rgba(190, 55, 70, 0.9);
+	box-shadow: 0 0 0 2px rgba(255, 111, 127, 0.28);
+}
+
+.disabled-action-hint {
+	position: relative;
+	display: inline-flex;
+}
+
+.disabled-action-tooltip {
+	position: absolute;
+	top: calc(100% + 8px);
+	left: 50%;
+	z-index: 160;
+	width: max-content;
+	max-width: min(280px, calc(100vw - 32px));
+	padding: 8px 10px;
+	pointer-events: none;
+	border: 1px solid var(--line-bright);
+	border-radius: 7px;
+	color: #e9eff5;
+	background: #0b1723;
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+	font-size: 0.75rem;
+	font-weight: 560;
+	line-height: 1.35;
+	text-align: left;
+	opacity: 0;
+	transform: translate(-50%, -3px);
+	transition:
+		opacity var(--motion-fast) var(--motion-enter),
+		transform var(--motion-fast) var(--motion-enter);
+}
+
+.disabled-action-hint:hover .disabled-action-tooltip,
+.disabled-action-hint:focus-visible .disabled-action-tooltip {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}
+
 .moirai-dialog-backdrop.confirmation-modal-backdrop {
 	z-index: 140;
 }
@@ -875,7 +935,7 @@ a.nav-link.router-link-exact-active {
 	font-size: 1.5rem;
 }
 
-.icon-button:hover {
+.icon-button:hover:not(:disabled) {
 	color: #fff;
 	background: var(--panel-2);
 }

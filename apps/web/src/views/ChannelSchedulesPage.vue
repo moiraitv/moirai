@@ -34,6 +34,8 @@ import { errorMessage } from '../error-message';
 import { randomUuid } from '../random-uuid';
 import LoadingState from '../components/LoadingState.vue';
 import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
+import DisabledActionHint from '../components/DisabledActionHint.vue';
+import TwoStepDeleteButton from '../components/TwoStepDeleteButton.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
 import ChannelSchedulesAbout from '../components/schedules/ChannelSchedulesAbout.vue';
 import LayeredSchedulingGuide from '../components/schedules/LayeredSchedulingGuide.vue';
@@ -108,11 +110,14 @@ const materialization = computed(() =>
 	materializations.value.find((entry) => entry.channelId === channelId.value));
 const templates = computed(() => scheduling.overview?.templates ?? []);
 const schedules = computed(() => scheduling.overview?.channelSchedules ?? []);
+const hasPersistedSchedule = ref(false);
 const selectedLayer = computed(() =>
 	draft.value?.layers.find((layer) => layer.id === selectedLayerId.value));
 const isDirty = computed(
 	() => Boolean(draft.value) && JSON.stringify(draft.value) !== original.value,
 );
+const scheduleNeedsSave = computed(() =>
+	Boolean(draft.value) && (!hasPersistedSchedule.value || isDirty.value));
 const previewLegend = computed(() =>
 	schedulePreviewLegend(preview.value, templates.value, draft.value?.defaultTemplateId ?? null));
 
@@ -179,12 +184,14 @@ function predicateSummary(predicate: SchedulePredicate): string {
 /** Clone the selected channel schedule or initialize a valid base-only draft. */
 function loadDraft(): void {
 	finiteBoundaryDrift.clear();
+	hasPersistedSchedule.value = false;
 	if (!editing.value || templates.value.length === 0) {
 		draft.value = null;
 		return;
 	}
 
 	const existing = schedules.value.find((schedule) => schedule.channelId === channelId.value);
+	hasPersistedSchedule.value = Boolean(existing);
 	draft.value = channelScheduleConfigSchema.parse(
 		existing ?? {
 			defaultTemplateId: templates.value[0]!.id,
@@ -320,7 +327,7 @@ function finishTemplateEdit(): void {
 
 /** Validate and save the selected channel's layered schedule. */
 async function save(): Promise<boolean> {
-	if (!draft.value || !channel.value) {
+	if (!draft.value || !channel.value || saving.value || !scheduleNeedsSave.value) {
 		return false;
 	}
 
@@ -331,9 +338,15 @@ async function save(): Promise<boolean> {
 			channel.value.id,
 			channelScheduleConfigSchema.parse(draft.value),
 		);
-		await scheduling.load();
+		hasPersistedSchedule.value = true;
 		draft.value = channelScheduleConfigSchema.parse(saved);
 		original.value = JSON.stringify(draft.value);
+		try {
+			await Promise.all([scheduling.load(), loadMaterializations()]);
+		}
+		catch (cause) {
+			error.value = `Schedule saved, but timeline status could not be refreshed. ${errorMessage(cause)}`;
+		}
 		return true;
 	}
 	catch (cause) {
@@ -360,7 +373,7 @@ async function leaveScheduleEditor(): Promise<void> {
 async function closeScheduleEditor(): Promise<void> {
 	await closeUnsavedEditor({
 		blocked: saving.value,
-		dirty: isDirty.value,
+		dirty: scheduleNeedsSave.value,
 		key: `unsaved-channel-schedule:${channel.value?.id ?? 'new'}`,
 		message: 'Save this channel schedule before closing?',
 		save: async () => {
@@ -392,7 +405,12 @@ function materializationTime(value: string | null | undefined): string {
 
 /** Apply pending schedule changes after the currently committed item. */
 async function applyTimelineNow(): Promise<void> {
-	if (!channel.value || applyingTimeline.value) {
+	if (
+		!channel.value
+		|| applyingTimeline.value
+		|| scheduleNeedsSave.value
+		|| materialization.value?.health !== 'pending'
+	) {
 		return;
 	}
 
@@ -478,7 +496,7 @@ function schedulePreview(delay = PREVIEW_DELAY_MS): void {
 
 /** Warn before navigation when the current editor contains unsaved changes. */
 function beforeUnload(event: BeforeUnloadEvent): void {
-	if (isDirty.value) {
+	if (scheduleNeedsSave.value) {
 		event.preventDefault();
 	}
 }
@@ -496,7 +514,7 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 	}
 }
 
-onBeforeRouteLeave(async () => allowRouteLeave || !isDirty.value || requestConfirmation({
+onBeforeRouteLeave(async () => allowRouteLeave || !scheduleNeedsSave.value || requestConfirmation({
 	key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
 	title: 'Discard Unsaved Changes?',
 	message: 'Leave this channel schedule without saving your changes?',
@@ -631,23 +649,32 @@ onBeforeUnmount(() => {
 
 					<template v-else-if="draft && channel">
 						<div class="channel-schedule-toolbar editor-surface">
-							<span class="channel-schedule-save-state" :class="{ dirty: isDirty }">
-								<CircleAlert v-if="isDirty" :size="22" />
+							<span class="channel-schedule-save-state" :class="{ dirty: scheduleNeedsSave }">
+								<CircleAlert v-if="scheduleNeedsSave" :size="22" />
 								<CircleCheck v-else :size="22" />
 								<span>
-									<strong>{{ isDirty ? 'Unsaved changes' : 'All changes saved' }}</strong>
-									<small v-if="!isDirty && materialization?.health === 'pending'">
+									<strong>{{ scheduleNeedsSave ? 'Unsaved changes' : 'All changes saved' }}</strong>
+									<small v-if="!scheduleNeedsSave && materialization?.health === 'pending'">
 										Programming update scheduled for
 										{{ materializationTime(materialization.applyAfter) }}
 									</small>
-									<small v-else-if="!isDirty && materialization?.health === 'failed'">
+									<small v-else-if="!scheduleNeedsSave && materialization?.health === 'failed'">
 										The last timeline update failed; the prior committed guide remains active.
 									</small>
 								</span>
 							</span>
 							<div class="channel-schedule-toolbar-actions">
+								<DisabledActionHint
+									v-if="scheduleNeedsSave"
+									label="Apply After Current Item"
+									message="Save the schedule before applying it after the current item."
+								>
+									<button type="button" class="button secondary" disabled>
+										<RefreshCw :size="17" />Apply After Current Item
+									</button>
+								</DisabledActionHint>
 								<button
-									v-if="!isDirty && materialization?.health === 'pending'"
+									v-else-if="materialization?.health === 'pending'"
 									type="button"
 									class="button secondary"
 									:disabled="applyingTimeline"
@@ -656,7 +683,7 @@ onBeforeUnmount(() => {
 									<RefreshCw :size="17" :class="{ spinning: applyingTimeline }" />
 									{{ applyingTimeline ? 'Applying…' : 'Apply After Current Item' }}
 								</button>
-								<button type="button" class="button" :disabled="saving || !isDirty" @click="save">
+								<button type="button" class="button" :disabled="saving || !scheduleNeedsSave" @click="save">
 									<Save :size="17" />{{ saving ? 'Saving…' : 'Save Schedule' }}
 								</button>
 							</div>
@@ -725,14 +752,15 @@ onBeforeUnmount(() => {
 											></span>
 										</div>
 										<div class="schedule-layer-actions">
-											<button
-												type="button"
-												class="icon-button danger-icon"
-												aria-label="Remove layer"
-												@click.stop="removeLayer(layer.id)"
+											<TwoStepDeleteButton
+												class="icon-button danger-icon layer-remove-button"
+												label="Remove layer"
+												confirm-label="Confirm remove layer"
+												@click.stop
+												@confirm="removeLayer(layer.id)"
 											>
 												<Trash2 :size="16" />
-											</button>
+											</TwoStepDeleteButton>
 										</div>
 									</article>
 									<article

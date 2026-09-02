@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Copy, RefreshCw, Save, Trash2 } from '@lucide/vue';
 import type {
 	PlaybackEngineStatus,
@@ -7,6 +7,7 @@ import type {
 	ViewingPreferenceSummary,
 } from '@moirai/shared';
 import { api } from '../api';
+import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -18,16 +19,23 @@ const settings = reactive<PlaybackSettings>({
 	maxActiveSessions: 4,
 	viewingPreferencesEnabled: true,
 });
+const savedSettings = ref<PlaybackSettings | null>(null);
 const status = ref<PlaybackEngineStatus | null>(null);
 const initialLoading = ref(true);
-const saving = ref(false);
+const savingSection = ref<'playback' | 'viewing-preferences' | null>(null);
 const message = ref('');
 const error = ref('');
 const preferences = ref<ViewingPreferenceSummary[]>([]);
 const preferencesLoading = ref(true);
 const preferencesError = ref('');
 const clearingPreferences = ref(false);
-const clearConfirmation = ref('');
+const playbackSettingsDirty = computed(() => savedSettings.value !== null
+	&& settings.maxActiveSessions !== savedSettings.value.maxActiveSessions);
+const playbackSettingsValid = computed(() => Number.isInteger(settings.maxActiveSessions)
+	&& settings.maxActiveSessions >= 1
+	&& settings.maxActiveSessions <= 32);
+const viewingPreferenceSettingsDirty = computed(() => savedSettings.value !== null
+	&& settings.viewingPreferencesEnabled !== savedSettings.value.viewingPreferencesEnabled);
 let refreshingStatus = false;
 let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
 /** Polling interval that keeps client activity current without following every segment request. */
@@ -52,6 +60,7 @@ async function load(): Promise<void> {
 			api.playbackStatus(),
 		]);
 		Object.assign(settings, loadedSettings);
+		savedSettings.value = { ...loadedSettings };
 		status.value = loadedStatus;
 		error.value = '';
 	}
@@ -64,9 +73,15 @@ async function load(): Promise<void> {
 	await preferenceLoad;
 }
 
-/** Clear local anonymous viewing history after exact typed confirmation. */
+/** Clear local anonymous viewing history after styled modal confirmation. */
 async function clearViewingPreferences(): Promise<void> {
-	if (clearConfirmation.value !== 'CLEAR VIEWING HISTORY') {
+	if (clearingPreferences.value || !(await requestConfirmation({
+		key: 'clear-viewing-history',
+		title: 'Clear Viewing History?',
+		message: 'Permanently remove all learned viewing preferences? This cannot be undone.',
+		confirmLabel: 'Clear History',
+		destructive: true,
+	}))) {
 		return;
 	}
 
@@ -76,7 +91,6 @@ async function clearViewingPreferences(): Promise<void> {
 	try {
 		await api.clearViewingPreferences();
 		preferences.value = [];
-		clearConfirmation.value = '';
 		message.value = 'Viewing history cleared.';
 	}
 	catch (cause) {
@@ -111,21 +125,54 @@ async function refreshStatus(): Promise<void> {
 	}
 }
 
-/** Persist the concurrent-session limit. */
-async function save(): Promise<void> {
-	saving.value = true;
+/** Persist one settings panel while retaining drafts owned by the other panel. */
+async function save(section: 'playback' | 'viewing-preferences'): Promise<void> {
+	const baseline = savedSettings.value;
+	const sectionDirty = section === 'playback'
+		? playbackSettingsDirty.value && playbackSettingsValid.value
+		: viewingPreferenceSettingsDirty.value;
+	if (!baseline || savingSection.value || !sectionDirty) {
+		return;
+	}
+
+	const submitted = { ...settings };
+	savingSection.value = section;
 	message.value = '';
 	error.value = '';
 	try {
-		Object.assign(settings, await api.savePlaybackSettings({ ...settings }));
-		message.value = 'Playback settings saved.';
-		await refreshStatus();
+		const authoritative = await api.savePlaybackSettings({
+			maxActiveSessions: section === 'playback'
+				? submitted.maxActiveSessions
+				: baseline.maxActiveSessions,
+			viewingPreferencesEnabled: section === 'viewing-preferences'
+				? submitted.viewingPreferencesEnabled
+				: baseline.viewingPreferencesEnabled,
+		});
+		savedSettings.value = { ...authoritative };
+		if (
+			section === 'playback'
+			&& settings.maxActiveSessions === submitted.maxActiveSessions
+		) {
+			settings.maxActiveSessions = authoritative.maxActiveSessions;
+		}
+		if (
+			section === 'viewing-preferences'
+			&& settings.viewingPreferencesEnabled === submitted.viewingPreferencesEnabled
+		) {
+			settings.viewingPreferencesEnabled = authoritative.viewingPreferencesEnabled;
+		}
+		message.value = section === 'playback'
+			? 'Playback settings saved.'
+			: 'Viewing preference settings saved.';
+		if (section === 'playback') {
+			await refreshStatus();
+		}
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
 	}
 	finally {
-		saving.value = false;
+		savingSection.value = null;
 	}
 }
 
@@ -174,7 +221,7 @@ onUnmounted(() => {
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading playback settings…" />
 		<div v-else class="settings-layout async-state-surface">
-			<form class="panel form-grid" @submit.prevent="save">
+			<form class="panel form-grid" @submit.prevent="save('playback')">
 				<div class="span-2">
 					<p class="eyebrow">Client setup</p>
 					<h2>Playlist and guide</h2>
@@ -204,7 +251,7 @@ onUnmounted(() => {
 					<small>Additional tune requests receive a retryable capacity response. Default: 4.</small>
 				</label>
 				<div class="form-actions span-2">
-					<button class="button" :disabled="saving"><Save :size="17" />Save Settings</button>
+					<button class="button" :disabled="savingSection !== null || !playbackSettingsDirty || !playbackSettingsValid"><Save :size="17" />Save Settings</button>
 				</div>
 			</form>
 			<aside class="panel playback-card">
@@ -223,7 +270,7 @@ onUnmounted(() => {
 					<input v-model="settings.viewingPreferencesEnabled" type="checkbox" />
 					<span>Learn from channel viewing and apply it to Weighted Random programs</span>
 				</label>
-				<div class="form-actions"><button type="button" class="button" :disabled="saving" @click="save"><Save :size="17" />Save Settings</button></div>
+				<div class="form-actions"><button type="button" class="button" :disabled="savingSection !== null || !viewingPreferenceSettingsDirty" @click="save('viewing-preferences')"><Save :size="17" />Save Settings</button></div>
 				<p v-if="preferencesLoading">Loading learned preferences…</p>
 				<p v-else-if="preferencesError" class="notice error">{{ preferencesError }}</p>
 				<p v-else-if="preferences.length === 0" class="muted">No qualified viewing has been recorded yet.</p>
@@ -235,11 +282,8 @@ onUnmounted(() => {
 				</ol>
 				<div class="viewing-preference-danger">
 					<strong>Clear all viewing history</strong>
-					<p>This permanently removes every learned preference. Type <code>CLEAR VIEWING HISTORY</code> to confirm.</p>
-					<div class="input-with-action">
-						<input v-model="clearConfirmation" autocomplete="off" aria-label="Viewing history confirmation" />
-						<button type="button" class="button secondary" :disabled="clearingPreferences || clearConfirmation !== 'CLEAR VIEWING HISTORY'" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear History' }}</button>
-					</div>
+					<p>This permanently removes every learned preference.</p>
+					<button type="button" class="button secondary" :disabled="clearingPreferences" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear History' }}</button>
 				</div>
 			</section>
 		</div>

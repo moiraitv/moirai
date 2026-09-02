@@ -131,7 +131,7 @@ onMounted(() => nameInput.value?.focus());
 
 					<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
 					<p v-if="error" class="notice error">{{ error }}</p>
-					<div class="form-actions"><button type="button" class="button ghost" :disabled="saving || deleting" @click="closeEditor">Cancel</button><button class="button" :disabled="saving || deleting">{{ saving ? 'Saving…' : 'Save Settings' }}</button></div>
+					<div class="form-actions"><button type="button" class="button ghost" :disabled="saving || deleting" @click="closeEditor">Cancel</button><button class="button" :disabled="saving || deleting || !isDirty">{{ saving ? 'Saving…' : 'Save Settings' }}</button></div>
 
 					<AnimatedDisclosure v-model="dangerOpen" class="library-danger-zone">
 						<template #summary><span class="library-danger-heading"><AlertTriangle :size="24" /><h3 id="library-delete-title">Permanently remove this library</h3><ChevronDown class="library-danger-chevron" :size="18" /></span></template>

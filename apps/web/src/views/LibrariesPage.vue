@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ChevronRight, FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
 import {
 	DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
+	libraryCreateSchema,
 	type Library,
 	type LibraryContentPreview,
 	type LibraryCreate,
@@ -41,6 +42,10 @@ const form = reactive<LibraryCreate>({
 	watcherEnabled: true,
 	enabled: true,
 });
+const libraryFormValid = computed(() => libraryCreateSchema.safeParse({
+	...form,
+	sourceConfig: { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null },
+}).success);
 /** Return whether the library has a scan that has not completed. */
 function isScanning(library: Library): boolean {
 	return Boolean(
@@ -111,6 +116,10 @@ function schedulePreviewRefresh(): void {
 }
 /** Create a library from the form and refresh the list. */
 async function create() {
+	if (busy.value || !libraryFormValid.value) {
+		return;
+	}
+
 	busy.value = true;
 	error.value = '';
 	try {
@@ -193,7 +202,7 @@ onUnmounted(() => {
 				/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
 				<p v-if="error" class="notice error span-2">{{ error }}</p>
 				<div class="form-actions span-2">
-					<button class="button" :disabled="busy">{{ busy ? 'Adding…' : 'Add and Scan' }}</button>
+					<button class="button" :disabled="busy || !libraryFormValid">{{ busy ? 'Adding…' : 'Add and Scan' }}</button>
 				</div>
 			</form>
 		</Transition>

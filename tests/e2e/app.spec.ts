@@ -56,9 +56,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/libraries');
 	await page.locator('.resource-empty-state').getByRole('button', { name: 'Add Library' }).click();
+	const addLibrary = page.getByRole('button', { name: 'Add and Scan' });
+	await expect(addLibrary).toBeDisabled();
 	await page.getByLabel('Name').fill(libraryName);
 	await page.getByLabel('Path Moirai scans').fill(mediaRoot);
-	await page.getByRole('button', { name: 'Add and Scan' }).click();
+	await expect(addLibrary).toBeEnabled();
+	await addLibrary.click();
 
 	const libraryRow = page.locator('.library-row').filter({
 		has: page.getByRole('link', { name: `Open library ${libraryName}`, exact: true }),
@@ -104,6 +107,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await settingsButton.click();
 	const librarySettings = page.getByRole('dialog', { name: `Library settings for ${libraryName}` });
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
+	const saveLibrarySettings = librarySettings.getByRole('button', { name: 'Save Settings' });
+	await expect(saveLibrarySettings).toBeDisabled();
+	await librarySettings.getByLabel('Name').fill(`${libraryName} Draft`);
+	await expect(saveLibrarySettings).toBeEnabled();
+	await librarySettings.getByLabel('Name').fill(libraryName);
+	await expect(saveLibrarySettings).toBeDisabled();
 	const deleteLibrary = librarySettings.getByRole('button', { name: 'Remove library permanently' });
 	await expect(deleteLibrary).toBeHidden();
 	const deleteDisclosure = librarySettings.getByText('Permanently remove this library', { exact: true });
@@ -301,9 +310,20 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await expect(page.locator('.acceleration-prediction')).toBeVisible();
+	const saveChannel = page.getByRole('button', { name: 'Save Changes' });
+	const disabledScheduleAction = page.getByRole('button', { name: 'Manage Layered Schedule' });
+	await expect(saveChannel).toBeDisabled();
+	await expect(disabledScheduleAction).toBeDisabled();
+	await disabledScheduleAction.locator('..').focus();
+	await expect(disabledScheduleAction.locator('..')).toHaveAttribute(
+		'aria-label',
+		'Manage Layered Schedule',
+	);
+	await expect(disabledScheduleAction.locator('..')).toHaveAttribute('aria-disabled', 'true');
 	await page.getByLabel('Number').fill(runId.slice(-8));
 	await page.getByLabel('Name').fill(channelName);
-	await page.getByRole('button', { name: 'Save Changes' }).click();
+	await expect(saveChannel).toBeEnabled();
+	await saveChannel.click();
 	await expect(page).toHaveURL(/\/channels$/);
 	await expect(page.getByText(channelName)).toBeVisible();
 	await expect(page.getByLabel('Seven-day channel guide')).toBeVisible();
@@ -312,6 +332,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
 	await expect(page.getByLabel('Name')).toHaveValue(channelName);
+	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
+	await page.getByLabel('Name').fill(`${channelName} Draft`);
+	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Manage Layered Schedule' })).toBeDisabled();
+	await page.getByLabel('Name').fill(channelName);
+	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
 	await page.getByLabel('Name').fill(`${channelName} Edited`);
 	await page.locator('input[type="file"]').setInputFiles({
 		name: 'channel-logo.svg',
@@ -435,6 +463,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const programTypes = page.getByRole('radiogroup', { name: 'Program type' });
 	await expect(programTypes).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Content/ })).toBeChecked();
+	const saveProgram = page.locator('.program-editor-actions button[type="submit"]');
+	await expect(saveProgram).toBeDisabled();
 	await expect(
 		page.getByLabel('Source type').getByRole('option', { name: /Exact item/ }),
 	).toHaveCount(0);
@@ -445,6 +475,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	expect(Math.abs((programTypeHeading?.x ?? 0) - (firstProgramType?.x ?? 0))).toBeLessThan(2);
 	await page.getByLabel('Name').fill(programName);
 	await page.getByLabel('Source type').selectOption('collection');
+	await expect(saveProgram).toBeDisabled();
 	await page.getByRole('searchbox', { name: 'Search source media' }).fill('Sci-Fi');
 	await page.getByRole('button', { name: 'Search', exact: true }).click();
 	const sourceMovie = page
@@ -460,6 +491,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const addMediaButton = sourceMovie.getByRole('button', { name: 'Add' });
 	await expect(addMediaButton).toHaveClass(/source-selection-button/);
 	await addMediaButton.click();
+	await expect(saveProgram).toBeEnabled();
 	await expect(sourceMovie.getByRole('button', { name: 'Remove' })).toHaveClass(
 		/source-selection-button/,
 	);
@@ -512,7 +544,13 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const removeBounds = await removeSelectedMovie.boundingBox();
 	expect(removeBounds!.y).toBeLessThan((posterBounds?.y ?? 0) + (posterBounds?.height ?? 0) / 3);
 	await removeSelectedMovie.click();
-	await selectionDrawer.getByRole('button', { name: 'Remove Companion Fixture' }).click();
+	await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
+	await selectionDrawer.getByRole('button', { name: 'Confirm remove Broadcast Fixture' }).click();
+	const removeCompanion = selectionDrawer.getByRole('button', {
+		name: 'Remove Companion Fixture',
+	});
+	await removeCompanion.click();
+	await selectionDrawer.getByRole('button', { name: 'Confirm remove Companion Fixture' }).click();
 	await expect(page.getByText('0 selected', { exact: true })).toBeVisible();
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
 	await expect(selectionDrawer).toBeHidden();
@@ -524,25 +562,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(pinnedPreview).toBeVisible();
 	await clearAll.focus();
 	await page.keyboard.press('Enter');
-	const clearConfirmation = page.getByRole('alertdialog', { name: 'Clear Selected Media?' });
-	await expect(clearConfirmation).toBeVisible();
-	const confirmationLayer = page.locator('.confirmation-modal-backdrop');
-	const confirmationZIndex = Number(await confirmationLayer.evaluate((element) =>
-		getComputedStyle(element).zIndex));
-	const previewZIndex = Number(await pinnedPreview.evaluate((element) =>
-		getComputedStyle(element).zIndex));
-	expect(confirmationZIndex).toBeGreaterThan(previewZIndex);
-	const cancelClear = clearConfirmation.getByRole('button', { name: 'Cancel' });
-	const confirmClear = clearConfirmation.getByRole('button', { name: 'Clear All' });
-	await expect(cancelClear).toBeFocused();
-	await page.keyboard.press('Shift+Tab');
-	await expect(confirmClear).toBeFocused();
-	await page.keyboard.press('Tab');
-	await expect(cancelClear).toBeFocused();
-	await cancelClear.click();
-	await expect(clearConfirmation).toBeHidden();
+	const confirmClear = selectionDrawer.getByRole('button', { name: 'Confirm Clear All' });
+	await expect(confirmClear).toHaveClass(/is-armed/);
+	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+	await page.keyboard.press('Escape');
 	await expect(clearAll).toBeFocused();
-	await clearAll.click();
+	await expect(confirmClear).toHaveCount(0);
+	await page.keyboard.press('Enter');
+	await expect(confirmClear).toBeVisible();
 	await confirmClear.click();
 	await expect(selectionDrawer.getByText('No media selected.')).toBeVisible();
 	await selectionDrawer.getByRole('button', { name: 'Done' }).click();
@@ -633,6 +660,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await expect(programCard).toContainText(`1 selected from ${libraryName}`);
 	await programCard.getByRole('link', { name: programName, exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+	await page.getByLabel('Name').fill(`${programName} Draft`);
+	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
+	await page.getByLabel('Name').fill(programName);
+	await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
 	await expect(page.getByRole('radio', { name: /Content/ })).toHaveCount(0);
 	await expect(page.getByLabel('Source type')).toHaveCount(0);
 	await expect(page.getByLabel('Library')).toHaveCount(0);
@@ -745,6 +777,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'No templates yet' })).toBeVisible();
 	await page.getByRole('link', { name: 'Create Your First Template' }).click();
 	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Save Template' })).toBeEnabled();
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByLabel('Template name').fill(templateName);
 	await expect(page.getByLabel('Preview as channel')).toHaveCount(0);
@@ -791,6 +824,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	);
 	await expect(editorSlots).toHaveCount(3);
 	await page.getByRole('button', { name: 'Delete selected slot' }).click();
+	await expect(editorSlots).toHaveCount(3);
+	await page.getByRole('button', { name: 'Confirm delete selected slot' }).click();
 	await expect(editorSlots).toHaveCount(2);
 
 	await editorView.getByRole('button', { name: 'List', exact: true }).click();
@@ -843,6 +878,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.notice.error')).toHaveCount(0);
 	await page.reload();
 	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
+	await expect(page.getByRole('button', { name: 'Save Template' })).toBeDisabled();
+	await page.getByLabel('Template name').fill(`${templateName} Draft`);
+	await expect(page.getByRole('button', { name: 'Save Template' })).toBeEnabled();
+	await page.getByLabel('Template name').fill(templateName);
+	await expect(page.getByRole('button', { name: 'Save Template' })).toBeDisabled();
 	await page.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
 	await expect(
 		page
@@ -868,7 +908,25 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(channelScheduleCard.locator('.schedule-channel-title a')).toHaveCount(0);
 	await expect(channelScheduleCard.locator('.schedule-channel-open')).toHaveCount(0);
 	await channelScheduleCard.getByRole('link', { name: 'Add template' }).click();
+	await expect(page.getByRole('button', { name: 'Save Schedule' })).toBeEnabled();
+	const applyAfterCurrent = page.getByRole('button', { name: 'Apply After Current Item' });
+	await expect(applyAfterCurrent).toBeDisabled();
+	await applyAfterCurrent.locator('..').focus();
+	await expect(applyAfterCurrent.locator('..')).toHaveAttribute(
+		'aria-label',
+		'Apply After Current Item',
+	);
+	await expect(applyAfterCurrent.locator('..')).toHaveAttribute('aria-disabled', 'true');
 	await page.getByLabel('Base template', { exact: true }).selectOption({ label: templateName });
+	await page.getByRole('button', { name: 'Add conditional template' }).click();
+	await expect(page.locator('.schedule-layer.conditional')).toHaveCount(1);
+	const armLayerRemoval = page.getByRole('button', { name: 'Remove layer' });
+	await armLayerRemoval.click();
+	const confirmLayerRemoval = page.getByRole('button', { name: 'Confirm remove layer' });
+	await expect(confirmLayerRemoval).toHaveClass(/armed/);
+	await expect(page.locator('.schedule-layer.conditional')).toHaveCount(1);
+	await confirmLayerRemoval.click();
+	await expect(page.locator('.schedule-layer.conditional')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Add conditional template' }).click();
 	await expect(page.locator('.schedule-layer.conditional')).toHaveCount(1);
 	await expect(page.locator('.channel-schedule-save-state')).toContainText('Unsaved changes');
@@ -942,8 +1000,32 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.schedule-preview-ruler > span').last()).toHaveText('24:00');
 	await expect(page.getByLabel('Schedule preview legend')).toBeVisible();
 	await page.unroute('**/api/v1/channel-schedule-preview');
+	await page.route('**/api/v1/scheduling/materializations', async (route) => {
+		const response = await route.fetch();
+		const body = (await response.json()) as Array<Record<string, unknown>>;
+		for (const status of body) {
+			status.health = 'pending';
+			status.applyAfter = new Date(Date.now() + 60_000).toISOString();
+		}
+		await route.fulfill({ response, json: body });
+	});
+	await page.route('**/api/v1/scheduling/overview', async (route) => {
+		await route.fulfill({
+			status: 503,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				code: 'overview_unavailable',
+				message: 'Scheduling overview could not be refreshed.',
+				requestId: 'e2e-overview-refresh-failure',
+			}),
+		});
+	});
 	await page.getByRole('button', { name: 'Save Schedule' }).click();
 	await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Save Schedule' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Apply After Current Item' })).toBeEnabled();
+	await page.unroute('**/api/v1/scheduling/overview');
+	await page.unroute('**/api/v1/scheduling/materializations');
 	await page.reload();
 	await expect(
 		page
@@ -989,7 +1071,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateRow).toContainText('2 slots');
 	const templateActions = templateRow.getByRole('button', { name: `Actions for ${templateName}` });
 	await templateActions.click();
-	const templateEditAction = templateRow.getByRole('link', { name: 'Edit' });
+	const templateEditAction = templateRow.getByRole('link', { name: 'Edit', exact: true });
 	await expect(templateEditAction).toBeVisible();
 	await templateEditAction.hover();
 	await expect.poll(() => templateEditAction.evaluate((element) =>
@@ -1017,7 +1099,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateRow).toBeVisible();
 });
 
-test('does not expose playback controls before playback settings load', async ({ page }) => {
+test('loads playback controls before tracking and independently saving panel drafts', async ({
+	page,
+}) => {
 	await authenticateAdministrator(page);
 	let releaseSettings: (() => void) | undefined;
 	const settingsGate = new Promise<void>((resolve) => {
@@ -1032,10 +1116,152 @@ test('does not expose playback controls before playback settings load', async ({
 	await expect(page.getByRole('status')).toContainText('Loading playback settings');
 	await expect(save).toHaveCount(0);
 	releaseSettings?.();
+	await expect(save).toBeDisabled();
+	const disabledSaveOpacity = Number(await save.evaluate((element) =>
+		getComputedStyle(element).opacity));
+	expect(disabledSaveOpacity).toBeLessThan(0.6);
+	await page.unroute('**/api/v1/playback/settings');
+
+	const maximumSessions = page.getByLabel('Maximum active channel sessions');
+	const viewingEnabled = page.getByLabel(
+		'Learn from channel viewing and apply it to Weighted Random programs',
+	);
+	const preferencePanel = page.locator('.viewing-preferences-panel');
+	const savePreferences = preferencePanel.getByRole('button', { name: 'Save Settings' });
+	const originalMaximum = Number(await maximumSessions.inputValue());
+	const originalViewingEnabled = await viewingEnabled.isChecked();
+	const updatedMaximum = originalMaximum === 32 ? 31 : originalMaximum + 1;
+	await expect(savePreferences).toBeDisabled();
+	await maximumSessions.fill(String(updatedMaximum));
 	await expect(save).toBeEnabled();
+	await expect.poll(() => save.evaluate((element) =>
+		Number(getComputedStyle(element).opacity))).toBeGreaterThan(disabledSaveOpacity);
+	await maximumSessions.fill(String(originalMaximum));
+	await expect(save).toBeDisabled();
+	await maximumSessions.fill(String(updatedMaximum));
+	await viewingEnabled.setChecked(!originalViewingEnabled);
+	await expect(save).toBeEnabled();
+	await expect(savePreferences).toBeEnabled();
+
+	const settingsUpdates: Array<Record<string, unknown>> = [];
+	let rejectNextUpdate = false;
+	await page.route('**/api/v1/playback/settings', async (route) => {
+		if (route.request().method() !== 'PUT') {
+			await route.continue();
+			return;
+		}
+
+		const payload = route.request().postDataJSON() as Record<string, unknown>;
+		settingsUpdates.push(payload);
+		if (rejectNextUpdate) {
+			rejectNextUpdate = false;
+			await route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					code: 'save_failed',
+					message: 'Settings could not be saved.',
+					requestId: 'e2e-settings-failure',
+				}),
+			});
+			return;
+		}
+
+		await route.fulfill({ json: payload });
+	});
+	await save.click();
+	await expect(save).toBeDisabled();
+	expect(await viewingEnabled.isChecked()).toBe(!originalViewingEnabled);
+	await expect(savePreferences).toBeEnabled();
+	expect(settingsUpdates[0]).toEqual({
+		maxActiveSessions: updatedMaximum,
+		viewingPreferencesEnabled: originalViewingEnabled,
+	});
+
+	rejectNextUpdate = true;
+	await savePreferences.click();
+	await expect(page.getByText('Settings could not be saved.')).toBeVisible();
+	await expect(savePreferences).toBeEnabled();
+	await savePreferences.click();
+	await expect(savePreferences).toBeDisabled();
+	expect(settingsUpdates.at(-1)).toEqual({
+		maxActiveSessions: updatedMaximum,
+		viewingPreferencesEnabled: !originalViewingEnabled,
+	});
+
+	let viewingHistoryCleared = false;
+	await page.route('**/api/v1/viewing-preferences/clear', async (route) => {
+		viewingHistoryCleared = true;
+		await route.fulfill({ status: 204 });
+	});
+	await preferencePanel.getByRole('button', { name: 'Clear History' }).click();
+	const clearHistoryDialog = page.getByRole('alertdialog', { name: 'Clear Viewing History?' });
+	await expect(clearHistoryDialog).toBeVisible();
+	await clearHistoryDialog.getByRole('button', { name: 'Cancel' }).click();
+	expect(viewingHistoryCleared).toBe(false);
+	await preferencePanel.getByRole('button', { name: 'Clear History' }).click();
+	await clearHistoryDialog.getByRole('button', { name: 'Clear History' }).click();
+	await expect(page.getByText('Viewing history cleared.')).toBeVisible();
+	expect(viewingHistoryCleared).toBe(true);
+});
+
+test('enables local credential creation only after its required fields agree', async ({ page }) => {
+	const csrfToken = await authenticateAdministrator(page);
+	await page.route('**/api/v1/auth/session', async (route) => {
+		await route.fulfill({
+			json: {
+				status: 'authenticated',
+				methods: { local: false, logto: true },
+				localUsername: null,
+				identity: {
+					id: '00000000-0000-4000-8000-000000000001',
+					provider: 'logto',
+					displayName: 'External Administrator',
+					username: 'external-admin',
+				},
+				csrfToken,
+			},
+		});
+	});
+	await page.goto('/account');
+	const createCredentials = page.getByRole('button', { name: 'Create Local Account' });
+	await expect(createCredentials).toBeDisabled();
+	await page.getByLabel('Username').fill('fallback-admin');
+	await page.getByRole('textbox', { name: /^New password/ })
+		.fill('a sufficiently long fallback password');
+	await page.getByLabel('Confirm new password').fill('different fallback password');
+	await expect(createCredentials).toBeDisabled();
+	await page.getByLabel('Confirm new password').fill('a sufficiently long fallback password');
+	await expect(createCredentials).toBeEnabled();
+	await page.route('**/api/v1/auth/local-credentials', async (route) => {
+		expect(route.request().postDataJSON()).toEqual({
+			username: 'fallback-admin',
+			password: 'a sufficiently long fallback password',
+			currentPassword: null,
+		});
+		await route.fulfill({
+			json: {
+				status: 'authenticated',
+				methods: { local: true, logto: true },
+				localUsername: 'fallback-admin',
+				identity: {
+					id: '00000000-0000-4000-8000-000000000001',
+					provider: 'logto',
+					displayName: 'External Administrator',
+					username: 'external-admin',
+				},
+				csrfToken,
+			},
+		});
+	});
+	await createCredentials.click();
+	await expect(page.getByRole('button', { name: 'Update Credentials' })).toBeDisabled();
+	await expect(page.getByRole('textbox', { name: /^New password/ })).toHaveValue('');
+	await expect(page.getByLabel('Confirm new password')).toHaveValue('');
 });
 
 test('uses an accessible navigation drawer on small screens', async ({ page }) => {
+	test.setTimeout(60_000);
 	await authenticateAdministrator(page);
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');
@@ -1072,6 +1298,17 @@ test('uses an accessible navigation drawer on small screens', async ({ page }) =
 	await expect(page).toHaveURL(/\/account$/);
 	await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
 	await expect(page.getByLabel('Username')).toHaveValue(E2E_ADMIN_USERNAME);
+	const updateCredentials = page.getByRole('button', { name: 'Update Credentials' });
+	await expect(updateCredentials).toBeDisabled();
+	await page.getByLabel('Current password').fill(E2E_ADMIN_PASSWORD);
+	await page.getByRole('textbox', { name: /^New password/ })
+		.fill('another sufficiently long password');
+	await page.getByLabel('Confirm new password').fill('passwords do not match');
+	await expect(updateCredentials).toBeDisabled();
+	await page.getByLabel('Confirm new password').fill('another sufficiently long password');
+	await expect(updateCredentials).toBeEnabled();
+	await page.getByLabel('Current password').fill('');
+	await expect(updateCredentials).toBeDisabled();
 });
 
 test('keeps catalog navigation sticky and synchronizes visible anchors with history', async ({

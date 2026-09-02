@@ -9,6 +9,7 @@ import {
 } from '@lucide/vue';
 import {
 	SECONDS_PER_SCHEDULING_DAY,
+	scheduleTemplateCreateSchema,
 	type ScheduleBoundary,
 	type ScheduleSlot,
 	type ScheduleTemplateCreate,
@@ -20,6 +21,7 @@ import { requestConfirmation } from '../../confirmation';
 import { errorMessage } from '../../error-message';
 import LoadingState from '../LoadingState.vue';
 import AnimatedDisclosure from '../AnimatedDisclosure.vue';
+import TwoStepDeleteButton from '../TwoStepDeleteButton.vue';
 import ProgramsPage from '../../views/ProgramsPage.vue';
 import { cloneContractValue } from '../../reactive-clone';
 import { randomUuid } from '../../random-uuid';
@@ -135,6 +137,7 @@ const usedPrograms = computed(() => {
 });
 const isDirty = computed(() =>
 	draft.value ? JSON.stringify({ template: draft.value }) !== originalSnapshot.value : false);
+const hasPendingSave = computed(() => Boolean(draft.value) && (!editingId.value || isDirty.value));
 const previewDraftFingerprint = computed(() => {
 	if (!draft.value) {
 		return '';
@@ -603,22 +606,36 @@ function toggleTemplateFiller(enabled: boolean): void {
 	markChanged();
 }
 
+/** Build the persisted template contract from the editor's UI-enriched draft. */
+function templatePayload(): ScheduleTemplateCreate | null {
+	if (!draft.value) {
+		return null;
+	}
+
+	return {
+		name: draft.value.name,
+		period: draft.value.period,
+		defaultFiller: draft.value.defaultFiller,
+		slots: draft.value.slots,
+		boundaries: draft.value.boundaries,
+	};
+}
+
+const templateFormValid = computed(() =>
+	scheduleTemplateCreateSchema.safeParse(templatePayload()).success);
+const templateSaveDisabled = computed(() =>
+	saving.value || !hasPendingSave.value || !templateFormValid.value);
+
 /** Validate and save the template draft. */
 async function save(): Promise<boolean> {
-	if (!draft.value) {
+	const body = templatePayload();
+	if (!body || templateSaveDisabled.value) {
 		return false;
 	}
 
 	saving.value = true;
 	error.value = '';
 	try {
-		const body: ScheduleTemplateCreate = {
-			name: draft.value.name,
-			period: draft.value.period,
-			defaultFiller: draft.value.defaultFiller,
-			slots: draft.value.slots,
-			boundaries: draft.value.boundaries,
-		};
 		const saved = editingId.value
 			? await api.updateScheduleTemplate(editingId.value, body)
 			: await api.createScheduleTemplate(body);
@@ -670,7 +687,7 @@ async function leaveEditor(): Promise<void> {
 async function closeEditor(): Promise<void> {
 	await closeUnsavedEditor({
 		blocked: saving.value,
-		dirty: isDirty.value,
+		dirty: hasPendingSave.value,
 		key: `unsaved-template:${editingId.value ?? 'new'}`,
 		message: 'Save this template before closing?',
 		save: async () => {
@@ -779,7 +796,7 @@ function finishProgramEdit(): void {
 
 /** Warn before navigation when the current editor contains unsaved changes. */
 function beforeUnload(event: BeforeUnloadEvent): void {
-	if (isDirty.value) {
+	if (hasPendingSave.value) {
 		event.preventDefault();
 	}
 }
@@ -811,7 +828,7 @@ onBeforeRouteLeave(async () => {
 		return true;
 	}
 
-	if (!isDirty.value || await requestConfirmation({
+	if (!hasPendingSave.value || await requestConfirmation({
 		key: `discard-template:${editingId.value ?? 'new'}`,
 		title: 'Discard Unsaved Changes?',
 		message: 'Leave this template without saving your changes?',
@@ -887,10 +904,10 @@ onBeforeUnmount(() => {
 						<span>Template name</span>
 						<input v-model="draft.name" aria-label="Template name" autocapitalize="words" @input="markChanged" />
 					</label>
-					<span v-if="isDirty" class="draft-badge">Unsaved changes</span>
+					<span v-if="hasPendingSave" class="draft-badge">Unsaved changes</span>
 					<div class="template-toolbar-actions">
 						<button type="button" class="toolbar-button" :disabled="saving" @click="closeEditor">Close</button>
-						<button class="button" :disabled="saving" @click="save">
+						<button class="button" :disabled="templateSaveDisabled" @click="save">
 							{{ saving ? 'Saving…' : 'Save Template' }}
 						</button>
 					</div>
@@ -936,14 +953,15 @@ onBeforeUnmount(() => {
 									</div>
 								</div>
 								<div class="card-actions">
-									<button
+									<TwoStepDeleteButton
 										class="template-delete-button"
 										:disabled="draft.slots.length <= 1"
-										aria-label="Delete selected slot"
-										@click="deleteSelected"
+										label="Delete selected slot"
+										confirm-label="Confirm delete selected slot"
+										@confirm="deleteSelected"
 									>
 										<Trash2 :size="17" />
-									</button>
+									</TwoStepDeleteButton>
 								</div>
 							</div>
 							<div class="template-slot-fields">

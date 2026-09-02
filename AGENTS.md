@@ -39,6 +39,11 @@
   auto-dismissing toasts with manual dismissal and enough time to read or interact. Keep failures,
   warnings, and states that require user attention persistent and in context instead of dismissing
   them automatically.
+- Confirm deletion of persisted top-level resources and other significant permanent data in a styled
+  modal. For nested, draft-local removals that can be undone by cancelling or discarding the editor,
+  use a compact two-step action instead: the first activation must visibly arm the control and change
+  its accessible label, while the second performs the removal. Allow the armed state to be cancelled
+  with Escape, an outside interaction, another armed delete action, or a short timeout.
 - Use subtle, context-appropriate motion when it clarifies presentation, dismissal, expansion,
   collapse, spatial relationships, or asynchronous state changes. Do not add animation solely for
   decoration or animate frequently changing data when doing so would add noise or imply false

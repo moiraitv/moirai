@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { KeyRound } from '@lucide/vue';
+import { localAuthenticationCredentialsSchema } from '@moirai/shared/api-contracts';
 import { errorMessage } from '../error-message';
 import PageHeader from '../components/PageHeader.vue';
 import { useAuthenticationStore } from '../stores/authentication';
@@ -16,6 +17,13 @@ const savingCredentials = ref(false);
 const credentialMessage = ref('');
 const credentialError = ref('');
 const hasLocalAccount = computed(() => authentication.state?.methods.local === true);
+const credentialsValid = computed(() =>
+	localCredentials.password === localCredentials.confirmation
+	&& localAuthenticationCredentialsSchema.safeParse({
+		username: localCredentials.username,
+		password: localCredentials.password,
+		currentPassword: hasLocalAccount.value ? localCredentials.currentPassword : null,
+	}).success);
 const accountDescription = computed(() =>
 	`Signed in as ${authentication.state?.identity?.displayName ?? 'Administrator'} via ${authentication.state?.identity?.provider ?? 'Moirai'}.`);
 
@@ -23,8 +31,7 @@ const accountDescription = computed(() =>
 async function saveCredentials(): Promise<void> {
 	credentialMessage.value = '';
 	credentialError.value = '';
-	if (localCredentials.password !== localCredentials.confirmation) {
-		credentialError.value = 'New passwords do not match.';
+	if (savingCredentials.value || !credentialsValid.value) {
 		return;
 	}
 
@@ -109,7 +116,7 @@ async function saveCredentials(): Promise<void> {
 					/>
 				</label>
 				<div class="form-actions span-2">
-					<button class="button" :disabled="savingCredentials">
+					<button class="button" :disabled="savingCredentials || !credentialsValid">
 						<KeyRound :size="17" />{{ hasLocalAccount ? 'Update Credentials' : 'Create Local Account' }}
 					</button>
 				</div>

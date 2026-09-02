@@ -18,6 +18,7 @@ import {
 import {
 	CHANNEL_LOGO_MAX_BYTES,
 	CHANNEL_LOGO_MAX_DIMENSION,
+	channelCreateSchema,
 	managedChannelLogoId,
 	type Channel,
 	type ChannelCreate,
@@ -30,9 +31,11 @@ import { channelLogoUrl } from '../channel-logo';
 import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 import GuideTimeline from '../components/GuideTimeline.vue';
+import DisabledActionHint from '../components/DisabledActionHint.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
+import TwoStepDeleteButton from '../components/TwoStepDeleteButton.vue';
 import { liveEvents } from '../live-events';
 import { affectsGuide } from '../guide-events';
 import { cloneContractValue } from '../reactive-clone';
@@ -230,6 +233,9 @@ function channelFormSnapshot(): string {
 
 const channelFormDirty = computed(() =>
 	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
+const channelFormValid = computed(() => channelCreateSchema.safeParse(payload()).success);
+const channelSaveDisabled = computed(() =>
+	saving.value || !channelFormValid.value || (Boolean(editingId.value) && !channelFormDirty.value));
 
 /** Close the channel form after releasing any temporary crop image. */
 function finishCloseForm(): void {
@@ -619,6 +625,10 @@ function edit(channel: Channel) {
 }
 /** Save the channel form and any managed logo change. */
 async function save() {
+	if (channelSaveDisabled.value) {
+		return;
+	}
+
 	error.value = '';
 	saving.value = true;
 	suppressChannelEventsUntil = Date.now() + 5_000;
@@ -843,13 +853,21 @@ onBeforeUnmount(() => {
 						<div class="span-2 channel-schedule-link">
 							<span>Schedule</span>
 							<RouterLink
-								v-if="editingId"
+								v-if="editingId && !channelFormDirty"
 								class="button secondary"
 								:to="`/schedules/channels/${editingId}`"
 							>
 								Manage Layered Schedule
 							</RouterLink>
-							<small v-else>Save the channel before configuring its schedule.</small>
+							<DisabledActionHint
+								v-else
+								label="Manage Layered Schedule"
+								message="Save the channel before configuring its schedule."
+							>
+								<button type="button" class="button secondary" disabled>
+									Manage Layered Schedule
+								</button>
+							</DisabledActionHint>
 						</div>
 						<div class="channel-logo-editor span-2">
 							<div class="channel-logo-heading">
@@ -906,9 +924,15 @@ onBeforeUnmount(() => {
 										<button type="button" class="button secondary" @click="logoInput?.click()">
 											<ImagePlus :size="16" />Choose Another
 										</button>
-										<button type="button" class="button secondary" @click="removeSelectedLogo">
+										<TwoStepDeleteButton
+											class="button secondary"
+											label="Remove selected logo"
+											confirm-label="Confirm remove selected logo"
+											confirm-text="Confirm Remove"
+											@confirm="removeSelectedLogo"
+										>
 											<Trash2 :size="16" />Remove
-										</button>
+										</TwoStepDeleteButton>
 									</div>
 								</div>
 							</div>
@@ -921,14 +945,16 @@ onBeforeUnmount(() => {
 									<button type="button" class="button secondary" @click="logoInput?.click()">
 										<Upload :size="16" />Choose Image
 									</button>
-									<button
-										v-if="existingLogoUrl() || removeLogoOnSave"
-										type="button"
+									<TwoStepDeleteButton
+										v-if="existingLogoUrl()"
 										class="text-button danger-text"
-										@click="removeSelectedLogo"
+										label="Remove logo"
+										confirm-label="Confirm remove logo"
+										confirm-text="Confirm Remove"
+										@confirm="removeSelectedLogo"
 									>
 										Remove Logo
-									</button>
+									</TwoStepDeleteButton>
 									<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
 								</div>
 							</div>
@@ -1033,7 +1059,7 @@ onBeforeUnmount(() => {
 				<div class="form-actions">
 					<button type="button" class="button secondary" :disabled="saving" @click="closeForm">
 						Cancel</button
-					><button class="button" :disabled="saving">
+					><button class="button" :disabled="channelSaveDisabled">
 						{{ saving ? 'Saving…' : 'Save Changes' }}
 					</button>
 				</div>
