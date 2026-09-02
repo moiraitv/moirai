@@ -102,6 +102,14 @@ export class MediaCatalogRepository {
 			conditions.push('i.year <= ?');
 			conditionParams.push(query.releaseYearTo);
 		}
+		if (query.minimumRating !== null) {
+			conditions.push("json_extract(i.metadata, '$.rating') >= ?");
+			conditionParams.push(query.minimumRating);
+		}
+		if (query.minimumUserRating !== null) {
+			conditions.push("json_extract(i.metadata, '$.userRating') >= ?");
+			conditionParams.push(query.minimumUserRating);
+		}
 		if (query.addedFrom) {
 			conditions.push('i.date_added_at >= ?');
 			conditionParams.push(query.addedFrom);
@@ -179,6 +187,8 @@ export class MediaCatalogRepository {
 			|| query.director
 			|| query.releaseYearFrom !== null
 			|| query.releaseYearTo !== null
+			|| query.minimumRating !== null
+			|| query.minimumUserRating !== null
 			|| query.addedFrom
 			|| query.addedBefore
 			|| query.genres.length
@@ -442,6 +452,8 @@ export class MediaCatalogRepository {
 				name: '',
 				releaseYearFrom: null,
 				releaseYearTo: null,
+				minimumRating: null,
+				minimumUserRating: null,
 				addedFrom: null,
 				addedBefore: null,
 				genres: [],

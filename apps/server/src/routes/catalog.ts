@@ -50,6 +50,12 @@ const genreKeysQuerySchema = z
 	.default([])
 	.transform((value) => [...new Set(Array.isArray(value) ? value : [value])]);
 
+/** Optional 0–10 rating threshold that treats an empty query field as omitted. */
+const optionalRatingQuerySchema = z.preprocess(
+	(value) => value === '' ? undefined : value,
+	z.coerce.number().min(0).max(10).optional(),
+);
+
 /** Filters, sorting, and pagination accepted by catalog browsing. */
 const mediaBrowseQuerySchema = z.object({
 	parentId: z.uuid().optional(),
@@ -60,6 +66,8 @@ const mediaBrowseQuerySchema = z.object({
 	name: z.string().trim().max(120).default(''),
 	releaseYearFrom: z.coerce.number().int().min(1800).max(2200).optional(),
 	releaseYearTo: z.coerce.number().int().min(1800).max(2200).optional(),
+	minimumRating: optionalRatingQuerySchema,
+	minimumUserRating: optionalRatingQuerySchema,
 	addedFrom: z.iso.datetime({ offset: true }).optional(),
 	addedBefore: z.iso.datetime({ offset: true }).optional(),
 	genres: genreKeysQuerySchema,
@@ -130,6 +138,8 @@ export function registerCatalogRoutes(
 			parentId: query.parentId ?? null,
 			releaseYearFrom: query.releaseYearFrom ?? null,
 			releaseYearTo: query.releaseYearTo ?? null,
+			minimumRating: query.minimumRating ?? null,
+			minimumUserRating: query.minimumUserRating ?? null,
 			addedFrom: query.addedFrom ?? null,
 			addedBefore: query.addedBefore ?? null,
 		});

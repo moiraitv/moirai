@@ -152,6 +152,8 @@ export const catalogProgramItemQuerySchema = z.object({
 	name: z.string().trim().max(120).default(''),
 	releaseYearFrom: z.number().int().min(1800).max(2200).nullable().default(null),
 	releaseYearTo: z.number().int().min(1800).max(2200).nullable().default(null),
+	minimumRating: z.number().min(0).max(10).nullable().default(null),
+	minimumUserRating: z.number().min(0).max(10).nullable().default(null),
 	addedFrom: z.iso.datetime({ offset: true }).nullable().default(null),
 	addedBefore: z.iso.datetime({ offset: true }).nullable().default(null),
 	genres: catalogGenreKeysSchema,

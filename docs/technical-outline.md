@@ -693,9 +693,15 @@ Route state preserves sorting, filters, hierarchy, pagination, and within-page c
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
 returns to a page; initial empty collections have explicit loading states.
 
-The library filter defaults to Match all, where each genre can be neutral, required, or explicitly
-disallowed. Its contextual facets predict the result of either action. Match any retains simple
-inclusion checkboxes and static library totals.
+Library catalog pages window responsive rows with bounded overscan. Full-width section headings and
+unmounted title or genre anchors retain virtual positions so sticky navigation can scroll directly to
+them without rendering every card on the page.
+
+The library filter presents genre rules first and defaults to Match all, where each genre can be
+neutral, required, or explicitly disallowed. Its contextual facets predict the result of either
+action. Match any retains simple inclusion checkboxes and static library totals. Additional filters
+cover title, release and indexed dates, minimum indexed popular and user ratings, actors, and
+directors. Items without the selected rating value do not satisfy a minimum-rating filter.
 
 Media preview supports `GET`, `HEAD`, and one HTTP range, which permits scrubbing when the browser
 supports the source container and codecs. Moirai does not transcode preview files.

@@ -1059,8 +1059,16 @@ a.media-card {
 }
 
 .pagination-gap {
-	padding: 0 2px;
+	width: 32px;
+	height: 38px;
+	display: inline-grid;
+	flex: 0 0 32px;
+	place-items: center;
 	color: var(--muted);
+	border-right: 1px solid var(--line);
+	background: var(--panel);
+	font-size: 0.82rem;
+	letter-spacing: 0.08em;
 }
 
 .library-title-actions {

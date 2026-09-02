@@ -33,7 +33,6 @@ import {
 	Zap,
 } from '@lucide/vue';
 import type {
-	CatalogProgramItemQuery,
 	Library,
 	MediaBrowseResult,
 	MediaGenreFacet,
@@ -60,6 +59,7 @@ import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
 import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
 import VirtualLibraryCatalog from '../components/library/VirtualLibraryCatalog.vue';
 import {
+	catalogProgramQuery,
 	emptyLibraryFilterDraft,
 	type LibraryFilterDraft,
 } from '../components/library/library-filter';
@@ -243,6 +243,8 @@ const activeFilterCount = computed(
 		[
 			queryString('q'),
 			queryString('releaseFrom') || queryString('releaseTo'),
+			queryString('minimumRating'),
+			queryString('minimumUserRating'),
 			queryString('addedFrom') || queryString('addedTo') || dateWindow.value,
 			queryStrings('genre').length || queryStrings('excludeGenre').length ? 'genre' : '',
 			queryString('actor'),
@@ -391,6 +393,8 @@ function dateWindowBounds(key: string): Pick<MediaQuery, 'addedFrom' | 'addedBef
 function currentMediaQuery(): MediaQuery {
 	const releaseFrom = Number(queryString('releaseFrom'));
 	const releaseTo = Number(queryString('releaseTo'));
+	const minimumRating = Number(queryString('minimumRating'));
+	const minimumUserRating = Number(queryString('minimumUserRating'));
 	const windowBounds = dateWindow.value ? dateWindowBounds(dateWindow.value) : {};
 	return {
 		parentId: parentId.value,
@@ -401,6 +405,8 @@ function currentMediaQuery(): MediaQuery {
 		name: queryString('q') || undefined,
 		releaseYearFrom: releaseFrom || undefined,
 		releaseYearTo: releaseTo || undefined,
+		minimumRating: queryString('minimumRating') ? minimumRating : undefined,
+		minimumUserRating: queryString('minimumUserRating') ? minimumUserRating : undefined,
 		addedFrom: windowBounds.addedFrom ?? localDay(queryString('addedFrom')),
 		addedBefore: windowBounds.addedBefore ?? localDay(queryString('addedTo'), true),
 		genres: queryStrings('genre'),
@@ -408,26 +414,6 @@ function currentMediaQuery(): MediaQuery {
 		genreMatch: queryString('genreMatch') === 'any' ? 'any' : 'all',
 		actor: queryString('actor') || undefined,
 		director: queryString('director') || undefined,
-	};
-}
-
-/** Build the recursive catalog selection represented by the current library route. */
-function currentProgramItemQuery(): CatalogProgramItemQuery {
-	const query = currentMediaQuery();
-	return {
-		parentId: query.parentId ?? null,
-		sort: query.sort,
-		direction: query.direction,
-		name: query.name ?? '',
-		releaseYearFrom: query.releaseYearFrom ?? null,
-		releaseYearTo: query.releaseYearTo ?? null,
-		addedFrom: query.addedFrom ?? null,
-		addedBefore: query.addedBefore ?? null,
-		genres: query.genres ?? [],
-		excludedGenres: query.excludedGenres ?? [],
-		genreMatch: query.genreMatch ?? 'all',
-		actor: query.actor ?? '',
-		director: query.director ?? '',
 	};
 }
 
@@ -480,7 +466,7 @@ function addSelectedItems(): void {
 
 /** Open the destination dialog for every recursive item matching the current catalog state. */
 function addAllMatchingItems(): void {
-	programSelection.value = { type: 'query', query: currentProgramItemQuery() };
+	programSelection.value = { type: 'query', query: catalogProgramQuery(currentMediaQuery()) };
 }
 
 /** Close selection UI and retain an accessible link to the changed program. */
@@ -957,6 +943,8 @@ function openFilters(): void {
 	filterDraft.name = queryString('q');
 	filterDraft.releaseFrom = queryString('releaseFrom');
 	filterDraft.releaseTo = queryString('releaseTo');
+	filterDraft.minimumRating = queryString('minimumRating');
+	filterDraft.minimumUserRating = queryString('minimumUserRating');
 	filterDraft.addedFrom = queryString('addedFrom');
 	filterDraft.addedTo = queryString('addedTo');
 	filterDraft.genres = queryStrings('genre');
@@ -975,6 +963,8 @@ async function applyFilters(draft: LibraryFilterDraft): Promise<void> {
 		q: draft.name || undefined,
 		releaseFrom: draft.releaseFrom || undefined,
 		releaseTo: draft.releaseTo || undefined,
+		minimumRating: draft.minimumRating || undefined,
+		minimumUserRating: draft.minimumUserRating || undefined,
 		addedFrom: draft.addedFrom || undefined,
 		addedTo: draft.addedTo || undefined,
 		dateWindow: undefined,

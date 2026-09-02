@@ -1,10 +1,13 @@
-import type { GenreMatch } from '@moirai/shared';
+import type { CatalogProgramItemQuery, GenreMatch } from '@moirai/shared';
+import type { MediaQuery } from '../../api';
 
 /** Editable catalog filters retained privately until the user applies them. */
 export interface LibraryFilterDraft {
 	name: string;
 	releaseFrom: string;
 	releaseTo: string;
+	minimumRating: string;
+	minimumUserRating: string;
 	addedFrom: string;
 	addedTo: string;
 	genres: string[];
@@ -20,6 +23,8 @@ export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 		name: '',
 		releaseFrom: '',
 		releaseTo: '',
+		minimumRating: '',
+		minimumUserRating: '',
 		addedFrom: '',
 		addedTo: '',
 		genres: [],
@@ -27,5 +32,26 @@ export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 		genreMatch: 'all',
 		actor: '',
 		director: '',
+	};
+}
+
+/** Convert current catalog filters into the persisted recursive program-selection contract. */
+export function catalogProgramQuery(query: MediaQuery): CatalogProgramItemQuery {
+	return {
+		parentId: query.parentId ?? null,
+		sort: query.sort,
+		direction: query.direction,
+		name: query.name ?? '',
+		releaseYearFrom: query.releaseYearFrom ?? null,
+		releaseYearTo: query.releaseYearTo ?? null,
+		minimumRating: query.minimumRating ?? null,
+		minimumUserRating: query.minimumUserRating ?? null,
+		addedFrom: query.addedFrom ?? null,
+		addedBefore: query.addedBefore ?? null,
+		genres: query.genres ?? [],
+		excludedGenres: query.excludedGenres ?? [],
+		genreMatch: query.genreMatch ?? 'all',
+		actor: query.actor ?? '',
+		director: query.director ?? '',
 	};
 }

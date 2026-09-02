@@ -99,6 +99,8 @@ export interface MediaQuery {
 	name?: string | undefined;
 	releaseYearFrom?: number | undefined;
 	releaseYearTo?: number | undefined;
+	minimumRating?: number | undefined;
+	minimumUserRating?: number | undefined;
 	addedFrom?: string | undefined;
 	addedBefore?: string | undefined;
 	genres?: string[] | undefined;

@@ -8,6 +8,7 @@ assets-src/
 data/
 playwright-report/
 test-results/
+*.tsbuildinfo
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

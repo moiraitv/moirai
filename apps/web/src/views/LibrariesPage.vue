@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
+import { ChevronRight, FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
 import {
 	DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
 	type Library,
@@ -208,15 +208,27 @@ onUnmounted(() => {
 				:key="library.id"
 				class="library-row"
 			>
-				<div class="library-row-heading">
+				<RouterLink
+					class="library-row-heading"
+					:to="`/libraries/${library.id}`"
+					:aria-label="`Open library ${library.name}`"
+				>
 					<div class="library-art">
 						<RefreshCw v-if="isScanning(library)" class="spinning" :size="30" />
 						<component :is="libraryIcon(library.typeKey)" v-else :size="30" />
 					</div>
 					<div class="library-row-copy">
 						<div class="card-title-row">
-							<h2><RouterLink :to="`/libraries/${library.id}`">{{ library.name }}</RouterLink></h2>
-							<StatusPill :value="libraryStatusValue(library, isScanning(library))" />
+							<h2>{{ library.name }}</h2>
+							<div class="library-row-actions">
+								<StatusPill :value="libraryStatusValue(library, isScanning(library))" />
+								<span
+									class="library-row-navigation"
+									aria-hidden="true"
+								>
+									<ChevronRight :size="20" aria-hidden="true" />
+								</span>
+							</div>
 						</div>
 						<p>{{ library.itemCount }} indexed</p>
 						<p
@@ -227,7 +239,7 @@ onUnmounted(() => {
 						</p>
 						<small>{{ library.sourceConfig.scanRoot }}</small>
 					</div>
-				</div>
+				</RouterLink>
 				<div class="library-content-carousel" :aria-label="`${library.name} recently added media`">
 					<div v-if="previewsLoading && !previewsLoaded" class="library-carousel-state">Loading recent media…</div>
 					<div v-else-if="previewsError" class="library-carousel-state error">Unable to load recent media. <button type="button" @click="loadContentPreviews">Retry</button></div>

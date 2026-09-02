@@ -793,7 +793,28 @@ describe('API', () => {
 			genres: [],
 			excludedGenres: [],
 			genreMatch: 'all',
+			minimumRating: null,
+			minimumUserRating: null,
 		}));
+		const ratedBrowse = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media?minimumRating=7.5&minimumUserRating=8`,
+		});
+		expect(ratedBrowse.statusCode).toBe(200);
+		expect(browseMedia).toHaveBeenCalledWith(libraryId, expect.objectContaining({
+			minimumRating: 7.5,
+			minimumUserRating: 8,
+		}));
+		const emptyRating = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media?minimumRating=`,
+		});
+		expect(emptyRating.statusCode).toBe(200);
+		expect(browseMedia).toHaveBeenLastCalledWith(libraryId, expect.objectContaining({
+			minimumRating: null,
+		}));
+		const invalidRating = await app.inject({
+			url: `/api/v1/libraries/${libraryId}/media?minimumRating=10.1`,
+		});
+		expect(invalidRating.statusCode).toBe(400);
 	});
 
 	it('rejects genre queries that exceed the shared rule limit', async () => {

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch } from 'vue';
-import { CalendarDays, Check, Filter, Search, UserRound, X } from '@lucide/vue';
+import { CalendarDays, Check, Filter, Search, Star, UserRound, X } from '@lucide/vue';
 import { MAX_MEDIA_GENRE_RULES, type MediaGenreFacet } from '@moirai/shared';
 import { api } from '../../api';
+import { useAnimatedDismissal } from '../../motion';
 import {
 	emptyLibraryFilterDraft,
 	type LibraryFilterDraft,
@@ -14,7 +15,8 @@ const props = defineProps<{
 	genres: MediaGenreFacet[];
 }>();
 const emit = defineEmits<{ apply: [draft: LibraryFilterDraft]; close: [] }>();
-const nameInput = useTemplateRef<HTMLInputElement>('nameInput');
+const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('close'));
+const genreMatchInput = useTemplateRef<HTMLInputElement>('genreMatchInput');
 const localDraft = reactive<LibraryFilterDraft>({
 	...props.draft,
 	genres: [...props.draft.genres],
@@ -143,7 +145,7 @@ async function refreshGenreCounts(): Promise<void> {
 	}
 }
 
-onMounted(() => nameInput.value?.focus());
+onMounted(() => genreMatchInput.value?.focus());
 watch(() => localDraft.genreMatch, (value) => {
 	if (value === 'any') {
 		localDraft.excludedGenres = [];
@@ -164,104 +166,115 @@ onUnmounted(() => genreCountsController?.abort());
 </script>
 
 <template>
-	<div class="moirai-dialog-backdrop" @click.self="emit('close')" @keydown.esc.stop.prevent="emit('close')">
-		<form
-			class="moirai-dialog filter-modal"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="library-filter-title"
-			aria-describedby="library-filter-description"
-			@submit.prevent="applyDraft"
-		>
-			<header class="filter-modal-header">
-				<div>
-					<p class="eyebrow">Library</p>
-					<h2 id="library-filter-title">Filter media</h2>
-					<p id="library-filter-description">Narrow down your results using the filters below.</p>
-				</div>
-				<button type="button" class="icon-button" aria-label="Close filters" @click="emit('close')"><X :size="22" /></button>
-			</header>
-
-			<div class="filter-modal-body">
-				<div class="filter-grid">
-					<label class="filter-field filter-name-field">
-						<span>Name</span>
-						<span class="filter-input"><input ref="nameInput" v-model="localDraft.name" placeholder="Partial title" /><Search :size="21" aria-hidden="true" /></span>
-					</label>
-
-					<fieldset class="filter-release-field">
-						<legend>Release year</legend>
-						<div class="filter-release-inputs">
-							<label class="filter-field">
-								<span>From</span>
-								<span class="filter-input"><input v-model="localDraft.releaseFrom" type="number" inputmode="numeric" min="1800" max="2200" placeholder="YYYY" /><CalendarDays :size="19" aria-hidden="true" /></span>
-							</label>
-							<label class="filter-field">
-								<span>To</span>
-								<span class="filter-input"><input v-model="localDraft.releaseTo" type="number" inputmode="numeric" min="1800" max="2200" placeholder="YYYY" /><CalendarDays :size="19" aria-hidden="true" /></span>
-							</label>
-						</div>
-					</fieldset>
-
-					<label class="filter-field">
-						<span>Added from</span>
-						<span class="filter-input"><input v-model="localDraft.addedFrom" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
-					</label>
-					<label class="filter-field">
-						<span>Added to</span>
-						<span class="filter-input"><input v-model="localDraft.addedTo" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
-					</label>
-				</div>
-
-				<section class="filter-genres" aria-labelledby="filter-genres-title">
-					<div class="filter-genres-header">
-						<div class="filter-genres-copy">
-							<div><h3 id="filter-genres-title">Genres</h3><p>Select genres to require or disallow in your results.</p></div>
-						</div>
-						<fieldset class="genre-match">
-							<legend class="sr-only">Genre matching behavior</legend>
-							<label><input v-model="localDraft.genreMatch" type="radio" value="any" /><span><strong>Match any</strong><small>Results with any selected genre</small></span></label>
-							<label><input v-model="localDraft.genreMatch" type="radio" value="all" /><span><strong>Match all</strong><small>Results with all selected genres</small></span></label>
-						</fieldset>
+	<Transition name="moirai-overlay" appear @after-leave="finishClose">
+		<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose" @keydown.esc.stop.prevent="requestClose">
+			<form
+				class="moirai-dialog filter-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="library-filter-title"
+				aria-describedby="library-filter-description"
+				@submit.prevent="applyDraft"
+			>
+				<header class="filter-modal-header">
+					<div>
+						<p class="eyebrow">Library</p>
+						<h2 id="library-filter-title">Filter media</h2>
+						<p id="library-filter-description">Narrow down your results using the filters below.</p>
 					</div>
-					<fieldset class="genre-choices" :aria-busy="genreCountsLoading">
-						<legend class="sr-only">Select genres</legend>
-						<template v-for="genre in displayedGenres" :key="genre.key">
-							<div v-if="localDraft.genreMatch === 'all'" class="genre-choice-row">
-								<div class="genre-rule-split" role="group" :aria-label="`${genre.name} rule`">
-									<button type="button" :class="{ active: genreRule(genre.key) === 'include' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'include'" :aria-label="genreActionLabel(genre, 'include')" @click="toggleGenreRule(genre.key, 'include')"><Check :size="16" aria-hidden="true" /><small>{{ genre.count.toLocaleString() }}</small></button>
-									<button type="button" class="exclude" :class="{ active: genreRule(genre.key) === 'exclude' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'exclude'" :aria-label="genreActionLabel(genre, 'exclude')" @click="toggleGenreRule(genre.key, 'exclude')"><X :size="16" aria-hidden="true" /><small>{{ genre.excludeCount?.toLocaleString() ?? '—' }}</small></button>
-								</div>
-								<span class="genre-choice-name">{{ genre.name }}</span>
+					<button type="button" class="icon-button" aria-label="Close filters" @click="requestClose"><X :size="22" /></button>
+				</header>
+
+				<div class="filter-modal-body">
+					<section class="filter-genres" aria-labelledby="filter-genres-title">
+						<div class="filter-genres-header">
+							<div class="filter-genres-copy">
+								<div><h3 id="filter-genres-title">Genres</h3><p>Select genres to require or disallow in your results.</p></div>
 							</div>
-							<label v-else><input v-model="localDraft.genres" type="checkbox" :value="genre.key" :disabled="!localDraft.genres.includes(genre.key) && genreRuleLimitReached" /><span>{{ genre.name }}</span><small>{{ genre.count.toLocaleString() }}</small></label>
-						</template>
-						<p v-if="displayedGenres.length === 0" class="genre-choices-empty">No genres have been indexed for this library.</p>
-					</fieldset>
-					<p v-if="genreRuleLimitReached" class="genre-count-status" :class="{ error: genreRuleLimitExceeded }" role="status">
-						{{ genreRuleLimitExceeded ? `Remove genre rules to stay within the ${MAX_MEDIA_GENRE_RULES}-rule limit.` : `The ${MAX_MEDIA_GENRE_RULES}-rule genre limit has been reached.` }}
-					</p>
-					<p v-if="genreCountsLoading" class="genre-count-status" role="status">Updating genre counts…</p>
-					<p v-else-if="genreCountsError" class="genre-count-status error" role="status">Could not refresh counts. Showing library totals.</p>
-				</section>
+							<fieldset class="genre-match">
+								<legend class="sr-only">Genre matching behavior</legend>
+								<label><input ref="genreMatchInput" v-model="localDraft.genreMatch" type="radio" value="any" /><span><strong>Match any</strong><small>Results with any selected genre</small></span></label>
+								<label><input v-model="localDraft.genreMatch" type="radio" value="all" /><span><strong>Match all</strong><small>Results with all selected genres</small></span></label>
+							</fieldset>
+						</div>
+						<fieldset class="genre-choices" :aria-busy="genreCountsLoading">
+							<legend class="sr-only">Select genres</legend>
+							<template v-for="genre in displayedGenres" :key="genre.key">
+								<div v-if="localDraft.genreMatch === 'all'" class="genre-choice-row">
+									<div class="genre-rule-split" role="group" :aria-label="`${genre.name} rule`">
+										<button type="button" :class="{ active: genreRule(genre.key) === 'include' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'include'" :aria-label="genreActionLabel(genre, 'include')" @click="toggleGenreRule(genre.key, 'include')"><Check :size="16" aria-hidden="true" /><small>{{ genre.count.toLocaleString() }}</small></button>
+										<button type="button" class="exclude" :class="{ active: genreRule(genre.key) === 'exclude' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'exclude'" :aria-label="genreActionLabel(genre, 'exclude')" @click="toggleGenreRule(genre.key, 'exclude')"><X :size="16" aria-hidden="true" /><small>{{ genre.excludeCount?.toLocaleString() ?? '—' }}</small></button>
+									</div>
+									<span class="genre-choice-name">{{ genre.name }}</span>
+								</div>
+								<label v-else><input v-model="localDraft.genres" type="checkbox" :value="genre.key" :disabled="!localDraft.genres.includes(genre.key) && genreRuleLimitReached" /><span>{{ genre.name }}</span><small>{{ genre.count.toLocaleString() }}</small></label>
+							</template>
+							<p v-if="displayedGenres.length === 0" class="genre-choices-empty">No genres have been indexed for this library.</p>
+						</fieldset>
+						<p v-if="genreRuleLimitReached" class="genre-count-status" :class="{ error: genreRuleLimitExceeded }" role="status">
+							{{ genreRuleLimitExceeded ? `Remove genre rules to stay within the ${MAX_MEDIA_GENRE_RULES}-rule limit.` : `The ${MAX_MEDIA_GENRE_RULES}-rule genre limit has been reached.` }}
+						</p>
+						<p v-if="genreCountsLoading" class="genre-count-status" role="status">Updating genre counts…</p>
+						<p v-else-if="genreCountsError" class="genre-count-status error" role="status">Could not refresh counts. Showing library totals.</p>
+					</section>
 
-				<div class="filter-people-grid">
-					<label class="filter-field">
-						<span>Actor</span>
-						<span class="filter-input"><input v-model="localDraft.actor" placeholder="Partial actor name" /><UserRound :size="20" aria-hidden="true" /></span>
-					</label>
-					<label class="filter-field">
-						<span>Director</span>
-						<span class="filter-input"><input v-model="localDraft.director" placeholder="Partial director name" /><UserRound :size="20" aria-hidden="true" /></span>
-					</label>
+					<div class="filter-grid">
+						<label class="filter-field filter-name-field">
+							<span>Name</span>
+							<span class="filter-input"><input v-model="localDraft.name" placeholder="Partial title" /><Search :size="21" aria-hidden="true" /></span>
+						</label>
+
+						<fieldset class="filter-release-field">
+							<legend>Release year</legend>
+							<div class="filter-release-inputs">
+								<label class="filter-field">
+									<span>From</span>
+									<span class="filter-input"><input v-model="localDraft.releaseFrom" type="number" inputmode="numeric" min="1800" max="2200" placeholder="YYYY" /><CalendarDays :size="19" aria-hidden="true" /></span>
+								</label>
+								<label class="filter-field">
+									<span>To</span>
+									<span class="filter-input"><input v-model="localDraft.releaseTo" type="number" inputmode="numeric" min="1800" max="2200" placeholder="YYYY" /><CalendarDays :size="19" aria-hidden="true" /></span>
+								</label>
+							</div>
+						</fieldset>
+
+						<label class="filter-field">
+							<span>Added from</span>
+							<span class="filter-input"><input v-model="localDraft.addedFrom" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
+						</label>
+						<label class="filter-field">
+							<span>Added to</span>
+							<span class="filter-input"><input v-model="localDraft.addedTo" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
+						</label>
+
+						<label class="filter-field">
+							<span>Minimum popular rating</span>
+							<span class="filter-input"><input v-model="localDraft.minimumRating" type="number" inputmode="decimal" min="0" max="10" step="0.1" placeholder="0–10" /><Star :size="19" aria-hidden="true" /></span>
+						</label>
+						<label class="filter-field">
+							<span>Minimum user rating</span>
+							<span class="filter-input"><input v-model="localDraft.minimumUserRating" type="number" inputmode="decimal" min="0" max="10" step="0.1" placeholder="0–10" /><UserRound :size="19" aria-hidden="true" /></span>
+						</label>
+					</div>
+
+					<div class="filter-people-grid">
+						<label class="filter-field">
+							<span>Actor</span>
+							<span class="filter-input"><input v-model="localDraft.actor" placeholder="Partial actor name" /><UserRound :size="20" aria-hidden="true" /></span>
+						</label>
+						<label class="filter-field">
+							<span>Director</span>
+							<span class="filter-input"><input v-model="localDraft.director" placeholder="Partial director name" /><UserRound :size="20" aria-hidden="true" /></span>
+						</label>
+					</div>
 				</div>
-			</div>
 
-			<footer class="filter-modal-footer">
-				<button type="button" class="button ghost" @click="clearDraft">Clear All</button>
-				<button type="button" class="button secondary" @click="emit('close')">Cancel</button>
-				<button class="button filter-apply" type="submit" :disabled="genreRuleLimitExceeded">Apply Filters <Filter :size="17" aria-hidden="true" /></button>
-			</footer>
-		</form>
-	</div>
+				<footer class="filter-modal-footer">
+					<button type="button" class="button ghost" @click="clearDraft">Clear All</button>
+					<button type="button" class="button secondary" @click="requestClose">Cancel</button>
+					<button class="button filter-apply" type="submit" :disabled="genreRuleLimitExceeded">Apply Filters <Filter :size="17" aria-hidden="true" /></button>
+				</footer>
+			</form>
+		</div>
+	</Transition>
 </template>

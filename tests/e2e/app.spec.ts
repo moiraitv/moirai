@@ -32,7 +32,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await writeFile(path.join(mediaRoot, 'Broadcast.mp4'), 'fixture');
 	await writeFile(
 		path.join(mediaRoot, 'Broadcast.nfo'),
-		'<movie><title>Broadcast Fixture</title><year>2026</year><plot>A broadcast preview summary.</plot><rating>8.4</rating><genre>Sci-Fi</genre><genre>Drama</genre><director>Jane Director</director><actor><name>Ada Actor</name><role>Host</role><order>1</order></actor><actor><name>Bea Performer</name><order>2</order></actor><actor><name>Cora Player</name><order>3</order></actor><actor><name>Unbilled Player</name></actor></movie>',
+		'<movie><title>Broadcast Fixture</title><year>2026</year><plot>A broadcast preview summary.</plot><rating>8.4</rating><userrating>9.1</userrating><genre>Sci-Fi</genre><genre>Drama</genre><director>Jane Director</director><actor><name>Ada Actor</name><role>Host</role><order>1</order></actor><actor><name>Bea Performer</name><order>2</order></actor><actor><name>Cora Player</name><order>3</order></actor><actor><name>Unbilled Player</name></actor></movie>',
 	);
 	await writeFile(path.join(mediaRoot, 'Companion.mp4'), 'fixture');
 	await writeFile(
@@ -61,14 +61,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Add and Scan' }).click();
 
 	const libraryRow = page.locator('.library-row').filter({
-		has: page.getByRole('link', { name: libraryName, exact: true }),
+		has: page.getByRole('link', { name: `Open library ${libraryName}`, exact: true }),
 	});
 	await expect(libraryRow).toBeVisible();
 	await expect(libraryRow).toContainText('2 indexed');
 	const recentMedia = libraryRow.getByRole('link', { name: /Broadcast Fixture/ });
 	await expect(recentMedia).toBeVisible();
 	await expect(recentMedia).toHaveAttribute('href', /\/items\//);
-	await libraryRow.getByRole('link', { name: libraryName, exact: true }).click();
+	await libraryRow.getByRole('link', { name: `Open library ${libraryName}`, exact: true }).click();
 	await expect(page.locator('.library-status-panel')).toContainText('Watcher');
 	await expect(page.locator('.status-watcher')).toContainText('ready');
 	await expect(page.locator('.library-status-panel')).toContainText('Indexed');
@@ -146,8 +146,15 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.getByRole('button', { name: 'Filter media' }).click();
 	await expect(page.getByRole('heading', { name: 'Filter media' })).toBeVisible();
+	await expect.poll(async () => {
+		const genres = await page.getByRole('heading', { name: 'Genres' }).boundingBox();
+		const name = await page.getByLabel('Name').boundingBox();
+		return Boolean(genres && name && genres.y < name.y);
+	}).toBe(true);
 	await expectControlHeight(page.getByLabel('Added from'), 42);
 	await expectControlHeight(page.getByLabel('Added to'), 42);
+	await expectControlHeight(page.getByLabel('Minimum popular rating'), 42);
+	await expectControlHeight(page.getByLabel('Minimum user rating'), 42);
 	await expect(page.getByText('Narrow down your results using the filters below.')).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Match all/ })).toBeChecked();
 	await page.getByLabel('Actor').fill('Discarded draft');
@@ -210,9 +217,20 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Clear All' }).click();
 	await expect(page.getByLabel('Actor')).toHaveValue('');
 	await expect(page).toHaveURL(/actor=Ada/);
+	await page.getByLabel('Minimum popular rating').fill('8');
+	await page.getByLabel('Minimum user rating').fill('9');
 	await page.getByRole('button', { name: 'Apply filters' }).click();
 	await expect(page).not.toHaveURL(/actor=/);
 	await expect(page).not.toHaveURL(/genre=/);
+	await expect(page).toHaveURL(/minimumRating=8/);
+	await expect(page).toHaveURL(/minimumUserRating=9/);
+	await expect(mediaCard).toBeVisible();
+	await expect(page.locator('.media-card').filter({ hasText: 'Companion Fixture' })).toBeHidden();
+	await page.getByRole('button', { name: /Filter/ }).click();
+	await page.getByRole('button', { name: 'Clear All' }).click();
+	await page.getByRole('button', { name: 'Apply filters' }).click();
+	await expect(page).not.toHaveURL(/minimumRating=/);
+	await expect(page).not.toHaveURL(/minimumUserRating=/);
 	await expect(mediaCard).toContainText('2026');
 	await expect(mediaCard).not.toContainText(/S\d+E\d+/);
 	await expect(mediaCard.locator('.card-menu-icon')).toHaveCount(0);

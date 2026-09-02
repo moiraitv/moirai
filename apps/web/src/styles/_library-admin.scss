@@ -413,6 +413,13 @@ label.check input {
 	grid-template-columns: 74px minmax(0, 1fr);
 	align-items: stretch;
 	gap: 15px;
+	border-radius: 9px;
+	color: inherit;
+}
+
+.library-row-heading:focus-visible {
+	outline: 2px solid rgba(22, 214, 164, 0.5);
+	outline-offset: 4px;
 }
 
 .library-art {
@@ -448,8 +455,31 @@ label.check input {
 	white-space: nowrap;
 }
 
-.card-title-row h2 a {
-	color: inherit;
+.library-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.library-row-navigation {
+	width: 30px;
+	height: 30px;
+	display: grid;
+	place-items: center;
+	border-radius: 7px;
+	color: var(--muted-strong);
+	transition:
+		color var(--motion-fast) ease,
+		background var(--motion-fast) ease,
+		transform var(--motion-fast) var(--motion-enter);
+}
+
+.library-row-navigation:hover,
+.library-row-heading:hover .library-row-navigation,
+.library-row-heading:focus-visible .library-row-navigation {
+	color: var(--accent);
+	background: rgba(22, 214, 164, 0.1);
+	transform: translateX(2px);
 }
 
 .library-row p {

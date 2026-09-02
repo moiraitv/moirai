@@ -836,6 +836,7 @@ describe('Repository scan reconciliation', () => {
 			metadata: {
 				releaseDate: '2001-06-01',
 				rating: 8.2,
+				userRating: 9.1,
 				genres: ['Science Fiction', 'Drama'],
 			},
 			genres: [
@@ -885,6 +886,7 @@ describe('Repository scan reconciliation', () => {
 			title: 'Beta',
 			sortTitle: 'Beta',
 			titleBucket: 'B',
+			metadata: { rating: 9.3, userRating: 6 },
 			genres: [{ key: 'drama', name: 'Drama' }],
 		};
 		await repository.reconcileScan(
@@ -942,6 +944,8 @@ describe('Repository scan reconciliation', () => {
 			name: '',
 			releaseYearFrom: null,
 			releaseYearTo: null,
+			minimumRating: null,
+			minimumUserRating: null,
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
@@ -976,6 +980,25 @@ describe('Repository scan reconciliation', () => {
 			actor: 'Ada',
 		});
 		expect(actorResult.items.map((entry) => entry.title)).toEqual(['Alpha']);
+		const popularRatingResult = await repository.browseMedia(library.id, {
+			...baseQuery,
+			pageSize: 10,
+			minimumRating: 9,
+		});
+		expect(popularRatingResult.items.map((entry) => entry.title)).toEqual(['Beta']);
+		const userRatingResult = await repository.browseMedia(library.id, {
+			...baseQuery,
+			pageSize: 10,
+			minimumUserRating: 9,
+		});
+		expect(userRatingResult.items.map((entry) => entry.title)).toEqual(['Alpha']);
+		const combinedRatingResult = await repository.browseMedia(library.id, {
+			...baseQuery,
+			pageSize: 10,
+			minimumRating: 9,
+			minimumUserRating: 9,
+		});
+		expect(combinedRatingResult.items).toEqual([]);
 		const excludedGenreResult = await repository.browseMedia(library.id, {
 			...baseQuery,
 			pageSize: 10,
@@ -1164,6 +1187,8 @@ describe('Repository scan reconciliation', () => {
 			name: '',
 			releaseYearFrom: null,
 			releaseYearTo: null,
+			minimumRating: null,
+			minimumUserRating: null,
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
