@@ -296,7 +296,10 @@ onUnmounted(() => {
 		:message="activeConfirmation.message"
 		:confirm-label="activeConfirmation.confirmLabel"
 		:destructive="activeConfirmation.destructive"
-		@cancel="settleConfirmation(false)"
-		@confirm="settleConfirmation(true)"
+		:alternate-label="activeConfirmation.alternateLabel"
+		:alternate-destructive="activeConfirmation.alternateDestructive"
+		@cancel="settleConfirmation('cancel')"
+		@alternate="settleConfirmation('alternate')"
+		@confirm="settleConfirmation('confirm')"
 	/>
 </template>

@@ -36,6 +36,7 @@ import {
 import { useChannelsStore } from '../../stores/channels';
 import { useSchedulingStore } from '../../stores/scheduling';
 import { scheduleClockLabel } from '../../time-format';
+import { closeUnsavedEditor } from '../../unsaved-editor';
 import ResolvedSchedulePreview from './ResolvedSchedulePreview.vue';
 import TemplateAssignments from './TemplateAssignments.vue';
 import TemplateTimelineEditor from './TemplateTimelineEditor.vue';
@@ -603,9 +604,9 @@ function toggleTemplateFiller(enabled: boolean): void {
 }
 
 /** Validate and save the template draft. */
-async function save(): Promise<void> {
+async function save(): Promise<boolean> {
 	if (!draft.value) {
-		return;
+		return false;
 	}
 
 	saving.value = true;
@@ -624,45 +625,66 @@ async function save(): Promise<void> {
 		await scheduling.load();
 		if (props.embedded) {
 			emit('saved', saved.id);
-			return;
+			return true;
 		}
 
 		if (!editingId.value) {
-			await router.replace(`/schedules/templates/${saved.id}`);
+			allowRouteLeave = true;
+			try {
+				await router.replace(`/schedules/templates/${saved.id}`);
+			}
+			finally {
+				allowRouteLeave = false;
+			}
 		}
 		loadDraft();
 		refreshPreviewNow();
+		return true;
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
+		return false;
 	}
 	finally {
 		saving.value = false;
 	}
 }
 
-/** Close the editor after confirming an embedded unsaved draft may be discarded. */
-async function closeEditor(): Promise<void> {
+/** Leave the current template route or dismiss its embedded editor. */
+async function leaveEditor(): Promise<void> {
 	if (props.embedded) {
-		if (isDirty.value && !(await requestConfirmation({
-			key: `discard-embedded-template:${editingId.value ?? 'new'}`,
-			title: 'Discard Unsaved Changes?',
-			message: 'Close this template without saving your changes?',
-			confirmLabel: 'Discard Changes',
-			destructive: true,
-		}))) {
-			return;
-		}
-
 		emit('close');
 		return;
 	}
 
-	void router.push('/schedules/templates');
+	allowRouteLeave = true;
+	try {
+		await router.push('/schedules/templates');
+	}
+	finally {
+		allowRouteLeave = false;
+	}
+}
+
+/** Save, discard, or retain an edited template before closing its editor. */
+async function closeEditor(): Promise<void> {
+	await closeUnsavedEditor({
+		blocked: saving.value,
+		dirty: isDirty.value,
+		key: `unsaved-template:${editingId.value ?? 'new'}`,
+		message: 'Save this template before closing?',
+		save: async () => {
+			if (await save() && !props.embedded) {
+				await leaveEditor();
+			}
+		},
+		discard: leaveEditor,
+	});
 }
 
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewRevision = 0;
+let allowRouteLeave = false;
 
 /** Cancel the pending coalesced preview request. */
 function clearPreviewTimer(): void {
@@ -785,6 +807,9 @@ onBeforeRouteLeave(async () => {
 	if (props.embedded) {
 		return true;
 	}
+	if (allowRouteLeave) {
+		return true;
+	}
 
 	if (!isDirty.value || await requestConfirmation({
 		key: `discard-template:${editingId.value ?? 'new'}`,
@@ -864,7 +889,7 @@ onBeforeUnmount(() => {
 					</label>
 					<span v-if="isDirty" class="draft-badge">Unsaved changes</span>
 					<div class="template-toolbar-actions">
-						<button type="button" class="toolbar-button" @click="closeEditor">Close</button>
+						<button type="button" class="toolbar-button" :disabled="saving" @click="closeEditor">Close</button>
 						<button class="button" :disabled="saving" @click="save">
 							{{ saving ? 'Saving…' : 'Save Template' }}
 						</button>

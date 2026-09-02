@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import {
-	Asterisk,
-	Check,
-	Layers3,
-	Plus,
-	Trash2,
-	X,
-} from '@lucide/vue';
+import { Asterisk, Check, Layers3, Plus, Trash2, X } from '@lucide/vue';
 import {
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	type MediaGroup,
@@ -29,6 +22,7 @@ import { useSchedulingStore } from '../../stores/scheduling';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { randomUuid } from '../../random-uuid';
+import { closeUnsavedEditor } from '../../unsaved-editor';
 import MediaSelectionDrawer from './MediaSelectionDrawer.vue';
 import ProgramTypeRail from './ProgramTypeRail.vue';
 import SelectionStrategyEditor from './SelectionStrategyEditor.vue';
@@ -206,6 +200,8 @@ const form = reactive({
 	repeat: true,
 	entries: [] as Array<{ id: string; programId: string; count: number }>,
 });
+const originalSnapshot = ref(JSON.stringify(form));
+const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot.value);
 
 /** Initialize the form from an existing program or safe defaults for a new content rule. */
 function resetForm(program?: SchedulingProgram): void {
@@ -281,6 +277,7 @@ function resetForm(program?: SchedulingProgram): void {
 	sourceParentId.value = undefined;
 	sourcePage.value = 1;
 	sourceSearch.value = '';
+	originalSnapshot.value = JSON.stringify(form);
 }
 
 /** Load genre facets or paged source choices while discarding superseded responses. */
@@ -801,14 +798,16 @@ async function save(addAnother = false): Promise<void> {
 	}
 }
 
-/** Close the embedded editor or return the standalone editor to the program list. */
-function closeEditor(): void {
-	if (props.embedded) {
-		emit('close');
-	}
-	else {
-		void router.push('/schedules/programs');
-	}
+/** Save, discard, or retain an edited program before closing its editor. */
+async function closeEditor(): Promise<void> {
+	await closeUnsavedEditor({
+		blocked: saving.value,
+		dirty: isDirty.value,
+		key: `unsaved-program:${editingId.value ?? 'new'}`,
+		message: 'Save this program before closing?',
+		save: () => save(),
+		discard: () => props.embedded ? emit('close') : router.push('/schedules/programs'),
+	});
 }
 
 watch(
@@ -896,6 +895,7 @@ onBeforeUnmount(() => {
 						type="button"
 						class="program-editor-close"
 						aria-label="Close"
+						:disabled="saving"
 						@click="closeEditor"
 					>
 						×
@@ -1296,7 +1296,7 @@ onBeforeUnmount(() => {
 					</div>
 				</div>
 				<footer class="program-editor-actions">
-					<button type="button" class="toolbar-button" @click="closeEditor">Cancel</button>
+					<button type="button" class="toolbar-button" :disabled="saving" @click="closeEditor">Cancel</button>
 					<div>
 						<button
 							v-if="!editingId"

@@ -6,18 +6,23 @@ const props = withDefaults(defineProps<{
 	message: string;
 	confirmLabel?: string;
 	destructive?: boolean;
+	alternateLabel?: string | null;
+	alternateDestructive?: boolean;
 }>(), {
 	confirmLabel: 'Confirm',
 	destructive: false,
+	alternateLabel: null,
+	alternateDestructive: false,
 });
 const emit = defineEmits<{
 	cancel: [];
 	confirm: [];
+	alternate: [];
 }>();
 const dialog = useTemplateRef<HTMLElement>('dialog');
 const cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton');
 const visible = ref(true);
-const result = ref<boolean | null>(null);
+const result = ref<'confirm' | 'alternate' | 'cancel' | null>(null);
 const previouslyFocused = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
 	? document.activeElement
 	: null;
@@ -33,7 +38,7 @@ function handleKeydown(event: KeyboardEvent): void {
 	if (event.key === 'Escape') {
 		event.stopPropagation();
 		event.preventDefault();
-		requestClose(false);
+		requestClose('cancel');
 		return;
 	}
 	if (event.key !== 'Tab') {
@@ -63,19 +68,22 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 /** Begin dismissal and remember which confirmation result to emit after the exit transition. */
-function requestClose(confirmed: boolean): void {
+function requestClose(resolution: 'confirm' | 'alternate' | 'cancel'): void {
 	if (!visible.value) {
 		return;
 	}
 
-	result.value = confirmed;
+	result.value = resolution;
 	visible.value = false;
 }
 
 /** Settle the confirmation only after its dialog has visually left the page. */
 function finishClose(): void {
-	if (result.value) {
+	if (result.value === 'confirm') {
 		emit('confirm');
+	}
+	else if (result.value === 'alternate') {
+		emit('alternate');
 	}
 	else {
 		emit('cancel');
@@ -97,7 +105,7 @@ onUnmounted(() => {
 <template>
 	<Teleport to="body">
 		<Transition name="moirai-overlay" appear @after-leave="finishClose">
-			<div v-show="visible" class="moirai-dialog-backdrop confirmation-modal-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose(false)">
+			<div v-show="visible" class="moirai-dialog-backdrop confirmation-modal-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose('cancel')">
 				<section
 					ref="dialog"
 					class="moirai-dialog confirmation-modal"
@@ -113,14 +121,23 @@ onUnmounted(() => {
 					</header>
 					<p id="confirmation-modal-message">{{ message }}</p>
 					<footer>
-						<button ref="cancelButton" type="button" class="button secondary" @click="requestClose(false)">
+						<button ref="cancelButton" type="button" class="button secondary" @click="requestClose('cancel')">
 							Cancel
+						</button>
+						<button
+							v-if="alternateLabel"
+							type="button"
+							class="button secondary"
+							:class="{ danger: props.alternateDestructive }"
+							@click="requestClose('alternate')"
+						>
+							{{ alternateLabel }}
 						</button>
 						<button
 							type="button"
 							class="button"
 							:class="{ danger: props.destructive }"
-							@click="requestClose(true)"
+							@click="requestClose('confirm')"
 						>
 							{{ confirmLabel }}
 						</button>

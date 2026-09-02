@@ -3,6 +3,7 @@ import {
 	activeConfirmation,
 	cancelConfirmations,
 	requestConfirmation,
+	requestUnsavedChanges,
 	settleConfirmation,
 } from '@web/confirmation.js';
 
@@ -34,7 +35,7 @@ describe('application confirmations', () => {
 			destructive: true,
 		});
 
-		settleConfirmation(true);
+		settleConfirmation('confirm');
 		await expect(first).resolves.toBe(true);
 		expect(activeConfirmation.value).toMatchObject({
 			title: 'Discard Changes?',
@@ -42,9 +43,37 @@ describe('application confirmations', () => {
 			destructive: false,
 		});
 
-		settleConfirmation(false);
+		settleConfirmation('cancel');
 		await expect(second).resolves.toBe(false);
 		expect(activeConfirmation.value).toBeNull();
+	});
+
+	it('distinguishes saving, discarding, and cancelling unsaved editor changes', async () => {
+		const save = requestUnsavedChanges({
+			key: 'unsaved-program:one',
+			message: 'Save this program before closing?',
+		});
+		expect(activeConfirmation.value).toMatchObject({
+			confirmLabel: 'Save Changes',
+			alternateLabel: 'Discard Changes',
+			alternateDestructive: true,
+		});
+		settleConfirmation('confirm');
+		await expect(save).resolves.toBe('save');
+
+		const discard = requestUnsavedChanges({
+			key: 'unsaved-template:one',
+			message: 'Save this template before closing?',
+		});
+		settleConfirmation('alternate');
+		await expect(discard).resolves.toBe('discard');
+
+		const cancel = requestUnsavedChanges({
+			key: 'unsaved-channel:one',
+			message: 'Save this channel before closing?',
+		});
+		settleConfirmation('cancel');
+		await expect(cancel).resolves.toBe('cancel');
 	});
 
 	it('cancels active and queued actions when navigation abandons their workflow', async () => {

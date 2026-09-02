@@ -5,6 +5,7 @@ import type { Library, LibraryUpdate } from '@moirai/shared';
 import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import { useAnimatedDismissal } from '../../motion';
+import { closeUnsavedEditor } from '../../unsaved-editor';
 import AnimatedDisclosure from '../AnimatedDisclosure.vue';
 
 const props = defineProps<{ library: Library }>();
@@ -29,7 +30,9 @@ const form = reactive<LibraryUpdate>({
 	enabled: props.library.enabled,
 });
 const deletionConfirmed = computed(() => deleteConfirmation.value === props.library.name);
-const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('close'));
+const originalSnapshot = JSON.stringify(form);
+const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot);
+const { visible, requestClose: dismiss, finishClose } = useAnimatedDismissal(() => emit('close'));
 
 /** Save the editable library configuration and return the authoritative record. */
 async function save(): Promise<void> {
@@ -50,6 +53,19 @@ async function save(): Promise<void> {
 	finally {
 		saving.value = false;
 	}
+}
+
+/** Save, discard, or retain library settings before closing the modal. */
+async function closeEditor(): Promise<void> {
+	await closeUnsavedEditor({
+		blocked: saving.value || deleting.value,
+		dirty: isDirty.value,
+		key: `unsaved-library:${props.library.id}`,
+		message: 'Save these library settings before closing?',
+		saveLabel: 'Save Settings',
+		save,
+		discard: dismiss,
+	});
 }
 
 /** Permanently remove the configured library after exact-name confirmation. */
@@ -85,7 +101,7 @@ onMounted(() => nameInput.value?.focus());
 <template>
 	<Teleport to="body">
 		<Transition name="moirai-overlay" appear @after-leave="finishClose">
-			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose" @keydown.esc.stop.prevent="requestClose">
+			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
 				<form
 					class="moirai-dialog library-settings-modal"
 					role="dialog"
@@ -98,7 +114,7 @@ onMounted(() => nameInput.value?.focus());
 							<p class="eyebrow">Library settings</p>
 							<h2 id="library-settings-title">Library settings for {{ library.name }}</h2>
 						</div>
-						<button type="button" class="icon-button" aria-label="Close library settings" @click="requestClose"><X :size="22" /></button>
+						<button type="button" class="icon-button" aria-label="Close library settings" :disabled="saving || deleting" @click="closeEditor"><X :size="22" /></button>
 					</header>
 
 					<div class="form-grid library-settings-fields">
@@ -115,7 +131,7 @@ onMounted(() => nameInput.value?.focus());
 
 					<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
 					<p v-if="error" class="notice error">{{ error }}</p>
-					<div class="form-actions"><button type="button" class="button ghost" @click="requestClose">Cancel</button><button class="button" :disabled="saving || deleting">{{ saving ? 'Saving…' : 'Save Settings' }}</button></div>
+					<div class="form-actions"><button type="button" class="button ghost" :disabled="saving || deleting" @click="closeEditor">Cancel</button><button class="button" :disabled="saving || deleting">{{ saving ? 'Saving…' : 'Save Settings' }}</button></div>
 
 					<AnimatedDisclosure v-model="dangerOpen" class="library-danger-zone">
 						<template #summary><span class="library-danger-heading"><AlertTriangle :size="24" /><h3 id="library-delete-title">Permanently remove this library</h3><ChevronDown class="library-danger-chevron" :size="18" /></span></template>

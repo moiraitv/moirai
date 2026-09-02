@@ -54,6 +54,7 @@ import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { liveEvents } from '../live-events';
+import { closeUnsavedEditor } from '../unsaved-editor';
 
 const PREVIEW_DELAY_MS = 450;
 const route = useRoute();
@@ -97,6 +98,7 @@ type BoundarySide = 'entryBoundary' | 'exitBoundary';
 const finiteBoundaryDrift = new Map<string, number>();
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewRevision = 0;
+let allowRouteLeave = false;
 
 const channelId = computed(() => String(route.params.id ?? ''));
 const editing = computed(() => Boolean(channelId.value));
@@ -317,9 +319,9 @@ function finishTemplateEdit(): void {
 }
 
 /** Validate and save the selected channel's layered schedule. */
-async function save(): Promise<void> {
+async function save(): Promise<boolean> {
 	if (!draft.value || !channel.value) {
-		return;
+		return false;
 	}
 
 	saving.value = true;
@@ -332,13 +334,42 @@ async function save(): Promise<void> {
 		await scheduling.load();
 		draft.value = channelScheduleConfigSchema.parse(saved);
 		original.value = JSON.stringify(draft.value);
+		return true;
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
+		return false;
 	}
 	finally {
 		saving.value = false;
 	}
+}
+
+/** Leave the channel schedule editor without triggering its general navigation guard. */
+async function leaveScheduleEditor(): Promise<void> {
+	allowRouteLeave = true;
+	try {
+		await router.push('/schedules/channels');
+	}
+	finally {
+		allowRouteLeave = false;
+	}
+}
+
+/** Save, discard, or retain a channel schedule before closing its editor. */
+async function closeScheduleEditor(): Promise<void> {
+	await closeUnsavedEditor({
+		blocked: saving.value,
+		dirty: isDirty.value,
+		key: `unsaved-channel-schedule:${channel.value?.id ?? 'new'}`,
+		message: 'Save this channel schedule before closing?',
+		save: async () => {
+			if (await save()) {
+				await leaveScheduleEditor();
+			}
+		},
+		discard: leaveScheduleEditor,
+	});
 }
 
 /** Refresh committed timeline health for pending-change controls. */
@@ -461,11 +492,11 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 		&& event.key === 'Escape'
 	) {
 		event.preventDefault();
-		void router.push('/schedules/channels');
+		void closeScheduleEditor();
 	}
 }
 
-onBeforeRouteLeave(async () => !isDirty.value || requestConfirmation({
+onBeforeRouteLeave(async () => allowRouteLeave || !isDirty.value || requestConfirmation({
 	key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
 	title: 'Discard Unsaved Changes?',
 	message: 'Leave this channel schedule without saving your changes?',
@@ -573,7 +604,7 @@ onBeforeUnmount(() => {
 			<div
 				v-if="editing && !initialLoading"
 				class="moirai-dialog-backdrop"
-				@click.self="router.push('/schedules/channels')"
+				@click.self="closeScheduleEditor"
 			>
 				<div
 					class="moirai-dialog scheduling-workspace-modal channel-schedule-modal"
@@ -587,9 +618,9 @@ onBeforeUnmount(() => {
 							<h2>{{ channel?.name ?? 'Channel schedule' }}</h2>
 							<p>Stack conditional templates above an always-available base template.</p>
 						</div>
-						<RouterLink class="program-editor-close" to="/schedules/channels" aria-label="Close">
+						<button type="button" class="program-editor-close" aria-label="Close" :disabled="saving" @click="closeScheduleEditor">
 							×
-						</RouterLink>
+						</button>
 					</header>
 
 					<div v-if="templates.length === 0" class="empty-state scheduling-modal-empty">

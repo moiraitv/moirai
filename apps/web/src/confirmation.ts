@@ -7,20 +7,38 @@ export interface ConfirmationOptions {
 	message: string;
 	confirmLabel?: string;
 	destructive?: boolean;
+	alternateLabel?: string;
+	alternateDestructive?: boolean;
+}
+
+/** Result returned by a confirmation with primary, alternate, and cancel actions. */
+export type ConfirmationResolution = 'confirm' | 'alternate' | 'cancel';
+
+/** User choice when closing an editor with unsaved changes. */
+export type UnsavedChangesResolution = 'save' | 'discard' | 'cancel';
+
+/** Copy and identity used for one unsaved-changes prompt. */
+export interface UnsavedChangesOptions {
+	key: string;
+	title?: string;
+	message: string;
+	saveLabel?: string;
 }
 
 /** Complete modal options exposed to the application shell. */
-interface ResolvedConfirmationOptions extends ConfirmationOptions {
+interface ResolvedConfirmationOptions extends Omit<ConfirmationOptions, 'alternateLabel'> {
 	instanceId: number;
 	confirmLabel: string;
 	destructive: boolean;
+	alternateLabel: string | null;
+	alternateDestructive: boolean;
 }
 
 /** Queued confirmation paired with its eventual caller result. */
 interface PendingConfirmation {
 	options: ResolvedConfirmationOptions;
-	promise: Promise<boolean>;
-	resolve: (confirmed: boolean) => void;
+	promise: Promise<ConfirmationResolution>;
+	resolve: (resolution: ConfirmationResolution) => void;
 }
 
 /** Confirmation currently presented by the application shell. */
@@ -40,15 +58,15 @@ function activateNextConfirmation(): void {
 }
 
 /** Ask the application shell to resolve one confirmation without blocking the browser thread. */
-export function requestConfirmation(options: ConfirmationOptions): Promise<boolean> {
+function enqueueConfirmation(options: ConfirmationOptions): Promise<ConfirmationResolution> {
 	const duplicate = [active, ...queue].find((request) =>
 		request?.options.key !== undefined && request.options.key === options.key);
 	if (duplicate) {
-		return Promise.resolve(false);
+		return Promise.resolve('cancel');
 	}
 
-	let resolve!: (confirmed: boolean) => void;
-	const promise = new Promise<boolean>((result) => {
+	let resolve!: (resolution: ConfirmationResolution) => void;
+	const promise = new Promise<ConfirmationResolution>((result) => {
 		resolve = result;
 	});
 	queue.push({
@@ -57,6 +75,8 @@ export function requestConfirmation(options: ConfirmationOptions): Promise<boole
 			instanceId: nextInstanceId++,
 			confirmLabel: options.confirmLabel ?? 'Confirm',
 			destructive: options.destructive ?? false,
+			alternateLabel: options.alternateLabel ?? null,
+			alternateDestructive: options.alternateDestructive ?? false,
 		},
 		promise,
 		resolve,
@@ -65,8 +85,29 @@ export function requestConfirmation(options: ConfirmationOptions): Promise<boole
 	return promise;
 }
 
+/** Ask the application shell to resolve one binary confirmation. */
+export async function requestConfirmation(options: ConfirmationOptions): Promise<boolean> {
+	return await enqueueConfirmation(options) === 'confirm';
+}
+
+/** Ask whether to save, discard, or continue editing an unsaved draft. */
+export async function requestUnsavedChanges(
+	options: UnsavedChangesOptions,
+): Promise<UnsavedChangesResolution> {
+	const resolution = await enqueueConfirmation({
+		key: options.key,
+		title: options.title ?? 'Save Changes?',
+		message: options.message,
+		confirmLabel: options.saveLabel ?? 'Save Changes',
+		alternateLabel: 'Discard Changes',
+		alternateDestructive: true,
+	});
+
+	return resolution === 'confirm' ? 'save' : resolution === 'alternate' ? 'discard' : 'cancel';
+}
+
 /** Resolve the visible confirmation and advance any independently queued request. */
-export function settleConfirmation(confirmed: boolean): void {
+export function settleConfirmation(resolution: ConfirmationResolution): void {
 	const completed = active;
 	if (!completed) {
 		return;
@@ -74,7 +115,7 @@ export function settleConfirmation(confirmed: boolean): void {
 
 	active = null;
 	activeConfirmation.value = null;
-	completed.resolve(confirmed);
+	completed.resolve(resolution);
 	activateNextConfirmation();
 }
 
@@ -87,6 +128,6 @@ export function cancelConfirmations(): void {
 	queue.length = 0;
 	activeConfirmation.value = null;
 	for (const request of cancelled) {
-		request.resolve(false);
+		request.resolve('cancel');
 	}
 }

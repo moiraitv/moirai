@@ -36,6 +36,7 @@ import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import { liveEvents } from '../live-events';
 import { affectsGuide } from '../guide-events';
 import { cloneContractValue } from '../reactive-clone';
+import { closeUnsavedEditor } from '../unsaved-editor';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 
@@ -63,6 +64,7 @@ const logoInput = ref<HTMLInputElement>();
 const externalLogoUrl = ref('');
 const removeLogoOnSave = ref(false);
 const saving = ref(false);
+const originalFormSnapshot = ref('');
 const accelerationPrediction = ref<HardwareAccelerationPrediction>();
 const accelerationPredictionLoading = ref(false);
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -216,8 +218,21 @@ function resetLogoEditor(logo: string | null): void {
 	removeLogoOnSave.value = false;
 }
 
+/** Serialize persisted channel fields plus pending logo edits for dirty-state comparison. */
+function channelFormSnapshot(): string {
+	return JSON.stringify({
+		form,
+		externalLogoUrl: externalLogoUrl.value,
+		removeLogoOnSave: removeLogoOnSave.value,
+		crop: cropSource.value ? { source: cropSource.value.url, ...logoCrop } : null,
+	});
+}
+
+const channelFormDirty = computed(() =>
+	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
+
 /** Close the channel form after releasing any temporary crop image. */
-function closeForm(): void {
+function finishCloseForm(): void {
 	disposeCropSource();
 	showForm.value = false;
 	if (route.query.new === '1') {
@@ -225,6 +240,18 @@ function closeForm(): void {
 		delete query.new;
 		void router.replace({ path: '/channels', query });
 	}
+}
+
+/** Save, discard, or retain a channel draft before closing its editor. */
+async function closeForm(): Promise<void> {
+	await closeUnsavedEditor({
+		blocked: saving.value,
+		dirty: channelFormDirty.value,
+		key: `unsaved-channel:${editingId.value ?? 'new'}`,
+		message: 'Save this channel before closing?',
+		save,
+		discard: finishCloseForm,
+	});
 }
 
 /** Debounce a server-side prediction and discard responses for superseded form values. */
@@ -574,6 +601,7 @@ function add() {
 	Object.assign(form, defaults());
 	resetLogoEditor(null);
 	editingId.value = undefined;
+	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
 }
 
@@ -586,6 +614,7 @@ function edit(channel: Channel) {
 	Object.assign(form, cloneContractValue(config) as ChannelCreate);
 	resetLogoEditor(channel.logo);
 	editingId.value = channel.id;
+	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
 }
 /** Save the channel form and any managed logo change. */
@@ -618,7 +647,7 @@ async function save() {
 			}
 		}
 		void saved;
-		closeForm();
+		finishCloseForm();
 		await Promise.all([loadChannels(), scheduling.load()]);
 		await loadGuide();
 	}
@@ -799,7 +828,7 @@ onBeforeUnmount(() => {
 						<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>
 						<h2>Broadcast profile</h2>
 					</div>
-					<button type="button" class="icon-button" aria-label="Close" @click="closeForm">
+					<button type="button" class="icon-button" aria-label="Close" :disabled="saving" @click="closeForm">
 						<X :size="20" />
 					</button>
 				</div>
