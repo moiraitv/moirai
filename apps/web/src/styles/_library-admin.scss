@@ -313,6 +313,13 @@ select {
 	background: #07121c;
 }
 
+input[type='date'],
+input[type='time'] {
+	height: 42px;
+	min-height: 42px;
+	line-height: normal;
+}
+
 select:not([multiple]) {
 	appearance: none;
 	padding-right: 40px;

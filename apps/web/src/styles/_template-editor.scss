@@ -459,6 +459,12 @@
 	padding-left: 47px;
 }
 
+.template-input-with-icon input[type='time'] {
+	height: 42px;
+	min-height: 42px;
+	line-height: normal;
+}
+
 .template-input-with-icon.compact {
 	width: 205px;
 }
@@ -646,6 +652,12 @@
 
 .preview-control-field > input {
 	width: 190px;
+}
+
+.preview-control-field > input[type='date'] {
+	height: 42px;
+	min-height: 42px;
+	line-height: normal;
 }
 
 .preview-controls > button {

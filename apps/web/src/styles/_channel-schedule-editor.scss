@@ -368,6 +368,14 @@
 	flex: 1;
 }
 
+.predicate-field-grid input[type='date'],
+.predicate-field-grid input[type='time'] {
+	height: 42px;
+	min-height: 42px;
+	flex: 0 0 42px;
+	line-height: normal;
+}
+
 .layer-boundary-grid {
 	margin-top: 18px;
 	display: grid;

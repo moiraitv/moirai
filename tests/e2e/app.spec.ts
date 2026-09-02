@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import {
 	authenticateAdministrator,
 	E2E_ADMIN_PASSWORD,
@@ -11,6 +11,14 @@ const wideLogoSvg = Buffer.from(
 	'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#20c997"/></svg>',
 );
 const posterPng = await readFile(path.resolve('apps/web/src/assets/moirai-logo.png'));
+
+/** Assert the rendered block size of a form control in CSS pixels. */
+async function expectControlHeight(control: Locator, expectedHeight: number): Promise<void> {
+	await expect.poll(async () => (await control.boundingBox())?.height ?? 0).toBeCloseTo(
+		expectedHeight,
+		0,
+	);
+}
 
 test('indexes a library and creates a channel', async ({ page }) => {
 	test.setTimeout(180_000);
@@ -138,6 +146,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.getByRole('button', { name: 'Filter media' }).click();
 	await expect(page.getByRole('heading', { name: 'Filter media' })).toBeVisible();
+	await expectControlHeight(page.getByLabel('Added from'), 42);
+	await expectControlHeight(page.getByLabel('Added to'), 42);
 	await expect(page.getByText('Narrow down your results using the filters below.')).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Match all/ })).toBeChecked();
 	await page.getByLabel('Actor').fill('Discarded draft');
@@ -701,6 +711,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const editorSlots = page.locator('.template-slot');
 	await expect(editorSlots).toHaveCount(2);
 	await expect(page.locator('.selected-slot-title')).toContainText('11:45');
+	await expectControlHeight(page.getByLabel('Starts'), 42);
 	const editorColor = await editorSlots
 		.first()
 		.evaluate((element) => getComputedStyle(element).getPropertyValue('--program-color').trim());
@@ -819,6 +830,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		.locator('.schedule-layer-inspector')
 		.getByText('Show this layer when', { exact: true })
 		.scrollIntoViewIfNeeded();
+	const predicateType = page.locator('.schedule-layer-inspector').getByLabel('Predicate type').last();
+	await predicateType.selectOption('time-range');
+	await expectControlHeight(page.locator('.predicate-time-range').getByLabel('Starts'), 42);
+	await expectControlHeight(page.locator('.predicate-time-range').getByLabel('Ends'), 42);
+	await predicateType.selectOption('date-range');
+	await expectControlHeight(page.locator('.predicate-date-range').getByLabel('Starts'), 42);
+	await expectControlHeight(page.locator('.predicate-date-range').getByLabel('Ends'), 42);
+	await predicateType.selectOption('weekdays');
 	const entryBoundary = page.getByRole('group', { name: 'Entry boundary' });
 	await expect(entryBoundary).toContainText('When this layer starts');
 	await expect(entryBoundary).toContainText('lower-priority programming');
@@ -851,6 +870,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			response.request().method() === 'POST'
 			&& response.url().endsWith('/api/v1/channel-schedule-preview'),
 	);
+	await expectControlHeight(page.getByLabel('Preview date'), 42);
 	await page.getByRole('button', { name: 'Refresh Now' }).click();
 	await refreshedLayerPreview;
 	await expect(page.getByLabel('Schedule preview issues')).toContainText(
