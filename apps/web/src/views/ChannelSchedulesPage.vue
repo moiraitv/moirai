@@ -53,6 +53,7 @@ import {
 	templateSlotStyle,
 } from '../channel-schedule-display';
 import { dateKey } from '../date-key';
+import { useUpcomingScheduleGuide } from '../upcoming-schedule-guide';
 import { guideSegmentPercent, guideWindowMilliseconds } from '../guide-geometry';
 import { programColorStyle } from '../program-colors';
 import { useChannelsStore } from '../stores/channels';
@@ -77,16 +78,8 @@ const {
 	dismiss: dismissChannelSchedulesHelp,
 	show: showChannelSchedulesHelp,
 } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.channelSchedules);
-const { capabilitiesLoaded, channels, guide, guideLoaded, guideWeekStart, timeZone }
+const { capabilitiesLoaded, channels, guide, timeZone }
 	= storeToRefs(channelsStore);
-const cachedListGuide
-	= guideLoaded.value
-		&& guideWeekStart.value === dateKey(new Date(), timeZone.value)
-		&& (guide.value?.days ?? 0) >= 1;
-const initialLoading = ref(
-	!(channelsStore.loaded && scheduling.loaded && channelsStore.capabilitiesLoaded)
-	|| (!route.params.id && !cachedListGuide),
-);
 const draft = ref<ChannelScheduleConfig | null>(null);
 const original = ref('');
 const selectedLayerId = ref<string | null>(null);
@@ -100,7 +93,6 @@ const previewWindowMilliseconds = computed(() => preview.value
 	? guideWindowMilliseconds(preview.value.startDate, preview.value.days, preview.value.timeZone)
 	: 0);
 const previewing = ref(false);
-const listGuideError = ref('');
 const guideExpanded = ref(false);
 const previewDate = ref(dateKey(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone));
 const previewRuler = scheduleRulerMarks();
@@ -122,6 +114,14 @@ const materialization = computed(() =>
 const templates = computed(() => scheduling.overview?.templates ?? []);
 const programs = computed(() => scheduling.overview?.programs ?? []);
 const schedules = computed(() => scheduling.overview?.channelSchedules ?? []);
+const {
+	window: summaryWindow, covered: summaryCovered, status: summaryStatus,
+	error: listGuideError, load: loadListGuide,
+} = useUpcomingScheduleGuide(() => !editing.value && schedules.value.length > 0);
+const initialLoading = ref(
+	!(channelsStore.loaded && scheduling.loaded && channelsStore.capabilitiesLoaded)
+	|| (!route.params.id && !summaryCovered.value),
+);
 const hasPersistedSchedule = ref(false);
 const selectedLayer = computed(() =>
 	draft.value?.layers.find((layer) => layer.id === selectedLayerId.value));
@@ -161,26 +161,6 @@ function showLayeredGuide(): void {
 			block: 'nearest',
 		});
 	});
-}
-
-/** Load today's committed guide once when the channel list needs programming summaries. */
-async function loadListGuide(): Promise<void> {
-	if (editing.value || schedules.value.length === 0) {
-		return;
-	}
-
-	const today = dateKey(new Date(), timeZone.value);
-	if (guideLoaded.value && guideWeekStart.value === today && (guide.value?.days ?? 0) >= 1) {
-		return;
-	}
-
-	try {
-		await channelsStore.loadGuide(today, 1);
-		listGuideError.value = '';
-	}
-	catch (cause) {
-		listGuideError.value = errorMessage(cause);
-	}
 }
 
 /** Format an absolute preview timestamp in the configured time zone. */
@@ -718,7 +698,7 @@ const unsubscribeTimeline = liveEvents.subscribe((event) => {
 	if (event.type === 'timeline.changed') {
 		void Promise.all([
 			loadMaterializations(),
-			editing.value ? Promise.resolve() : loadListGuide(),
+			loadListGuide(true),
 		]).catch(() => undefined);
 	}
 });
@@ -772,6 +752,8 @@ onBeforeUnmount(() => {
 					:schedules="schedules"
 					:templates="templates"
 					:guide="guide"
+					:summary-window="summaryWindow"
+					:summary-status="summaryStatus"
 				/>
 				<LayeredSchedulingGuide :expanded="guideExpanded" @show="showLayeredGuide" />
 			</div>

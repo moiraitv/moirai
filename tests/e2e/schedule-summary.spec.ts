@@ -5,8 +5,10 @@ import { SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide, type TimelineSegment } 
 import { authenticateAdministrator } from './authentication';
 
 for (const todayHasGap of [false, true]) {
-	test(`cached guide summaries stay within today (today has gap: ${todayHasGap})`, async ({ page }) => {
+	test(`cached guide summaries cover upcoming time (upcoming gap: ${todayHasGap})`, async ({ page }) => {
 		const csrfToken = await authenticateAdministrator(page);
+		const frozenNow = new Date('2026-09-03T19:00:00Z');
+		await page.clock.install({ time: frozenNow });
 		const headers = { 'x-moirai-csrf': csrfToken };
 		const channelName = `Cached guide ${randomUUID()}`;
 		const channelResponse = await page.request.post('/api/v1/channels', {
@@ -36,7 +38,7 @@ for (const todayHasGap of [false, true]) {
 		const { timeZone } = await capabilities.json() as { timeZone: string };
 		const guideRequests: number[] = [];
 
-		// Supply a cached week with a gap crossing midnight and another gap on a later day.
+		// Supply a cached week with elapsed, ongoing, and beyond-window gaps.
 		await page.route('**/api/v1/schedule-guide?*', async (route) => {
 			const query = new URL(route.request().url()).searchParams;
 			const startDate = query.get('startDate')!;
@@ -44,13 +46,15 @@ for (const todayHasGap of [false, true]) {
 			guideRequests.push(days);
 			const date = Temporal.PlainDate.from(startDate);
 			const start = date.toZonedDateTime(timeZone).toInstant();
-			const midnight = date.add({ days: 1 }).toZonedDateTime(timeZone).toInstant();
-			const gapStart = midnight.subtract({ seconds: todayHasGap ? 12 : 0 });
+			const now = Temporal.Instant.from(frozenNow.toISOString());
+			const finish = now.add({ hours: 24 });
+			const gapStart = now.subtract({ minutes: 8 });
+			const gapFinish = now.add({ seconds: todayHasGap ? 12 : 0 });
 			const base: TimelineSegment = {
 				id: randomUUID(), channelId: channel.id, templateId: template.id, slotId,
 				scheduleLayerId: null, programId: null, mediaItemId: null, playbackPath: null,
 				sourceStartSeconds: 0, sourceFinishSeconds: null, truncated: false,
-				role: 'primary', title: 'First-day programming', start: start.toString(), finish: gapStart.toString(),
+				role: 'primary', title: 'First-day programming', start: gapFinish.toString(), finish: finish.toString(),
 			};
 			const body: ScheduleGuide = {
 				timeZone, startDate, days, requestedDays: days, segmentLimitApplied: false,
@@ -60,13 +64,14 @@ for (const todayHasGap of [false, true]) {
 						channelId: channel.id, timeZone, startDate, days, proposedState: [],
 						segments: [
 							base,
-							{ ...base, id: randomUUID(), role: 'dead-air', start: gapStart.toString(), finish: midnight.add({ minutes: 8 }).toString() },
-							{ ...base, id: randomUUID(), role: 'dead-air', start: midnight.add({ hours: 2 }).toString(), finish: midnight.add({ hours: 2, minutes: 8 }).toString() },
+							{ ...base, id: randomUUID(), role: 'dead-air', start: start.toString(), finish: now.subtract({ hours: 2 }).toString() },
+							{ ...base, id: randomUUID(), role: 'dead-air', start: gapStart.toString(), finish: gapFinish.toString() },
+							{ ...base, id: randomUUID(), role: 'dead-air', start: finish.add({ hours: 2 }).toString(), finish: finish.add({ hours: 2, minutes: 8 }).toString() },
 						],
 						issues: [{
 							code: 'boundary-start-rejected', message: 'Review this boundary.',
 							templateId: template.id, slotId, scheduleLayerId: null, programId: null, mediaItemId: null,
-							occurrences: [{ start: gapStart.toString(), finish: midnight.add({ minutes: 8 }).toString(), boundaryOrigin: 'template' }],
+							occurrences: [{ start: gapStart.toString(), finish: gapFinish.toString(), boundaryOrigin: 'template' }],
 						}],
 					},
 				}],
@@ -75,6 +80,7 @@ for (const todayHasGap of [false, true]) {
 		});
 
 		for (const path of ['/guide', '/channels']) {
+			await page.clock.setSystemTime(frozenNow);
 			await page.goto(path);
 			const row = page.locator('.guide-channel-cell').filter({ hasText: channelName });
 			const badge = row.getByRole('button', { name: /warning.*show details/ });
@@ -92,15 +98,20 @@ for (const todayHasGap of [false, true]) {
 			await expect(nextControl).toBeFocused();
 			await expect(panel).toBeHidden();
 
-			// SPA navigation must reuse the existing seven-day cache, not fetch a one-day replacement.
+			// SPA navigation reuses the covering seven-day cache.
 			const requestsBeforeNavigation = guideRequests.length;
 			await page.getByRole('link', { name: 'Channel Schedules', exact: true }).click();
 			const card = page.locator('.schedule-channel-card').filter({ hasText: channelName });
-			await expect(card.locator('.next-day')).toContainText(todayHasGap ? '1 gap · 12 seconds dead air' : '1 scheduled item');
+			await expect(card.locator('.next-day')).toContainText(todayHasGap ? /1 gap · \d+ seconds dead air/ : '1 scheduled item');
 			await expect(card).toHaveClass(todayHasGap ? /has-dead-air/ : /^(?!.*has-dead-air)/);
 			await expect(card.locator('.next-day')).toHaveClass(todayHasGap ? /warning/ : /^(?!.*warning)/);
 			expect(guideRequests).toHaveLength(requestsBeforeNavigation);
 			expect(guideRequests.at(-1)).toBe(7);
+
+			await page.clock.fastForward(61_000);
+			await expect(card.locator('.next-day')).toContainText('1 scheduled item');
+			await expect(card).not.toHaveClass(/has-dead-air/);
+			expect(guideRequests).toHaveLength(requestsBeforeNavigation);
 		}
 	});
 }

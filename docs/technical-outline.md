@@ -551,8 +551,11 @@ distinguishes intentional off-air time from boundary, source, filler, and otherw
 When several warnings match a gap, its boundary rejection takes precedence over incidental
 skipped-media warnings so the diagnostic action opens the relevant boundary editor.
 Channel fallback filler can be reviewed and edited directly from the base schedule inspector.
-Channel-card summaries and warning styling use only the first local guide day, even when a longer
-guide is cached. Overlapping gaps are clipped at local midnight, including daylight-saving changes.
+Channel-card summaries and warning styling cover the next 24 elapsed hours, excluding finished gaps
+and clipping ongoing gaps to their remaining duration. Counts update locally each minute and when
+the page becomes visible. Cached guides are reused when their actual returned range covers the
+window; otherwise the UI requests the required local dates, including daylight-saving changes.
+Resource-limited partial guides show an incomplete preview instead of implying full coverage.
 
 The public detail sample is limited to 50 occurrences per issue and rebuilt for each requested guide
 range. A separate persistence-only index retains exact interval counts and boundary origins, allowing

@@ -19,7 +19,8 @@ import {
 	scheduleTemplateName,
 	templateRepresentativeStyle,
 } from '../../channel-schedule-display';
-import { firstDayScheduleSummary } from '../../channel-schedule-preview';
+import { upcomingScheduleSummary, type ScheduleSummaryWindow } from '../../channel-schedule-preview';
+import type { UpcomingGuideStatus } from '../../upcoming-schedule-guide';
 import { schedulingDurationLabel } from '../../schedule-diagnostics';
 
 const props = defineProps<{
@@ -27,13 +28,17 @@ const props = defineProps<{
 	schedules: ChannelSchedule[];
 	templates: ScheduleTemplate[];
 	guide: ScheduleGuide | null;
+	summaryWindow: ScheduleSummaryWindow;
+	summaryStatus: UpcomingGuideStatus;
 }>();
 
 const route = useRoute();
 const router = useRouter();
 const failedChannelLogos = ref<Set<string>>(new Set());
-const firstDaySummaries = computed(() => new Map(props.guide?.channels.map((entry) =>
-	[entry.channelId, firstDayScheduleSummary(entry.preview)])));
+const upcomingSummaries = computed(() => new Map(props.summaryStatus === 'ready'
+	? props.guide?.channels.map((entry) =>
+		[entry.channelId, upcomingScheduleSummary(entry.preview, props.summaryWindow)])
+	: []));
 const channelSearch = computed(() => {
 	const value = route.query.q;
 	return typeof value === 'string' ? value : '';
@@ -68,13 +73,20 @@ function markChannelLogoFailed(channelId: string): void {
 	failedChannelLogos.value = new Set([...failedChannelLogos.value, channelId]);
 }
 
-/** Summarize next-day programming from the loaded committed guide. */
+/** Summarize upcoming 24 hours of programming from the loaded committed guide. */
 function nextDaySummary(id: string): string {
 	if (!channelSchedule(id)) {
 		return 'No programming';
 	}
 
-	const summary = firstDaySummaries.value.get(id);
+	if (props.summaryStatus === 'loading') {
+		return 'Loading preview…';
+	}
+	if (props.summaryStatus === 'incomplete') {
+		return 'Preview incomplete';
+	}
+
+	const summary = upcomingSummaries.value.get(id);
 	if (!summary) {
 		return 'Preview unavailable';
 	}
@@ -90,9 +102,9 @@ function nextDaySummary(id: string): string {
 		: `${programmed} scheduled item${programmed === 1 ? '' : 's'}`;
 }
 
-/** Return whether the loaded next-day guide contains dead air for a channel. */
+/** Return whether the upcoming 24-hour window contains dead air for a channel. */
 function channelHasDeadAir(id: string): boolean {
-	return (firstDaySummaries.value.get(id)?.gapCount ?? 0) > 0;
+	return (upcomingSummaries.value.get(id)?.gapCount ?? 0) > 0;
 }
 
 /** Summarize a channel's base and conditional template configuration. */

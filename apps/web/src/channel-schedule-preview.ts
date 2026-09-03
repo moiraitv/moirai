@@ -1,33 +1,86 @@
 import { Temporal } from '@js-temporal/polyfill';
-import type { ScheduleTemplate, TimelinePreview } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide, type ScheduleTemplate, type TimelinePreview } from '@moirai/shared';
 
-/** Counts and clipped dead-air duration for the first local calendar day of a cached preview. */
+/** Exact rolling interval and the smallest local-date guide request that covers it. */
+export interface ScheduleSummaryWindow {
+	start: number;
+	finish: number;
+	startDate: string;
+	days: number;
+	timeZone: string;
+}
+
+/** Counts and clipped dead-air duration within an upcoming programming interval. */
 export interface ScheduleDaySummary {
 	gapCount: number;
 	deadAirSeconds: number;
 	programmedCount: number;
 }
 
-/** Summarize only segments overlapping the first local day, including DST-short and DST-long days. */
-export function firstDayScheduleSummary(preview: TimelinePreview): ScheduleDaySummary {
-	const date = Temporal.PlainDate.from(preview.startDate);
-	const start = date.toZonedDateTime(preview.timeZone).epochMilliseconds;
-	const finish = date.add({ days: 1 }).toZonedDateTime(preview.timeZone).epochMilliseconds;
+/** Cover 24 elapsed hours, requesting every local date touched even across DST changes. */
+export function upcomingScheduleWindow(now: number, timeZone: string): ScheduleSummaryWindow {
+	const finish = now + SECONDS_PER_SCHEDULING_DAY * 1_000;
+	const firstDate = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO(timeZone).toPlainDate();
+	const lastDate = Temporal.Instant.fromEpochMilliseconds(finish - 1)
+		.toZonedDateTimeISO(timeZone).toPlainDate();
+	return {
+		start: now, finish, startDate: firstDate.toString(), timeZone,
+		days: firstDate.until(lastDate, { largestUnit: 'days' }).days + 1,
+	};
+}
+
+/** Accept cached guides only when their actual returned range covers the complete interval. */
+export function guideCoversScheduleWindow(
+	guide: ScheduleGuide | null,
+	window: ScheduleSummaryWindow,
+): boolean {
+	if (!guide || guide.timeZone !== window.timeZone) {
+		return false;
+	}
+
+	const date = Temporal.PlainDate.from(guide.startDate);
+	const start = date.toZonedDateTime(guide.timeZone).epochMilliseconds;
+	const finish = date.add({ days: guide.days }).toZonedDateTime(guide.timeZone).epochMilliseconds;
+	return start <= window.start && finish >= window.finish;
+}
+
+/** Count clipped programming and coalesce contiguous dead air within the upcoming interval. */
+export function upcomingScheduleSummary(
+	preview: TimelinePreview,
+	window: ScheduleSummaryWindow,
+): ScheduleDaySummary {
 	const summary: ScheduleDaySummary = { gapCount: 0, deadAirSeconds: 0, programmedCount: 0 };
+	const gaps: Array<{ start: number; finish: number }> = [];
 	for (const segment of preview.segments) {
-		const clippedStart = Math.max(start, Date.parse(segment.start));
-		const clippedFinish = Math.min(finish, Date.parse(segment.finish));
+		const clippedStart = Math.max(window.start, Date.parse(segment.start));
+		const clippedFinish = Math.min(window.finish, Date.parse(segment.finish));
 		if (clippedStart >= clippedFinish) {
 			continue;
 		}
 
 		if (segment.role === 'dead-air') {
-			summary.gapCount += 1;
-			summary.deadAirSeconds += (clippedFinish - clippedStart) / 1000;
+			gaps.push({ start: clippedStart, finish: clippedFinish });
 		}
 		else {
 			summary.programmedCount += 1;
 		}
+	}
+
+	// Treat adjacent daily materialization rows as one uninterrupted playback gap.
+	gaps.sort((left, right) => left.start - right.start || left.finish - right.finish);
+	const mergedGaps: Array<{ start: number; finish: number }> = [];
+	for (const gap of gaps) {
+		const previous = mergedGaps.at(-1);
+		if (previous && gap.start <= previous.finish) {
+			previous.finish = Math.max(previous.finish, gap.finish);
+			continue;
+		}
+
+		mergedGaps.push({ ...gap });
+	}
+	summary.gapCount = mergedGaps.length;
+	for (const gap of mergedGaps) {
+		summary.deadAirSeconds += (gap.finish - gap.start) / 1000;
 	}
 	return summary;
 }
