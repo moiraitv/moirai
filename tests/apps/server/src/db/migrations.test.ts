@@ -138,6 +138,8 @@ describe('database compatibility migrations', () => {
 			['0013_integrated_playback', '0014_video_metadata'],
 			['0014_video_metadata', '0015_source_adapters'],
 			['0015_source_adapters', '0016_authentication'],
+			['0016_authentication', '0017_boundary_early_start'],
+			['0017_boundary_early_start', '0018_timeline_continuation'],
 		] as const;
 
 		for (const [priorTag, targetTag] of boundaries) {
@@ -175,6 +177,20 @@ describe('database compatibility migrations', () => {
 				).get()).toBeUndefined();
 			},
 		);
+	});
+
+	it('adds nullable continuation checkpoints without changing committed segment state', async () => {
+		await upgradeFrom('0017_boundary_early_start', (sqlite) => {
+			insertChannel(sqlite);
+			sqlite.prepare(`INSERT INTO materialized_timeline_segments (
+				id, channel_id, template_id, slot_id, role, title, starts_at, finishes_at,
+				source_start_seconds, truncated, state_delta
+			) VALUES ('segment', 'channel', 'template', 'slot', 'primary', 'Movie',
+				'2026-09-02T23:40:00Z', '2026-09-03T00:20:00Z', 0, 0, '[{"consumerKey":"saved"}]')`).run();
+		}, (sqlite) => {
+			expect(sqlite.prepare('SELECT continuation, state_delta, starts_at, finishes_at FROM materialized_timeline_segments').get())
+				.toEqual({ continuation: null, state_delta: '[{"consumerKey":"saved"}]', starts_at: '2026-09-02T23:40:00Z', finishes_at: '2026-09-03T00:20:00Z' });
+		});
 	});
 
 	it('upgrades pre-probe media and invalidates generated output that used NFO durations', async () => {
@@ -330,6 +346,42 @@ describe('database compatibility migrations', () => {
 					) VALUES ('unlimited', 'template', 1, 'left', 'right', 7200,
 						'finish-left', NULL, 'reject-start')`,
 				).run()).not.toThrow();
+			},
+		);
+	});
+
+	it('adds zero early-start drift without changing existing boundary behavior', async () => {
+		await upgradeFrom(
+			'0016_authentication',
+			(sqlite) => {
+				insertScheduleFoundation(sqlite);
+				for (const [id, position, start] of [['left', 0, 0], ['right', 1, 3_600]] as const) {
+					sqlite.prepare(
+						`INSERT INTO schedule_slots (
+							id, template_id, position, start_seconds, program_id, state_scope,
+							start_eligibility, filler
+						) VALUES (?, 'template', ?, ?, 'program', 'persistent', '{}', '{}')`,
+					).run(id, position, start);
+				}
+				sqlite.prepare(
+					`INSERT INTO schedule_boundaries (
+						id, template_id, position, left_slot_id, right_slot_id, target_seconds,
+						policy, max_drift_seconds, fallback
+					) VALUES ('boundary', 'template', 0, 'left', 'right', 3600,
+						'finish-left', 5400, 'reject-start')`,
+				).run();
+			},
+			(sqlite) => {
+				expect(sqlite.prepare(
+					`SELECT policy, max_drift_seconds AS maxDriftSeconds, fallback,
+						early_start_max_drift_seconds AS earlyStartMaxDriftSeconds
+					FROM schedule_boundaries WHERE id = 'boundary'`,
+				).get()).toEqual({
+					policy: 'finish-left',
+					maxDriftSeconds: 5_400,
+					fallback: 'reject-start',
+					earlyStartMaxDriftSeconds: 0,
+				});
 			},
 		);
 	});

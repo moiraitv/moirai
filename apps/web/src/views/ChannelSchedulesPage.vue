@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import {
@@ -37,6 +37,8 @@ import DisabledActionHint from '../components/DisabledActionHint.vue';
 import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import TwoStepActionButton from '../components/TwoStepActionButton.vue';
+import ProgramEditor from '../components/programs/ProgramEditor.vue';
+import ChannelFillerEditor from '../components/schedules/ChannelFillerEditor.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
 import ChannelSchedulesAbout from '../components/schedules/ChannelSchedulesAbout.vue';
 import LayeredSchedulingGuide from '../components/schedules/LayeredSchedulingGuide.vue';
@@ -58,6 +60,12 @@ import { useSchedulingStore } from '../stores/scheduling';
 import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { liveEvents } from '../live-events';
 import { closeUnsavedEditor } from '../unsaved-editor';
+import { deadAirAction } from '../schedule-diagnostic-actions';
+import {
+	deadAirDiagnostics,
+	schedulingDurationLabel,
+	type DeadAirDiagnostic,
+} from '../schedule-diagnostics';
 
 const PREVIEW_DELAY_MS = 450;
 const route = useRoute();
@@ -83,6 +91,7 @@ const draft = ref<ChannelScheduleConfig | null>(null);
 const original = ref('');
 const selectedLayerId = ref<string | null>(null);
 const quickEditingTemplateId = ref<string | null>(null);
+const quickEditingProgramId = ref<string | null>(null);
 const saving = ref(false);
 const deleting = ref(false);
 const error = ref('');
@@ -111,6 +120,7 @@ const channel = computed(() => channels.value.find((entry) => entry.id === chann
 const materialization = computed(() =>
 	materializations.value.find((entry) => entry.channelId === channelId.value));
 const templates = computed(() => scheduling.overview?.templates ?? []);
+const programs = computed(() => scheduling.overview?.programs ?? []);
 const schedules = computed(() => scheduling.overview?.channelSchedules ?? []);
 const hasPersistedSchedule = ref(false);
 const selectedLayer = computed(() =>
@@ -123,6 +133,14 @@ const scheduleNeedsSave = computed(() =>
 const scheduleFormValid = computed(() => channelScheduleConfigSchema.safeParse(draft.value).success);
 const previewLegend = computed(() =>
 	schedulePreviewLegend(preview.value, templates.value, draft.value?.defaultTemplateId ?? null));
+const previewDeadAir = computed(() => deadAirDiagnostics(preview.value, templates.value, draft.value));
+const previewDeadAirSeconds = computed(() => previewDeadAir.value.reduce(
+	(total, diagnostic) => total + diagnostic.durationSeconds,
+	0,
+));
+const diagnosticBoundary = computed(() => typeof route.query.boundary === 'string'
+	? route.query.boundary
+	: null);
 
 /** Return the display name for template. */
 function templateName(id: string): string {
@@ -174,6 +192,83 @@ function previewTime(value: string): string {
 	}).format(new Date(value));
 }
 
+/** Format an exact dead-air timestamp so sub-minute gaps remain understandable. */
+function previewExactTime(value: string): string {
+	return new Intl.DateTimeFormat([], {
+		timeZone: preview.value?.timeZone,
+		month: 'short',
+		day: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit',
+		second: '2-digit',
+	}).format(new Date(value));
+}
+
+/** Position a dead-air warning marker without changing segment geometry. */
+function deadAirMarkerStyle(diagnostic: DeadAirDiagnostic): Record<string, string> {
+	const firstStart = preview.value?.segments[0]?.start;
+	if (!firstStart || previewWindowMilliseconds.value <= 0) {
+		return { left: '0%' };
+	}
+
+	const elapsed = Date.parse(diagnostic.segment.start) - Date.parse(firstStart);
+	const left = Math.max(0, Math.min(100, elapsed / previewWindowMilliseconds.value * 100));
+	return { left: `${left}%` };
+}
+
+/** Select and focus the editor section that can resolve one dead-air interval. */
+async function reviewDeadAir(diagnostic: DeadAirDiagnostic): Promise<void> {
+	const action = deadAirAction(diagnostic);
+	if (action.type === 'program') {
+		quickEditingProgramId.value = action.programId;
+		return;
+	}
+	if (action.type === 'channel-filler') {
+		selectedLayerId.value = null;
+		await nextTick();
+		const target = document.getElementById('channel-default-filler');
+		target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		target?.querySelector<HTMLElement>('select, input, button')?.focus();
+		return;
+	}
+
+	if (action.type === 'layer-boundary'
+		&& draft.value?.layers.some((layer) => layer.id === action.layerId)) {
+		const layerId = action.layerId;
+		selectedLayerId.value = layerId;
+		await router.replace({
+			query: {
+				...route.query,
+				previewDate: preview.value?.startDate,
+				layer: layerId,
+				boundary: action.origin,
+			},
+		});
+		await nextTick();
+		const side = action.origin === 'layer-exit' ? 'exitBoundary' : 'entryBoundary';
+		const target = document.getElementById(`layer-boundary-${layerId}-${side}`);
+		target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		target?.querySelector<HTMLElement>('select, input, button')?.focus();
+		return;
+	}
+
+	editTemplate(diagnostic.segment.templateId);
+}
+
+/** Close the guided program editor and refresh scheduling data without changing the channel draft. */
+async function finishProgramEdit(): Promise<void> {
+	quickEditingProgramId.value = null;
+	await scheduling.load();
+	schedulePreview(0);
+}
+
+/** Focus the detailed row associated with a compact timeline marker. */
+function focusDeadAirDiagnostic(segmentId: string): void {
+	const target = document.getElementById(`dead-air-diagnostic-${segmentId}`);
+	target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	target?.focus();
+}
+
 /** Return CSS presentation values for slot. */
 function slotStyle(template: ScheduleTemplate, slot: ScheduleSlot): Record<string, string> {
 	return templateSlotStyle(template, slot);
@@ -202,7 +297,10 @@ function loadDraft(): void {
 			defaultFiller: null,
 		},
 	);
-	selectedLayerId.value = draft.value.layers[0]?.id ?? null;
+	const requestedLayer = typeof route.query.layer === 'string' ? route.query.layer : null;
+	selectedLayerId.value = draft.value.layers.some((layer) => layer.id === requestedLayer)
+		? requestedLayer
+		: (draft.value.layers[0]?.id ?? null);
 	for (const layer of draft.value.layers) {
 		for (const side of ['entryBoundary', 'exitBoundary'] as const) {
 			const drift = layer[side].maxDriftSeconds;
@@ -215,9 +313,28 @@ function loadDraft(): void {
 	preview.value = null;
 }
 
+/** Apply a diagnostic deep link after the editor has rendered its selected layer. */
+async function focusDiagnosticRoute(): Promise<void> {
+	const layerId = selectedLayerId.value;
+	if (!layerId || !diagnosticBoundary.value?.startsWith('layer-')) {
+		return;
+	}
+
+	await nextTick();
+	const side = diagnosticBoundary.value === 'layer-exit' ? 'exitBoundary' : 'entryBoundary';
+	const target = document.getElementById(`layer-boundary-${layerId}-${side}`);
+	target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	target?.querySelector<HTMLElement>('select, input, button')?.focus();
+}
+
 /** Create the initial hard entry or exit boundary for a new layer. */
 function defaultBoundary(): LayerBoundary {
-	return { policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left' };
+	return {
+		policy: 'hard',
+		maxDriftSeconds: 0,
+		fallback: 'truncate-left',
+		earlyStartMaxDriftSeconds: 0,
+	};
 }
 
 /** Change a layer boundary policy while restoring finite drift when required. */
@@ -229,6 +346,9 @@ function updateLayerBoundaryPolicy(side: BoundarySide, policy: LayerBoundary['po
 	const boundary = selectedLayer.value[side];
 	if (policy !== 'finish-left' && boundary.maxDriftSeconds === null) {
 		boundary.maxDriftSeconds = finiteBoundaryDrift.get(`${selectedLayer.value.id}:${side}`) ?? 0;
+	}
+	if (policy !== 'finish-left' && boundary.fallback === 'favor-right') {
+		boundary.fallback = 'truncate-left';
 	}
 	boundary.policy = policy;
 }
@@ -244,6 +364,15 @@ function updateLayerBoundaryDrift(side: BoundarySide, minutes: number): void {
 	selectedLayer.value[side].maxDriftSeconds = maxDriftSeconds;
 }
 
+/** Store the independent early-start fallback allowance for one layer boundary. */
+function updateLayerEarlyStartDrift(side: BoundarySide, minutes: number): void {
+	if (!selectedLayer.value) {
+		return;
+	}
+
+	selectedLayer.value[side].earlyStartMaxDriftSeconds = minutes * 60;
+}
+
 /** Switch a layer boundary between unlimited drift and its last finite limit. */
 function toggleUnlimitedLayerDrift(side: BoundarySide, unlimited: boolean): void {
 	if (!selectedLayer.value) {
@@ -257,6 +386,9 @@ function toggleUnlimitedLayerDrift(side: BoundarySide, unlimited: boolean): void
 			finiteBoundaryDrift.set(key, boundary.maxDriftSeconds);
 		}
 		boundary.maxDriftSeconds = null;
+		if (boundary.fallback === 'favor-right') {
+			boundary.fallback = 'truncate-left';
+		}
 		return;
 	}
 
@@ -527,6 +659,7 @@ function handleEditorKeydown(event: KeyboardEvent): void {
 		!event.defaultPrevented
 		&& editing.value
 		&& !quickEditingTemplateId.value
+		&& !quickEditingProgramId.value
 		&& event.key === 'Escape'
 	) {
 		event.preventDefault();
@@ -559,7 +692,10 @@ onMounted(async () => {
 			loadMaterializations(),
 			capabilitiesLoaded.value ? Promise.resolve() : channelsStore.loadCapabilities(),
 		]);
-		previewDate.value = dateKey(new Date(), timeZone.value);
+		previewDate.value = typeof route.query.previewDate === 'string'
+			&& /^\d{4}-\d{2}-\d{2}$/u.test(route.query.previewDate)
+			? route.query.previewDate
+			: dateKey(new Date(), timeZone.value);
 		loadDraft();
 		if (editing.value) {
 			schedulePreview(0);
@@ -573,6 +709,9 @@ onMounted(async () => {
 	}
 	finally {
 		initialLoading.value = false;
+	}
+	if (editing.value && draft.value) {
+		await focusDiagnosticRoute();
 	}
 });
 const unsubscribeTimeline = liveEvents.subscribe((event) => {
@@ -847,6 +986,7 @@ onBeforeUnmount(() => {
 									<div class="layer-boundary-grid">
 										<fieldset
 											v-for="side in ['entryBoundary', 'exitBoundary'] as const"
+											:id="`layer-boundary-${selectedLayer.id}-${side}`"
 											:key="side"
 										>
 											<legend>
@@ -918,7 +1058,37 @@ onBeforeUnmount(() => {
 											>
 												<option value="truncate-left">Truncate outgoing content</option>
 												<option value="reject-start">Do not start it</option>
+												<option
+													value="favor-right"
+													:disabled="
+														selectedLayer[side].policy !== 'finish-left'
+															|| selectedLayer[side].maxDriftSeconds === null
+													"
+												>
+													Start incoming content early
+												</option>
 											</select></label
+											>
+											<label v-if="selectedLayer[side].fallback === 'favor-right'"
+											><span>Maximum early start (minutes)</span
+											><input
+												type="number"
+												min="0"
+												max="1440"
+												:disabled="
+													selectedLayer[side].policy !== 'finish-left'
+														|| selectedLayer[side].maxDriftSeconds === null
+												"
+												:value="(selectedLayer[side].earlyStartMaxDriftSeconds ?? 0) / 60"
+												@input="
+													updateLayerEarlyStartDrift(
+														side,
+														Number(($event.target as HTMLInputElement).value),
+													)
+												"
+											/><small>
+												Used only when no outgoing item can satisfy the primary boundary behavior.
+											</small></label
 											>
 										</fieldset>
 									</div>
@@ -975,6 +1145,11 @@ onBeforeUnmount(() => {
 											"
 										></span>
 									</div>
+									<ChannelFillerEditor
+										v-model="draft.defaultFiller"
+										:programs="programs"
+										@edit-program="quickEditingProgramId = $event"
+									/>
 								</section>
 							</div>
 
@@ -1000,26 +1175,70 @@ onBeforeUnmount(() => {
 							<div v-if="preview" class="schedule-preview-ruler" aria-hidden="true">
 								<span v-for="mark in previewRuler" :key="mark.seconds">{{ mark.label }}</span>
 							</div>
-							<div v-if="preview" class="resolved-track">
-								<div
-									v-for="segment in preview.segments"
-									:key="segment.id"
-									class="resolved-segment"
-									:class="`role-${segment.role}`"
-									:style="{
-										...programColorStyle(segment.programId),
-										width: `${guideSegmentPercent(
-											segment.start,
-											segment.finish,
-											previewWindowMilliseconds,
-										)}%`,
-									}"
-									:title="`${segment.title}\n${segment.start}–${segment.finish}`"
-								>
-									<strong>{{ segment.title }}</strong
-									><small>{{ previewTime(segment.start) }}–{{ previewTime(segment.finish) }}</small>
+							<div v-if="preview" class="resolved-track-shell">
+								<div class="resolved-track">
+									<div
+										v-for="segment in preview.segments"
+										:key="segment.id"
+										class="resolved-segment"
+										:class="`role-${segment.role}`"
+										:style="{
+											...programColorStyle(segment.programId),
+											width: `${guideSegmentPercent(
+												segment.start,
+												segment.finish,
+												previewWindowMilliseconds,
+											)}%`,
+										}"
+										:title="`${segment.title}\n${segment.start}–${segment.finish}`"
+									>
+										<strong>{{ segment.title }}</strong
+										><small>{{ previewTime(segment.start) }}–{{ previewTime(segment.finish) }}</small>
+									</div>
 								</div>
+								<button
+									v-for="diagnostic in previewDeadAir"
+									:key="`marker-${diagnostic.segment.id}`"
+									type="button"
+									class="dead-air-marker"
+									:style="deadAirMarkerStyle(diagnostic)"
+									:aria-label="`Dead air at ${previewExactTime(diagnostic.segment.start)} for ${schedulingDurationLabel(diagnostic.durationSeconds)}`"
+									@click="focusDeadAirDiagnostic(diagnostic.segment.id)"
+								>
+									<CircleAlert :size="15" />
+								</button>
 							</div>
+							<section v-if="previewDeadAir.length" class="dead-air-diagnostics" aria-live="polite">
+								<header>
+									<CircleAlert :size="20" />
+									<div>
+										<strong>Dead air detected</strong>
+										<small>
+											{{ previewDeadAir.length }} gap{{ previewDeadAir.length === 1 ? '' : 's' }} ·
+											{{ schedulingDurationLabel(previewDeadAirSeconds) }} total
+										</small>
+									</div>
+								</header>
+								<article
+									v-for="diagnostic in previewDeadAir"
+									:id="`dead-air-diagnostic-${diagnostic.segment.id}`"
+									:key="diagnostic.segment.id"
+									tabindex="-1"
+									:class="`category-${diagnostic.category}`"
+								>
+									<div>
+										<strong>{{ diagnostic.label }}</strong>
+										<small>
+											{{ previewExactTime(diagnostic.segment.start) }}–{{ previewExactTime(diagnostic.segment.finish) }}
+											· {{ schedulingDurationLabel(diagnostic.durationSeconds) }}
+										</small>
+										<p>{{ diagnostic.explanation }}</p>
+									</div>
+									<button type="button" class="button secondary" @click="reviewDeadAir(diagnostic)">
+										{{ deadAirAction(diagnostic).label }}
+									</button>
+								</article>
+							</section>
 							<div
 								v-if="previewLegend.length"
 								class="schedule-preview-legend"
@@ -1083,6 +1302,16 @@ onBeforeUnmount(() => {
 				:template-id="quickEditingTemplateId"
 				@close="quickEditingTemplateId = null"
 				@saved="finishTemplateEdit"
+			/>
+		</Teleport>
+
+		<Teleport to="body">
+			<ProgramEditor
+				v-if="quickEditingProgramId"
+				embedded
+				:program-id="quickEditingProgramId"
+				@close="quickEditingProgramId = null"
+				@saved="() => finishProgramEdit()"
 			/>
 		</Teleport>
 	</section>

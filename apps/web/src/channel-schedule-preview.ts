@@ -1,4 +1,36 @@
+import { Temporal } from '@js-temporal/polyfill';
 import type { ScheduleTemplate, TimelinePreview } from '@moirai/shared';
+
+/** Counts and clipped dead-air duration for the first local calendar day of a cached preview. */
+export interface ScheduleDaySummary {
+	gapCount: number;
+	deadAirSeconds: number;
+	programmedCount: number;
+}
+
+/** Summarize only segments overlapping the first local day, including DST-short and DST-long days. */
+export function firstDayScheduleSummary(preview: TimelinePreview): ScheduleDaySummary {
+	const date = Temporal.PlainDate.from(preview.startDate);
+	const start = date.toZonedDateTime(preview.timeZone).epochMilliseconds;
+	const finish = date.add({ days: 1 }).toZonedDateTime(preview.timeZone).epochMilliseconds;
+	const summary: ScheduleDaySummary = { gapCount: 0, deadAirSeconds: 0, programmedCount: 0 };
+	for (const segment of preview.segments) {
+		const clippedStart = Math.max(start, Date.parse(segment.start));
+		const clippedFinish = Math.min(finish, Date.parse(segment.finish));
+		if (clippedStart >= clippedFinish) {
+			continue;
+		}
+
+		if (segment.role === 'dead-air') {
+			summary.gapCount += 1;
+			summary.deadAirSeconds += (clippedFinish - clippedStart) / 1000;
+		}
+		else {
+			summary.programmedCount += 1;
+		}
+	}
+	return summary;
+}
 
 /** Label and horizontal position for a preview time ruler. */
 export interface ScheduleRulerMark {

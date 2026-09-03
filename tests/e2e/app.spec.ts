@@ -886,9 +886,13 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(advancedScheduling).toHaveAttribute('aria-expanded', 'true');
 	const templateBoundary = page.getByRole('group', { name: /Outgoing boundary at/ });
 	await templateBoundary.getByLabel('Policy').selectOption('finish-left');
+	await templateBoundary.getByLabel('Fallback').selectOption('favor-right');
+	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toBeVisible();
+	await templateBoundary.getByLabel('Maximum early start (minutes)').fill('75');
 	await templateBoundary.getByLabel('No limit — always finish outgoing item').check();
 	await expect(templateBoundary.getByLabel('Maximum drift (minutes)')).toBeDisabled();
 	await expect(templateBoundary.getByLabel('Fallback')).toBeDisabled();
+	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Preview resolved schedule' })).toBeVisible();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/templates\/[0-9a-f-]+$/);
@@ -970,6 +974,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.channel-schedule-save-state')).toContainText('Unsaved changes');
 	await page.locator('.schedule-layer.base').click();
 	await expect(page.locator('.base-inspector')).toBeVisible();
+	const channelFiller = page.getByRole('group', { name: 'Channel fallback filler' });
+	await expect(channelFiller.getByLabel('Configure channel filler')).toBeVisible();
+	await channelFiller.getByLabel('Configure channel filler').check();
+	await expect(channelFiller.getByLabel('Program')).toBeVisible();
+	await expect(channelFiller.getByLabel('Selection policy')).toBeVisible();
+	await channelFiller.getByLabel('Configure channel filler').uncheck();
 	await page.locator('.schedule-layer.conditional').click();
 	await page
 		.locator('.schedule-layer-inspector')
@@ -993,23 +1003,64 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await entryBoundary.getByLabel('Boundary behavior').selectOption('finish-left');
 	await expect(entryBoundary.getByLabel('Maximum drift past boundary (minutes)')).toBeVisible();
 	await entryBoundary.getByLabel('Maximum drift past boundary (minutes)').fill('90');
+	await entryBoundary
+		.getByLabel('If the next outgoing item cannot satisfy this boundary')
+		.selectOption('favor-right');
+	await entryBoundary.getByLabel('Maximum early start (minutes)').fill('75');
 	await entryBoundary.getByLabel('No limit — always finish outgoing item').check();
 	await expect(entryBoundary.getByLabel('Maximum drift past boundary (minutes)')).toBeDisabled();
 	await expect(
 		entryBoundary.getByLabel('If the next outgoing item cannot satisfy this boundary'),
 	).toBeDisabled();
+	await expect(entryBoundary.getByLabel('Maximum early start (minutes)')).toHaveCount(0);
 	await page.route('**/api/v1/channel-schedule-preview', async (route) => {
 		const response = await route.fetch();
 		const body = (await response.json()) as Record<string, unknown>;
+		const segments = body.segments as Array<Record<string, unknown>>;
+		const sourceSegment = segments[0]!;
+		const sourceStart = Date.parse(String(sourceSegment.start));
+		const gap12Start = new Date(sourceStart + 60 * 60 * 1_000).toISOString();
+		const gap12Finish = new Date(Date.parse(gap12Start) + 12_000).toISOString();
+		const gap8Start = new Date(sourceStart + 2 * 60 * 60 * 1_000).toISOString();
+		const gap8Finish = new Date(Date.parse(gap8Start) + 8 * 60 * 1_000).toISOString();
+		const gap12 = {
+			...sourceSegment,
+			id: 'e2e-dead-air-12',
+			role: 'dead-air',
+			programId: null,
+			mediaItemId: null,
+			title: 'Dead air',
+			playbackPath: null,
+			playbackParts: [],
+			start: gap12Start,
+			finish: gap12Finish,
+		};
+		const gap8 = {
+			...gap12,
+			id: 'e2e-dead-air-8-minutes',
+			start: gap8Start,
+			finish: gap8Finish,
+		};
+		body.segments = [
+			...segments.filter((segment) => segment.role !== 'dead-air'),
+			gap12,
+			gap8,
+		];
 		body.issues = [
 			{
 				code: 'boundary-start-rejected',
 				message: 'Boundary preview diagnostic',
-				scheduleLayerId: null,
-				templateId: null,
-				slotId: null,
+				scheduleLayerId: sourceSegment.scheduleLayerId,
+				templateId: sourceSegment.templateId,
+				slotId: sourceSegment.slotId,
 				programId: null,
 				mediaItemId: null,
+				occurrenceCount: 1,
+				occurrences: [{
+					start: gap12Start,
+					finish: gap12Finish,
+					boundaryOrigin: 'template',
+				}],
 			},
 		];
 		await route.fulfill({ response, json: body });
@@ -1025,6 +1076,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByLabel('Schedule preview issues')).toContainText(
 		'Boundary preview diagnostic',
 	);
+	await expect(page.getByText('Dead air detected', { exact: true })).toBeVisible();
+	await expect(page.locator('.dead-air-diagnostics')).toContainText('2 gaps · 8m 12s total');
+	const tinyGapMarker = page.getByRole('button', { name: /Dead air at .* for 12 seconds/ });
+	await expect(tinyGapMarker).toBeVisible();
+	await expect(page.locator('.dead-air-marker')).toHaveCount(2);
+	await tinyGapMarker.focus();
+	await page.keyboard.press('Enter');
+	await expect(page.locator('#dead-air-diagnostic-e2e-dead-air-12')).toBeFocused();
 	await expect(page.locator('.schedule-preview-ruler > span')).toHaveCount(9);
 	await expect(page.locator('.schedule-preview-ruler > span').first()).toHaveText('00:00');
 	await expect(page.locator('.schedule-preview-ruler > span').last()).toHaveText('24:00');
@@ -1109,6 +1168,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 				slotId: null,
 				programId: null,
 				mediaItemId: null,
+				occurrenceCount: 1,
+				occurrences: [{
+					start: new Date().toISOString(),
+					finish: new Date(Date.now() + 12_000).toISOString(),
+					boundaryOrigin: 'template',
+				}],
 			}));
 		}
 		await route.fulfill({ response, json: body });
@@ -1127,12 +1192,16 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		name: '5 warnings; show details',
 	});
 	await warningBadge.hover();
-	const warningTooltip = page.getByRole('tooltip');
+	const warningTooltip = page.getByRole('dialog', { name: 'Scheduling warnings' });
 	await expect(warningTooltip).toContainText(warningMessages[0]!);
 	await expect(warningTooltip).toContainText(warningMessages[1]!);
 	await expect(warningTooltip).toContainText(warningMessages[3]!);
 	await expect(warningTooltip).not.toContainText(warningMessages[4]!);
-	await expect(warningTooltip).toContainText('2 additional warnings');
+	await expect(warningTooltip).toContainText('1 additional warning type');
+	await expect(warningTooltip.getByRole('link', { name: 'Diagnose schedule' })).toHaveAttribute(
+		'href',
+		/\/schedules\/channels\/[0-9a-f-]+\?previewDate=/,
+	);
 	const warningTooltipBox = await warningTooltip.boundingBox();
 	expect(warningTooltipBox).not.toBeNull();
 	expect(warningTooltipBox!.x).toBeGreaterThanOrEqual(0);
@@ -1143,13 +1212,32 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	expect(warningTooltipBox!.y + warningTooltipBox!.height).toBeLessThanOrEqual(
 		page.viewportSize()!.height,
 	);
+	// Hover may cross into the action without first pinning the warning panel.
+	const diagnoseLink = warningTooltip.getByRole('link', { name: 'Diagnose schedule' });
+	await diagnoseLink.hover();
+	await expect(warningTooltip).toBeVisible();
+	await page.locator('.guide-toolbar').hover();
+	await expect(warningTooltip).toBeHidden();
+	await warningBadge.focus();
+	await expect(warningTooltip).toBeVisible();
+	await page.keyboard.press('Tab');
+	await expect(diagnoseLink).toBeFocused();
+	await page.keyboard.press('Shift+Tab');
+	await expect(warningBadge).toBeFocused();
+	await page.keyboard.press('Tab');
 	await page.keyboard.press('Escape');
 	await expect(warningTooltip).toBeHidden();
+	await expect(warningBadge).toBeFocused();
+	await page.locator('.guide-toolbar').click();
 	await warningBadge.focus();
 	await expect(warningTooltip).toBeVisible();
 	await warningBadge.click();
 	await page.locator('.guide-toolbar').click();
 	await expect(warningTooltip).toBeHidden();
+	await warningBadge.click();
+	await warningTooltip.getByRole('link', { name: 'Diagnose schedule' }).click();
+	await expect(page).toHaveURL(/\/schedules\/channels\/[0-9a-f-]+\?previewDate=/);
+	await expect(page.getByRole('dialog', { name: 'Channel schedule editor' })).toBeVisible();
 	await page.goto('/guide');
 	const guideChannelCell = page
 		.locator('.guide-channel-cell')

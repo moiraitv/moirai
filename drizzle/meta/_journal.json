@@ -120,6 +120,20 @@
       "when": 1788033600000,
       "tag": "0016_authentication",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788397200000,
+      "tag": "0017_boundary_early_start",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788483600000,
+      "tag": "0018_timeline_continuation",
+      "breakpoints": true
     }
   ]
 }

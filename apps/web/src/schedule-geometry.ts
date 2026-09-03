@@ -104,6 +104,7 @@ export function rebuildBoundaries(
 			policy: existing?.policy ?? 'hard',
 			maxDriftSeconds: existing?.maxDriftSeconds ?? 0,
 			fallback: existing?.fallback ?? 'reject-start',
+			earlyStartMaxDriftSeconds: existing?.earlyStartMaxDriftSeconds ?? 0,
 		};
 	});
 }
@@ -149,6 +150,7 @@ export function splitScheduleSlot(
 			policy: 'hard',
 			maxDriftSeconds: 0,
 			fallback: 'reject-start',
+			earlyStartMaxDriftSeconds: 0,
 		});
 	if (outgoing) {
 		preserved.push({ ...outgoing, leftSlotId: right.id });

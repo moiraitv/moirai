@@ -228,6 +228,8 @@ onMounted(() => scrollToCurrentTime());
 									<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)"></slot>
 									<ScheduleWarningBadge
 										:issues="guideByChannel.get(channel.id)?.issues ?? []"
+										:channel-id="channel.id"
+										:time-zone="timeZone"
 									/>
 								</div>
 								<div v-if="$slots.actions" class="guide-channel-actions">

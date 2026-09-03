@@ -703,7 +703,9 @@
 }
 
 .resolved-segment.role-dead-air {
-	background: #24303a;
+	border-color: #ff8d55;
+	background: repeating-linear-gradient(135deg, #7b301e 0 7px, #351c1a 7px 14px);
+	color: #fff0e7;
 }
 
 .resolved-segment strong,

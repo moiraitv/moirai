@@ -1140,7 +1140,7 @@ describe('API', () => {
 	});
 
 	it('supports scheduling overview, assignments, draft previews, and the batch guide', async () => {
-		const { app } = await fixture();
+		const { app, services } = await fixture();
 		const channelResponse = await app.inject({
 			method: 'POST',
 			url: '/api/v1/channels',
@@ -1349,8 +1349,29 @@ describe('API', () => {
 		});
 		expect(layeredDraft.statusCode).toBe(200);
 		expect(layeredDraft.json()).toMatchObject({ channelId, days: 1 });
+		const persistedPreview = await app.inject({
+			url: `/api/v1/channels/${channelId}/timeline-preview?startDate=2026-08-20&days=1`,
+		});
+		expect(persistedPreview.statusCode).toBe(200);
+		for (const preview of [draft, layeredDraft.json(), persistedPreview.json()]) {
+			expect(preview.issues.length).toBeGreaterThan(0);
+			for (const issue of preview.issues) {
+				expect(issue.occurrenceCount).toBeGreaterThan(0);
+				expect(issue).not.toHaveProperty('occurrenceCounts');
+				expect(issue).not.toHaveProperty('unlocatedOccurrenceCount');
+				expect(issue).not.toHaveProperty('unlocatedUntil');
+			}
+		}
+
+		await services.timelineMaterializer.runNow();
+		const materialization = await services.repository.getTimelineMaterialization(channelId);
+		expect(materialization?.issues.length).toBeGreaterThan(0);
+		expect(materialization?.issues[0]?.occurrenceCounts?.length).toBeGreaterThan(0);
 		const guide = (await app.inject({ url: '/api/v1/schedule-guide?days=1' })).json();
 		expect(guide.channels).toMatchObject([{ channelId, preview: { days: 1 } }]);
+		for (const issue of guide.channels[0].preview.issues) {
+			expect(issue).not.toHaveProperty('occurrenceCounts');
+		}
 	});
 
 	it('keeps a program type, source type, and library fixed after creation', async () => {

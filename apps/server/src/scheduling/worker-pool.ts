@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads';
 import { MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
 import type { GenerateTimelineInput, TimelineGeneration } from './engine.js';
 import { generateTimelineDetailed, TimelineMaterializationLimitError } from './engine.js';
+import { TimelineIssueLimitError } from './timeline-issues.js';
 
 /** Report bounded scheduling work rejected because every worker slot is occupied. */
 export class SchedulingQueueFullError extends Error {
@@ -40,6 +41,9 @@ export interface SchedulingWorkerErrorPayload {
 
 /** Restore expected domain errors that lose their prototype across a worker boundary. */
 export function schedulingWorkerError(payload: SchedulingWorkerErrorPayload): Error {
+	if (payload.name === 'TimelineIssueLimitError') {
+		return new TimelineIssueLimitError();
+	}
 	if (payload.name === 'TimelineMaterializationLimitError') {
 		return new TimelineMaterializationLimitError(payload.limit ?? MAX_TIMELINE_SEGMENTS);
 	}

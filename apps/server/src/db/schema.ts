@@ -18,9 +18,10 @@ import type {
 	SelectionStateValue,
 	SourceCandidateSummary,
 	SourceIdentity,
-	TimelineIssue,
 } from '@moirai/shared';
 import { DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES } from '@moirai/shared';
+import type { RecordedTimelineIssue } from '../scheduling/timeline-issues.js';
+import type { TimelineContinuation } from '../scheduling/continuation.js';
 
 /** Shared creation and update columns used by mutable application records. */
 const timestamps = {
@@ -460,6 +461,7 @@ export const scheduleBoundaries = sqliteTable(
 		policy: text('policy').$type<ScheduleBoundary['policy']>().notNull(),
 		maxDriftSeconds: integer('max_drift_seconds'),
 		fallback: text('fallback').$type<ScheduleBoundary['fallback']>().notNull(),
+		earlyStartMaxDriftSeconds: integer('early_start_max_drift_seconds').notNull().default(0),
 	},
 	(table) => [
 		uniqueIndex('schedule_boundaries_template_position').on(table.templateId, table.position),
@@ -552,7 +554,7 @@ export const timelineMaterializations = sqliteTable('timeline_materializations',
 	continuationAt: text('continuation_at').notNull(),
 	inputFingerprint: text('input_fingerprint').notNull(),
 	baseState: text('base_state', { mode: 'json' }).$type<SelectionStateRecord[]>().notNull(),
-	issues: text('issues', { mode: 'json' }).$type<TimelineIssue[]>().notNull(),
+	issues: text('issues', { mode: 'json' }).$type<RecordedTimelineIssue[]>().notNull(),
 	committedAt: text('committed_at').notNull(),
 	pendingSince: text('pending_since'),
 	applyAfter: text('apply_after'),
@@ -594,6 +596,7 @@ export const materializedTimelineSegments = sqliteTable(
       (SchedulableMedia & { seriesTitle?: string | null }) | null
 		>(),
 		stateDelta: text('state_delta', { mode: 'json' }).$type<SelectionStateRecord[]>().notNull(),
+		continuation: text('continuation', { mode: 'json' }).$type<TimelineContinuation | null>(),
 	},
 	(table) => [
 		index('materialized_segments_channel_start_idx').on(table.channelId, table.startsAt),

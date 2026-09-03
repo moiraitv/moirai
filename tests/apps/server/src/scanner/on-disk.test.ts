@@ -6,6 +6,7 @@ import type { Library } from '@moirai/shared';
 import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
 import { MediaProbeError } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
+import { MAX_MEDIA_SCAN_ATTEMPTS } from '@server/scanner/scan-queue.js';
 
 const roots: string[] = [];
 async function library(typeKey = 'movies'): Promise<Library> {
@@ -41,6 +42,111 @@ afterEach(async () => {
 });
 
 describe('discoverOnDisk', () => {
+	it('retries probes after the inventory and persists only final outcomes and file progress', async () => {
+		const fixture = await library();
+		const names = ['Recovered.mp4', 'Healthy.mp4', 'Exhausted.mp4'];
+		await Promise.all(names.map((name) => writeFile(path.join(fixture.sourceConfig.scanRoot, name), 'video')));
+		const calls: string[] = [];
+		const attempts = new Map<string, number>();
+		const onProgress = vi.fn();
+		const probeMedia = vi.fn(async (_root: string, file: string) => {
+			const name = path.basename(file);
+			calls.push(name);
+			const attempt = (attempts.get(name) ?? 0) + 1;
+			attempts.set(name, attempt);
+			if (name === 'Exhausted.mp4' || (name === 'Recovered.mp4' && attempt < MAX_MEDIA_SCAN_ATTEMPTS)) {
+				throw new MediaProbeError('timed-out', 'Media probe exceeded its time limit');
+			}
+
+			return { durationMilliseconds: 90_125, fileSizeBytes: 5, container: 'mp4', streams: [], resolution: null, tags: {} };
+		});
+
+		const result = await discoverOnDisk(fixture, { probeMedia, onProgress });
+
+		expect(new Set(calls.slice(0, names.length))).toEqual(new Set(names));
+		expect(attempts.get('Healthy.mp4')).toBe(1);
+		expect(attempts.get('Recovered.mp4')).toBe(MAX_MEDIA_SCAN_ATTEMPTS);
+		expect(attempts.get('Exhausted.mp4')).toBe(MAX_MEDIA_SCAN_ATTEMPTS);
+		expect(result.items).toHaveLength(names.length);
+		expect(new Set(result.items.map((item) => item.id)).size).toBe(names.length);
+		expect(result.items.find((item) => item.relativePath === 'Recovered.mp4')).toMatchObject({
+			probeStatus: 'complete', probeErrorCode: null, durationMilliseconds: 90_125,
+		});
+		expect(result.items.find((item) => item.relativePath === 'Exhausted.mp4')).toMatchObject({
+			probeStatus: 'failed', probeErrorCode: 'timed-out', durationMilliseconds: null,
+		});
+		expect(result.issues.filter((issue) => issue.code === 'media_timed_out')).toEqual([
+			expect.objectContaining({ path: 'Exhausted.mp4' }),
+		]);
+		expect(result.issues.filter((issue) => issue.code === 'nfo_missing')).toHaveLength(names.length);
+		expect(onProgress.mock.calls.map(([progress]) => progress.processedCount)).toEqual([0, 1, 2, 3, 3]);
+		expect(onProgress.mock.calls.every(([progress]) => progress.totalCount === names.length)).toBe(true);
+		expect(result.traversalComplete).toBe(true);
+	});
+
+	it('cancels deferred probes without starting another pass or reporting completion', async () => {
+		const fixture = await library();
+		await Promise.all(['Alpha.mp4', 'Beta.mp4'].map((name) =>
+			writeFile(path.join(fixture.sourceConfig.scanRoot, name), 'video')));
+		const controller = new AbortController();
+		const cancelled = new Error('Scan cancelled');
+		const onProgress = vi.fn();
+		const probeMedia = vi.fn().mockImplementationOnce(async () => {
+			throw new MediaProbeError('timed-out', 'Transient failure');
+		}).mockImplementationOnce(async () => {
+			controller.abort(cancelled);
+			throw cancelled;
+		});
+
+		await expect(discoverOnDisk(fixture, { probeMedia, onProgress, signal: controller.signal }))
+			.rejects.toBe(cancelled);
+		expect(probeMedia).toHaveBeenCalledTimes(2);
+		expect(onProgress.mock.calls.every(([progress]) => progress.phase === 'processing'
+			&& progress.processedCount < progress.totalCount)).toBe(true);
+	});
+
+	it.each(['resource-exhausted', 'executable-unavailable'] as const)(
+		'finalizes deferred probes without retrying a later %s failure',
+		async (code) => {
+			const fixture = await library();
+			await Promise.all(['Alpha.mp4', 'Beta.mp4'].map((name) =>
+				writeFile(path.join(fixture.sourceConfig.scanRoot, name), 'video')));
+			const probeMedia = vi.fn()
+				.mockRejectedValueOnce(new MediaProbeError('timed-out', 'Transient failure'))
+				.mockRejectedValue(new MediaProbeError(code, 'System-wide probe failure'));
+
+			const result = await discoverOnDisk(fixture, { probeMedia });
+
+			expect(probeMedia).toHaveBeenCalledTimes(2);
+			expect(result.items).toHaveLength(2);
+			expect(result.items.every((item) => item.probeErrorCode === code)).toBe(true);
+			expect(result.issues.filter((issue) => issue.code.startsWith('media_'))).toEqual([
+				expect.objectContaining({ path: null, code: `media_${code.replaceAll('-', '_')}`, severity: 'error' }),
+			]);
+		},
+	);
+
+	it('assembles multipart durations only after failed parts finish retrying', async () => {
+		const fixture = await library();
+		await Promise.all(['Film-cd1.mkv', 'Film-cd2.mkv'].map((name) =>
+			writeFile(path.join(fixture.sourceConfig.scanRoot, name), 'video')));
+		let failed = false;
+		const probeMedia = vi.fn(async (_root: string, file: string) => {
+			if (file.endsWith('cd1.mkv') && !failed) {
+				failed = true;
+				throw new MediaProbeError('timed-out', 'Transient failure');
+			}
+			return { durationMilliseconds: 90_000, fileSizeBytes: 5, container: 'mkv', streams: [], resolution: null, tags: {} };
+		});
+
+		const result = await discoverOnDisk(fixture, { probeMedia });
+
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({ durationMilliseconds: 180_000, probeStatus: 'complete', multipartStatus: 'complete' });
+		expect(result.items[0]?.parts.map((part) => part.durationSeconds)).toEqual([90, 90]);
+		expect(result.issues.some((issue) => issue.code === 'media_timed_out')).toBe(false);
+	});
+
 	it('checks only supplied missing-item paths and accepts any present multipart file', async () => {
 		const fixture = await library();
 		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Restored.mkv'), 'video');

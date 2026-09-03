@@ -12,8 +12,12 @@ import {
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import { internalErrorMessage } from '../error-message.js';
 import type { Repository } from '../repository/index.js';
-import type { MaterializedSegmentRecord } from '../repository/contracts.js';
+import type {
+	MaterializedSegmentRecord,
+	TimelineMaterializationRecord,
+} from '../repository/contracts.js';
 import { generateTimelineDetailed } from './engine.js';
+import { mergeTimelineIssues } from './timeline-issues.js';
 import type { SchedulingWorkerPool } from './worker-pool.js';
 import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
 import { stableJsonFingerprint } from '../stable-json.js';
@@ -214,10 +218,20 @@ function persistentState(records: SelectionStateRecord[]): SelectionStateRecord[
 	return records.filter((record) => !/:\d{4}-\d{2}-\d{2}(?::|$)/u.test(record.consumerKey));
 }
 
+/** Retain active occurrence cursors when next-day programming began before the window's midnight. */
+function windowBaseState(records: SelectionStateRecord[], startDate: string): SelectionStateRecord[] {
+	return records.filter((record) => {
+		const occurrenceDate = /:(\d{4}-\d{2}-\d{2})(?::|$)/u.exec(record.consumerKey)?.[1];
+		return !occurrenceDate || occurrenceDate >= startDate;
+	});
+}
+
 /** Freeze catalog availability for media already committed to the durable timeline. */
 function committedCatalog(catalog: SchedulingCatalog): SchedulingCatalog {
 	return indexSchedulingCatalog({
 		...catalog,
+		// A worker may already hold the live preview catalog for this revision and scope.
+		...(catalog.cacheKey ? { cacheKey: `committed:${catalog.cacheKey}` } : {}),
 		media: catalog.media.map((media) => ({
 			...media,
 			availability: catalog.libraryEnabled?.[media.libraryId] === false
@@ -233,6 +247,47 @@ function committedCatalog(catalog: SchedulingCatalog): SchedulingCatalog {
 	});
 }
 
+/**
+ * Retry catalog-caused dead air as soon as indexed facts change. Only an entirely empty remaining
+ * timeline qualifies, and pending authored edits keep their normal application boundary.
+ */
+function canRecoverEmptyTimeline(
+	current: TimelineMaterializationRecord,
+	fingerprint: string,
+	existing: MaterializedSegmentRecord[],
+	now: string,
+	schedule: ChannelSchedule,
+	templates: ScheduleTemplate[],
+	programs: SchedulingProgram[],
+): boolean {
+	if (current.inputFingerprint === fingerprint
+		|| !current.issues.some((issue) =>
+			issue.code === 'source-unavailable' || issue.code === 'media-duration-missing')) {
+		return false;
+	}
+
+	const remaining = existing.filter((record) => Date.parse(record.segment.finish) > Date.parse(now));
+	if (remaining.length === 0 || remaining.some((record) => record.segment.role !== 'dead-air')) {
+		return false;
+	}
+
+	const templateIds = new Set([
+		schedule.defaultTemplateId,
+		...schedule.layers.map((layer) => layer.templateId),
+	]);
+	const authored = [
+		schedule,
+		...templates.filter((template) => templateIds.has(template.id)),
+		...referencedPrograms(
+			templateIds,
+			templates,
+			programs,
+			schedule.defaultFiller ? [schedule.defaultFiller.programId] : [],
+		),
+	];
+	return authored.every((resource) => Date.parse(resource.updatedAt) <= Date.parse(current.committedAt));
+}
+
 /** Convert an instant to the configured scheduling calendar date. */
 function localDate(value: string, timeZone: string): Temporal.PlainDate {
 	return Temporal.Instant.from(value).toZonedDateTimeISO(timeZone).toPlainDate();
@@ -242,6 +297,9 @@ function localDate(value: string, timeZone: string): Temporal.PlainDate {
 function startOfDate(date: Temporal.PlainDate, timeZone: string): string {
 	return date.toZonedDateTime(timeZone).toInstant().toString();
 }
+
+/** Preserve the established materializer export for issue merging. */
+export { mergeTimelineIssues } from './timeline-issues.js';
 
 /**
  * Own the durable rolling schedule and act as the only production cursor-state writer. The
@@ -463,11 +521,21 @@ export class TimelineMaterializer {
 				schedule.channelId,
 			)
 			: [];
+		const recoveringEmptyTimeline = current && canRecoverEmptyTimeline(
+			current,
+			currentFingerprint,
+			existing,
+			now.toString(),
+			schedule,
+			templates,
+			programs,
+		);
+		const retryImmediately = retryingFailure || recoveringEmptyTimeline;
 
 		// Stage changed configuration at the next local-day boundary.
 		if (
 			current
-			&& !retryingFailure
+			&& !retryImmediately
 			&& current.inputFingerprint !== currentFingerprint
 			&& !current.pendingSince
 		) {
@@ -481,7 +549,11 @@ export class TimelineMaterializer {
 			});
 		}
 
-		if (current?.applyAfter && Temporal.Instant.compare(now, current.applyAfter) < 0) {
+		if (
+			!recoveringEmptyTimeline
+			&& current?.applyAfter
+			&& Temporal.Instant.compare(now, current.applyAfter) < 0
+		) {
 			return;
 		}
 
@@ -490,8 +562,8 @@ export class TimelineMaterializer {
 		let initialState: SelectionStateRecord[] = [];
 		let baseState: SelectionStateRecord[] = [];
 		if (current) {
-			baseState = persistentState(stateAfter(current.baseState, existing, desiredStart));
-			if (current.applyAfter) {
+			baseState = windowBaseState(stateAfter(current.baseState, existing, desiredStart), today.toString());
+			if (current.applyAfter && !recoveringEmptyTimeline) {
 				replaceFrom = current.applyAfter;
 				const active = existing.find(
 					({ segment }) =>
@@ -504,7 +576,7 @@ export class TimelineMaterializer {
 				}
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
-			else if (retryingFailure) {
+			else if (retryImmediately) {
 				replaceFrom
 					= Temporal.Instant.compare(now, Temporal.Instant.from(desiredStart)) > 0
 						? now.toString()
@@ -520,9 +592,11 @@ export class TimelineMaterializer {
 				}
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
-			else if (current.windowEnd < desiredEnd) {
+			else if (Temporal.Instant.compare(current.windowEnd, desiredEnd) < 0
+				|| Temporal.Instant.compare(current.continuationAt, current.windowEnd) < 0) {
+				// Also repair older commits that advertised time beyond their generated tail.
 				replaceFrom = current.continuationAt;
-				initialState = await this.repository.getSelectionState(schedule.channelId);
+				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
 			else {
 				return;
@@ -541,6 +615,9 @@ export class TimelineMaterializer {
 		const generationDate = localDate(replaceFrom, this.timeZone);
 		const days = Math.max(1, generationDate.until(desiredEndDate, { largestUnit: 'days' }).days);
 		const catalog = committedCatalog(sourceCatalog);
+		const initialContinuation = current?.inputFingerprint === currentFingerprint
+			? existing.findLast((record) => Temporal.Instant.compare(record.segment.finish, replaceFrom) === 0)?.continuation ?? null
+			: null;
 		const generated = this.workers
 			? await this.workers.generate({
 				channelId: schedule.channelId,
@@ -558,6 +635,7 @@ export class TimelineMaterializer {
 					.filter((entry) => entry.channelId !== schedule.channelId)
 					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),
 				initialCursor: replaceFrom,
+				initialContinuation,
 			})
 			: generateTimelineDetailed({
 				channelId: schedule.channelId,
@@ -575,14 +653,12 @@ export class TimelineMaterializer {
 					.filter((entry) => entry.channelId !== schedule.channelId)
 					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),
 				initialCursor: replaceFrom,
+				initialContinuation,
 			});
-		if (generated.issues.some((issue) => issue.code === 'media-duration-missing')) {
-			throw new Error('Scheduled media requires technical inspection before playback');
-		}
 
 		// Snapshot media labels and state deltas so committed output survives catalog changes.
 		const transitions = new Map(
-			generated.stateTransitions.map((transition) => [transition.segmentId, transition.stateDelta]),
+			generated.stateTransitions.map((transition) => [transition.segmentId, transition]),
 		);
 		const media = new Map(catalog.media.map((item) => [item.id, item]));
 		const segments: MaterializedSegmentRecord[] = generated.segments
@@ -605,11 +681,36 @@ export class TimelineMaterializer {
 						};
 					})()
 					: null,
-				stateDelta: transitions.get(segment.id) ?? [],
+				stateDelta: transitions.get(segment.id)?.stateDelta ?? [],
+				continuation: transitions.get(segment.id)?.continuation ?? null,
 			}));
+
+		// Replacing an active gap must preserve the elapsed portion of the advertised guide.
+		const interruptedGap = existing.find(({ segment }) =>
+			segment.role === 'dead-air'
+			&& Temporal.Instant.compare(segment.start, replaceFrom) < 0
+			&& Temporal.Instant.compare(segment.finish, replaceFrom) > 0);
+		if (interruptedGap) {
+			segments.unshift({
+				...interruptedGap,
+				segment: { ...interruptedGap.segment, finish: replaceFrom },
+				stateDelta: [],
+				continuation: null,
+			});
+		}
 
 		// Atomically commit the replacement range and notify guide and playout consumers.
 		const committedAt = currentTimestamp();
+		// The final advertised item can consume slots beyond midnight. Keep those warnings for the roll.
+		const issueWindowEnd = Temporal.Instant.compare(generated.continuationAt, desiredEnd) > 0
+			? generated.continuationAt : desiredEnd;
+		const issues = mergeTimelineIssues(
+			current?.issues ?? [],
+			generated.issues,
+			desiredStart,
+			replaceFrom,
+			issueWindowEnd,
+		);
 		this.repository.commitMaterializedTimeline({
 			channelId: schedule.channelId,
 			windowStart: desiredStart,
@@ -620,7 +721,7 @@ export class TimelineMaterializer {
 			baseState,
 			finalState: persistentState(generated.proposedState),
 			segments,
-			issues: generated.issues,
+			issues,
 			committedAt,
 		});
 		for (let index = occupiedMedia.length - 1; index >= 0; index -= 1) {

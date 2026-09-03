@@ -4,6 +4,7 @@ import { Temporal } from '@js-temporal/polyfill';
 import type { Repository } from '../repository/index.js';
 import type { MaterializedSegmentRecord } from '../repository/contracts.js';
 import { generateTimeline } from '../scheduling/engine.js';
+import { timelineIssuesInRange } from '../scheduling/timeline-issues.js';
 import { schedulingRootProgramIds } from '../scheduling/catalog.js';
 
 /** Signal that a requested guide would exceed the bounded segment count. */
@@ -263,7 +264,11 @@ export async function readCommittedScheduleGuide(
 					startDate,
 					days: bounded.days,
 					segments: byChannel.get(schedule.channelId) ?? [],
-					issues: materializationByChannel.get(schedule.channelId)?.issues ?? [],
+					issues: timelineIssuesInRange(
+						materializationByChannel.get(schedule.channelId)?.issues ?? [],
+						rangeStart,
+						rangeEnd,
+					),
 					proposedState: [],
 				},
 			})),
@@ -340,7 +345,7 @@ export async function readCommittedChannelScheduleGuide(
 				startDate,
 				days,
 				segments,
-				issues: status.issues,
+				issues: timelineIssuesInRange(status.issues, rangeStart, rangeEnd),
 				proposedState: [],
 			},
 		}],

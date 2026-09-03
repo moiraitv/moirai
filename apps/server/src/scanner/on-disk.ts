@@ -48,6 +48,7 @@ import {
 	type ParsedVideoFilename,
 } from './video-filename.js';
 import { collapseMultipartItems } from './multipart.js';
+import { runScanQueue, type ScanFileOutcome } from './scan-queue.js';
 import type {
 	MissingItemPresenceCheck,
 	MissingItemPresenceTarget,
@@ -518,8 +519,8 @@ export async function discoverOnDisk(
 		return sidecarCache.get(key)!;
 	}
 
-	/** Normalize one playable file and its sidecar metadata into index records. */
-	async function discoverFile(file: string): Promise<void> {
+	/** Defer failed probes before emitting a final media record and its metadata diagnostics. */
+	async function discoverFile(file: string, canRetry: boolean): Promise<ScanFileOutcome> {
 		// Open the media safely and reuse a technical probe when its fingerprint still matches.
 		throwIfCancelled(signal);
 		const mediaInfo = options.statFile ? await statFile(file) : await sourceStat(scanRoot, file);
@@ -573,6 +574,10 @@ export async function discoverOnDisk(
 
 				probeErrorCode = error instanceof MediaProbeError ? error.code : 'probe-failed';
 				const systemic = ['executable-unavailable', 'resource-exhausted'].includes(probeErrorCode);
+				if (canRetry && !systemic && probeErrorCode !== 'cancelled') {
+					return 'retry';
+				}
+
 				const message = error instanceof Error ? error.message : 'Media file could not be probed.';
 				const firstSystemicFailure = systemic && systemicProbeFailure === null;
 				if (systemic) {
@@ -976,18 +981,18 @@ export async function discoverOnDisk(
 			genres,
 			people,
 		});
+		return 'complete';
 	}
 
-	// Process files through a shared cursor so concurrency cannot enqueue duplicates.
-	let nextFile = 0;
-	let processedFiles = 0;
-	/** Discover files from a shared cursor while preserving the global probe limit. */
-	const discoverNext = async (): Promise<void> => {
-		while (nextFile < walked.files.length) {
-			const file = walked.files[nextFile++]!;
+	// Complete the inventory before retrying failed probes, without inflating file progress.
+	await runScanQueue(walked.files, {
+		concurrency: options.discoveryConcurrency ?? 1,
+		signal,
+		onProgress: options.onProgress,
+		processFile: async (file, canRetry) => {
 			try {
 				throwIfCancelled(signal);
-				await discoverFile(file);
+				return await discoverFile(file, canRetry);
 			}
 			catch (error) {
 				if (signal?.aborted) {
@@ -1005,25 +1010,13 @@ export async function discoverOnDisk(
 					message: internalErrorMessage(error),
 					severity: missingDuringScan ? 'warning' : 'error',
 				});
+				return 'complete';
 			}
-			finally {
-				processedFiles += 1;
-				options.onProgress?.({
-					phase: 'processing',
-					processedCount: processedFiles,
-					totalCount: walked.files.length,
-				});
-			}
-		}
-	};
-	const concurrency = Math.max(
-		1,
-		Math.min(options.discoveryConcurrency ?? 1, walked.files.length || 1),
-	);
-	await Promise.all(Array.from({ length: concurrency }, () => discoverNext()));
+		},
+	});
 	options.onProgress?.({
 		phase: 'finalizing',
-		processedCount: processedFiles,
+		processedCount: walked.files.length,
 		totalCount: walked.files.length,
 	});
 

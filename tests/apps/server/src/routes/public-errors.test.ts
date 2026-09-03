@@ -30,6 +30,25 @@ describe('public error policy', () => {
 		expect(mapped.body.message).not.toContain('/private');
 	});
 
+	it('maps a missing SQLite migration to an actionable restart message', () => {
+		const error = Object.assign(
+			new Error('no such column: "early_start_max_drift_seconds"'),
+			{ code: 'SQLITE_ERROR' },
+		);
+		const mapped = publicError(error, REQUEST_ID);
+
+		expect(mapped).toMatchObject({
+			statusCode: 503,
+			body: {
+				code: 'database_upgrade_required',
+				message: 'The database schema is out of date. Restart the server to apply pending migrations.',
+				requestId: REQUEST_ID,
+			},
+			expected: true,
+		});
+		expect(JSON.stringify(mapped.body)).not.toContain('early_start_max_drift_seconds');
+	});
+
 	it('preserves expected service-unavailable status without exposing details', () => {
 		const error = Object.assign(new Error('Artwork failed at /Volumes/Private/poster.jpg'), {
 			statusCode: 503,

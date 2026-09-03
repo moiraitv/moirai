@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
 	CalendarClock,
+	CircleAlert,
 	CirclePlus,
 	Layers3,
 	Pencil,
@@ -18,7 +19,8 @@ import {
 	scheduleTemplateName,
 	templateRepresentativeStyle,
 } from '../../channel-schedule-display';
-import { dateKey } from '../../date-key';
+import { firstDayScheduleSummary } from '../../channel-schedule-preview';
+import { schedulingDurationLabel } from '../../schedule-diagnostics';
 
 const props = defineProps<{
 	channels: Channel[];
@@ -30,6 +32,8 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const failedChannelLogos = ref<Set<string>>(new Set());
+const firstDaySummaries = computed(() => new Map(props.guide?.channels.map((entry) =>
+	[entry.channelId, firstDayScheduleSummary(entry.preview)])));
 const channelSearch = computed(() => {
 	const value = route.query.q;
 	return typeof value === 'string' ? value : '';
@@ -70,19 +74,25 @@ function nextDaySummary(id: string): string {
 		return 'No programming';
 	}
 
-	const preview = props.guide?.channels.find((entry) => entry.channelId === id)?.preview;
-	if (!preview) {
+	const summary = firstDaySummaries.value.get(id);
+	if (!summary) {
 		return 'Preview unavailable';
 	}
+	if (summary.gapCount > 0) {
+		return `${countLabel(summary.gapCount, 'gap')} · ${schedulingDurationLabel(
+			summary.deadAirSeconds,
+		)} dead air`;
+	}
 
-	const programmed = preview.segments.filter(
-		(segment) =>
-			segment.role !== 'dead-air'
-			&& dateKey(new Date(segment.start), preview.timeZone) === preview.startDate,
-	).length;
+	const programmed = summary.programmedCount;
 	return programmed === 0
 		? 'No programming'
 		: `${programmed} scheduled item${programmed === 1 ? '' : 's'}`;
+}
+
+/** Return whether the loaded next-day guide contains dead air for a channel. */
+function channelHasDeadAir(id: string): boolean {
+	return (firstDaySummaries.value.get(id)?.gapCount ?? 0) > 0;
 }
 
 /** Summarize a channel's base and conditional template configuration. */
@@ -147,7 +157,12 @@ onMounted(() => {
 		</div>
 
 		<div class="schedule-channel-list">
-			<article v-for="entry in filteredChannels" :key="entry.id" class="schedule-channel-card">
+			<article
+				v-for="entry in filteredChannels"
+				:key="entry.id"
+				class="schedule-channel-card"
+				:class="{ 'has-dead-air': channelHasDeadAir(entry.id) }"
+			>
 				<div class="schedule-channel-card-main">
 					<span class="schedule-channel-icon">
 						<img
@@ -175,8 +190,9 @@ onMounted(() => {
 						<Layers3 :size="23" />
 						<span><strong>Template stack</strong><small>{{ stackSummary(entry.id) }}</small></span>
 					</div>
-					<div class="schedule-channel-metric next-day">
-						<CalendarClock :size="23" />
+					<div class="schedule-channel-metric next-day" :class="{ warning: channelHasDeadAir(entry.id) }">
+						<CircleAlert v-if="channelHasDeadAir(entry.id)" :size="23" />
+						<CalendarClock v-else :size="23" />
 						<span><strong>Next 24h</strong><small>{{ nextDaySummary(entry.id) }}</small></span>
 					</div>
 				</div>

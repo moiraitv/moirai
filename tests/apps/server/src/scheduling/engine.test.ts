@@ -12,15 +12,18 @@ import type {
 } from '@moirai/shared';
 import {
 	MAX_MEDIA_DURATION_MILLISECONDS,
+	MAX_TIMELINE_ISSUE_OCCURRENCES,
 	MAX_TIMELINE_SEGMENTS,
 	SECONDS_PER_SCHEDULING_DAY,
 } from '@moirai/shared';
 import {
 	generateTimeline,
+	generateTimelineDetailed,
 	TimelineMaterializationLimitError,
 	type GenerateTimelineInput,
 } from '@server/scheduling/engine.js';
 import { stableJsonFingerprint } from '@server/stable-json.js';
+import { mergeTimelineIssues, timelineIssuesInRange, TimelineIssueLimitError } from '@server/scheduling/timeline-issues.js';
 
 const uuid = (value: number): string =>
 	`00000000-0000-4000-8000-${value.toString().padStart(12, '0')}`;
@@ -110,6 +113,8 @@ function template(
       	? 0
       	: slotFixtures[index]!.boundary!.maxDriftSeconds,
 		fallback: slotFixtures[index]!.boundary?.fallback ?? 'reject-start',
+		earlyStartMaxDriftSeconds:
+      slotFixtures[index]!.boundary?.earlyStartMaxDriftSeconds ?? 0,
 	}));
 	const result: ScheduleTemplate = {
 		id: uuid(idValue),
@@ -169,6 +174,312 @@ function primaryTitles(result: ReturnType<typeof generateTimeline>, slotIndex = 
 }
 
 describe('schedule timeline engine', () => {
+	it.each(['best-fit-only', 'next-fit-only', 'best-fit-or-truncate', 'next-truncate'] as const)('fits early incoming %s filler against its nominal boundary across midnight', (policy) => {
+		const outgoing = contentProgram(10, 1);
+		const filler = contentProgram(11, 2);
+		const daily = template([
+			{ programId: null, startSeconds: 0 },
+			{
+				programId: outgoing.id, startSeconds: 3600,
+				boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3600 },
+			},
+		]);
+		const options = input([outgoing, filler], [media(1, 22 * 3600), media(2, 90 * 60)], daily);
+		options.schedule.defaultFiller = { programId: filler.id, policy };
+		const first = generateTimelineDetailed(options);
+		expect(first.segments.at(-1)).toMatchObject({
+			role: 'filler', start: '2026-01-05T23:00:00Z', finish: '2026-01-06T00:30:00Z', truncated: false,
+		});
+		expect(first.continuation).toMatchObject({ date: '2026-01-06', phase: 'filler', hadPrimary: false });
+		const tail = generateTimelineDetailed({
+			...options, startDate: '2026-01-06', initialCursor: first.continuationAt,
+			state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)),
+		});
+		const whole = generateTimelineDetailed({ ...options, days: 2 });
+		expect([...first.segments, ...tail.segments]).toEqual(whole.segments);
+		expect(tail.proposedState.map((record) => ({ ...record, updatedAt: '' })))
+			.toEqual(whole.proposedState.map((record) => ({ ...record, updatedAt: '' })));
+	});
+
+	it('retains primary progress for an early incoming favor-right slot across continuation', () => {
+		const incoming = program(10, {
+			type: 'content', source: { type: 'collection', libraryId: uuid(900), itemIds: [uuid(1), uuid(2)], sort: { type: 'date-added', direction: 'asc' } },
+			strategy: { type: 'sequential' },
+		});
+		const outgoing = contentProgram(11, 3);
+		const daily = template([
+			{ programId: incoming.id, startSeconds: 0, boundary: { policy: 'favor-right', maxDriftSeconds: 40 * 60 } },
+			{
+				programId: outgoing.id, startSeconds: 3600,
+				boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 40 * 60 },
+			},
+		]);
+		daily.slots[0]!.stateScope = 'occurrence';
+		const options = input([incoming, outgoing], [media(1, 40 * 60), media(2, 2 * 3600), media(3, 23 * 3600)], daily);
+		const first = generateTimelineDetailed(options);
+		expect(first.segments.at(-1)).toMatchObject({ start: '2026-01-05T23:40:00Z', finish: '2026-01-06T00:20:00Z', programId: incoming.id });
+		expect(first.continuation).toMatchObject({ phase: 'primary', hadPrimary: true, date: '2026-01-06' });
+		const tail = generateTimelineDetailed({
+			...options, startDate: '2026-01-06', initialCursor: first.continuationAt,
+			state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)),
+		});
+		expect(tail.segments[0]).toMatchObject({ programId: outgoing.id, start: '2026-01-06T00:20:00Z' });
+		expect([...first.segments, ...tail.segments]).toEqual(generateTimelineDetailed({ ...options, days: 2 }).segments);
+	});
+
+	it.each(['random', 'weighted-random', 'shuffle'] as const)('tries a fitting outgoing %s item before an ordinary early fallback', (strategy) => {
+		const outgoing = program(10, {
+			type: 'content',
+			source: { type: 'collection', libraryId: uuid(900), itemIds: [uuid(1), uuid(2)], sort: { type: 'date-added', direction: 'asc' } },
+			strategy: { type: strategy, seed: 'late-first' },
+		});
+		const incoming = contentProgram(11, 3);
+		const daily = template([
+			{
+				programId: outgoing.id, startSeconds: 0, startEligibility: { type: 'allow-overrun' },
+				boundary: { policy: 'finish-left', maxDriftSeconds: 1800, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3600 },
+			},
+			{ programId: incoming.id, startSeconds: 3600 },
+		]);
+		const options = input([outgoing, incoming], [media(1, 3600), media(2, 3600), media(3, 3600)], daily);
+		const preferredId = generateTimeline(options).segments[0]!.mediaItemId;
+		// Make the strategy's first choice too long, leaving one eligible late finish.
+		for (const item of options.catalog.media.slice(0, 2)) {
+			item.durationSeconds = item.id === preferredId ? 3 * 3600 : 75 * 60;
+		}
+		const result = generateTimeline(options);
+		expect(result.segments[0]).toMatchObject({
+			programId: outgoing.id, start: '2026-01-05T00:00:00Z', finish: '2026-01-05T01:15:00Z', truncated: false,
+		});
+		expect(result.segments[0]?.mediaItemId).not.toBe(preferredId);
+		if (strategy === 'shuffle') {
+			const value = result.proposedState.find((record) => record.consumerKey.endsWith(outgoing.id))?.value;
+			expect(value).toMatchObject({ remainingItemIds: [preferredId] });
+		}
+	});
+
+	it.each([
+		{ eligibility: { type: 'require-fit' } as const, fittingMinutes: 60 },
+		{ eligibility: { type: 'within-drift', maxDriftSeconds: 900 } as const, fittingMinutes: 75 },
+	])('respects $eligibility.type when searching before early fallback', ({ eligibility, fittingMinutes }) => {
+		const outgoing = program(10, {
+			type: 'content',
+			source: { type: 'collection', libraryId: uuid(900), itemIds: [uuid(1), uuid(2)], sort: { type: 'date-added', direction: 'asc' } },
+			strategy: { type: 'random', seed: 'slot-eligibility' },
+		});
+		const incoming = contentProgram(11, 3);
+		const daily = template([
+			{
+				programId: outgoing.id, startSeconds: 0, startEligibility: eligibility,
+				boundary: { policy: 'finish-left', maxDriftSeconds: 3600, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3600 },
+			},
+			{ programId: incoming.id, startSeconds: 3600 },
+		]);
+		const options = input([outgoing, incoming], [media(1, 3600), media(2, 3600), media(3, 3600)], daily);
+		const preferredId = generateTimeline(options).segments[0]!.mediaItemId;
+		for (const item of options.catalog.media.slice(0, 2)) {
+			item.durationSeconds = item.id === preferredId ? 90 * 60 : fittingMinutes * 60;
+		}
+		const result = generateTimeline(options);
+		expect(result.segments[0]?.programId).toBe(outgoing.id);
+		expect(result.segments[0]?.mediaItemId).not.toBe(preferredId);
+		expect(Date.parse(result.segments[0]!.finish) - Date.parse(result.segments[0]!.start)).toBe(fittingMinutes * 60_000);
+	});
+
+	it.each(['template', 'layer-entry', 'layer-exit'] as const)('only warns about the gap left after a %s filler handoff', (origin) => {
+		const primary = contentProgram(10, 1);
+		const filler = contentProgram(11, 2);
+		const next = contentProgram(12, 3);
+		const base = template([
+			{ programId: primary.id, startSeconds: 0 },
+			{ programId: next.id, startSeconds: 3600 },
+		], { programId: filler.id, policy: 'best-fit-only' });
+		const options = input([primary, filler, next], [media(1, 50 * 60), media(2, 5 * 60), media(3, 3600)], base);
+		if (origin !== 'template') {
+			const overlay = template([{ programId: origin === 'layer-entry' ? next.id : primary.id, startSeconds: 0 }], base.defaultFiller, 101);
+			options.templates = [base, overlay];
+			options.schedule.layers = [{
+				id: uuid(600), templateId: overlay.id,
+				predicate: { type: 'time-range', startSeconds: origin === 'layer-entry' ? 3600 : 0, endSeconds: origin === 'layer-entry' ? 86400 : 3600, negated: false },
+				entryBoundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'reject-start' },
+				exitBoundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'reject-start' },
+			}];
+		}
+		const filled = generateTimeline(options);
+		expect(filled.segments.filter((entry) => entry.role === 'filler')).toHaveLength(2);
+		expect(filled.segments.some((entry) => entry.role === 'dead-air')).toBe(false);
+		expect(filled.issues.filter((entry) => entry.code === 'boundary-start-rejected')).toEqual([]);
+
+		options.catalog.media[1]!.durationSeconds = 7 * 60;
+		const partial = generateTimeline(options);
+		const gap = partial.segments.find((entry) => entry.role === 'dead-air');
+		expect(gap).toMatchObject({ start: '2026-01-05T00:57:00Z', finish: '2026-01-05T01:00:00Z' });
+		const warning = partial.issues.find((entry) => entry.code === 'boundary-start-rejected');
+		expect(warning?.occurrences).toEqual([{ start: gap!.start, finish: gap!.finish, boundaryOrigin: origin }]);
+		expect(warning?.occurrenceCount).toBe(1);
+	});
+
+	it('chains conditional entry and exit fallbacks before the requested end', () => {
+		const rejected = contentProgram(10, 1);
+		const playable = contentProgram(11, 2);
+		const early = { policy: 'finish-left' as const, maxDriftSeconds: 0, fallback: 'favor-right' as const, earlyStartMaxDriftSeconds: 2 * 3600 };
+		const base = template([{ programId: playable.id, startSeconds: 0, boundary: early }]);
+		const overlay = template([{ programId: rejected.id, startSeconds: 0 }], null, 101);
+		const options = input([rejected, playable], [media(1, 4 * 3600), media(2, 22 * 3600)], base, { templates: [base, overlay] });
+		options.schedule.layers = [{
+			id: uuid(600), templateId: overlay.id,
+			predicate: { type: 'all', children: [
+				{ type: 'dates', values: ['2026-01-06'], negated: false },
+				{ type: 'time-range', startSeconds: 0, endSeconds: 3600, negated: false },
+			] },
+			entryBoundary: early, exitBoundary: { ...early, earlyStartMaxDriftSeconds: 3 * 3600 },
+		}];
+		const first = generateTimelineDetailed(options);
+		const whole = generateTimelineDetailed({ ...options, days: 2 });
+		expect(first.segments).toEqual(whole.segments.filter((segment) => segment.start < '2026-01-06T00:00:00Z'));
+		expect(first.segments[1]).toMatchObject({ role: 'primary', programId: playable.id, start: '2026-01-05T22:00:00Z' });
+		expect(first.issues.filter((issue) => issue.code === 'boundary-start-rejected')).toEqual([]);
+	});
+
+	it('chains early handoffs past nominal midnight without changing the committed prefix', () => {
+		const rejected = contentProgram(10, 1);
+		const playable = contentProgram(11, 2);
+		const daily = template([
+			{
+				programId: rejected.id, startSeconds: 0,
+				boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3 * 3600 },
+			},
+			{
+				programId: playable.id, startSeconds: 3600,
+				boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 2 * 3600 },
+			},
+		]);
+		const options = input([rejected, playable], [media(1, 4 * 3600), media(2, 22 * 3600)], daily);
+		const first = generateTimelineDetailed(options);
+		const whole = generateTimelineDetailed({ ...options, days: 2 });
+		expect(first.segments).toEqual(whole.segments.filter((segment) => segment.start < '2026-01-06T00:00:00Z'));
+		expect(first.segments[1]).toMatchObject({ role: 'primary', programId: playable.id, start: '2026-01-05T22:00:00Z' });
+		const tail = generateTimelineDetailed({ ...options, startDate: '2026-01-06', initialCursor: first.continuationAt, state: first.proposedState });
+		expect([...first.segments, ...tail.segments]).toEqual(whole.segments);
+	});
+
+	it('records next-day displacement while its boundary cause is still known and preserves it across a split', () => {
+		const short = contentProgram(10, 1);
+		const long = contentProgram(11, 2);
+		const daily = template([
+			{ programId: short.id, startSeconds: 0 },
+			{
+				programId: long.id, startSeconds: 3600, startEligibility: { type: 'allow-overrun' },
+				boundary: { policy: 'finish-left', maxDriftSeconds: null },
+			},
+		]);
+		const options = input([short, long], [media(1, 3600), media(2, 29 * 3600)], daily);
+		const first = generateTimelineDetailed(options);
+		expect(first.continuationAt).toBe('2026-01-06T06:00:00Z');
+		expect(first.issues.find((entry) => entry.code === 'slot-displaced')?.occurrences).toEqual([{
+			start: '2026-01-06T00:00:00Z', finish: '2026-01-06T01:00:00Z', boundaryOrigin: 'template',
+		}]);
+		const tail = generateTimelineDetailed({ ...options, startDate: '2026-01-06', initialCursor: first.continuationAt, state: first.proposedState });
+		const merged = mergeTimelineIssues(first.issues, tail.issues, '2026-01-05T00:00:00Z', first.continuationAt, tail.continuationAt);
+		const whole = generateTimelineDetailed({ ...options, days: 2 });
+		expect([...first.segments, ...tail.segments]).toEqual(whole.segments);
+		expect(timelineIssuesInRange(merged, '2026-01-05T00:00:00Z', tail.continuationAt))
+			.toEqual(timelineIssuesInRange(whole.issues, '2026-01-05T00:00:00Z', tail.continuationAt));
+	});
+
+	it.each([1, 14])('completes a %i-day window after an early midnight fallback without consuming the following day', (days) => {
+		const incoming = program(10, {
+			type: 'content', source: { type: 'collection', libraryId: uuid(900), itemIds: [uuid(1), uuid(2)], sort: { type: 'date-added', direction: 'asc' } },
+			strategy: { type: 'sequential' },
+		});
+		const outgoing = contentProgram(11, 3);
+		const daily = template([
+			{ programId: incoming.id, startSeconds: 0 },
+			{
+				programId: outgoing.id, startSeconds: 3600, startEligibility: { type: 'allow-overrun' },
+				boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3600 },
+			},
+		]);
+		const options = input([incoming, outgoing], [media(1, 3600), media(2, 3600), media(3, 22 * 3600)], daily, { days });
+		const result = generateTimelineDetailed(options);
+		const expectedEnd = new Date(Date.parse(`${options.startDate}T00:00:00Z`) + days * 86400_000).toISOString();
+		expect(Date.parse(result.continuationAt)).toBe(Date.parse(expectedEnd));
+		expect(result.segments.at(-1)).toMatchObject({ programId: incoming.id, role: 'primary' });
+		expect(Date.parse(result.segments.at(-1)!.finish)).toBe(Date.parse(expectedEnd));
+		expect(result.segments.every((entry) => entry.role === 'primary')).toBe(true);
+		for (let index = 1; index < result.segments.length; index += 1) {
+			expect(result.segments[index]?.start).toBe(result.segments[index - 1]?.finish);
+		}
+		const continued = generateTimelineDetailed({
+			...options, startDate: expectedEnd.slice(0, 10), days: 1,
+			initialCursor: result.continuationAt, state: result.proposedState,
+		});
+		const uninterrupted = generateTimelineDetailed({ ...options, days: days + 1 });
+		expect([...result.segments, ...continued.segments]).toEqual(uninterrupted.segments);
+	});
+
+	it.each(['entry', 'exit'] as const)('completes early midnight layer-%s handoffs using the correct next-day program', (side) => {
+		const incoming = contentProgram(10, 1);
+		const outgoing = contentProgram(11, 2);
+		const base = template([{ programId: side === 'entry' ? outgoing.id : incoming.id, startSeconds: 0 }]);
+		const overlay = template([{ programId: side === 'entry' ? incoming.id : outgoing.id, startSeconds: 0 }], null, 101);
+		const options = input([incoming, outgoing], [media(1, 7200), media(2, 23 * 3600)], base, { templates: [base, overlay] });
+		const hard = { policy: 'hard' as const, maxDriftSeconds: 0, fallback: 'truncate-left' as const, earlyStartMaxDriftSeconds: 0 };
+		const early = { policy: 'finish-left' as const, maxDriftSeconds: 0, fallback: 'favor-right' as const, earlyStartMaxDriftSeconds: 3600 };
+		options.schedule.layers = [{
+			id: uuid(600), templateId: overlay.id,
+			predicate: { type: 'dates', values: [side === 'entry' ? '2026-01-06' : '2026-01-05'], negated: false },
+			entryBoundary: side === 'entry' ? early : hard,
+			exitBoundary: side === 'exit' ? early : hard,
+		}];
+		const result = generateTimelineDetailed(options);
+		expect(result.segments).toHaveLength(2);
+		expect(result.segments[1]).toMatchObject({
+			programId: incoming.id, start: '2026-01-05T23:00:00Z', finish: '2026-01-06T01:00:00Z',
+			scheduleLayerId: side === 'entry' ? uuid(600) : null,
+		});
+		expect(result.continuationAt).toBe('2026-01-06T01:00:00Z');
+	});
+
+	it('indexes large invalid-media catalogs within the aggregate diagnostic budget', () => {
+		const invalidItems = Array.from({ length: 1000 }, (_, index) => media(index + 2, null));
+		const selected = contentProgram(10, [1, 2]);
+		const daily = template([{ programId: selected.id, startSeconds: 0 }]);
+		const result = generateTimelineDetailed(input([selected], [media(1, 3600), ...invalidItems], daily));
+		expect(result.segments).toHaveLength(24);
+		expect(result.issues).toHaveLength(invalidItems.length);
+		for (const issue of result.issues) {
+			expect(issue.occurrenceCount).toBe(24);
+			expect(issue.occurrences).toHaveLength(24);
+		}
+	}, 30_000);
+
+	it('rejects a dense fourteen-day catalog before its diagnostic state can grow without bound', () => {
+		const selected = contentProgram(10, [1, 2]);
+		const daily = template([{ programId: selected.id, startSeconds: 0 }]);
+		const invalid = Array.from({ length: 1000 }, (_, index) => media(index + 2, null));
+		expect(() => generateTimelineDetailed(input([selected], [media(1, 30), ...invalid], daily, { days: 14 })))
+			.toThrow(TimelineIssueLimitError);
+	});
+
+	it('completes an early midnight handoff with explicit dead air when the next-day source is unavailable', () => {
+		const outgoing = contentProgram(10, 1);
+		const missing = contentProgram(11, 2);
+		const base = template([{ programId: outgoing.id, startSeconds: 0 }]);
+		const overlay = template([{ programId: missing.id, startSeconds: 0 }], null, 101);
+		const options = input([outgoing, missing], [media(1, 23 * 3600)], base, { templates: [base, overlay] });
+		const early = { policy: 'finish-left' as const, maxDriftSeconds: 0, fallback: 'favor-right' as const, earlyStartMaxDriftSeconds: SECONDS_PER_SCHEDULING_DAY };
+		options.schedule.layers = [{
+			id: uuid(600), templateId: overlay.id,
+			predicate: { type: 'dates', values: ['2026-01-06'], negated: false },
+			entryBoundary: early, exitBoundary: early,
+		}];
+		const result = generateTimelineDetailed(options);
+		expect(result.segments.at(-1)).toMatchObject({ role: 'dead-air', start: '2026-01-05T23:00:00Z', finish: '2026-01-06T00:00:00Z' });
+		expect(result.continuationAt).toBe('2026-01-06T00:00:00Z');
+		expect(result.issues.some((issue) => issue.code === 'source-reference-missing')).toBe(true);
+	});
+
 	it('uses decayed preference weights while retaining baseline variety and no immediate repeat', () => {
 		const items = [media(1, 60), media(2, 60), media(3, 60)];
 		const weighted = contentProgram(10, [1, 2, 3], 'weighted-random');
@@ -221,6 +532,112 @@ describe('schedule timeline engine', () => {
 
 		expect(first.segments.find((segment) => segment.role === 'primary')?.mediaItemId).toBe(uuid(1));
 		expect(resumed.segments.find((segment) => segment.role === 'primary')?.mediaItemId).toBe(uuid(2));
+	});
+
+	it('does not report slots ending before an incremental cursor as displaced', () => {
+		const earlier = contentProgram(10, 1);
+		const current = contentProgram(11, 2);
+		const daily = template([
+			{ programId: earlier.id, startSeconds: 0 },
+			{ programId: current.id, startSeconds: 3 * 3_600 },
+		]);
+
+		const result = generateTimeline(input(
+			[earlier, current],
+			[media(1, 60 * 60), media(2, 60 * 60)],
+			daily,
+			{ initialCursor: '2026-01-05T04:00:00Z' },
+		));
+
+		expect(result.issues.some((issue) => issue.code === 'slot-displaced')).toBe(false);
+		expect(result.segments.find((segment) => segment.role === 'primary')?.start)
+			.toBe('2026-01-05T04:00:00Z');
+	});
+
+	it('reports the exact future slot consumed by a genuine boundary overrun', () => {
+		const overrunning = contentProgram(10, 1);
+		const displaced = contentProgram(11, 2);
+		const resumed = contentProgram(12, 3);
+		const daily = template([
+			{
+				programId: overrunning.id,
+				startSeconds: 0,
+				startEligibility: { type: 'allow-overrun' },
+				boundary: { policy: 'finish-left', maxDriftSeconds: 2 * 3_600 },
+			},
+			{ programId: displaced.id, startSeconds: 3 * 3_600 },
+			{ programId: resumed.id, startSeconds: 4 * 3_600 },
+		]);
+
+		const result = generateTimeline(input(
+			[overrunning, displaced, resumed],
+			[media(1, 5 * 3_600), media(2, 60 * 60), media(3, 60 * 60)],
+			daily,
+		));
+		const issue = result.issues.find((candidate) => candidate.code === 'slot-displaced');
+
+		expect(issue?.message).toContain('Reduce its boundary drift');
+		expect(issue).toMatchObject({
+			occurrenceCount: 1,
+			occurrences: [{
+				start: '2026-01-05T03:00:00Z',
+				finish: '2026-01-05T04:00:00Z',
+				boundaryOrigin: 'template',
+			}],
+		});
+	});
+
+	it('counts fit-then-fallback filler warnings once per cursor beyond the detail cap', () => {
+		const filler = contentProgram(10, [1, 2]);
+		const daily = template([{ programId: null, startSeconds: 0 }]);
+		const testInput = input([filler], [media(1, 1_000), media(2, null)], daily);
+		testInput.schedule.defaultFiller = { programId: filler.id, policy: 'best-fit-or-truncate' };
+
+		const result = generateTimelineDetailed(testInput);
+		const warning = result.issues.find((entry) => entry.code === 'media-duration-missing');
+		const fillerSegments = result.segments.filter((entry) => entry.role === 'filler');
+		expect(fillerSegments.length).toBeGreaterThan(MAX_TIMELINE_ISSUE_OCCURRENCES);
+		expect(fillerSegments.at(-1)?.truncated).toBe(true);
+		expect(warning?.occurrenceCount).toBe(fillerSegments.length);
+		expect(warning?.occurrenceCounts).toHaveLength(fillerSegments.length);
+		expect(warning?.occurrences).toHaveLength(MAX_TIMELINE_ISSUE_OCCURRENCES);
+		expect(generateTimeline(testInput).issues[0]).not.toHaveProperty('occurrenceCounts');
+	});
+
+	it('keeps the causative entry boundary while an outgoing item displaces a whole conditional window', () => {
+		const outgoing = contentProgram(10, 1);
+		const incoming = contentProgram(11, 2);
+		const base = template([{ programId: outgoing.id, startSeconds: 0 }]);
+		const overlay = template([
+			{ programId: incoming.id, startSeconds: 0 },
+			{ programId: incoming.id, startSeconds: 2 * 3_600 },
+		], null, 101);
+		const testInput = input([outgoing, incoming], [media(1, 6 * 3_600), media(2, 3_600)], base);
+		const layerId = uuid(600);
+		testInput.templates = [base, overlay];
+		testInput.schedule.layers = [{
+			id: layerId,
+			templateId: overlay.id,
+			predicate: { type: 'time-range', startSeconds: 3_600, endSeconds: 3 * 3_600, negated: false },
+			entryBoundary: { policy: 'finish-left', maxDriftSeconds: 6 * 3_600, fallback: 'reject-start' },
+			exitBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left' },
+		}];
+
+		const result = generateTimeline(testInput);
+		const displaced = result.issues.filter((entry) => entry.code === 'slot-displaced');
+		expect(displaced).toHaveLength(2);
+		expect(displaced.map((entry) => entry.slotId)).toEqual(overlay.slots.map((slot) => slot.id));
+		for (const [index, entry] of displaced.entries()) {
+			expect(entry).toMatchObject({
+				scheduleLayerId: layerId,
+				templateId: overlay.id,
+				occurrences: [{
+					start: `2026-01-05T0${index + 1}:00:00Z`,
+					finish: `2026-01-05T0${index + 2}:00:00Z`,
+					boundaryOrigin: 'layer-entry',
+				}],
+			});
+		}
 	});
 
 	it('retains a temporarily colliding item in shuffle cycle state', () => {
@@ -577,6 +994,226 @@ describe('schedule timeline engine', () => {
 		expect(result.proposedState.some((record) => record.consumerKey.includes(base.id))).toBe(false);
 		expect(result.issues.find((issue) => issue.code === 'boundary-start-rejected')?.message)
 			.toBe('No outgoing item can finish within 90 minutes of the conditional boundary. Selection state was preserved.');
+	});
+
+	it('finishes an outgoing item before using the early incoming fallback', () => {
+		const first = media(1, 2 * 3_600);
+		const fitting = media(2, 2 * 3_600);
+		const overlayMedia = media(3, 60 * 60);
+		const baseProgram = contentProgram(10, [1, 2]);
+		const overlayProgram = contentProgram(11, 3);
+		const base = template([{ programId: baseProgram.id, startSeconds: 0 }]);
+		const overlay = template([{ programId: overlayProgram.id, startSeconds: 0 }], null, 101);
+		const layerId = uuid(600);
+		const schedule: ChannelSchedule = {
+			...input([baseProgram], [first, fitting], base).schedule,
+			layers: [{
+				id: layerId,
+				templateId: overlay.id,
+				predicate: {
+					type: 'time-range',
+					startSeconds: 3 * 3_600,
+					endSeconds: 23 * 3_600,
+					negated: false,
+				},
+				entryBoundary: {
+					policy: 'finish-left',
+					maxDriftSeconds: 90 * 60,
+					fallback: 'favor-right',
+					earlyStartMaxDriftSeconds: 75 * 60,
+				},
+				exitBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'reject-start' },
+			}],
+		};
+
+		const result = generateTimeline(input(
+			[baseProgram, overlayProgram],
+			[first, fitting, overlayMedia],
+			base,
+			{ schedule, templates: [base, overlay] },
+		));
+		const firstLayerSegment = result.segments.find((segment) => segment.scheduleLayerId === layerId);
+		expect(firstLayerSegment?.start).toBe('2026-01-05T04:00:00Z');
+		expect(result.segments.some((segment) => segment.role === 'dead-air')).toBe(false);
+	});
+
+	it('starts incoming layer content early when no outgoing item fits the late drift', () => {
+		const first = media(1, 2 * 3_600);
+		const tooLong = media(2, 4 * 3_600);
+		const overlayMedia = media(3, 60 * 60);
+		const baseProgram = contentProgram(10, [1, 2]);
+		const overlayProgram = contentProgram(11, 3);
+		const base = template([{ programId: baseProgram.id, startSeconds: 0 }]);
+		const overlay = template([{ programId: overlayProgram.id, startSeconds: 0 }], null, 101);
+		const layerId = uuid(600);
+		const schedule: ChannelSchedule = {
+			...input([baseProgram], [first, tooLong], base).schedule,
+			layers: [{
+				id: layerId,
+				templateId: overlay.id,
+				predicate: {
+					type: 'time-range',
+					startSeconds: 3 * 3_600,
+					endSeconds: 23 * 3_600,
+					negated: false,
+				},
+				entryBoundary: {
+					policy: 'finish-left',
+					maxDriftSeconds: 90 * 60,
+					fallback: 'favor-right',
+					earlyStartMaxDriftSeconds: 75 * 60,
+				},
+				exitBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'reject-start' },
+			}],
+		};
+
+		const result = generateTimeline(input(
+			[baseProgram, overlayProgram],
+			[first, tooLong, overlayMedia],
+			base,
+			{ schedule, templates: [base, overlay] },
+		));
+		const firstLayerSegment = result.segments.find((segment) => segment.scheduleLayerId === layerId);
+		expect(firstLayerSegment?.start).toBe('2026-01-05T02:00:00Z');
+		expect(result.segments.some((segment) =>
+			segment.role === 'dead-air'
+			&& segment.start === '2026-01-05T02:00:00Z'
+			&& segment.finish === '2026-01-05T03:00:00Z')).toBe(false);
+		const state = result.proposedState.find((record) => record.consumerKey.includes(base.id));
+		expect(state?.value).toMatchObject({ type: 'sequential', lastItemId: first.id });
+	});
+
+	it('starts lower-priority content early through a conditional exit fallback', () => {
+		const first = media(1, 2 * 3_600);
+		const tooLong = media(2, 4 * 3_600);
+		const baseMedia = media(3, 60 * 60);
+		const overlayProgram = contentProgram(10, [1, 2]);
+		const baseProgram = contentProgram(11, 3);
+		const base = template([{ programId: baseProgram.id, startSeconds: 0 }]);
+		const overlay = template([{ programId: overlayProgram.id, startSeconds: 0 }], null, 101);
+		const layerId = uuid(600);
+		const schedule: ChannelSchedule = {
+			...input([baseProgram], [baseMedia], base).schedule,
+			layers: [{
+				id: layerId,
+				templateId: overlay.id,
+				predicate: {
+					type: 'time-range',
+					startSeconds: 0,
+					endSeconds: 3 * 3_600,
+					negated: false,
+				},
+				entryBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'reject-start' },
+				exitBoundary: {
+					policy: 'finish-left',
+					maxDriftSeconds: 90 * 60,
+					fallback: 'favor-right',
+					earlyStartMaxDriftSeconds: 75 * 60,
+				},
+			}],
+		};
+
+		const result = generateTimeline(input(
+			[baseProgram, overlayProgram],
+			[first, tooLong, baseMedia],
+			base,
+			{ schedule, templates: [base, overlay] },
+		));
+		const firstBaseSegment = result.segments.find((segment) =>
+			segment.programId === baseProgram.id && segment.role === 'primary');
+
+		expect(firstBaseSegment?.start).toBe('2026-01-05T02:00:00Z');
+		expect(result.segments.some((segment) =>
+			segment.role === 'dead-air'
+			&& segment.start === '2026-01-05T02:00:00Z'
+			&& segment.finish === '2026-01-05T03:00:00Z')).toBe(false);
+		expect(result.proposedState.find((record) => record.consumerKey.includes(overlayProgram.id))?.value)
+			.toMatchObject({ type: 'sequential', lastItemId: first.id });
+	});
+
+	it('starts an ordinary incoming slot early after a finish-left attempt cannot fit', () => {
+		const first = media(1, 2 * 3_600);
+		const tooLong = media(2, 4 * 3_600);
+		const incoming = media(3, 60 * 60);
+		const outgoingProgram = contentProgram(10, [1, 2]);
+		const incomingProgram = contentProgram(11, 3);
+		const daily = template([
+			{
+				programId: outgoingProgram.id,
+				startSeconds: 0,
+				startEligibility: { type: 'allow-overrun' },
+				boundary: {
+					policy: 'finish-left',
+					maxDriftSeconds: 90 * 60,
+					fallback: 'favor-right',
+					earlyStartMaxDriftSeconds: 75 * 60,
+				},
+			},
+			{ programId: incomingProgram.id, startSeconds: 3 * 3_600 },
+		]);
+
+		const result = generateTimeline(input(
+			[outgoingProgram, incomingProgram],
+			[first, tooLong, incoming],
+			daily,
+		));
+		const incomingSegment = result.segments.find((segment) =>
+			segment.programId === incomingProgram.id && segment.role === 'primary');
+		expect(incomingSegment?.start).toBe('2026-01-05T02:00:00Z');
+		expect(result.proposedState.find((record) => record.consumerKey.includes(outgoingProgram.id))?.value)
+			.toMatchObject({ type: 'sequential', lastItemId: first.id });
+	});
+
+	it('retains dead air and an occurrence when the early fallback limit is exceeded', () => {
+		const first = media(1, 2 * 3_600);
+		const tooLong = media(2, 4 * 3_600);
+		const overlayMedia = media(3, 60 * 60);
+		const baseProgram = contentProgram(10, [1, 2]);
+		const overlayProgram = contentProgram(11, 3);
+		const base = template([{ programId: baseProgram.id, startSeconds: 0 }]);
+		const overlay = template([{ programId: overlayProgram.id, startSeconds: 0 }], null, 101);
+		const layerId = uuid(600);
+		const schedule: ChannelSchedule = {
+			...input([baseProgram], [first, tooLong], base).schedule,
+			layers: [{
+				id: layerId,
+				templateId: overlay.id,
+				predicate: {
+					type: 'time-range',
+					startSeconds: 3 * 3_600,
+					endSeconds: 23 * 3_600,
+					negated: false,
+				},
+				entryBoundary: {
+					policy: 'finish-left',
+					maxDriftSeconds: 90 * 60,
+					fallback: 'favor-right',
+					earlyStartMaxDriftSeconds: 30 * 60,
+				},
+				exitBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'reject-start' },
+			}],
+		};
+
+		const result = generateTimeline(input(
+			[baseProgram, overlayProgram],
+			[first, tooLong, overlayMedia],
+			base,
+			{ schedule, templates: [base, overlay] },
+		));
+		expect(result.segments.find((segment) => segment.role === 'dead-air')).toMatchObject({
+			start: '2026-01-05T02:00:00Z',
+			finish: '2026-01-05T03:00:00Z',
+		});
+		expect(result.issues.find((issue) => issue.code === 'boundary-start-rejected'))
+			.toMatchObject({
+				scheduleLayerId: layerId,
+				occurrenceCount: 1,
+				occurrences: [{
+					start: '2026-01-05T02:00:00Z',
+					finish: '2026-01-05T03:00:00Z',
+					boundaryOrigin: 'layer-entry',
+				}],
+			});
 	});
 
 	it('uses a layer truncate fallback without requiring the outgoing template to allow truncation', () => {

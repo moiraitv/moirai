@@ -18,6 +18,7 @@ const serverOnly = process.argv.includes('--server-only');
 /** Source roots whose changes trigger a rebuilt API process. */
 const watchRoots = [
 	path.join(serverRoot, 'src'),
+	path.join(repositoryRoot, 'drizzle'),
 	path.join(repositoryRoot, 'packages/shared/src'),
 	path.join(repositoryRoot, 'packages/ersatztv-contract/src'),
 ];
@@ -270,7 +271,7 @@ function scheduleApiRestart() {
 /** Recursive source watchers owned until coordinator shutdown. */
 const watchers = watchRoots.map((root) => {
 	const watcher = watch(root, { recursive: true }, (_eventType, filename) => {
-		if (!filename || /\.(?:ts|json)$/.test(filename)) {
+		if (!filename || /\.(?:ts|json|sql)$/.test(filename)) {
 			scheduleApiRestart();
 		}
 	});

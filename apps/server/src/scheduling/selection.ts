@@ -10,9 +10,11 @@ import {
 	type SelectionStateRecord,
 	type SelectionStateValue,
 	type TimelineIssue,
+	type TimelineIssueOccurrence,
 	type ViewingPreferenceScores,
 } from '@moirai/shared';
 import { stableJson, stableJsonFingerprint } from '../stable-json.js';
+import { recordTimelineIssue, type RecordedTimelineIssue } from './timeline-issues.js';
 
 /** Selected media item and the cursor state to persist after playback. */
 export interface SelectionResult {
@@ -38,8 +40,12 @@ export interface SelectionContext {
 		}
 	>;
 	blockedPrograms: Set<string>;
-	issues: TimelineIssue[];
+	/** Count selections rejected by duration so callers can distinguish source failures. */
+	fitRejectionCount: number;
+	issues: RecordedTimelineIssue[];
 	issueKeys: Set<string>;
+	issueIndex: Map<string, RecordedTimelineIssue>;
+	boundaryOrigin: TimelineIssueOccurrence['boundaryOrigin'];
 	templateId: string;
 	scheduleLayerId: string | null;
 	slotId: string;
@@ -148,20 +154,30 @@ export function changedStateRecords(
 /** Add one deduplicated scheduling issue to the current preview. */
 export function addIssue(
 	context: SelectionContext,
-	issue: Omit<TimelineIssue, 'scheduleLayerId' | 'templateId' | 'slotId'>,
+	issue: Omit<
+		TimelineIssue,
+		'scheduleLayerId' | 'templateId' | 'slotId' | 'occurrences' | 'occurrenceCount'
+	> & {
+		scheduleLayerId?: string | null;
+		occurrence?: TimelineIssueOccurrence;
+	},
 ): void {
-	const key = `${context.slotId}:${issue.code}:${issue.programId ?? ''}:${issue.mediaItemId ?? ''}`;
-	if (context.issueKeys.has(key)) {
-		return;
-	}
-
-	context.issueKeys.add(key);
-	context.issues.push({
-		...issue,
-		scheduleLayerId: context.scheduleLayerId,
+	const scheduleLayerId = Object.hasOwn(issue, 'scheduleLayerId')
+		? issue.scheduleLayerId ?? null
+		: context.scheduleLayerId;
+	recordTimelineIssue(context.issues, context.issueKeys, {
+		code: issue.code,
+		message: issue.message,
+		programId: issue.programId,
+		mediaItemId: issue.mediaItemId,
+		scheduleLayerId,
 		templateId: context.templateId,
 		slotId: context.slotId,
-	});
+	}, issue.occurrence ?? {
+		start: context.selectionStart,
+		finish: null,
+		boundaryOrigin: context.boundaryOrigin,
+	}, context.issueIndex);
 }
 
 /** Compare media using stable episode and title ordering. */
@@ -813,6 +829,10 @@ export function selectProgram(
 	// Delegate leaf content programs to the configured selection strategy.
 	if (program.config.type === 'content') {
 		const media = chooseContent(program, consumerKey, state, context, fitSeconds, fitMode);
+		// A nonempty playable pool can fail content selection only on the requested fit limit.
+		if (!media && fitSeconds !== null && (context.candidateCache.get(programId)?.playable.length ?? 0) > 0) {
+			context.fitRejectionCount += 1;
+		}
 		return media ? { media, state } : null;
 	}
 

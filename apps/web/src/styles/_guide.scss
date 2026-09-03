@@ -405,7 +405,7 @@
 	color: #f5e8df;
 	background: rgba(24, 16, 14, 0.98);
 	box-shadow: 0 16px 46px rgba(0, 0, 0, 0.48);
-	pointer-events: none;
+	pointer-events: auto;
 }
 
 .schedule-warning-tooltip strong {
@@ -428,4 +428,12 @@
 	display: block;
 	color: #c7a896;
 	font-size: 0.67rem;
+}
+
+.schedule-warning-diagnose {
+	margin-top: 11px;
+	display: inline-flex;
+	color: #ffb88f;
+	font-size: 0.72rem;
+	font-weight: 750;
 }

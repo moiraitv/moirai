@@ -101,6 +101,35 @@ describe('layered schedule contracts', () => {
 		).toBe(false);
 	});
 
+	it('defaults early drift to zero and validates the finite finish-left fallback', () => {
+		const templateBoundary = {
+			id: uuid(10),
+			leftSlotId: uuid(11),
+			rightSlotId: uuid(12),
+			targetSeconds: 3_600,
+			policy: 'finish-left' as const,
+			maxDriftSeconds: 5_400,
+			fallback: 'favor-right' as const,
+		};
+		const parsedTemplate = scheduleBoundarySchema.parse(templateBoundary);
+		const parsedLayer = layerBoundarySchema.parse({
+			policy: 'finish-left',
+			maxDriftSeconds: 5_400,
+			fallback: 'favor-right',
+		});
+
+		expect(parsedTemplate.earlyStartMaxDriftSeconds).toBe(0);
+		expect(parsedLayer.earlyStartMaxDriftSeconds).toBe(0);
+		expect(scheduleBoundarySchema.safeParse({
+			...templateBoundary,
+			maxDriftSeconds: null,
+		}).success).toBe(false);
+		expect(layerBoundarySchema.safeParse({
+			...parsedLayer,
+			policy: 'hard',
+		}).success).toBe(false);
+	});
+
 	it('rejects impossible recurring calendar dates and excessive predicate depth', () => {
 		expect(
 			boundedSchedulePredicateSchema.safeParse({

@@ -83,6 +83,7 @@ function materializedSegmentRecord(
 		},
 		mediaSnapshot: row.mediaSnapshot as SchedulableMedia | null,
 		stateDelta: row.stateDelta,
+		continuation: row.continuation,
 	};
 }
 
@@ -626,7 +627,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			if (input.segments.length > 0) {
 				tx.insert(materializedTimelineSegments)
 					.values(
-						input.segments.map(({ segment, mediaSnapshot, stateDelta }) => ({
+						input.segments.map(({ segment, mediaSnapshot, stateDelta, continuation }) => ({
 							id: segment.id,
 							channelId: segment.channelId,
 							scheduleLayerId: segment.scheduleLayerId,
@@ -645,6 +646,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 							truncated: segment.truncated,
 							mediaSnapshot,
 							stateDelta,
+							continuation: continuation ?? null,
 						})),
 					)
 					.onConflictDoNothing()

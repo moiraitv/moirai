@@ -172,9 +172,14 @@ and reports a scan diagnostic. This bound also prevents corrupt probe output fro
 scheduling arithmetic.
 
 Successful probes are cached using the file identity, size, modification time, and probe-contract
-version. Pending and failed probes are retried during startup backfill and later scans. Probe work is
-globally bounded to two processes by default, with a 15-second deadline and 256 KiB output limit per
-file.
+version. Failed media probes move to the end of the scan for up to three total attempts per physical
+file. Each retry pass waits for the preceding pass to finish and uses the same concurrency limit.
+Recovered files retain measured metadata without stale failure diagnostics; exhausted files retain
+one final probe diagnostic. Cancellation, an unavailable probe executable, and system resource
+exhaustion do not trigger retries. Progress counts completed files rather than attempts and remains
+in processing until deferred files settle. Pending and failed probes are also retried during startup
+backfill and later scans. Probe work is globally bounded to two processes by default, with a
+15-second deadline and 256 KiB output limit per attempt.
 
 ### Metadata normalization and limits
 
@@ -330,6 +335,11 @@ deterministically from the prior position.
 A healthy recovery scan immediately rechecks dependent materialized timelines, even when catalog
 rows did not change. Existing committed programming can remain available from retained metadata
 during a temporary outage; newly authoritative output still requires a healthy, contiguous timeline.
+Missing measured durations exclude only the affected media and retain per-item diagnostics; playable
+items continue to populate the committed schedule. When changed catalog facts can refill an entirely
+dead-air future caused by unavailable or unprobed media, materialization retries immediately if its
+authored resources have not changed since the last commit. Unchanged empty results are not repeatedly
+regenerated, and pending authored edits retain their normal application boundary.
 
 ## Persistence
 
@@ -476,6 +486,13 @@ Supported boundary policies are:
 - `finish-left`: allow the outgoing item to finish within finite or unlimited drift.
 - `favor-right`: favor an item boundary for incoming content.
 
+A finite `finish-left` boundary may use `favor-right` as a fallback with a separate early-start
+limit. Resolution first looks for an eligible outgoing item that can finish within the ordinary late
+drift. If none can, incoming programming may begin at the current item boundary only when that handoff
+is within the configured early limit. Unlimited `finish-left` boundaries cannot use this fallback.
+Template fallback searches also honor the slot's fit or overrun tolerance. Existing template
+policies without early fallback and explicit slot truncation keep their established selection rules.
+
 Boundary drift affects the immediately adjacent slot. The following nominal boundary remains an
 anchor. Unlimited drift is valid only for finishing outgoing content and may allow that item to cross
 midnight.
@@ -491,6 +508,11 @@ Example with a hard boundary and filler:
 Filler has separate selection state and never delays primary content. By default it prefers the
 longest deterministic candidate that fits, then permits truncation according to its configured
 policy.
+Boundary rejection warnings are emitted only for time still unfilled after filler runs. A successful
+primary-to-filler handoff is not a failure; partial filler coverage narrows the warning to the gap.
+Fit rejection requires playable candidates that exceed the duration limit. Unavailable, unmeasured,
+or missing sources retain their source diagnostics, and completed sequences do not produce false
+boundary failures.
 
 ### Materialization and determinism
 
@@ -504,6 +526,56 @@ stores:
 
 Window rolls preserve overlapping advertised entries and generate only the uncovered tail. A restart
 therefore does not reset sequential playback or reshuffle established programming.
+Recovery or explicit application during dead air retains the elapsed gap up to the replacement
+instant, keeping the historical guide contiguous while future programming resumes.
+An early handoff at the final midnight resolves incoming next-day programming through the requested
+end, including chained handoffs whose actual cursor precedes that end even when their nominal
+boundaries lie later. It retains the final item's natural finish and active occurrence state for
+continuation. Existing commits whose continuation falls short of their advertised window are repaired
+on the next pass.
+Filler fitting uses the actual incoming slot boundary, not the requested window cutoff. A filler item
+that starts before the cutoff remains committed through its accepted finish. Each committed segment
+can retain an internal active-slot checkpoint with its nominal occurrence, primary/filler phase,
+primary progress, and deferred boundary warning. Continuation restores that checkpoint only for an
+unchanged schedule at the matching cursor, preserving early handoffs across midnight and restarts.
+Migration `0018_timeline_continuation` adds a nullable JSON column without changing existing entries
+or selection state; older entries without a checkpoint retain the prior cursor-only resume behavior.
+
+Timeline issues aggregate exact bounded occurrence intervals with their template, layer, slot,
+program, media, and boundary origin. Partial regeneration preserves occurrences before the replacement
+point, clips intervals at replacement and window edges, and replaces later occurrences. All range
+comparisons use chronological millisecond timestamps, including fractional-second instants. Guide warnings and
+channel schedule diagnostics use this data to open the affected date and editor section. Every
+materialized dead-air segment remains visible, including authored no-program intervals, while the UI
+distinguishes intentional off-air time from boundary, source, filler, and otherwise unfilled gaps.
+When several warnings match a gap, its boundary rejection takes precedence over incidental
+skipped-media warnings so the diagnostic action opens the relevant boundary editor.
+Channel fallback filler can be reviewed and edited directly from the base schedule inspector.
+Channel-card summaries and warning styling use only the first local guide day, even when a longer
+guide is cached. Overlapping gaps are clipped at local midnight, including daylight-saving changes.
+
+The public detail sample is limited to 50 occurrences per issue and rebuilt for each requested guide
+range. A separate persistence-only index retains exact interval counts and boundary origins, allowing
+daily rolls and mid-day replacements to partition totals and replenish diagnostic targets without
+losing hidden occurrences. Older indexes preserve known origins from their detail samples and expose
+unrecoverable origins as unknown rather than guessing an editor target.
+Duplicate reports share generation-local identity state and an issue lookup index even after the
+detail cap, avoiding repeated scans when large catalogs contain invalid media. Pre-index records retain
+unlocated legacy counts conservatively until regeneration or the retained legacy window ages out;
+these indexes are not sent to clients.
+An aggregate ceiling of 50,000 occurrences spans every issue in a generation or merged commit,
+bounding deduplication keys, detail samples, and count records together. Exceeding it rejects the
+work with an actionable limit error rather than truncating counts or continuing to allocate storage.
+Displaced-slot warnings retain the origin and owning layer of the boundary that permitted the overrun.
+Generation records all slots consumed by the final advertised item, including those past the requested
+midnight. The commit retains these deferred warnings through its continuation cursor; guide queries
+still filter them to their requested range, and subsequent rolls preserve them without inventing
+warnings for intervals skipped by an unrelated incremental cursor.
+Disabled slot filler directs diagnostics to the template; configuring channel filler cannot override
+that opt-out. Boundary deep links focus their selected control after the editor finishes loading.
+Warning popovers remain open while pointer or focus transfers into their diagnostic action; Tab
+reaches the action from its badge, a second Tab continues to the next guide control, Shift+Tab returns
+to the badge, and Escape closes it and restores badge focus.
 
 Configuration changes remain pending until the next local midnight by default. The schedule editor
 can instead apply them after the currently playing item. Healthy catalog changes rebuild only unlocked
@@ -518,6 +590,8 @@ and a 32-request queue by default. Saturation returns `503` with `Retry-After`.
 
 Catalog loading follows program references. It reads whole libraries only for library-query sources,
 coalesces identical revision reads, builds reusable indexes, and retains at most 32 cached scopes.
+Worker caches distinguish live preview availability from the retained availability used for committed
+programming, so alternating preview and background requests cannot reuse the wrong catalog view.
 
 ## Guide and IPTV delivery
 

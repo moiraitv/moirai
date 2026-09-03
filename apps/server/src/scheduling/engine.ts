@@ -10,13 +10,14 @@ import type {
 	SchedulingCatalog,
 	SchedulingProgram,
 	SelectionStateRecord,
-	TimelineIssue,
 	TimelinePreview,
 	TimelineSegment,
 	ViewingPreferenceScores,
 } from '@moirai/shared';
 import { countLabel, MAX_TIMELINE_SEGMENTS, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 import { predicateTimeBoundaries, schedulePredicateMatches } from './predicate.js';
+import { publicTimelineIssue, type RecordedTimelineIssue } from './timeline-issues.js';
+import type { BoundaryRejection, TimelineContinuation } from './continuation.js';
 import {
 	addIssue,
 	changedStateRecords,
@@ -49,6 +50,8 @@ export interface GenerateTimelineInput {
 	state: SelectionStateRecord[];
 	/** Continue a committed range at this instant instead of the first local midnight. */
 	initialCursor?: string;
+	/** Resume the unfinished slot recorded at initialCursor, when the schedule is unchanged. */
+	initialContinuation?: TimelineContinuation | null;
 	/** Immutable decayed preference scores captured for this generation pass. */
 	viewingPreferences?: ViewingPreferenceScores;
 	/** Exact media intervals already committed or generated on other channels. */
@@ -59,11 +62,14 @@ export interface GenerateTimelineInput {
 export interface TimelineStateTransition {
 	segmentId: string;
 	stateDelta: SelectionStateRecord[];
+	continuation?: TimelineContinuation | null;
 }
 
 /** Concrete timeline plus issues and proposed state changes from generation. */
 export interface TimelineGeneration extends TimelinePreview {
+	issues: RecordedTimelineIssue[];
 	continuationAt: string;
+	continuation: TimelineContinuation | null;
 	stateTransitions: TimelineStateTransition[];
 }
 
@@ -158,6 +164,7 @@ interface ResolvedScheduleSlot {
 	endSeconds: number;
 	boundary: ScheduleBoundary;
 	boundaryOrigin: 'template' | 'layer-entry' | 'layer-exit';
+	boundaryLayerId: string | null;
 }
 
 /** Return the nominal template slot active at a wall-clock offset. */
@@ -194,6 +201,42 @@ function isWithinBoundaryDrift(boundary: ScheduleBoundary, overrunSeconds: numbe
 	return boundary.maxDriftSeconds === null || overrunSeconds <= boundary.maxDriftSeconds;
 }
 
+/** Return whether a finite finish-left boundary may hand off before its nominal time. */
+function canStartIncomingEarly(
+	boundary: ScheduleBoundary,
+	cursor: Temporal.Instant,
+	nominalEnd: Temporal.Instant,
+): boolean {
+	return boundary.policy === 'finish-left'
+		&& boundary.maxDriftSeconds !== null
+		&& boundary.fallback === 'favor-right'
+		&& Temporal.Instant.compare(cursor, nominalEnd) <= 0
+		&& durationBetween(cursor, nominalEnd) <= (boundary.earlyStartMaxDriftSeconds ?? 0);
+}
+
+/** Bound late-first selection without changing legacy template or explicit truncation behavior. */
+function primaryFitSeconds(
+	slot: ScheduleSlot,
+	boundary: ScheduleBoundary,
+	layerTransition: boolean,
+	availableSeconds: number,
+): number | null {
+	if (boundary.policy !== 'finish-left' || boundary.maxDriftSeconds === null) {
+		return null;
+	}
+	if (layerTransition) {
+		return availableSeconds + boundary.maxDriftSeconds;
+	}
+	if (boundary.fallback !== 'favor-right' || slot.startEligibility.type === 'allow-truncate') {
+		return null;
+	}
+
+	const slotDrift = slot.startEligibility.type === 'allow-overrun'
+		? boundary.maxDriftSeconds
+		: slot.startEligibility.type === 'within-drift' ? slot.startEligibility.maxDriftSeconds : 0;
+	return availableSeconds + Math.min(slotDrift, boundary.maxDriftSeconds);
+}
+
 /** Resolve the applicable layered slots for one local scheduling day. */
 function resolveScheduleDay(
 	input: GenerateTimelineInput,
@@ -220,7 +263,10 @@ function resolveScheduleDay(
 	const selectionAt = (
 		selectionDate: Temporal.PlainDate,
 		startSeconds: number,
-	): Omit<ResolvedScheduleSlot, 'startSeconds' | 'endSeconds' | 'boundary' | 'boundaryOrigin'> => {
+	): Omit<
+		ResolvedScheduleSlot,
+		'startSeconds' | 'endSeconds' | 'boundary' | 'boundaryOrigin' | 'boundaryLayerId'
+	> => {
 		const instant = instantFor(selectionDate, startSeconds, input.timeZone);
 		for (const [layerIndex, layer] of input.schedule.layers.entries()) {
 			const template = templateMap.get(layer.templateId);
@@ -242,7 +288,10 @@ function resolveScheduleDay(
 	};
 
 	// Resolve each interval and merge adjacent intervals with the same effective slot.
-	const preliminary: Omit<ResolvedScheduleSlot, 'boundary' | 'boundaryOrigin'>[] = [];
+	const preliminary: Omit<
+		ResolvedScheduleSlot,
+		'boundary' | 'boundaryOrigin' | 'boundaryLayerId'
+	>[] = [];
 	for (let index = 0; index < points.length - 1; index += 1) {
 		const startSeconds = points[index]!;
 		const endSeconds = points[index + 1]!;
@@ -266,6 +315,7 @@ function resolveScheduleDay(
 		const next = preliminary[index + 1] ?? selectionAt(date.add({ days: 1 }), 0);
 		let boundary = templateBoundary(current.template, current.slot);
 		let boundaryOrigin: ResolvedScheduleSlot['boundaryOrigin'] = 'template';
+		let boundaryLayerId = current.layerId;
 		if (current.layerId !== next.layerId) {
 			if (next.layerId && next.layerIndex < current.layerIndex) {
 				const entering = input.schedule.layers.find((layer) => layer.id === next.layerId)!;
@@ -277,6 +327,7 @@ function resolveScheduleDay(
 					current.endSeconds,
 				);
 				boundaryOrigin = 'layer-entry';
+				boundaryLayerId = next.layerId;
 			}
 			else if (current.layerId) {
 				const exiting = input.schedule.layers.find((layer) => layer.id === current.layerId)!;
@@ -294,6 +345,7 @@ function resolveScheduleDay(
 			...current,
 			boundary: { ...boundary, targetSeconds: current.endSeconds },
 			boundaryOrigin,
+			boundaryLayerId,
 		};
 	});
 }
@@ -313,50 +365,86 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 	// Initialize reusable indexes, selection state, issue tracking, and output limits.
 	const programs = new Map(input.programs.map((program) => [program.id, program]));
 	let state = new Map(input.state.map((record) => [record.consumerKey, structuredClone(record)]));
-	const issues: TimelineIssue[] = [];
+	const issues: RecordedTimelineIssue[] = [];
 	const issueKeys = new Set<string>();
+	const issueIndex = new Map<string, RecordedTimelineIssue>();
 	const candidateCache: SelectionContext['candidateCache'] = new Map();
 	const blockedPrograms = new Set<string>();
 	const segments: TimelineSegment[] = [];
 	const stateTransitions: TimelineStateTransition[] = [];
-	const appendSegment = (entry: TimelineSegment): void => {
+	let activeContinuation: TimelineContinuation | null = null;
+	let continuation: TimelineContinuation | null = null;
+	const appendSegment = (entry: TimelineSegment, stateDelta: SelectionStateRecord[] = []): void => {
 		if (segments.length >= MAX_TIMELINE_SEGMENTS) {
 			throw new TimelineMaterializationLimitError(MAX_TIMELINE_SEGMENTS);
 		}
 
 		segments.push(entry);
+		if (activeContinuation && entry.role === 'primary') {
+			activeContinuation.hadPrimary = true;
+		}
+		continuation = activeContinuation && Temporal.Instant.compare(entry.finish, activeContinuation.intervalEnd) < 0
+			? { ...activeContinuation, at: entry.finish, phase: entry.role === 'primary' ? 'primary' : 'filler' }
+			: null;
+		stateTransitions.push({ segmentId: entry.id, stateDelta, continuation });
 	};
 	const firstDate = Temporal.PlainDate.from(input.startDate);
+	const windowEnd = instantFor(firstDate.add({ days: input.days }), 0, input.timeZone);
+	const initialCursor = input.initialCursor ? Temporal.Instant.from(input.initialCursor) : null;
 	let carriedStart: Temporal.Instant | null = input.initialCursor
-		? Temporal.Instant.from(input.initialCursor)
+		? initialCursor
 		: null;
+	let carriedBoundary: Pick<ResolvedScheduleSlot, 'boundaryOrigin' | 'boundaryLayerId'> | null = null;
 	const generatedAt = instantFor(firstDate, 0, input.timeZone).toString();
+	const saved = input.initialContinuation;
+	// Ignore checkpoints for a different cursor or resolved interval.
+	let resume = saved && initialCursor && Temporal.Instant.compare(saved.at, initialCursor) === 0
+		&& Temporal.Instant.compare(initialCursor, saved.intervalEnd) < 0
+		&& resolveScheduleDay(input, Temporal.PlainDate.from(saved.date)).some((resolved) =>
+			resolved.template.id === saved.templateId && resolved.slot.id === saved.slotId
+			&& resolved.layerId === saved.scheduleLayerId
+			&& instantFor(Temporal.PlainDate.from(saved.date), resolved.startSeconds, input.timeZone).toString() === saved.intervalStart
+			&& instantFor(Temporal.PlainDate.from(saved.date), resolved.endSeconds, input.timeZone).toString() === saved.intervalEnd)
+		? saved : null;
 
 	const appendSelectedSegment = (entry: TimelineSegment, selected: SelectionResult): void => {
 		const stateDelta = changedStateRecords(state, selected.state);
-		appendSegment(entry);
+		appendSegment(entry, stateDelta);
 		state = selected.state;
-		if (stateDelta.length > 0) {
-			stateTransitions.push({ segmentId: entry.id, stateDelta });
-		}
 	};
 
-	// Resolve each nominal day into effective template and conditional-layer intervals.
-	for (let day = 0; day < input.days; day += 1) {
+	// Follow actual handoffs until covered, then record slots consumed by the final committed item.
+	// Early drift and media-duration limits bound lookahead even when several handoffs share a cursor.
+	generation: for (let day = 0; ; day += 1) {
+		if (day >= input.days && (!carriedStart
+			|| (Temporal.Instant.compare(carriedStart, windowEnd) >= 0 && !carriedBoundary))) {
+			break;
+		}
 		const date = firstDate.add({ days: day });
 		for (const resolved of resolveScheduleDay(input, date)) {
-			const { slot, template, layerId, boundary, boundaryOrigin } = resolved;
+			const { slot, template, layerId, boundary, boundaryOrigin, boundaryLayerId } = resolved;
 			const nominalStart = instantFor(date, resolved.startSeconds, input.timeZone);
 			const nominalEnd = instantFor(date, resolved.endSeconds, input.timeZone);
+			if (resume && Temporal.Instant.compare(nominalStart, resume.intervalStart) < 0) {
+				continue;
+			}
 			let cursor: Temporal.Instant = carriedStart ?? nominalStart;
 			carriedStart = null;
+			if (Temporal.Instant.compare(cursor, windowEnd) >= 0
+				&& (!carriedBoundary || Temporal.Instant.compare(cursor, nominalEnd) < 0)) {
+				carriedStart = cursor;
+				break generation;
+			}
 			const context: SelectionContext = {
 				programs,
 				catalog: input.catalog,
 				candidateCache,
 				blockedPrograms,
+				fitRejectionCount: 0,
 				issues,
 				issueKeys,
+				issueIndex,
+				boundaryOrigin,
 				templateId: template.id,
 				scheduleLayerId: layerId,
 				slotId: slot.id,
@@ -365,23 +453,43 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				selectionStart: cursor.toString(),
 				occupiedMedia: input.occupiedMedia ?? [],
 			};
-			let primaryCount = 0;
+			let primaryCount = resume?.hadPrimary ? 1 : 0;
+			let boundaryRejection: BoundaryRejection | null = resume?.boundaryRejection ?? null;
+			const resumingFiller = resume?.phase === 'filler';
+			activeContinuation = {
+				at: cursor.toString(), date: date.toString(), templateId: template.id, slotId: slot.id,
+				scheduleLayerId: layerId, intervalStart: nominalStart.toString(), intervalEnd: nominalEnd.toString(),
+				boundaryOrigin, phase: resumingFiller ? 'filler' : 'primary', hadPrimary: primaryCount > 0, boundaryRejection,
+			};
+			resume = null;
 			let resolvedEnd = nominalEnd;
 
 			// Carry prior boundary drift forward and skip slots it displaces completely.
 			if (Temporal.Instant.compare(cursor, nominalEnd) >= 0) {
-				addIssue(context, {
-					code: 'slot-displaced',
-					message: 'The slot has no remaining time because the prior boundary resolved after it.',
-					programId: slot.programId,
-					mediaItemId: null,
-				});
+				const skippedBeforeInitialCursor
+					= initialCursor !== null && Temporal.Instant.compare(nominalEnd, initialCursor) <= 0;
+				if (!skippedBeforeInitialCursor) {
+					addIssue(context, {
+						code: 'slot-displaced',
+						message: 'An earlier item displaced this entire slot. Reduce its boundary drift or '
+							+ 'choose a boundary behavior that hands off sooner.',
+						programId: slot.programId,
+						mediaItemId: null,
+						scheduleLayerId: carriedBoundary ? carriedBoundary.boundaryLayerId : layerId,
+						occurrence: {
+							start: nominalStart.toString(),
+							finish: nominalEnd.toString(),
+							boundaryOrigin: carriedBoundary?.boundaryOrigin ?? null,
+						},
+					});
+				}
 				carriedStart = cursor;
 				continue;
 			}
 
 			// Select primary media until the slot is full or its boundary rejects another start.
-			while (slot.programId !== null && Temporal.Instant.compare(cursor, nominalEnd) < 0) {
+			while (!resumingFiller && slot.programId !== null && Temporal.Instant.compare(cursor, nominalEnd) < 0
+				&& Temporal.Instant.compare(cursor, windowEnd) < 0) {
 				context.selectionStart = cursor.toString();
 				const primaryConsumerKey = consumerKey(
 					'primary',
@@ -393,10 +501,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				);
 				const layerTransition = boundaryOrigin !== 'template';
 				const layerFinishesOutgoing = layerTransition && boundary.policy === 'finish-left';
-				const fitSeconds
-					= layerFinishesOutgoing && boundary.maxDriftSeconds !== null
-						? durationBetween(cursor, nominalEnd) + boundary.maxDriftSeconds
-						: null;
+				const fitSeconds = primaryFitSeconds(slot, boundary, layerTransition, durationBetween(cursor, nominalEnd));
+				const previousFitRejections = context.fitRejectionCount;
 				let selected = selectProgram(
 					slot.programId,
 					primaryConsumerKey,
@@ -414,16 +520,24 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					selected = selectProgram(slot.programId, primaryConsumerKey, state, context);
 				}
 				if (!selected) {
-					if (layerFinishesOutgoing && boundary.maxDriftSeconds !== null) {
-						addIssue(context, {
+					if (canStartIncomingEarly(boundary, cursor, nominalEnd)) {
+						resolvedEnd = cursor;
+						break;
+					}
+
+					if (fitSeconds !== null && context.fitRejectionCount > previousFitRejections) {
+						boundaryRejection = {
 							code: 'boundary-start-rejected',
-							message: `No outgoing item can finish within ${countLabel(
-								Math.round(boundary.maxDriftSeconds / 60),
+							message: layerTransition ? `No outgoing item can finish within ${countLabel(
+								Math.round(boundary.maxDriftSeconds! / 60),
 								'minute',
-							)} of the conditional boundary. Selection state was preserved.`,
+							)} of the conditional boundary. Selection state was preserved.`
+								: 'No outgoing item satisfies this template boundary. Review start eligibility, '
+									+ 'drift, or fallback behavior. Selection state was preserved.',
 							programId: slot.programId,
 							mediaItemId: null,
-						});
+							scheduleLayerId: boundaryLayerId,
+						};
 					}
 					break;
 				}
@@ -473,15 +587,20 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					: slot.startEligibility.type === 'allow-truncate'
 						|| (eligibleForOverrun && boundary.fallback === 'truncate-left');
 				if (!finishLeft && !truncate) {
-					if (layerTransition) {
-						addIssue(context, {
-							code: 'boundary-start-rejected',
-							message: 'The next outgoing item cannot satisfy the conditional boundary and '
-								+ 'was left unconsumed.',
-							programId: slot.programId,
-							mediaItemId: selected.media.id,
-						});
+					if (canStartIncomingEarly(boundary, cursor, nominalEnd)) {
+						resolvedEnd = cursor;
+						break;
 					}
+
+					const boundaryLabel = layerTransition ? 'conditional boundary' : 'template boundary';
+					boundaryRejection = {
+						code: 'boundary-start-rejected',
+						message: `The next outgoing item cannot satisfy the ${boundaryLabel} and was `
+							+ 'left unconsumed. Review start eligibility, drift, or fallback behavior.',
+						programId: slot.programId,
+						mediaItemId: selected.media.id,
+						scheduleLayerId: boundaryLayerId,
+					};
 					break;
 				}
 
@@ -519,6 +638,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			// Let a favor-right boundary end at the final primary item within its drift allowance.
 			if (
 				boundary.policy === 'favor-right'
+				&& !resumingFiller
+				&& Temporal.Instant.compare(cursor, windowEnd) < 0
 				&& boundary.maxDriftSeconds !== null
 				&& primaryCount > 0
 				&& Temporal.Instant.compare(cursor, nominalEnd) < 0
@@ -528,10 +649,11 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			}
 
 			// Fill unused time with interruptible filler according to the inherited policy.
+			activeContinuation.boundaryRejection = boundaryRejection;
 			if (Temporal.Instant.compare(cursor, resolvedEnd) < 0) {
 				const filler = fillerFor(slot, template, input.schedule);
 				if (filler) {
-					while (Temporal.Instant.compare(cursor, resolvedEnd) < 0) {
+					while (Temporal.Instant.compare(cursor, resolvedEnd) < 0 && Temporal.Instant.compare(cursor, windowEnd) < 0) {
 						context.selectionStart = cursor.toString();
 						const available = durationBetween(cursor, resolvedEnd);
 						const bestFit
@@ -591,7 +713,14 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			}
 
 			// Materialize any remaining gap explicitly so downstream output stays continuous.
-			if (Temporal.Instant.compare(cursor, resolvedEnd) < 0) {
+			const gapEnd = Temporal.Instant.compare(resolvedEnd, windowEnd) < 0 ? resolvedEnd : windowEnd;
+			if (Temporal.Instant.compare(cursor, gapEnd) < 0) {
+				if (boundaryRejection) {
+					addIssue(context, {
+						...boundaryRejection,
+						occurrence: { start: cursor.toString(), finish: gapEnd.toString(), boundaryOrigin },
+					});
+				}
 				appendSegment(
 					segment({
 						role: 'dead-air',
@@ -605,14 +734,17 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 						playbackPath: null,
 						playbackParts: [],
 						start: cursor,
-						finish: resolvedEnd,
+						finish: gapEnd,
 						sourceStartSeconds: 0,
 						sourceFinishSeconds: null,
 						truncated: false,
 					}),
 				);
 			}
-			carriedStart = resolvedEnd;
+			carriedStart = Temporal.Instant.compare(cursor, gapEnd) > 0 ? cursor : gapEnd;
+			carriedBoundary = Temporal.Instant.compare(resolvedEnd, nominalEnd) > 0
+				? { boundaryOrigin, boundaryLayerId }
+				: null;
 		}
 	}
 
@@ -629,6 +761,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			carriedStart ?? instantFor(firstDate.add({ days: input.days }), 0, input.timeZone)
 		).toString(),
 		stateTransitions,
+		continuation,
 	};
 }
 
@@ -641,7 +774,7 @@ export function generateTimeline(input: GenerateTimelineInput): TimelinePreview 
 		startDate: generated.startDate,
 		days: generated.days,
 		segments: generated.segments,
-		issues: generated.issues,
+		issues: generated.issues.map(publicTimelineIssue),
 		proposedState: generated.proposedState,
 	};
 }

@@ -399,6 +399,12 @@ export const timelinePreviewSchema = z.object({
 		slotId: idSchema.nullable(),
 		programId: idSchema.nullable(),
 		mediaItemId: idSchema.nullable(),
+		occurrences: z.array(z.object({
+			start: isoDateSchema,
+			finish: isoDateSchema.nullable(),
+			boundaryOrigin: z.enum(['template', 'layer-entry', 'layer-exit']).nullable(),
+		})).default([]),
+		occurrenceCount: z.number().int().nonnegative().default(0),
 	})),
 	proposedState: z.array(selectionStateRecordSchema),
 });

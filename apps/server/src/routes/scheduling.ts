@@ -29,6 +29,7 @@ import type { LiveEventHub } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
 import { schedulingRootProgramIds } from '../scheduling/catalog.js';
 import { schedulingProgramStatuses } from '../scheduling/status.js';
+import { publicTimelineIssue } from '../scheduling/timeline-issues.js';
 import { validateTemplate } from '../scheduling/validation.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { currentTimestamp } from '../time.js';
@@ -559,7 +560,7 @@ export function registerSchedulingRoutes(
 			throw app.httpErrors.notFound('Schedule template not found');
 		}
 
-		return schedulingWorkers.generate({
+		const generated = await schedulingWorkers.generate({
 			channelId: id,
 			timeZone: config.timeZone,
 			startDate: query.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString(),
@@ -571,6 +572,7 @@ export function registerSchedulingRoutes(
 			catalog,
 			state,
 		});
+		return { ...generated, issues: generated.issues.map(publicTimelineIssue) };
 	});
 
 	// Preview an unsaved template without mutating persistent playback state.
@@ -637,7 +639,7 @@ export function registerSchedulingRoutes(
 			programs,
 			schedulingRootProgramIds(previewTemplates, [previewSchedule]),
 		);
-		return schedulingWorkers.generate({
+		const generated = await schedulingWorkers.generate({
 			channelId,
 			timeZone: config.timeZone,
 			startDate: input.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString(),
@@ -649,6 +651,7 @@ export function registerSchedulingRoutes(
 			catalog,
 			state,
 		});
+		return { ...generated, issues: generated.issues.map(publicTimelineIssue) };
 	});
 
 	// Preview an unsaved layered channel schedule.
@@ -691,7 +694,7 @@ export function registerSchedulingRoutes(
 			programs,
 			schedulingRootProgramIds(templates, [draftSchedule]),
 		);
-		return schedulingWorkers.generate({
+		const generated = await schedulingWorkers.generate({
 			channelId: input.channelId,
 			timeZone: config.timeZone,
 			startDate: input.startDate,
@@ -703,6 +706,7 @@ export function registerSchedulingRoutes(
 			catalog,
 			state,
 		});
+		return { ...generated, issues: generated.issues.map(publicTimelineIssue) };
 	});
 
 }

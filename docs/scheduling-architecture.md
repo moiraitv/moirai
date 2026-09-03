@@ -20,7 +20,13 @@ Authored configuration and runtime selection state have separate tables. Each st
 
 Sequential state retains the last item and fallback position. Shuffle state persists its cycle, membership, remaining order, and last item. Newly eligible media is inserted deterministically without reordering the remaining pool, and removed media is discarded. Random selection is derived from a stable seed and counter. A preview clones stored state and returns `proposedState`; it never writes a checkpoint. The rolling materializer is the sole production writer: it stores segment state transitions and atomically replaces the concrete future range and exact tail cursor checkpoint.
 
-Generated segments have concrete instants, source offsets, physical playback parts, and a role of `primary`, `filler`, or `dead-air`. Missing/deleted items, invalid multipart sequences, and media without a positive duration are skipped with structured issues. A valid multipart item occupies one logical segment while its physical files play sequentially. The durable committed window is adapted into validated, non-overlapping daily ErsatzTV playout JSON; preview generation remains noncommitting.
+Generated segments have concrete instants, source offsets, physical playback parts, and a role of `primary`, `filler`, or `dead-air`. Missing/deleted items, invalid multipart sequences, and media without a positive duration are skipped with structured issues. Issues retain a bounded list of exact occurrences, their boundary origin, and a total occurrence count. Rolling materialization merges retained and regenerated occurrences around the replacement point. A valid multipart item occupies one logical segment while its physical files play sequentially. The durable committed window is adapted into validated, non-overlapping daily ErsatzTV playout JSON; preview generation remains noncommitting.
+
+Missing-duration diagnostics do not reject otherwise valid committed programming. A changed catalog
+can immediately replace an entirely dead-air future caused by unavailable or unprobed media when
+the authored schedule resources remain unchanged. Recovery preserves elapsed dead air and does not
+repeatedly regenerate an unchanged catalog. Live previews and committed generation use separate
+worker catalog identities because their availability policies differ.
 
 Library reachability and per-item observation are persisted separately from the authored rules. A degraded scan keeps positively observed items eligible while retained missing items become unconfirmed; a source-root outage makes the library unavailable without deleting its index. Unavailable content is not selected and does not advance primary, composite, shuffle, or filler state. Exact references that are truly deleted remain in program configuration as repairable broken references. Explicit item and group collections continue with their surviving playable members and report missing members as degraded; if none remain, they resolve to inherited filler or dead air until repaired.
 
@@ -37,12 +43,17 @@ behavior for such extreme overlaps can be revisited before it is finalized.
 The supported policies are:
 
 - `hard`: retain the nominal boundary. The slot's start-eligibility rule decides whether a crossing item is rejected or truncated.
-- `finish-left`: allow an eligible crossing primary item to finish when the result is within maximum drift. Drift may instead be explicitly unlimited, in which case that one item always finishes and later slots resume at its actual finish time. The boundary fallback decides whether excessive finite drift truncates or rejects the item.
+- `finish-left`: allow an eligible crossing primary item to finish when the result is within maximum drift. Drift may instead be explicitly unlimited, in which case that one item always finishes and later slots resume at its actual finish time. A finite boundary may separately fall back to starting incoming content early, within its own early-start limit, after no outgoing item satisfies the late limit. Other fallbacks truncate or reject the item.
 - `favor-right`: when primary content ends close enough before the target, start the right slot at that item boundary. The following nominal anchor remains fixed.
 
 Start eligibility is independent of boundary ownership: require a full fit, permit truncation, permit an overrun for boundary resolution, or permit an overrun only within a slot-specific tolerance. Candidate state is advanced only after a candidate is accepted, so a rejected too-long item is not silently consumed.
 
 Unlimited drift is stored as a nullable drift limit rather than a sentinel duration. It is valid only for `finish-left`. A sufficiently long outgoing item may cross midnight or displace several nominal slots or an entire conditional window; nominal anchors remain authored in place, and materialization skips displaced intervals until the item finishes.
+
+The early-start fallback is stored independently from the primary late-drift limit and defaults to
+zero for existing schedules. It is available only on finite `finish-left` boundaries. Candidate state
+is committed only for accepted outgoing content, so handing off early or retaining dead air does not
+consume a rejected sequential or shuffle choice.
 
 ## Filler decision
 
@@ -58,7 +69,7 @@ Preview requests are limited to 14 days and 5,000 materialized segments; finer-g
 
 ## Editing and incremental follow-up
 
-The SPA exposes reusable Programs and daily Templates, a draggable nominal 24-hour slot editor, progressive boundary/filler controls, a dedicated channel schedule stack and predicate editor, coalesced draft previews, and a read-only weekly channel guide. Template pages show read-only links to every channel that uses the template as a base or conditional layer. These previews deliberately leave cursor state unchanged.
+The SPA exposes reusable Programs and daily Templates, a draggable nominal 24-hour slot editor, progressive boundary/filler controls, a dedicated channel schedule stack and predicate editor with channel fallback filler, coalesced draft previews, and a read-only weekly channel guide. Dead-air segments use a static warning treatment plus exact-position markers so short gaps remain discoverable without changing timeline geometry. The editor classifies intentional and correctable gaps, reports exact local times and durations, and guides the user to the relevant boundary, template, program, or filler configuration without mutating the current draft. Guide warnings carry stable route state for the occurrence date and affected conditional boundary. Template pages show read-only links to every channel that uses the template as a base or conditional layer. These previews deliberately leave cursor state unchanged.
 
 The next scheduling steps include rotation rules and playback configuration that can select from the
 indexed embedded and sidecar subtitle inventory. The playout adapter continues to consume the

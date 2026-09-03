@@ -49,6 +49,12 @@ const STORAGE_CODES = new Set([
 	'SQLITE_READONLY',
 ]);
 
+/** Return whether SQLite rejected a query because a pending schema migration is missing. */
+function isDatabaseSchemaMismatch(error: ErrorWithStatus): boolean {
+	return error.code === 'SQLITE_ERROR'
+		&& /^(?:no such column|no such table):/u.test(error.message);
+}
+
 /** Build the stable public error envelope returned by the API. */
 function response(
 	requestId: string,
@@ -145,6 +151,16 @@ export function publicError(error: unknown, requestId: string): PublicError {
 
 	// Map low-level storage and service failures without exposing their raw messages.
 	const normalized = (error instanceof Error ? error : new Error(String(error))) as ErrorWithStatus;
+	if (isDatabaseSchemaMismatch(normalized)) {
+		return response(
+			requestId,
+			503,
+			'database_upgrade_required',
+			'The database schema is out of date. Restart the server to apply pending migrations.',
+			true,
+		);
+	}
+
 	if (normalized.code && SQLITE_CONFLICT_CODES.has(normalized.code)) {
 		return response(
 			requestId,

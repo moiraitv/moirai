@@ -9,10 +9,11 @@ import type {
 	SchedulableMedia,
 	SchedulingProgram,
 	SelectionStateRecord,
-	TimelineIssue,
 	TimelineSegment,
 } from '@moirai/shared';
 import type { MissingItemPresenceTarget } from '../scanner/contracts.js';
+import type { RecordedTimelineIssue } from '../scheduling/timeline-issues.js';
+import type { TimelineContinuation } from '../scheduling/continuation.js';
 
 /** Filters, ordering, and paging accepted by catalog browsing. */
 export interface MediaBrowseQuery extends CatalogProgramItemQuery {
@@ -111,7 +112,7 @@ export interface TimelineMaterializationRecord extends ChannelTimelineMaterializ
 	continuationAt: string;
 	inputFingerprint: string;
 	baseState: SelectionStateRecord[];
-	issues: TimelineIssue[];
+	issues: RecordedTimelineIssue[];
 }
 
 /** Timeline segment with the media and cursor state captured at generation time. */
@@ -119,6 +120,7 @@ export interface MaterializedSegmentRecord {
 	segment: TimelineSegment;
 	mediaSnapshot: (SchedulableMedia & { seriesTitle?: string | null }) | null;
 	stateDelta: SelectionStateRecord[];
+	continuation?: TimelineContinuation | null;
 }
 
 /** Atomic replacement of a channel timeline window and its continuation state. */
@@ -132,7 +134,7 @@ export interface TimelineCommit {
 	baseState: SelectionStateRecord[];
 	finalState: SelectionStateRecord[];
 	segments: MaterializedSegmentRecord[];
-	issues: TimelineIssue[];
+	issues: RecordedTimelineIssue[];
 	committedAt: string;
 }
 

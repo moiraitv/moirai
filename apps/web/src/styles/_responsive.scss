@@ -96,6 +96,15 @@
 		max-height: none;
 	}
 
+	.dead-air-diagnostics > article {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.dead-air-diagnostics article .button {
+		align-self: flex-start;
+	}
+
 	.templates-catalog-toolbar {
 		grid-template-columns: minmax(240px, 1fr) 190px;
 	}

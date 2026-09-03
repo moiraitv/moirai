@@ -519,6 +519,7 @@ export class SchedulingConfigurationRepository {
 					policy: boundary.policy,
 					maxDriftSeconds: boundary.maxDriftSeconds,
 					fallback: boundary.fallback,
+					earlyStartMaxDriftSeconds: boundary.earlyStartMaxDriftSeconds,
 				})),
 		}));
 	}
@@ -568,6 +569,7 @@ export class SchedulingConfigurationRepository {
 				policy: boundary.policy,
 				maxDriftSeconds: boundary.maxDriftSeconds,
 				fallback: boundary.fallback,
+				earlyStartMaxDriftSeconds: boundary.earlyStartMaxDriftSeconds,
 			})),
 		};
 	}

@@ -10,4 +10,14 @@ describe('error messages', () => {
 		expect(errorMessage('Connection closed')).toBe('Connection closed');
 		expect(errorMessage(null)).toBe('null');
 	});
+
+	it('adds the safe request identifier to unexpected API failures', () => {
+		const failure = Object.assign(new Error('An unexpected server error occurred'), {
+			body: { code: 'internal_error', requestId: 'req-channels-17' },
+		});
+
+		expect(errorMessage(failure)).toBe(
+			'An unexpected server error occurred. Check server logs for request req-channels-17.',
+		);
+	});
 });

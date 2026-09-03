@@ -181,6 +181,21 @@
 	background: linear-gradient(90deg, var(--program-color-dark), var(--program-color));
 }
 
+.channel-filler-settings {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.channel-filler-program-control {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.channel-filler-program-control > select {
+	min-width: 0;
+	flex: 1;
+}
+
 .base-template-row .eyebrow {
 	margin: 0;
 	white-space: nowrap;
@@ -506,6 +521,94 @@
 .resolved-preview .resolved-track {
 	margin-top: 8px;
 	min-height: 70px;
+}
+
+.resolved-track-shell {
+	position: relative;
+}
+
+.dead-air-marker {
+	position: absolute;
+	top: 1px;
+	z-index: 4;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	display: grid;
+	place-items: center;
+	transform: translate(-50%, -50%);
+	border: 2px solid #ffd1b9;
+	border-radius: 50%;
+	color: #fff6f0;
+	background: #c84f28;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.52);
+	cursor: pointer;
+}
+
+.dead-air-marker:hover,
+.dead-air-marker:focus-visible {
+	border-color: white;
+	outline: 2px solid rgba(255, 151, 98, 0.46);
+	outline-offset: 2px;
+}
+
+.dead-air-diagnostics {
+	margin-top: 14px;
+	padding: 13px;
+	display: grid;
+	gap: 9px;
+	border: 1px solid rgba(255, 140, 84, 0.5);
+	border-radius: 9px;
+	background: rgba(93, 37, 20, 0.28);
+}
+
+.dead-air-diagnostics > header,
+.dead-air-diagnostics > article {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+
+.dead-air-diagnostics > header svg {
+	flex: 0 0 auto;
+	color: #ff9f68;
+}
+
+.dead-air-diagnostics > header strong,
+.dead-air-diagnostics > header small,
+.dead-air-diagnostics article strong,
+.dead-air-diagnostics article small {
+	display: block;
+}
+
+.dead-air-diagnostics > header small,
+.dead-air-diagnostics article small {
+	margin-top: 3px;
+	color: #e9bca5;
+}
+
+.dead-air-diagnostics > article {
+	padding: 10px 11px;
+	justify-content: space-between;
+	border: 1px solid rgba(255, 164, 118, 0.24);
+	border-radius: 7px;
+	background: rgba(17, 18, 22, 0.42);
+}
+
+.dead-air-diagnostics > article:focus {
+	border-color: #ffaf83;
+	outline: none;
+	box-shadow: 0 0 0 2px rgba(255, 143, 88, 0.16);
+}
+
+.dead-air-diagnostics article p {
+	margin: 6px 0 0;
+	color: #dfd2cb;
+	line-height: 1.45;
+}
+
+.dead-air-diagnostics article .button {
+	flex: 0 0 auto;
 }
 
 .schedule-preview-legend {

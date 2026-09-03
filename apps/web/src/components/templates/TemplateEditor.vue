@@ -254,6 +254,7 @@ function loadDraft(): void {
 					policy: 'hard',
 					maxDriftSeconds: 0,
 					fallback: 'reject-start',
+					earlyStartMaxDriftSeconds: 0,
 				},
 			],
 		};
@@ -519,7 +520,11 @@ function updateBoundaryPolicy(policy: ScheduleBoundary['policy']): void {
 		= policy !== 'finish-left' && selectedBoundary.value.maxDriftSeconds === null
 			? (finiteBoundaryDrift.get(selectedBoundary.value.id) ?? 0)
 			: selectedBoundary.value.maxDriftSeconds;
-	updateBoundary({ policy, maxDriftSeconds });
+	const fallback
+		= policy !== 'finish-left' && selectedBoundary.value.fallback === 'favor-right'
+			? 'reject-start'
+			: selectedBoundary.value.fallback;
+	updateBoundary({ policy, maxDriftSeconds, fallback });
 }
 
 /** Store a finite maximum drift in seconds for the selected boundary. */
@@ -533,6 +538,11 @@ function updateBoundaryDrift(minutes: number): void {
 	updateBoundary({ maxDriftSeconds });
 }
 
+/** Store the independent early-start fallback allowance for the selected boundary. */
+function updateBoundaryEarlyStartDrift(minutes: number): void {
+	updateBoundary({ earlyStartMaxDriftSeconds: minutes * 60 });
+}
+
 /** Switch between unlimited drift and the selected boundary's last finite limit. */
 function toggleUnlimitedBoundaryDrift(unlimited: boolean): void {
 	if (!selectedBoundary.value) {
@@ -543,7 +553,12 @@ function toggleUnlimitedBoundaryDrift(unlimited: boolean): void {
 		if (selectedBoundary.value.maxDriftSeconds !== null) {
 			finiteBoundaryDrift.set(selectedBoundary.value.id, selectedBoundary.value.maxDriftSeconds);
 		}
-		updateBoundary({ maxDriftSeconds: null });
+		updateBoundary({
+			maxDriftSeconds: null,
+			fallback: selectedBoundary.value.fallback === 'favor-right'
+				? 'reject-start'
+				: selectedBoundary.value.fallback,
+		});
 		return;
 	}
 
@@ -1129,7 +1144,34 @@ onBeforeUnmount(() => {
 										>
 											<option value="reject-start">Reject item start</option>
 											<option value="truncate-left">Truncate left item</option>
+											<option
+												value="favor-right"
+												:disabled="
+													selectedBoundary.policy !== 'finish-left'
+														|| selectedBoundary.maxDriftSeconds === null
+												"
+											>
+												Start right slot early
+											</option>
 										</select></label
+										>
+										<label v-if="selectedBoundary.fallback === 'favor-right'"
+										><span>Maximum early start (minutes)</span
+										><input
+											type="number"
+											min="0"
+											max="1440"
+											:disabled="
+												selectedBoundary.policy !== 'finish-left'
+													|| selectedBoundary.maxDriftSeconds === null
+											"
+											:value="(selectedBoundary.earlyStartMaxDriftSeconds ?? 0) / 60"
+											@input="
+												updateBoundaryEarlyStartDrift(
+													Number(($event.target as HTMLInputElement).value),
+												)
+											"
+										/></label
 										>
 									</div>
 								</fieldset>

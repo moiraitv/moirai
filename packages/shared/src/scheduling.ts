@@ -15,6 +15,8 @@ export const MAX_MEDIA_DURATION_MILLISECONDS = 366 * SECONDS_PER_SCHEDULING_DAY 
 export const MAX_TIMELINE_PREVIEW_DAYS = 14;
 /** Bound one channel's timeline generation while supporting dense short-form schedules. */
 export const MAX_TIMELINE_SEGMENTS = 50_000;
+/** Bound exact occurrence details retained for one aggregated timeline issue. */
+export const MAX_TIMELINE_ISSUE_OCCURRENCES = 50;
 /** Bound combined guide responses while supporting several dense short-form channels. */
 export const MAX_GUIDE_TIMELINE_SEGMENTS = 200_000;
 /** Number of committed days exposed through the XMLTV guide. */
@@ -410,7 +412,8 @@ export const scheduleBoundarySchema = z
 		targetSeconds: z.number().int().min(1).max(SECONDS_PER_SCHEDULING_DAY),
 		policy: z.enum(['hard', 'finish-left', 'favor-right']).default('hard'),
 		maxDriftSeconds: z.number().int().min(0).max(SECONDS_PER_SCHEDULING_DAY).nullable().default(0),
-		fallback: z.enum(['truncate-left', 'reject-start']).default('reject-start'),
+		fallback: z.enum(['truncate-left', 'reject-start', 'favor-right']).default('reject-start'),
+		earlyStartMaxDriftSeconds: z.number().int().min(0).max(SECONDS_PER_SCHEDULING_DAY).default(0),
 	})
 	.superRefine((boundary, context) => {
 		if (boundary.maxDriftSeconds === null && boundary.policy !== 'finish-left') {
@@ -420,9 +423,24 @@ export const scheduleBoundarySchema = z
 				message: 'Unlimited drift is only valid when finishing the left item',
 			});
 		}
+		if (
+			boundary.fallback === 'favor-right'
+			&& (boundary.policy !== 'finish-left' || boundary.maxDriftSeconds === null)
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['fallback'],
+				message: 'Starting the right slot early requires finite finish-left drift',
+			});
+		}
 	});
 /** Shared wire contract for schedule boundary. */
-export type ScheduleBoundary = z.infer<typeof scheduleBoundarySchema>;
+export interface ScheduleBoundary extends Omit<
+	z.infer<typeof scheduleBoundarySchema>,
+	'earlyStartMaxDriftSeconds'
+> {
+	earlyStartMaxDriftSeconds?: number;
+}
 
 /** Validate the schedule template create contract at runtime. */
 export const scheduleTemplateCreateSchema = z.object({
@@ -435,9 +453,19 @@ export const scheduleTemplateCreateSchema = z.object({
 /** Validate the schedule template update contract at runtime. */
 export const scheduleTemplateUpdateSchema = scheduleTemplateCreateSchema.partial();
 /** Shared wire contract for schedule template create. */
-export type ScheduleTemplateCreate = z.infer<typeof scheduleTemplateCreateSchema>;
+export interface ScheduleTemplateCreate extends Omit<
+	z.infer<typeof scheduleTemplateCreateSchema>,
+	'boundaries'
+> {
+	boundaries: ScheduleBoundary[];
+}
 /** Shared wire contract for schedule template update. */
-export type ScheduleTemplateUpdate = z.infer<typeof scheduleTemplateUpdateSchema>;
+export interface ScheduleTemplateUpdate extends Omit<
+	z.infer<typeof scheduleTemplateUpdateSchema>,
+	'boundaries'
+> {
+	boundaries?: ScheduleBoundary[] | undefined;
+}
 
 /** Shared wire contract for schedule template. */
 export interface ScheduleTemplate extends ScheduleTemplateCreate {
@@ -451,7 +479,8 @@ export const layerBoundarySchema = z
 	.object({
 		policy: z.enum(['hard', 'finish-left', 'favor-right']).default('hard'),
 		maxDriftSeconds: z.number().int().min(0).max(SECONDS_PER_SCHEDULING_DAY).nullable().default(0),
-		fallback: z.enum(['truncate-left', 'reject-start']).default('truncate-left'),
+		fallback: z.enum(['truncate-left', 'reject-start', 'favor-right']).default('truncate-left'),
+		earlyStartMaxDriftSeconds: z.number().int().min(0).max(SECONDS_PER_SCHEDULING_DAY).default(0),
 	})
 	.superRefine((boundary, context) => {
 		if (boundary.maxDriftSeconds === null && boundary.policy !== 'finish-left') {
@@ -461,9 +490,24 @@ export const layerBoundarySchema = z
 				message: 'Unlimited drift is only valid when finishing the outgoing item',
 			});
 		}
+		if (
+			boundary.fallback === 'favor-right'
+			&& (boundary.policy !== 'finish-left' || boundary.maxDriftSeconds === null)
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['fallback'],
+				message: 'Starting incoming content early requires finite finish-left drift',
+			});
+		}
 	});
 /** Shared wire contract for layer boundary. */
-export type LayerBoundary = z.infer<typeof layerBoundarySchema>;
+export interface LayerBoundary extends Omit<
+	z.infer<typeof layerBoundarySchema>,
+	'earlyStartMaxDriftSeconds'
+> {
+	earlyStartMaxDriftSeconds?: number;
+}
 
 /** Validate explicit predicate dates in ISO calendar form. */
 const calendarDateSchema = z.iso.date();
@@ -633,15 +677,23 @@ export const channelScheduleLayerSchema = z.object({
 		policy: 'hard',
 		maxDriftSeconds: 0,
 		fallback: 'truncate-left',
+		earlyStartMaxDriftSeconds: 0,
 	}),
 	exitBoundary: layerBoundarySchema.default({
 		policy: 'hard',
 		maxDriftSeconds: 0,
 		fallback: 'truncate-left',
+		earlyStartMaxDriftSeconds: 0,
 	}),
 });
 /** Shared wire contract for channel schedule layer. */
-export type ChannelScheduleLayer = z.infer<typeof channelScheduleLayerSchema>;
+export interface ChannelScheduleLayer extends Omit<
+	z.infer<typeof channelScheduleLayerSchema>,
+	'entryBoundary' | 'exitBoundary'
+> {
+	entryBoundary: LayerBoundary;
+	exitBoundary: LayerBoundary;
+}
 
 /** Validate the channel schedule config contract at runtime. */
 export const channelScheduleConfigSchema = z.object({
@@ -650,7 +702,12 @@ export const channelScheduleConfigSchema = z.object({
 	defaultFiller: fillerConfigSchema.nullable().default(null),
 });
 /** Shared wire contract for channel schedule config. */
-export type ChannelScheduleConfig = z.infer<typeof channelScheduleConfigSchema>;
+export interface ChannelScheduleConfig extends Omit<
+	z.infer<typeof channelScheduleConfigSchema>,
+	'layers'
+> {
+	layers: ChannelScheduleLayer[];
+}
 
 /** Shared wire contract for channel schedule. */
 export interface ChannelSchedule extends ChannelScheduleConfig {
@@ -807,6 +864,13 @@ export interface TimelineSegment {
 }
 
 /** Shared wire contract for timeline issue. */
+export interface TimelineIssueOccurrence {
+	start: string;
+	finish: string | null;
+	boundaryOrigin: 'template' | 'layer-entry' | 'layer-exit' | null;
+}
+
+/** Shared wire contract for one aggregated timeline issue. */
 export interface TimelineIssue {
 	code: string;
 	message: string;
@@ -815,6 +879,8 @@ export interface TimelineIssue {
 	slotId: string | null;
 	programId: string | null;
 	mediaItemId: string | null;
+	occurrences?: TimelineIssueOccurrence[];
+	occurrenceCount?: number;
 }
 
 /** Shared wire contract for timeline preview. */
