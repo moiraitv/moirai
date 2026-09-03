@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CircleAlert } from '@lucide/vue';
+import { Check } from '@lucide/vue';
 import { onBeforeUnmount, ref } from 'vue';
 import { claimInlineAction, releaseInlineAction } from '../inline-action-coordination';
 
@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
 		@keydown="handleKeydown"
 	>
 		<template v-if="armed">
-			<CircleAlert :size="17" aria-hidden="true" />
+			<Check :size="17" aria-hidden="true" />
 			<span v-if="confirmText">{{ confirmText }}</span>
 		</template>
 		<slot v-else />

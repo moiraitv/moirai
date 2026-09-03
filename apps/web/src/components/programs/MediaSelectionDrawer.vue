@@ -178,7 +178,7 @@ onMounted(async () => {
 										:confirm-label="`Confirm remove ${group.title}`"
 										@confirm="emit('removeGroup', group.id)"
 									>
-										<X :size="15" />
+										<Trash2 :size="15" />
 									</TwoStepActionButton>
 								</article>
 							</div>
@@ -258,7 +258,7 @@ onMounted(async () => {
 											:confirm-label="`Confirm remove ${item.title}`"
 											@confirm="emit('removeItem', item.id)"
 										>
-											<X :size="15" />
+											<Trash2 :size="15" />
 										</TwoStepActionButton>
 									</article>
 								</MediaCardPreview>

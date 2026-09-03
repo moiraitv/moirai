@@ -963,13 +963,12 @@ onBeforeUnmount(() => {
 												<ImagePlus :size="16" />Choose Another
 											</button>
 											<TwoStepActionButton
-												class="button secondary"
+												class="icon-button danger-text"
 												label="Remove selected logo"
 												confirm-label="Confirm remove selected logo"
-												confirm-text="Confirm Remove"
 												@confirm="removeSelectedLogo"
 											>
-												<Trash2 :size="16" />Remove
+												<Trash2 :size="17" />
 											</TwoStepActionButton>
 										</div>
 									</div>
@@ -985,13 +984,12 @@ onBeforeUnmount(() => {
 										</button>
 										<TwoStepActionButton
 											v-if="existingLogoUrl()"
-											class="text-button danger-text"
+											class="icon-button danger-text"
 											label="Remove logo"
 											confirm-label="Confirm remove logo"
-											confirm-text="Confirm Remove"
 											@confirm="removeSelectedLogo"
 										>
-											Remove Logo
+											<Trash2 :size="17" />
 										</TwoStepActionButton>
 										<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
 									</div>
