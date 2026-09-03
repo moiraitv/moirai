@@ -322,10 +322,23 @@ function formatDate(value: string | null | undefined): string {
 			month: 'short',
 			day: 'numeric',
 			year: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit',
 		}).format(new Date(value))
 		: 'Not yet';
+}
+
+/** Combine local activity time with its relative age beneath the date. */
+function formatActivityTime(value: string | null | undefined): string {
+	if (!value) {
+		return formatRelative(value);
+	}
+
+	const formatter = new Intl.DateTimeFormat(undefined, {
+		hour: 'numeric', minute: '2-digit',
+	});
+	const time = formatter.formatToParts(new Date(value))
+		.map((part) => part.type === 'dayPeriod' ? part.value.toLocaleLowerCase() : part.value)
+		.join('');
+	return `${time} • ${formatRelative(value)}`;
 }
 
 /** Summarize elapsed time since an optional activity timestamp. */
@@ -1262,11 +1275,11 @@ onUnmounted(() => {
 				</div>
 				<div class="status-stat status-last-scan">
 					<span class="status-icon"><Clock3 :size="24" /></span>
-					<div><span>Last scan</span><strong>{{ formatDate(library.lastScanCompletedAt) }}</strong><small>{{ formatRelative(library.lastScanCompletedAt) }}</small></div>
+					<div><span>Last scan</span><strong>{{ formatDate(library.lastScanCompletedAt) }}</strong><small>{{ formatActivityTime(library.lastScanCompletedAt) }}</small></div>
 				</div>
 				<div class="status-stat status-change">
 					<span class="status-icon"><Zap :size="24" /></span>
-					<div><span>Last change</span><strong>{{ formatDate(library.lastChangeDetectedAt) }}</strong><small>{{ formatRelative(library.lastChangeDetectedAt) }}</small></div>
+					<div><span>Last change</span><strong>{{ formatDate(library.lastChangeDetectedAt) }}</strong><small>{{ formatActivityTime(library.lastChangeDetectedAt) }}</small></div>
 				</div>
 			</section>
 		</div>
