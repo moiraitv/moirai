@@ -548,7 +548,7 @@
 	}
 
 	.moirai-dialog.filter-modal {
-		max-height: calc(100vh - 12px);
+		max-height: var(--overlay-available-height);
 	}
 
 	.filter-modal-header {
@@ -613,7 +613,7 @@
 
 	.media-preview-modal {
 		width: calc(100vw - 12px);
-		max-height: calc(100vh - 12px);
+		max-height: var(--overlay-available-height);
 		padding: 12px;
 	}
 
@@ -622,7 +622,7 @@
 	}
 
 	.media-preview-stage video {
-		max-height: calc(100vh - 175px);
+		max-height: max(0px, calc(var(--overlay-available-height) - 163px));
 	}
 
 	.media-grid {
@@ -694,11 +694,11 @@
 	}
 
 	.moirai-dialog-backdrop {
-		padding: 6px;
+		--overlay-gutter: 6px;
 	}
 
 	.moirai-dialog {
-		max-height: calc(100vh - 12px);
+		max-height: var(--overlay-available-height);
 		padding: 12px;
 	}
 
@@ -708,14 +708,14 @@
 	}
 
 	.moirai-dialog.schedule-editor-modal {
-		height: calc(100vh - 12px);
+		height: var(--overlay-available-height);
 		padding: 0;
 	}
 
 	.moirai-dialog.scheduling-workspace-modal {
 		width: 100%;
-		height: calc(100vh - 12px);
-		max-height: calc(100vh - 12px);
+		height: var(--overlay-available-height);
+		max-height: var(--overlay-available-height);
 		padding: 0;
 	}
 
@@ -989,5 +989,37 @@
 	.media-card-preview-tooltip,
 	.transient-toast {
 		transform: none !important;
+	}
+}
+
+@media (max-height: 700px), (max-width: 700px) {
+	.scheduling-workspace-content {
+		display: block;
+		overflow: auto;
+	}
+
+	.scheduling-workspace-content .scheduling-workspace-scroll,
+	.scheduling-workspace-content .scheduling-preview-dock,
+	.schedule-editor-columns > .schedule-stack {
+		position: static;
+		max-height: none;
+		overflow: visible;
+	}
+
+	.selection-drawer-toolbar {
+		min-height: 0;
+		max-height: calc(var(--overlay-available-height) * 0.3);
+		overflow: auto;
+	}
+
+	.resource-editor-header,
+	.selection-drawer-header,
+	.filter-modal-header {
+		min-height: 0;
+		padding: 12px 16px;
+	}
+
+	.media-preview-stage {
+		min-height: 0;
 	}
 }

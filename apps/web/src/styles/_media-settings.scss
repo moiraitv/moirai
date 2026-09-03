@@ -269,7 +269,7 @@
 
 .media-preview-modal {
 	width: min(1180px, calc(100vw - 32px));
-	max-height: calc(100vh - 32px);
+	max-height: var(--overlay-available-height);
 	padding: 18px;
 	overflow: auto;
 	border: 1px solid var(--line-bright);
@@ -304,7 +304,7 @@
 
 .media-preview-stage video {
 	width: 100%;
-	max-height: calc(100vh - 190px);
+	max-height: max(0px, calc(var(--overlay-available-height) - 158px));
 	display: block;
 	background: #000;
 }

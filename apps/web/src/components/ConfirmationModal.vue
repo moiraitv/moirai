@@ -127,11 +127,13 @@ onUnmounted(() => {
 						<p class="eyebrow">Confirmation required</p>
 						<h2 id="confirmation-modal-title">{{ title }}</h2>
 					</header>
-					<p id="confirmation-modal-message">{{ message }}</p>
-					<label v-if="requiredText" class="confirmation-required-text">
-						<span>{{ requiredTextLabel ?? `Type ${requiredText} to confirm` }}</span>
-						<input v-model="confirmationText" autocomplete="off" />
-					</label>
+					<div class="confirmation-modal-body">
+						<p id="confirmation-modal-message">{{ message }}</p>
+						<label v-if="requiredText" class="confirmation-required-text">
+							<span>{{ requiredTextLabel ?? `Type ${requiredText} to confirm` }}</span>
+							<input v-model="confirmationText" autocomplete="off" />
+						</label>
+					</div>
 					<footer>
 						<button ref="cancelButton" type="button" class="button secondary" @click="requestClose('cancel')">
 							Cancel

@@ -1,6 +1,6 @@
 .moirai-dialog.program-item-modal {
 	width: min(620px, 100%);
-	max-height: calc(100vh - 32px);
+	max-height: var(--overlay-available-height);
 	padding: 0;
 	overflow-y: auto;
 }

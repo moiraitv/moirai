@@ -184,8 +184,8 @@
 	position: fixed;
 	inset: 0;
 	z-index: 40;
-	padding: 16px;
 	display: grid;
+	grid-template-rows: minmax(0, 1fr);
 	place-items: center;
 	background: rgba(2, 7, 12, 0.8);
 	backdrop-filter: blur(8px);
@@ -198,7 +198,9 @@ body:has(.moirai-dialog-backdrop) {
 
 .moirai-dialog {
 	width: min(820px, 100%);
-	max-height: calc(100vh - 32px);
+	min-width: 0;
+	min-height: 0;
+	max-height: var(--overlay-available-height);
 	padding: 24px;
 	overflow: auto;
 	border: 1px solid var(--line-bright);

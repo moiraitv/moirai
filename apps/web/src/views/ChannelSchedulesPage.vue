@@ -802,131 +802,335 @@ onBeforeUnmount(() => {
 					</div>
 
 					<template v-else-if="draft && channel">
-						<div class="channel-schedule-toolbar editor-surface">
-							<span class="channel-schedule-save-state" :class="{ dirty: scheduleNeedsSave }">
-								<CircleAlert v-if="scheduleNeedsSave" :size="22" />
-								<CircleCheck v-else :size="22" />
-								<span>
-									<strong>{{ scheduleNeedsSave ? 'Unsaved changes' : 'All changes saved' }}</strong>
-									<small v-if="!scheduleNeedsSave && materialization?.health === 'pending'">
-										Programming update scheduled for
-										{{ materializationTime(materialization.applyAfter) }}
-									</small>
-									<small v-else-if="!scheduleNeedsSave && materialization?.health === 'failed'">
-										The last timeline update failed; the prior committed guide remains active.
-									</small>
+						<div class="scheduling-workspace-content">
+							<div class="channel-schedule-toolbar editor-surface">
+								<span class="channel-schedule-save-state" :class="{ dirty: scheduleNeedsSave }">
+									<CircleAlert v-if="scheduleNeedsSave" :size="22" />
+									<CircleCheck v-else :size="22" />
+									<span>
+										<strong>{{ scheduleNeedsSave ? 'Unsaved changes' : 'All changes saved' }}</strong>
+										<small v-if="!scheduleNeedsSave && materialization?.health === 'pending'">
+											Programming update scheduled for
+											{{ materializationTime(materialization.applyAfter) }}
+										</small>
+										<small v-else-if="!scheduleNeedsSave && materialization?.health === 'failed'">
+											The last timeline update failed; the prior committed guide remains active.
+										</small>
+									</span>
 								</span>
-							</span>
-							<div class="channel-schedule-toolbar-actions">
-								<DisabledActionHint
-									v-if="scheduleNeedsSave"
-									label="Apply After Current Item"
-									message="Save the schedule before applying it after the current item."
-								>
-									<button type="button" class="button secondary" disabled>
-										<RefreshCw :size="17" />Apply After Current Item
-									</button>
-								</DisabledActionHint>
-								<button
-									v-else-if="materialization?.health === 'pending'"
-									type="button"
-									class="button secondary"
-									:disabled="applyingTimeline"
-									@click="applyTimelineNow"
-								>
-									<RefreshCw :size="17" :class="{ spinning: applyingTimeline }" />
-									{{ applyingTimeline ? 'Applying…' : 'Apply After Current Item' }}
-								</button>
-							</div>
-						</div>
-						<div class="scheduling-workspace-scroll">
-							<p v-if="error" class="notice error">{{ error }}</p>
-
-							<div class="schedule-editor-columns">
-								<section class="schedule-stack editor-surface" aria-label="Template priority stack">
-									<div class="schedule-stack-heading">
-										<div><Layers3 :size="20" /><strong>Template stack</strong></div>
-										<small>Highest priority</small>
-									</div>
-									<div class="schedule-layer-add-placeholder">
-										<button
-											type="button"
-											class="button secondary"
-											:disabled="draft.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS"
-											@click="addLayer"
-										>
-											<Plus :size="17" />Add Conditional Template
+								<div class="channel-schedule-toolbar-actions">
+									<DisabledActionHint
+										v-if="scheduleNeedsSave"
+										label="Apply After Current Item"
+										message="Save the schedule before applying it after the current item."
+									>
+										<button type="button" class="button secondary" disabled>
+											<RefreshCw :size="17" />Apply After Current Item
 										</button>
-									</div>
-									<article
-										v-for="(layer, index) in draft.layers"
-										:key="layer.id"
-										class="schedule-layer conditional"
-										:class="{ selected: selectedLayerId === layer.id }"
-										@click="selectedLayerId = layer.id"
+									</DisabledActionHint>
+									<button
+										v-else-if="materialization?.health === 'pending'"
+										type="button"
+										class="button secondary"
+										:disabled="applyingTimeline"
+										@click="applyTimelineNow"
 									>
-										<div class="schedule-layer-order">
+										<RefreshCw :size="17" :class="{ spinning: applyingTimeline }" />
+										{{ applyingTimeline ? 'Applying…' : 'Apply After Current Item' }}
+									</button>
+								</div>
+							</div>
+							<div class="scheduling-workspace-scroll">
+								<p v-if="error" class="notice error">{{ error }}</p>
+
+								<div class="schedule-editor-columns">
+									<section class="schedule-stack editor-surface" aria-label="Template priority stack">
+										<div class="schedule-stack-heading">
+											<div><Layers3 :size="20" /><strong>Template stack</strong></div>
+											<small>Highest priority</small>
+										</div>
+										<div class="schedule-layer-add-placeholder">
 											<button
 												type="button"
-												:disabled="index === 0"
-												aria-label="Move layer up"
-												@click.stop="moveLayer(index, -1)"
+												class="button secondary"
+												:disabled="draft.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS"
+												@click="addLayer"
 											>
-												<ArrowUp :size="15" />
+												<Plus :size="17" />Add Conditional Template
 											</button>
+										</div>
+										<article
+											v-for="(layer, index) in draft.layers"
+											:key="layer.id"
+											class="schedule-layer conditional"
+											:class="{ selected: selectedLayerId === layer.id }"
+											@click="selectedLayerId = layer.id"
+										>
+											<div class="schedule-layer-order">
+												<button
+													type="button"
+													:disabled="index === 0"
+													aria-label="Move layer up"
+													@click.stop="moveLayer(index, -1)"
+												>
+													<ArrowUp :size="15" />
+												</button>
+												<button
+													type="button"
+													:disabled="index === draft.layers.length - 1"
+													aria-label="Move layer down"
+													@click.stop="moveLayer(index, 1)"
+												>
+													<ArrowDown :size="15" />
+												</button>
+											</div>
+											<div class="schedule-layer-copy">
+												<strong>{{ templateName(layer.templateId) }}</strong>
+												<small>{{ predicateSummary(layer.predicate) }}</small>
+											</div>
+											<div class="schedule-layer-mini-track">
+												<span
+													v-for="slot in templates.find(
+														(template) => template.id === layer.templateId,
+													)?.slots ?? []"
+													:key="slot.id"
+													:class="{ 'fall-through-slot': slot.programId === null }"
+													:style="
+														slotStyle(
+															templates.find((template) => template.id === layer.templateId)!,
+															slot,
+														)
+													"
+												></span>
+											</div>
+											<div class="schedule-layer-actions">
+												<TwoStepActionButton
+													class="icon-button danger-icon layer-remove-button"
+													label="Remove layer"
+													confirm-label="Confirm remove layer"
+													@click.stop
+													@confirm="removeLayer(layer.id)"
+												>
+													<Trash2 :size="16" />
+												</TwoStepActionButton>
+											</div>
+										</article>
+										<article
+											class="schedule-layer base"
+											:class="{ selected: selectedLayerId === null }"
+											@click="selectedLayerId = null"
+										>
+											<div class="schedule-layer-copy">
+												<span class="eyebrow">Base template</span>
+												<strong>{{ templateName(draft.defaultTemplateId) }}</strong>
+												<small>Fallback programming</small>
+											</div>
+											<div
+												class="schedule-layer-mini-track"
+												aria-label="Base template slot structure"
+											>
+												<span
+													v-for="slot in templates.find(
+														(template) => template.id === draft?.defaultTemplateId,
+													)?.slots ?? []"
+													:key="slot.id"
+													:class="{ 'fall-through-slot': slot.programId === null }"
+													:style="
+														slotStyle(
+															templates.find((template) => template.id === draft?.defaultTemplateId)!,
+															slot,
+														)
+													"
+												></span>
+											</div>
+										</article>
+										<small class="schedule-stack-bottom">Base priority</small>
+									</section>
+
+									<section v-if="selectedLayer" class="schedule-layer-inspector editor-surface">
+										<div class="template-panel-heading">
+											<div class="layer-editor-title">
+												<p class="eyebrow">Conditional layer</p>
+												<label class="layer-template-picker layer-title-picker">
+													<span class="sr-only">Conditional layer template</span>
+													<span class="layer-template-select">
+														<i :style="templateRepresentativeStyle(selectedLayer.templateId)"></i>
+														<select
+															v-model="selectedLayer.templateId"
+															aria-label="Conditional layer template"
+														>
+															<option
+																v-for="template in templates"
+																:key="template.id"
+																:value="template.id"
+															>
+																{{ template.name }}
+															</option>
+														</select>
+													</span>
+												</label>
+											</div>
 											<button
 												type="button"
-												:disabled="index === draft.layers.length - 1"
-												aria-label="Move layer down"
-												@click.stop="moveLayer(index, 1)"
+												class="toolbar-button"
+												:aria-label="`Edit ${templateName(selectedLayer.templateId)}`"
+												@click="editTemplate(selectedLayer.templateId)"
 											>
-												<ArrowDown :size="15" />
+												<Pencil :size="16" />Edit Template
 											</button>
 										</div>
-										<div class="schedule-layer-copy">
-											<strong>{{ templateName(layer.templateId) }}</strong>
-											<small>{{ predicateSummary(layer.predicate) }}</small>
-										</div>
-										<div class="schedule-layer-mini-track">
-											<span
-												v-for="slot in templates.find(
-													(template) => template.id === layer.templateId,
-												)?.slots ?? []"
-												:key="slot.id"
-												:class="{ 'fall-through-slot': slot.programId === null }"
-												:style="
-													slotStyle(
-														templates.find((template) => template.id === layer.templateId)!,
-														slot,
-													)
-												"
-											></span>
-										</div>
-										<div class="schedule-layer-actions">
-											<TwoStepActionButton
-												class="icon-button danger-icon layer-remove-button"
-												label="Remove layer"
-												confirm-label="Confirm remove layer"
-												@click.stop
-												@confirm="removeLayer(layer.id)"
+										<h3>Show this layer when</h3>
+										<SchedulePredicateEditor
+											v-model="selectedLayer.predicate"
+											:time-zone="timeZone"
+										/>
+										<div class="layer-boundary-grid">
+											<fieldset
+												v-for="side in ['entryBoundary', 'exitBoundary'] as const"
+												:id="`layer-boundary-${selectedLayer.id}-${side}`"
+												:key="side"
 											>
-												<Trash2 :size="16" />
-											</TwoStepActionButton>
+												<legend>
+													{{ side === 'entryBoundary' ? 'Entry boundary' : 'Exit boundary' }}
+												</legend>
+												<p class="layer-boundary-description">
+													{{
+														side === 'entryBoundary'
+															? 'When this layer starts, control lower-priority programming that is already playing.'
+															: 'When this layer ends, control its programming as lower-priority programming resumes.'
+													}}
+												</p>
+												<label
+												><span>Boundary behavior</span
+												><select
+													:value="selectedLayer[side].policy"
+													@change="
+														updateLayerBoundaryPolicy(
+															side,
+															($event.target as HTMLSelectElement).value as LayerBoundary['policy'],
+														)
+													"
+												>
+													<option value="hard">Hard boundary</option>
+													<option value="finish-left">Finish outgoing item within drift</option>
+													<option value="favor-right">Favor incoming content</option>
+												</select></label
+												>
+												<label v-if="selectedLayer[side].policy !== 'hard'"
+												><span>Maximum drift past boundary (minutes)</span
+												><input
+													type="number"
+													min="0"
+													max="1440"
+													:disabled="selectedLayer[side].maxDriftSeconds === null"
+													:value="(selectedLayer[side].maxDriftSeconds ?? 0) / 60"
+													@input="
+														updateLayerBoundaryDrift(
+															side,
+															Number(($event.target as HTMLInputElement).value),
+														)
+													"
+												/><small>
+													Outgoing content may shift the incoming programming by at most this
+													amount.
+												</small></label
+												>
+												<label
+													v-if="selectedLayer[side].policy === 'finish-left'"
+													class="check-row boundary-unlimited-control"
+												>
+													<input
+														type="checkbox"
+														:checked="selectedLayer[side].maxDriftSeconds === null"
+														@change="
+															toggleUnlimitedLayerDrift(
+																side,
+																($event.target as HTMLInputElement).checked,
+															)
+														"
+													/>
+													<span>No limit — always finish outgoing item</span>
+												</label>
+												<label
+												><span>If the next outgoing item cannot satisfy this boundary</span
+												><select
+													v-model="selectedLayer[side].fallback"
+													:disabled="selectedLayer[side].maxDriftSeconds === null"
+												>
+													<option value="truncate-left">Truncate outgoing content</option>
+													<option value="reject-start">Do not start it</option>
+													<option
+														value="favor-right"
+														:disabled="
+															selectedLayer[side].policy !== 'finish-left'
+																|| selectedLayer[side].maxDriftSeconds === null
+														"
+													>
+														Start incoming content early
+													</option>
+												</select></label
+												>
+												<label v-if="selectedLayer[side].fallback === 'favor-right'"
+												><span>Maximum early start (minutes)</span
+												><input
+													type="number"
+													min="0"
+													max="1440"
+													:disabled="
+														selectedLayer[side].policy !== 'finish-left'
+															|| selectedLayer[side].maxDriftSeconds === null
+													"
+													:value="(selectedLayer[side].earlyStartMaxDriftSeconds ?? 0) / 60"
+													@input="
+														updateLayerEarlyStartDrift(
+															side,
+															Number(($event.target as HTMLInputElement).value),
+														)
+													"
+												/><small>
+													Used only when no outgoing item can satisfy the primary boundary behavior.
+												</small></label
+												>
+											</fieldset>
 										</div>
-									</article>
-									<article
-										class="schedule-layer base"
-										:class="{ selected: selectedLayerId === null }"
-										@click="selectedLayerId = null"
-									>
-										<div class="schedule-layer-copy">
-											<span class="eyebrow">Base template</span>
-											<strong>{{ templateName(draft.defaultTemplateId) }}</strong>
-											<small>Fallback programming</small>
+									</section>
+
+									<section v-else class="schedule-layer-inspector base-inspector editor-surface">
+										<div class="template-panel-heading">
+											<div class="layer-editor-title">
+												<p class="eyebrow">Base template</p>
+												<label class="layer-template-picker layer-title-picker">
+													<span class="sr-only">Base template</span>
+													<span class="layer-template-select">
+														<i :style="templateRepresentativeStyle(draft.defaultTemplateId)"></i>
+														<select v-model="draft.defaultTemplateId" aria-label="Base template">
+															<option
+																v-for="template in templates"
+																:key="template.id"
+																:value="template.id"
+															>
+																{{ template.name }}
+															</option>
+														</select>
+													</span>
+												</label>
+											</div>
+											<button
+												type="button"
+												class="toolbar-button"
+												:aria-label="`Edit ${templateName(draft.defaultTemplateId)}`"
+												@click="editTemplate(draft.defaultTemplateId)"
+											>
+												<Pencil :size="16" />Edit Template
+											</button>
 										</div>
+										<p class="base-inspector-description">
+											The base supplies programming whenever no higher-priority conditional layer
+											applies or when a conditional template explicitly falls through.
+										</p>
 										<div
-											class="schedule-layer-mini-track"
-											aria-label="Base template slot structure"
+											class="base-inspector-track"
+											aria-label="Selected base template slot structure"
 										>
 											<span
 												v-for="slot in templates.find(
@@ -942,342 +1146,140 @@ onBeforeUnmount(() => {
 												"
 											></span>
 										</div>
+										<ChannelFillerEditor
+											v-model="draft.defaultFiller"
+											:programs="programs"
+											@edit-program="quickEditingProgramId = $event"
+										/>
+									</section>
+								</div>
+
+							</div>
+
+							<section class="resolved-preview scheduling-preview-dock editor-surface">
+								<div class="template-panel-heading preview-heading">
+									<div>
+										<p class="eyebrow">Materialized output</p>
+										<h2>Preview layered schedule</h2>
+									</div>
+									<div class="preview-controls">
+										<label class="preview-control-field"
+										><span>Preview date</span><input v-model="previewDate" type="date"
+										/></label>
+										<button class="toolbar-button" :disabled="previewing" @click="schedulePreview(0)">
+											<RefreshCw :size="16" :class="{ spinning: previewing }" />{{
+												previewing ? 'Updating…' : 'Refresh Now'
+											}}
+										</button>
+									</div>
+								</div>
+								<div v-if="preview" class="schedule-preview-ruler" aria-hidden="true">
+									<span v-for="mark in previewRuler" :key="mark.seconds">{{ mark.label }}</span>
+								</div>
+								<div v-if="preview" class="resolved-track-shell">
+									<div class="resolved-track">
+										<div
+											v-for="segment in preview.segments"
+											:key="segment.id"
+											class="resolved-segment"
+											:class="`role-${segment.role}`"
+											:style="{
+												...programColorStyle(segment.programId),
+												width: `${guideSegmentPercent(
+													segment.start,
+													segment.finish,
+													previewWindowMilliseconds,
+												)}%`,
+											}"
+											:title="`${segment.title}\n${segment.start}–${segment.finish}`"
+										>
+											<strong>{{ segment.title }}</strong
+											><small>{{ previewTime(segment.start) }}–{{ previewTime(segment.finish) }}</small>
+										</div>
+									</div>
+									<button
+										v-for="diagnostic in previewDeadAir"
+										:key="`marker-${diagnostic.segment.id}`"
+										type="button"
+										class="dead-air-marker"
+										:style="deadAirMarkerStyle(diagnostic)"
+										:aria-label="`Dead air at ${previewExactTime(diagnostic.segment.start)} for ${schedulingDurationLabel(diagnostic.durationSeconds)}`"
+										@click="focusDeadAirDiagnostic(diagnostic.segment.id)"
+									>
+										<CircleAlert :size="15" />
+									</button>
+								</div>
+								<section v-if="previewDeadAir.length" class="dead-air-diagnostics" aria-live="polite">
+									<header>
+										<CircleAlert :size="20" />
+										<div>
+											<strong>Dead air detected</strong>
+											<small>
+												{{ previewDeadAir.length }} gap{{ previewDeadAir.length === 1 ? '' : 's' }} ·
+												{{ schedulingDurationLabel(previewDeadAirSeconds) }} total
+											</small>
+										</div>
+									</header>
+									<article
+										v-for="diagnostic in previewDeadAir"
+										:id="`dead-air-diagnostic-${diagnostic.segment.id}`"
+										:key="diagnostic.segment.id"
+										tabindex="-1"
+										:class="`category-${diagnostic.category}`"
+									>
+										<div>
+											<strong>{{ diagnostic.label }}</strong>
+											<small>
+												{{ previewExactTime(diagnostic.segment.start) }}–{{ previewExactTime(diagnostic.segment.finish) }}
+												· {{ schedulingDurationLabel(diagnostic.durationSeconds) }}
+											</small>
+											<p>{{ diagnostic.explanation }}</p>
+										</div>
+										<button type="button" class="button secondary" @click="reviewDeadAir(diagnostic)">
+											{{ deadAirAction(diagnostic).label }}
+										</button>
 									</article>
-									<small class="schedule-stack-bottom">Base priority</small>
 								</section>
-
-								<section v-if="selectedLayer" class="schedule-layer-inspector editor-surface">
-									<div class="template-panel-heading">
-										<div class="layer-editor-title">
-											<p class="eyebrow">Conditional layer</p>
-											<label class="layer-template-picker layer-title-picker">
-												<span class="sr-only">Conditional layer template</span>
-												<span class="layer-template-select">
-													<i :style="templateRepresentativeStyle(selectedLayer.templateId)"></i>
-													<select
-														v-model="selectedLayer.templateId"
-														aria-label="Conditional layer template"
-													>
-														<option
-															v-for="template in templates"
-															:key="template.id"
-															:value="template.id"
-														>
-															{{ template.name }}
-														</option>
-													</select>
-												</span>
-											</label>
-										</div>
-										<button
-											type="button"
-											class="toolbar-button"
-											:aria-label="`Edit ${templateName(selectedLayer.templateId)}`"
-											@click="editTemplate(selectedLayer.templateId)"
-										>
-											<Pencil :size="16" />Edit Template
-										</button>
+								<div
+									v-if="previewLegend.length"
+									class="schedule-preview-legend"
+									aria-label="Schedule preview legend"
+								>
+									<div v-for="entry in previewLegend" :key="entry.templateId">
+										<span class="schedule-preview-legend-swatch">
+											<i
+												v-for="programId in entry.programIds"
+												:key="programId ?? 'fall-through'"
+												:class="{ 'fall-through-slot': programId === null }"
+												:style="programColorStyle(programId)"
+											></i>
+										</span>
+										<span> {{ entry.name }}<small v-if="entry.isBase"> (Base template)</small> </span>
 									</div>
-									<h3>Show this layer when</h3>
-									<SchedulePredicateEditor
-										v-model="selectedLayer.predicate"
-										:time-zone="timeZone"
-									/>
-									<div class="layer-boundary-grid">
-										<fieldset
-											v-for="side in ['entryBoundary', 'exitBoundary'] as const"
-											:id="`layer-boundary-${selectedLayer.id}-${side}`"
-											:key="side"
-										>
-											<legend>
-												{{ side === 'entryBoundary' ? 'Entry boundary' : 'Exit boundary' }}
-											</legend>
-											<p class="layer-boundary-description">
-												{{
-													side === 'entryBoundary'
-														? 'When this layer starts, control lower-priority programming that is already playing.'
-														: 'When this layer ends, control its programming as lower-priority programming resumes.'
-												}}
-											</p>
-											<label
-											><span>Boundary behavior</span
-											><select
-												:value="selectedLayer[side].policy"
-												@change="
-													updateLayerBoundaryPolicy(
-														side,
-														($event.target as HTMLSelectElement).value as LayerBoundary['policy'],
-													)
-												"
-											>
-												<option value="hard">Hard boundary</option>
-												<option value="finish-left">Finish outgoing item within drift</option>
-												<option value="favor-right">Favor incoming content</option>
-											</select></label
-											>
-											<label v-if="selectedLayer[side].policy !== 'hard'"
-											><span>Maximum drift past boundary (minutes)</span
-											><input
-												type="number"
-												min="0"
-												max="1440"
-												:disabled="selectedLayer[side].maxDriftSeconds === null"
-												:value="(selectedLayer[side].maxDriftSeconds ?? 0) / 60"
-												@input="
-													updateLayerBoundaryDrift(
-														side,
-														Number(($event.target as HTMLInputElement).value),
-													)
-												"
-											/><small>
-												Outgoing content may shift the incoming programming by at most this
-												amount.
-											</small></label
-											>
-											<label
-												v-if="selectedLayer[side].policy === 'finish-left'"
-												class="check-row boundary-unlimited-control"
-											>
-												<input
-													type="checkbox"
-													:checked="selectedLayer[side].maxDriftSeconds === null"
-													@change="
-														toggleUnlimitedLayerDrift(
-															side,
-															($event.target as HTMLInputElement).checked,
-														)
-													"
-												/>
-												<span>No limit — always finish outgoing item</span>
-											</label>
-											<label
-											><span>If the next outgoing item cannot satisfy this boundary</span
-											><select
-												v-model="selectedLayer[side].fallback"
-												:disabled="selectedLayer[side].maxDriftSeconds === null"
-											>
-												<option value="truncate-left">Truncate outgoing content</option>
-												<option value="reject-start">Do not start it</option>
-												<option
-													value="favor-right"
-													:disabled="
-														selectedLayer[side].policy !== 'finish-left'
-															|| selectedLayer[side].maxDriftSeconds === null
-													"
-												>
-													Start incoming content early
-												</option>
-											</select></label
-											>
-											<label v-if="selectedLayer[side].fallback === 'favor-right'"
-											><span>Maximum early start (minutes)</span
-											><input
-												type="number"
-												min="0"
-												max="1440"
-												:disabled="
-													selectedLayer[side].policy !== 'finish-left'
-														|| selectedLayer[side].maxDriftSeconds === null
-												"
-												:value="(selectedLayer[side].earlyStartMaxDriftSeconds ?? 0) / 60"
-												@input="
-													updateLayerEarlyStartDrift(
-														side,
-														Number(($event.target as HTMLInputElement).value),
-													)
-												"
-											/><small>
-												Used only when no outgoing item can satisfy the primary boundary behavior.
-											</small></label
-											>
-										</fieldset>
-									</div>
-								</section>
-
-								<section v-else class="schedule-layer-inspector base-inspector editor-surface">
-									<div class="template-panel-heading">
-										<div class="layer-editor-title">
-											<p class="eyebrow">Base template</p>
-											<label class="layer-template-picker layer-title-picker">
-												<span class="sr-only">Base template</span>
-												<span class="layer-template-select">
-													<i :style="templateRepresentativeStyle(draft.defaultTemplateId)"></i>
-													<select v-model="draft.defaultTemplateId" aria-label="Base template">
-														<option
-															v-for="template in templates"
-															:key="template.id"
-															:value="template.id"
-														>
-															{{ template.name }}
-														</option>
-													</select>
-												</span>
-											</label>
-										</div>
-										<button
-											type="button"
-											class="toolbar-button"
-											:aria-label="`Edit ${templateName(draft.defaultTemplateId)}`"
-											@click="editTemplate(draft.defaultTemplateId)"
-										>
-											<Pencil :size="16" />Edit Template
-										</button>
-									</div>
-									<p class="base-inspector-description">
-										The base supplies programming whenever no higher-priority conditional layer
-										applies or when a conditional template explicitly falls through.
-									</p>
-									<div
-										class="base-inspector-track"
-										aria-label="Selected base template slot structure"
-									>
-										<span
-											v-for="slot in templates.find(
-												(template) => template.id === draft?.defaultTemplateId,
-											)?.slots ?? []"
-											:key="slot.id"
-											:class="{ 'fall-through-slot': slot.programId === null }"
-											:style="
-												slotStyle(
-													templates.find((template) => template.id === draft?.defaultTemplateId)!,
-													slot,
-												)
-											"
-										></span>
-									</div>
-									<ChannelFillerEditor
-										v-model="draft.defaultFiller"
-										:programs="programs"
-										@edit-program="quickEditingProgramId = $event"
-									/>
-								</section>
-							</div>
-
-						</div>
-
-						<section class="resolved-preview scheduling-preview-dock editor-surface">
-							<div class="template-panel-heading preview-heading">
-								<div>
-									<p class="eyebrow">Materialized output</p>
-									<h2>Preview layered schedule</h2>
 								</div>
-								<div class="preview-controls">
-									<label class="preview-control-field"
-									><span>Preview date</span><input v-model="previewDate" type="date"
-									/></label>
-									<button class="toolbar-button" :disabled="previewing" @click="schedulePreview(0)">
-										<RefreshCw :size="16" :class="{ spinning: previewing }" />{{
-											previewing ? 'Updating…' : 'Refresh Now'
+								<AnimatedDisclosure
+									v-if="preview?.issues.length"
+									v-model="previewIssuesOpen"
+									class="schedule-preview-issues compact-preview-issues"
+									aria-label="Schedule preview issues"
+								>
+									<template #summary><span>
+										{{ preview.issues.length }} preview issue{{
+											preview.issues.length === 1 ? '' : 's'
 										}}
-									</button>
-								</div>
-							</div>
-							<div v-if="preview" class="schedule-preview-ruler" aria-hidden="true">
-								<span v-for="mark in previewRuler" :key="mark.seconds">{{ mark.label }}</span>
-							</div>
-							<div v-if="preview" class="resolved-track-shell">
-								<div class="resolved-track">
-									<div
-										v-for="segment in preview.segments"
-										:key="segment.id"
-										class="resolved-segment"
-										:class="`role-${segment.role}`"
-										:style="{
-											...programColorStyle(segment.programId),
-											width: `${guideSegmentPercent(
-												segment.start,
-												segment.finish,
-												previewWindowMilliseconds,
-											)}%`,
-										}"
-										:title="`${segment.title}\n${segment.start}–${segment.finish}`"
-									>
-										<strong>{{ segment.title }}</strong
-										><small>{{ previewTime(segment.start) }}–{{ previewTime(segment.finish) }}</small>
-									</div>
-								</div>
-								<button
-									v-for="diagnostic in previewDeadAir"
-									:key="`marker-${diagnostic.segment.id}`"
-									type="button"
-									class="dead-air-marker"
-									:style="deadAirMarkerStyle(diagnostic)"
-									:aria-label="`Dead air at ${previewExactTime(diagnostic.segment.start)} for ${schedulingDurationLabel(diagnostic.durationSeconds)}`"
-									@click="focusDeadAirDiagnostic(diagnostic.segment.id)"
-								>
-									<CircleAlert :size="15" />
-								</button>
-							</div>
-							<section v-if="previewDeadAir.length" class="dead-air-diagnostics" aria-live="polite">
-								<header>
-									<CircleAlert :size="20" />
-									<div>
-										<strong>Dead air detected</strong>
-										<small>
-											{{ previewDeadAir.length }} gap{{ previewDeadAir.length === 1 ? '' : 's' }} ·
-											{{ schedulingDurationLabel(previewDeadAirSeconds) }} total
-										</small>
-									</div>
-								</header>
-								<article
-									v-for="diagnostic in previewDeadAir"
-									:id="`dead-air-diagnostic-${diagnostic.segment.id}`"
-									:key="diagnostic.segment.id"
-									tabindex="-1"
-									:class="`category-${diagnostic.category}`"
-								>
-									<div>
-										<strong>{{ diagnostic.label }}</strong>
-										<small>
-											{{ previewExactTime(diagnostic.segment.start) }}–{{ previewExactTime(diagnostic.segment.finish) }}
-											· {{ schedulingDurationLabel(diagnostic.durationSeconds) }}
-										</small>
-										<p>{{ diagnostic.explanation }}</p>
-									</div>
-									<button type="button" class="button secondary" @click="reviewDeadAir(diagnostic)">
-										{{ deadAirAction(diagnostic).label }}
-									</button>
-								</article>
+									</span></template>
+									<ul>
+										<li
+											v-for="issue in preview.issues"
+											:key="`${issue.slotId}:${issue.code}:${issue.programId}:${issue.mediaItemId}`"
+										>
+											<Info :size="17" />
+											<span>{{ issue.message }}</span>
+										</li>
+									</ul>
+								</AnimatedDisclosure>
 							</section>
-							<div
-								v-if="previewLegend.length"
-								class="schedule-preview-legend"
-								aria-label="Schedule preview legend"
-							>
-								<div v-for="entry in previewLegend" :key="entry.templateId">
-									<span class="schedule-preview-legend-swatch">
-										<i
-											v-for="programId in entry.programIds"
-											:key="programId ?? 'fall-through'"
-											:class="{ 'fall-through-slot': programId === null }"
-											:style="programColorStyle(programId)"
-										></i>
-									</span>
-									<span> {{ entry.name }}<small v-if="entry.isBase"> (Base template)</small> </span>
-								</div>
-							</div>
-							<AnimatedDisclosure
-								v-if="preview?.issues.length"
-								v-model="previewIssuesOpen"
-								class="schedule-preview-issues compact-preview-issues"
-								aria-label="Schedule preview issues"
-							>
-								<template #summary><span>
-									{{ preview.issues.length }} preview issue{{
-										preview.issues.length === 1 ? '' : 's'
-									}}
-								</span></template>
-								<ul>
-									<li
-										v-for="issue in preview.issues"
-										:key="`${issue.slotId}:${issue.code}:${issue.programId}:${issue.mediaItemId}`"
-									>
-										<Info :size="17" />
-										<span>{{ issue.message }}</span>
-									</li>
-								</ul>
-							</AnimatedDisclosure>
-						</section>
+						</div>
 						<ResourceEditorActionBar
 							resource-type="Channel Schedule"
 							:show-delete="hasPersistedSchedule"

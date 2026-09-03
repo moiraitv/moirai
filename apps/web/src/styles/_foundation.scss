@@ -26,6 +26,8 @@
 	--orange: #ff8a3d;
 	--gold: #e2a95b;
 	--danger: #ff6f7f;
+	--overlay-viewport-height: 100vh;
+	--overlay-gutter: 16px;
 	--motion-fast: 110ms;
 	--motion-standard: 170ms;
 	--motion-panel: 220ms;
@@ -33,6 +35,22 @@
 	--motion-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
 	--motion-exit: cubic-bezier(0.4, 0, 1, 1);
 	--motion-system-ease: cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+@supports (height: 100dvh) {
+	:root {
+		--overlay-viewport-height: 100dvh;
+	}
+}
+
+.moirai-dialog-backdrop,
+.selection-drawer-backdrop {
+	--overlay-padding-top: max(var(--overlay-gutter), env(safe-area-inset-top));
+	--overlay-padding-bottom: max(var(--overlay-gutter), env(safe-area-inset-bottom));
+	--overlay-available-height: calc(var(--overlay-viewport-height) - var(--overlay-padding-top) - var(--overlay-padding-bottom));
+	height: var(--overlay-viewport-height);
+	padding-block: var(--overlay-padding-top) var(--overlay-padding-bottom);
+	padding-inline: max(var(--overlay-gutter), env(safe-area-inset-left)) max(var(--overlay-gutter), env(safe-area-inset-right));
 }
 
 @keyframes moirai-backdrop-enter {
@@ -983,11 +1001,13 @@ a.nav-link.router-link-exact-active {
 .moirai-dialog.confirmation-modal {
 	width: min(430px, 100%);
 	padding: 0;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
 	overflow: hidden;
 }
 
 .confirmation-modal header,
-.confirmation-modal > p,
+.confirmation-modal-body > p,
 .confirmation-modal footer {
 	padding-inline: 24px;
 }
@@ -1006,7 +1026,12 @@ a.nav-link.router-link-exact-active {
 	font-size: 1.35rem;
 }
 
-.confirmation-modal > p {
+.confirmation-modal-body {
+	min-height: 0;
+	overflow: auto;
+}
+
+.confirmation-modal-body > p {
 	margin: 18px 0 24px;
 	color: var(--muted);
 }

@@ -1,6 +1,6 @@
 .moirai-dialog.filter-modal {
 	width: min(1090px, 100%);
-	max-height: calc(100vh - 48px);
+	max-height: var(--overlay-available-height);
 	padding: 0;
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr) auto;
