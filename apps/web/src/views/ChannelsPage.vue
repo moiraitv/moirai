@@ -1036,26 +1036,30 @@ onBeforeUnmount(() => {
 								<option value="stretch">Stretch</option>
 								<option value="crop">Crop</option>
 							</select></label
-							><label class="acceleration-field"
-							><span>Acceleration</span
-							><select v-model="form.video.accel">
-								<option value="automatic">Automatic</option>
-								<option :value="null">None</option>
-								<option value="amf">AMF</option>
-								<option value="cuda">CUDA</option>
-								<option value="qsv">QSV</option>
-								<option value="rkmpp">RKMPP</option>
-								<option value="vaapi">VAAPI</option>
-								<option value="videotoolbox">VideoToolbox</option>
-								<option value="vulkan">Vulkan</option>
-							</select
-							><small
-								v-if="form.video.accel === 'automatic' && accelerationPredictionText"
-								class="acceleration-prediction"
-								role="status"
-								:title="accelerationPrediction?.detail"
-							>{{ accelerationPredictionText }}</small
-							></label
+							><label class="acceleration-field">
+								<span class="acceleration-heading">
+									Acceleration
+									<small
+										v-if="form.video.accel === 'automatic' && accelerationPredictionText"
+										class="acceleration-prediction"
+										role="status"
+										:title="accelerationPrediction?.detail"
+									>
+										{{ accelerationPredictionText }}
+									</small>
+								</span>
+								<select v-model="form.video.accel">
+									<option value="automatic">Automatic</option>
+									<option :value="null">None</option>
+									<option value="amf">AMF</option>
+									<option value="cuda">CUDA</option>
+									<option value="qsv">QSV</option>
+									<option value="rkmpp">RKMPP</option>
+									<option value="vaapi">VAAPI</option>
+									<option value="videotoolbox">VideoToolbox</option>
+									<option value="vulkan">Vulkan</option>
+								</select>
+							</label
 							><label class="check"
 							><input v-model="form.video.deinterlace" type="checkbox" /> Deinterlace</label
 							>

@@ -17,16 +17,16 @@ export function formatHardwareAccelerationPrediction(
 	loading: boolean,
 ): string {
 	if (loading) {
-		return 'Checking available hardware…';
+		return 'Checking…';
 	}
 	if (prediction?.outcome === 'hardware' && prediction.accel) {
-		return `Likely resolves to ${accelerationLabels[prediction.accel]}.`;
+		return accelerationLabels[prediction.accel];
 	}
 	if (prediction?.outcome === 'none') {
-		return 'No compatible hardware detected; Automatic will use None.';
+		return 'None';
 	}
 	if (prediction?.outcome === 'indeterminate') {
-		return 'Unable to predict; playback will retry, then use None if still indeterminate.';
+		return 'Undetermined';
 	}
 	return '';
 }
