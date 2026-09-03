@@ -929,3 +929,33 @@
 	min-width: 0;
 	flex: 1;
 }
+
+.source-browser-disclosure > summary {
+	padding-block: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	color: var(--muted-strong);
+	font-size: 0.85rem;
+	font-weight: 600;
+	list-style: none;
+	cursor: pointer;
+}
+
+.source-browser-disclosure > summary::-webkit-details-marker {
+	display: none;
+}
+
+.source-browser-disclosure > summary svg {
+	transition: transform var(--motion-standard) var(--motion-enter);
+}
+
+.source-browser-disclosure[open] > summary svg {
+	transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.source-browser-disclosure > summary svg {
+		transition: none;
+	}
+}

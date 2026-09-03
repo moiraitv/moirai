@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Asterisk, Layers3, Plus, Trash2, X } from '@lucide/vue';
+import { Asterisk, Trash2, X } from '@lucide/vue';
 import {
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	type MediaGroup,
@@ -27,6 +27,7 @@ import { randomUuid } from '../../random-uuid';
 import { closeUnsavedEditor } from '../../unsaved-editor';
 import MediaSelectionDrawer from './MediaSelectionDrawer.vue';
 import ProgramTypeRail from './ProgramTypeRail.vue';
+import ProgramSourceBrowser from './ProgramSourceBrowser.vue';
 import SelectionStrategyEditor from './SelectionStrategyEditor.vue';
 import SequenceProgramEditor from './SequenceProgramEditor.vue';
 import { itemsInReferenceOrder, manualOrderFromDisplay, mergeVisibleManualOrder } from './selected-media-order';
@@ -67,6 +68,7 @@ const sourceParentId = ref<string>();
 const sourcePage = ref(1);
 const sourceTotalPages = ref(1);
 const sourceSearch = ref('');
+const sourceBrowserOpen = ref(true);
 const selectedSourceLabel = ref('');
 const genreToAdd = ref('');
 const selectedItems = ref<MediaItem[]>([]);
@@ -205,6 +207,7 @@ const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot.value);
 
 /** Initialize the form from an existing program or safe defaults for a new content rule. */
 function resetForm(program?: SchedulingProgram): void {
+	sourceBrowserOpen.value = !program;
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.name = program?.name ?? '';
@@ -632,29 +635,6 @@ async function changeSourceType(): Promise<void> {
 	if (previousLibraryId === form.libraryId) {
 		void loadSourceOptions();
 	}
-}
-
-/** Build the compact metadata line shown for a source result. */
-function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
-	if (entry.group) {
-		return mediaGroupSubtitle(selectedLibraryType.value, entry.group) || entry.group.kind;
-	}
-
-	if (entry.item) {
-		return mediaItemSubtitle(selectedLibraryType.value, entry.item) || entry.item.kind;
-	}
-
-	return '';
-}
-
-/** Describe which metadata field matched the source search. */
-function sourceMatchText(entry: MediaSourcePickerEntry): string {
-	return entry.matches
-		.filter((match) => match.field !== 'title')
-		.map(
-			(match) => `${match.field.charAt(0).toUpperCase() + match.field.slice(1)} · ${match.label}`,
-		)
-		.join(' · ');
 }
 
 /** Return the user-facing label for genre. */
@@ -1157,131 +1137,16 @@ onBeforeUnmount(() => {
 										><input v-model="form.includeDescendants" type="checkbox" />Include
 											descendants</label
 										>
-										<div class="source-picker-toolbar">
-											<input
-												v-model="sourceSearch"
-												type="search"
-												aria-label="Search source media"
-												placeholder="Search title, genre, actor, or director…"
-												@keydown.enter.prevent="searchSources"
-											/>
-											<button type="button" class="toolbar-button" @click="searchSources">
-												Search
-											</button>
-										</div>
-										<button
-											v-if="sourceParentId"
-											type="button"
-											class="text-button"
-											@click="
-												sourceParentId = undefined;
-												sourcePage = 1;
-												loadSourceOptions();
-											"
-										>
-											Back to Library Root
-										</button>
-										<LoadingState v-if="sourceLoading" label="Loading source media…" />
-										<div v-else-if="sourceEntries.length" class="source-picker-list">
-											<article v-for="entry in sourceEntries" :key="entry.key">
-												<span class="source-picker-artwork">
-													<span class="source-artwork-placeholder">
-														<Layers3 v-if="entry.group" :size="20" />
-														<Asterisk v-else :size="20" />
-													</span>
-													<img
-														v-if="entry.group?.artworkUrl || entry.item?.artworkUrl"
-														:src="
-															artworkVariantUrl(
-																entry.group?.artworkUrl ?? entry.item?.artworkUrl,
-																'thumb',
-															)
-														"
-														:srcset="
-															artworkSrcset(
-																entry.group?.artworkUrl ?? entry.item?.artworkUrl,
-																'thumb',
-															)
-														"
-														:alt="`${entry.group?.title ?? entry.item?.title} artwork`"
-														loading="eager"
-														decoding="async"
-														@error="hideBrokenImage"
-													/>
-												</span>
-												<span class="source-picker-copy">
-													<strong>{{ entry.group?.title ?? entry.item?.title }}</strong>
-													<small>{{ sourceEntrySubtitle(entry) }}</small>
-													<small v-if="sourceMatchText(entry)" class="source-match-context">
-														Matched {{ sourceMatchText(entry) }}
-													</small>
-												</span>
-												<div class="source-picker-actions">
-													<button
-														v-if="entry.group && entry.group.childCount > 0"
-														type="button"
-														class="text-button"
-														@click="browseGroup(entry)"
-													>
-														Browse</button
-													><button
-														v-if="
-															(form.sourceType === 'group' && entry.group) ||
-																(form.sourceType === 'item' && entry.item)
-														"
-														type="button"
-														class="text-button"
-														@click="selectSource(entry)"
-													>
-														Select
-													</button>
-													<button
-														v-if="form.sourceType === 'collection' && entry.item"
-														type="button"
-														class="source-selection-button"
-														:class="{ selected: selectedIdSet.has(entry.item.id) }"
-														@click="toggleSelectedItem(entry.item)"
-													>
-														<X v-if="selectedIdSet.has(entry.item.id)" :size="14" />
-														<Plus v-else :size="14" />
-														{{ selectedIdSet.has(entry.item.id) ? 'Remove' : 'Add' }}
-													</button>
-													<button
-														v-if="form.sourceType === 'group-collection' && entry.group"
-														type="button"
-														class="source-selection-button"
-														:class="{ selected: selectedGroupIdSet.has(entry.group.id) }"
-														@click="toggleSelectedGroup(entry.group)"
-													>
-														<X v-if="selectedGroupIdSet.has(entry.group.id)" :size="14" />
-														<Plus v-else :size="14" />
-														{{ selectedGroupIdSet.has(entry.group.id) ? 'Remove' : 'Add' }}
-													</button>
-												</div>
-											</article>
-										</div>
-										<div v-else-if="sourceLoaded" class="empty-state compact">
-											<p>No matching source media.</p>
-										</div>
-										<div v-if="sourceTotalPages > 1" class="source-picker-pagination">
-											<button
-												type="button"
-												class="toolbar-button"
-												:disabled="sourcePage <= 1"
-												@click="changeSourcePage(sourcePage - 1)"
-											>
-												Previous
-											</button>
-											<small>Page {{ sourcePage }} of {{ sourceTotalPages }}</small>
-											<button
-												type="button"
-												class="toolbar-button"
-												:disabled="sourcePage >= sourceTotalPages"
-												@click="changeSourcePage(sourcePage + 1)"
-											>
-												Next
-											</button>
-										</div>
+										<ProgramSourceBrowser
+											v-model:open="sourceBrowserOpen" v-model:search="sourceSearch"
+											:source-type="form.sourceType" :library-type="selectedLibraryType"
+											:source-entries="sourceEntries" :source-loading="sourceLoading" :source-loaded="sourceLoaded"
+											:source-parent-id="sourceParentId" :source-page="sourcePage" :source-total-pages="sourceTotalPages"
+											:selected-id-set="selectedIdSet" :selected-group-id-set="selectedGroupIdSet"
+											@search="searchSources" @browse="browseGroup" @select="selectSource"
+											@toggle-item="toggleSelectedItem" @toggle-group="toggleSelectedGroup" @page="changeSourcePage"
+											@root="sourceParentId = undefined; sourcePage = 1; loadSourceOptions();"
+										/>
 									</template>
 								</div>
 							</section>
