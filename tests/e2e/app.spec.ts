@@ -889,8 +889,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await templateBoundary.getByLabel('Fallback').selectOption('favor-right');
 	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toBeVisible();
 	await templateBoundary.getByLabel('Maximum early start (minutes)').fill('75');
-	await templateBoundary.getByLabel('No limit — always finish outgoing item').check();
-	await expect(templateBoundary.getByLabel('Maximum drift (minutes)')).toBeDisabled();
+	await templateBoundary.getByLabel('Maximum drift in minutes').fill('120');
+	const noLimit = templateBoundary.getByRole('button', { name: 'No Limit', exact: true });
+	await noLimit.click();
+	await expect(noLimit).toHaveAttribute('aria-pressed', 'true');
+	await expect(templateBoundary.getByRole('button', { name: 'Use a finite maximum drift' }))
+		.toContainText('120 min');
 	await expect(templateBoundary.getByLabel('Fallback')).toBeDisabled();
 	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Preview resolved schedule' })).toBeVisible();
@@ -915,8 +919,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(
 		page
 			.getByRole('group', { name: /Outgoing boundary at/ })
-			.getByLabel('No limit — always finish outgoing item'),
-	).toBeChecked();
+			.getByRole('button', { name: 'No Limit', exact: true }),
+	).toHaveAttribute('aria-pressed', 'true');
 	await page.goto('/schedules/channels');
 	const channelScheduleHelp = page.getByRole('heading', { name: 'What is a channel schedule?' });
 	await expect(channelScheduleHelp).toBeVisible();

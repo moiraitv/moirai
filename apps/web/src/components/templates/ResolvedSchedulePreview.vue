@@ -54,28 +54,38 @@ function timeRange(start: string, finish: string): string {
 			</div>
 		</div>
 		<p v-if="error" class="notice error">{{ error }}</p>
-		<p v-else-if="stale || (!preview && (queued || updating))" class="notice">
-			{{ updating ? 'Updating resolved schedule…' : 'Schedule changed; previewing shortly…' }}
-		</p>
-		<div v-if="preview" class="resolved-track">
+		<div class="resolved-track-shell resolved-preview-track-shell">
+			<div class="resolved-track" :class="{ 'is-placeholder': !preview }">
+				<template v-if="preview">
+					<div
+						v-for="segment in preview.segments"
+						:key="segment.id"
+						class="resolved-segment"
+						:class="[`role-${segment.role}`, { truncated: segment.truncated }]"
+						:style="{
+							...programColorStyle(segment.programId),
+							width: `${guideSegmentPercent(
+								segment.start,
+								segment.finish,
+								previewWindowMilliseconds,
+							)}%`,
+						}"
+						:title="`${segment.title} · ${timeRange(segment.start, segment.finish)}`"
+						:aria-label="`${segment.title}, ${timeRange(segment.start, segment.finish)}`"
+					>
+						<strong>{{ segment.title }}</strong>
+						<small>{{ timeRange(segment.start, segment.finish) }}</small>
+					</div>
+				</template>
+			</div>
 			<div
-				v-for="segment in preview.segments"
-				:key="segment.id"
-				class="resolved-segment"
-				:class="[`role-${segment.role}`, { truncated: segment.truncated }]"
-				:style="{
-					...programColorStyle(segment.programId),
-					width: `${guideSegmentPercent(
-						segment.start,
-						segment.finish,
-						previewWindowMilliseconds,
-					)}%`,
-				}"
-				:title="`${segment.title} · ${timeRange(segment.start, segment.finish)}`"
-				:aria-label="`${segment.title}, ${timeRange(segment.start, segment.finish)}`"
+				v-if="!error && (stale || (!preview && (queued || updating)))"
+				class="resolved-preview-loading"
+				role="status"
+				aria-live="polite"
 			>
-				<strong>{{ segment.title }}</strong>
-				<small>{{ timeRange(segment.start, segment.finish) }}</small>
+				<RefreshCw :size="17" class="spinning" aria-hidden="true" />
+				<span>{{ updating ? 'Updating resolved schedule…' : 'Schedule changed — refreshing preview...' }}</span>
 			</div>
 		</div>
 		<AnimatedDisclosure v-if="preview?.issues.length" v-model="issuesOpen" class="timeline-issues compact-preview-issues">

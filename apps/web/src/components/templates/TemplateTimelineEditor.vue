@@ -116,7 +116,7 @@ function handlePointerMove(event: PointerEvent): void {
 					Choose where to divide the timeline. Adding a slot keeps the full day allocated.
 					<span>Click or press Enter to add · Arrow keys adjust · Esc cancels</span>
 				</p>
-				<div v-else class="template-slot-list" aria-label="Template slots">
+				<div v-else-if="editorView === 'list'" class="template-slot-list" aria-label="Template slots">
 					<button
 						v-for="slot in sortedSlots"
 						:key="slot.id"

@@ -83,7 +83,6 @@
 	.catalog-selection-page-action {
 		align-self: flex-start;
 	}
-
 }
 
 @media (max-width: 900px) {
@@ -417,6 +416,7 @@
 
 	.template-schedule-main,
 	.slot-inspector,
+	.template-default-filler-panel,
 	.assignment-panel,
 	.resolved-preview {
 		padding: 16px 14px;
@@ -645,6 +645,14 @@
 	.form-grid,
 	.form-grid.three {
 		grid-template-columns: 1fr;
+	}
+
+	.template-default-filler-row {
+		grid-template-columns: 42px minmax(0, 1fr);
+	}
+
+	.template-default-filler-field {
+		grid-column: 2;
 	}
 
 	.library-source-row {

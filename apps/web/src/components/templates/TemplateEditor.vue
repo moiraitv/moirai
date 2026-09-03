@@ -3,7 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import {
+	ChevronDown,
 	Clock3,
+	Monitor,
 	Pencil,
 	Trash2,
 } from '@lucide/vue';
@@ -567,6 +569,11 @@ function toggleUnlimitedBoundaryDrift(unlimited: boolean): void {
 	});
 }
 
+/** Return the selected boundary's current or last finite drift in minutes. */
+function finiteBoundaryDriftMinutes(boundary: ScheduleBoundary): number {
+	return (boundary.maxDriftSeconds ?? finiteBoundaryDrift.get(boundary.id) ?? 0) / 60;
+}
+
 /** Replace start eligibility and supply the default tolerance required by drift mode. */
 function updateStartEligibility(type: ScheduleSlot['startEligibility']['type']): void {
 	if (!selectedSlot.value) {
@@ -621,6 +628,28 @@ function toggleTemplateFiller(enabled: boolean): void {
 	const programId = programs.value[0]?.id;
 	draft.value.defaultFiller
 		= enabled && programId ? { programId, policy: 'best-fit-or-truncate' } : null;
+	markChanged();
+}
+
+/** Replace the template filler program when its configuration is enabled. */
+function updateTemplateFillerProgram(programId: string): void {
+	if (!draft.value?.defaultFiller) {
+		return;
+	}
+
+	draft.value.defaultFiller.programId = programId;
+	markChanged();
+}
+
+/** Replace the template filler selection policy when its configuration is enabled. */
+function updateTemplateFillerPolicy(
+	policy: NonNullable<ScheduleTemplateCreate['defaultFiller']>['policy'],
+): void {
+	if (!draft.value?.defaultFiller) {
+		return;
+	}
+
+	draft.value.defaultFiller.policy = policy;
 	markChanged();
 }
 
@@ -1052,7 +1081,10 @@ onBeforeUnmount(() => {
 									v-model="advancedOpen"
 									class="slot-advanced"
 								>
-									<template #summary><span>Advanced scheduling behavior</span></template>
+									<template #summary>
+										<span>Advanced scheduling behavior</span>
+										<ChevronDown :size="17" aria-hidden="true" />
+									</template>
 									<div class="form-grid">
 										<label
 										><span>Playback state</span
@@ -1110,27 +1142,45 @@ onBeforeUnmount(() => {
 												<option value="finish-left">Finish left item</option>
 												<option value="favor-right">Favor right slot</option>
 											</select></label
-											><label
-											><span>Maximum drift (minutes)</span
-											><input
-												type="number"
-												min="0"
-												max="1440"
-												:disabled="selectedBoundary.maxDriftSeconds === null"
-												:value="(selectedBoundary.maxDriftSeconds ?? 0) / 60"
-												@input="
-													updateBoundaryDrift(Number(($event.target as HTMLInputElement).value))
-												" /></label
-											><label
-												v-if="selectedBoundary.policy === 'finish-left'"
-												class="check-row boundary-unlimited-control"
-											><input
-												type="checkbox"
-												:checked="selectedBoundary.maxDriftSeconds === null"
-												@change="
-													toggleUnlimitedBoundaryDrift(($event.target as HTMLInputElement).checked)
-												"
-											/><span>No limit — always finish outgoing item</span></label
+											><label class="boundary-drift-field"
+											><span>Maximum drift</span
+											><span class="boundary-drift-toggle">
+												<span
+													v-if="selectedBoundary.maxDriftSeconds !== null"
+													class="boundary-drift-minutes"
+												>
+													<input
+														type="number"
+														aria-label="Maximum drift in minutes"
+														min="0"
+														max="1440"
+														:value="selectedBoundary.maxDriftSeconds / 60"
+														@input="
+															updateBoundaryDrift(Number(($event.target as HTMLInputElement).value))
+														"
+													/>
+													<span aria-hidden="true">min</span>
+												</span>
+												<button
+													v-else
+													type="button"
+													class="boundary-drift-mode-button boundary-drift-finite-button"
+													aria-label="Use a finite maximum drift"
+													@click="toggleUnlimitedBoundaryDrift(false)"
+												>
+													{{ finiteBoundaryDriftMinutes(selectedBoundary) }} min
+												</button>
+												<button
+													type="button"
+													class="boundary-drift-mode-button"
+													:class="{ active: selectedBoundary.maxDriftSeconds === null }"
+													:aria-pressed="selectedBoundary.maxDriftSeconds === null"
+													:disabled="selectedBoundary.policy !== 'finish-left'"
+													@click="toggleUnlimitedBoundaryDrift(true)"
+												>
+													No Limit
+												</button>
+											</span></label
 											><label
 											><span>Fallback</span
 											><select
@@ -1226,45 +1276,75 @@ onBeforeUnmount(() => {
 											>
 										</div>
 									</fieldset>
-									<fieldset>
-										<legend>Template default filler</legend>
-										<label class="check-row"
-										><input
-											type="checkbox"
-											:checked="draft.defaultFiller !== null"
-											@change="toggleTemplateFiller(($event.target as HTMLInputElement).checked)"
-										/>Configure default filler</label
-										>
-										<div v-if="draft.defaultFiller" class="form-grid">
-											<label>
-												<span>Program</span>
-												<span class="template-program-control">
-													<select v-model="draft.defaultFiller.programId" @change="markChanged">
-														<option v-for="program in programs" :key="program.id" :value="program.id">
-															{{ program.name }}
-														</option>
-													</select>
-													<button
-														type="button"
-														class="template-edit-program-button"
-														:aria-label="`Edit ${programName(draft.defaultFiller.programId)}`"
-														@click="editProgram(draft.defaultFiller.programId)"
-													>
-														<Pencil :size="16" />Edit
-													</button>
-												</span> </label
-											><label
-											><span>Selection policy</span
-											><select v-model="draft.defaultFiller.policy" @change="markChanged">
-												<option value="best-fit-or-truncate">Best fit or truncate</option>
-												<option value="best-fit-only">Best fit only</option>
-												<option value="next-truncate">Next and truncate</option>
-												<option value="next-fit-only">Next only if it fits</option>
-											</select></label
-											>
-										</div>
-									</fieldset>
 								</AnimatedDisclosure>
+							</section>
+
+							<section class="template-default-filler-panel editor-surface">
+								<div class="template-panel-heading">
+									<div>
+										<p class="eyebrow">Template behavior</p>
+										<h2>Template default filler</h2>
+									</div>
+								</div>
+								<p class="template-default-filler-description">
+									Used by programmed slots whose Filler mode is Inherit.
+								</p>
+								<div
+									class="template-default-filler-row"
+									:class="{ 'is-disabled': !draft.defaultFiller }"
+								>
+									<label class="template-default-filler-toggle">
+										<input
+											type="checkbox"
+											aria-label="Use template default filler"
+											:checked="draft.defaultFiller !== null"
+											:disabled="!draft.defaultFiller && programs.length === 0"
+											@change="toggleTemplateFiller(($event.target as HTMLInputElement).checked)"
+										/>
+									</label>
+									<label class="template-default-filler-field">
+										<span>Program</span>
+										<span class="template-program-control">
+											<select
+												:value="draft.defaultFiller?.programId ?? programs[0]?.id ?? ''"
+												:disabled="!draft.defaultFiller"
+												@change="updateTemplateFillerProgram(($event.target as HTMLSelectElement).value)"
+											>
+												<option v-for="program in programs" :key="program.id" :value="program.id">
+													{{ program.name }}
+												</option>
+											</select>
+											<button
+												type="button"
+												class="template-edit-program-button"
+												aria-label="Edit template default filler program"
+												:disabled="!draft.defaultFiller"
+												@click="draft.defaultFiller && editProgram(draft.defaultFiller.programId)"
+											>
+												<Pencil :size="16" />Edit
+											</button>
+										</span>
+									</label>
+									<label class="template-default-filler-field">
+										<span>Selection policy</span>
+										<select
+											:value="draft.defaultFiller?.policy ?? 'best-fit-or-truncate'"
+											:disabled="!draft.defaultFiller"
+											@change="
+												updateTemplateFillerPolicy(
+													($event.target as HTMLSelectElement).value as NonNullable<
+														ScheduleTemplateCreate['defaultFiller']
+													>['policy'],
+												)
+											"
+										>
+											<option value="best-fit-or-truncate">Best fit or truncate</option>
+											<option value="best-fit-only">Best fit only</option>
+											<option value="next-truncate">Next and truncate</option>
+											<option value="next-fit-only">Next only if it fits</option>
+										</select>
+									</label>
+								</div>
 							</section>
 
 							<TemplateAssignments :channels="assignedChannels" />
