@@ -25,7 +25,7 @@ if (
 console.log(JSON.stringify({
 	format: { duration: '5880.125', format_name: 'mov,mp4,m4a,3gp,3g2,mj2' },
 	streams: [
-		{ codec_type: 'video', codec_name: 'h264', width: 1920, height: 1080 },
-		{ codec_type: 'audio', codec_name: 'aac' },
+		{ codec_type: 'video', codec_name: 'h264', width: 1920, height: 1080, duration: '5880.125' },
+		{ codec_type: 'audio', codec_name: 'aac', duration: '5880.125' },
 	],
 }));

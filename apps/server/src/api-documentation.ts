@@ -128,6 +128,10 @@ export async function createOpenApiDocument(): Promise<ApiDescriptionDocument> {
 				{ name: 'Authentication', description: 'Administrator initialization and sessions.' },
 				{ name: 'System', description: 'Liveness, readiness, capabilities, and live status.' },
 				{ name: 'Logs', description: 'Bounded operational log browsing and downloads.' },
+				{
+					name: 'Playback fallback',
+					description: 'Managed video used to cover otherwise unfilled playback intervals.',
+				},
 				{ name: 'Libraries', description: 'Media source configuration.' },
 				{ name: 'Library scans', description: 'Scan lifecycle and retained history.' },
 				{ name: 'Library reconciliation', description: 'Safe missing-media and source-change resolution.' },

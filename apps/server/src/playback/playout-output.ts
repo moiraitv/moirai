@@ -3,7 +3,28 @@ import {
 	toEtvPlayout,
 	type EtvPlayoutItem,
 } from '@moirai/ersatztv-contract';
-import type { Channel, ScheduleGuide, TimelineSegment } from '@moirai/shared';
+import {
+	FALLBACK_FILLER_MIN_DURATION_MILLISECONDS,
+	type Channel,
+	type ScheduleGuide,
+	type TimelineSegment,
+} from '@moirai/shared';
+
+/** Maximum source span exposed through one fallback playout item. */
+export const FALLBACK_ITEM_MAX_MILLISECONDS = 5 * 60 * 1_000;
+
+/** Effective fallback selected for one channel. */
+export interface PlayoutFallback {
+	path: string;
+	durationMilliseconds: number;
+	hasAudio: boolean;
+}
+
+/** Concrete interval covered by scheduled media before fallback insertion. */
+interface CoveredInterval {
+	start: Temporal.Instant;
+	finish: Temporal.Instant;
+}
 
 /** Pad a non-negative date or time component for a compact ISO timestamp. */
 function padded(value: number, length = 2): string {
@@ -90,10 +111,185 @@ function playoutItems(
 	return output;
 }
 
+/** Merge scheduled intervals so their complement can be filled without overlaps. */
+function coveredIntervals(
+	segments: TimelineSegment[],
+	windowStart: Temporal.Instant,
+	windowEnd: Temporal.Instant,
+	date: string,
+): CoveredInterval[] {
+	const intervals = segments
+		.flatMap((segment) => playoutItems(segment, windowStart, windowEnd, date))
+		.map<CoveredInterval>((item) => ({
+			start: Temporal.Instant.from(item.start),
+			finish: Temporal.Instant.from(item.finish),
+		}))
+		.sort((left, right) => Temporal.Instant.compare(left.start, right.start));
+	const merged: CoveredInterval[] = [];
+	for (const interval of intervals) {
+		const prior = merged.at(-1);
+		if (prior && Temporal.Instant.compare(interval.start, prior.finish) <= 0) {
+			if (Temporal.Instant.compare(interval.finish, prior.finish) > 0) {
+				prior.finish = interval.finish;
+			}
+			continue;
+		}
+		merged.push({ ...interval });
+	}
+	return merged;
+}
+
+/** Return every continuous interval not occupied by scheduled playable media. */
+function uncoveredIntervals(
+	covered: CoveredInterval[],
+	windowStart: Temporal.Instant,
+	windowEnd: Temporal.Instant,
+): CoveredInterval[] {
+	const gaps: CoveredInterval[] = [];
+	let cursor = windowStart;
+	for (const interval of covered) {
+		if (Temporal.Instant.compare(cursor, interval.start) < 0) {
+			gaps.push({ start: cursor, finish: interval.start });
+		}
+		if (Temporal.Instant.compare(interval.finish, cursor) > 0) {
+			cursor = interval.finish;
+		}
+	}
+	if (Temporal.Instant.compare(cursor, windowEnd) < 0) {
+		gaps.push({ start: cursor, finish: windowEnd });
+	}
+	return gaps;
+}
+
+/** Derive a stable loop anchor from materialized dead air or the fixed epoch for an empty guide. */
+function fallbackOffset(
+	gap: CoveredInterval,
+	segments: TimelineSegment[],
+	durationMilliseconds: number,
+): number {
+	const anchors = segments
+		.filter((segment) => segment.role === 'dead-air' || !segment.playbackPath)
+		.filter((segment) => {
+			const start = Temporal.Instant.from(segment.start);
+			const finish = Temporal.Instant.from(segment.finish);
+			return Temporal.Instant.compare(start, gap.finish) < 0
+				&& Temporal.Instant.compare(finish, gap.start) > 0;
+		})
+		.map((segment) => Temporal.Instant.from(segment.start))
+		.sort(Temporal.Instant.compare);
+	const anchor = anchors[0];
+	if (!anchor && segments.length > 0) {
+		return 0;
+	}
+
+	const sourceAnchor = anchor ?? Temporal.Instant.fromEpochMilliseconds(0);
+	const elapsed = Math.max(0, Math.round(elapsedMilliseconds(sourceAnchor, gap.start)));
+	return elapsed % durationMilliseconds;
+}
+
+/** Loop or truncate one fallback source to cover a continuous uncovered interval exactly. */
+function fallbackItems(
+	gap: CoveredInterval,
+	fallback: PlayoutFallback,
+	initialSourceOffsetMs = 0,
+): EtvPlayoutItem[] {
+	if (
+		!Number.isSafeInteger(fallback.durationMilliseconds)
+		|| fallback.durationMilliseconds < FALLBACK_FILLER_MIN_DURATION_MILLISECONDS
+	) {
+		throw new Error('Fallback filler must have a measured duration of at least 1 minute');
+	}
+	if (
+		!Number.isSafeInteger(initialSourceOffsetMs)
+		|| initialSourceOffsetMs < 0
+		|| initialSourceOffsetMs >= fallback.durationMilliseconds
+	) {
+		throw new Error('Fallback filler source offset is outside its measured duration');
+	}
+	const output: EtvPlayoutItem[] = [];
+	let cursor = gap.start;
+	let sourceOffsetMs = initialSourceOffsetMs;
+	while (Temporal.Instant.compare(cursor, gap.finish) < 0) {
+		const gapRemainingMs = Math.round(elapsedMilliseconds(cursor, gap.finish));
+		const sourceRemainingMs = fallback.durationMilliseconds - sourceOffsetMs;
+		const durationMs = Math.min(
+			gapRemainingMs,
+			sourceRemainingMs,
+			FALLBACK_ITEM_MAX_MILLISECONDS,
+		);
+		if (durationMs <= 0) {
+			throw new Error('Fallback filler could not advance through an uncovered interval');
+		}
+		const finish = cursor.add({ milliseconds: durationMs });
+		const sourceFinishMs = sourceOffsetMs + durationMs;
+		output.push({
+			type: 'local',
+			id: `fallback:${cursor.epochMilliseconds}`,
+			start: cursor.toString(),
+			finish: finish.toString(),
+			path: fallback.path,
+			inPointMs: sourceOffsetMs === 0 ? null : sourceOffsetMs,
+			outPointMs: sourceFinishMs,
+			silentAudio: !fallback.hasAudio,
+		});
+		cursor = finish;
+		sourceOffsetMs = sourceFinishMs === fallback.durationMilliseconds ? 0 : sourceFinishMs;
+	}
+	return output;
+}
+/** Clip one generated fallback item to a local-day document while retaining source phase. */
+function clipFallbackItem(
+	item: EtvPlayoutItem,
+	windowStart: Temporal.Instant,
+	windowEnd: Temporal.Instant,
+): EtvPlayoutItem[] {
+	if (item.type !== 'local') {
+		return [];
+	}
+	const itemStart = Temporal.Instant.from(item.start);
+	const itemFinish = Temporal.Instant.from(item.finish);
+	const start = Temporal.Instant.compare(itemStart, windowStart) < 0 ? windowStart : itemStart;
+	const finish = Temporal.Instant.compare(itemFinish, windowEnd) > 0 ? windowEnd : itemFinish;
+	if (Temporal.Instant.compare(start, finish) >= 0) {
+		return [];
+	}
+	const sourceStart = (item.inPointMs ?? 0) + Math.round(elapsedMilliseconds(itemStart, start));
+	const sourceFinish = sourceStart + Math.round(elapsedMilliseconds(start, finish));
+	return [{
+		...item,
+		id: `fallback:${start.epochMilliseconds}`,
+		start: start.toString(),
+		finish: finish.toString(),
+		inPointMs: sourceStart === 0 ? null : sourceStart,
+		outPointMs: sourceFinish,
+	}];
+}
+
+/** Reject incomplete or overlapping daily output before it can replace the last valid playout. */
+function assertCompleteWindow(
+	items: EtvPlayoutItem[],
+	windowStart: Temporal.Instant,
+	windowEnd: Temporal.Instant,
+): void {
+	let cursor = windowStart;
+	for (const item of items) {
+		const start = Temporal.Instant.from(item.start);
+		const finish = Temporal.Instant.from(item.finish);
+		if (Temporal.Instant.compare(start, cursor) !== 0 || Temporal.Instant.compare(finish, start) <= 0) {
+			throw new Error('Generated fallback playout is incomplete or overlapping');
+		}
+		cursor = finish;
+	}
+	if (Temporal.Instant.compare(cursor, windowEnd) !== 0) {
+		throw new Error('Generated fallback playout does not cover the complete local day');
+	}
+}
+
 /** Generate non-overlapping daily ErsatzTV playout files from the committed guide. */
 export function buildEtvPlayoutFiles(
 	channels: Channel[],
 	guide: ScheduleGuide,
+	fallbacks: ReadonlyMap<string, PlayoutFallback> = new Map(),
 ): Map<string, string> {
 	const files = new Map<string, string>();
 	const segmentsByChannel = new Map(
@@ -101,7 +297,28 @@ export function buildEtvPlayoutFiles(
 	);
 	const firstDate = Temporal.PlainDate.from(guide.startDate);
 	for (const channel of channels) {
-		const segments = segmentsByChannel.get(channel.id);
+		const segments = segmentsByChannel.get(channel.id) ?? [];
+		const rangeStart = firstDate.toZonedDateTime(guide.timeZone).toInstant();
+		const rangeFinish = firstDate
+			.add({ days: guide.days })
+			.toZonedDateTime(guide.timeZone)
+			.toInstant();
+		const fallback = fallbacks.get(channel.id);
+		const generatedFallback = fallback
+			? uncoveredIntervals(
+				coveredIntervals(segments, rangeStart, rangeFinish, guide.startDate),
+				rangeStart,
+				rangeFinish,
+			).flatMap((gap) => fallbackItems(
+				gap,
+				fallback,
+				fallbackOffset(
+					gap,
+					segments,
+					fallback.durationMilliseconds,
+				),
+			))
+			: [];
 		for (let day = 0; day < guide.days; day += 1) {
 			const date = firstDate.add({ days: day });
 			const nextDate = date.add({ days: 1 });
@@ -109,16 +326,17 @@ export function buildEtvPlayoutFiles(
 			const zonedFinish = nextDate.toZonedDateTime(guide.timeZone);
 			const start = zonedStart.toInstant();
 			const finish = zonedFinish.toInstant();
-			// Leave intentional gaps empty. The pinned worker fills each gap with a
-			// fresh, bounded one-minute lavfi item at the current transcode position.
-			// Persisting an all-day lavfi item would make the worker seek hours into a
-			// synthetic input when a client tunes mid-day, delaying or preventing HLS
-			// readiness.
-			const items = segments
-				? segments.flatMap((segment) => {
+			const items = [
+				...segments.flatMap((segment) => {
 					return playoutItems(segment, start, finish, date.toString());
-				})
-				: [];
+				}),
+				...generatedFallback.flatMap((item) => {
+					return clipFallbackItem(item, start, finish);
+				}),
+			].sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
+			if (fallback) {
+				assertCompleteWindow(items, start, finish);
+			}
 			const document = toEtvPlayout(items);
 			const filename = `${compactPlayoutTimestamp(zonedStart)}_${compactPlayoutTimestamp(zonedFinish)}.json`;
 			files.set(

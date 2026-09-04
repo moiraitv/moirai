@@ -463,6 +463,58 @@ export class PlaybackEngine {
 		await this.ensureSession(channel);
 	}
 
+	/** Move affected channels to inherited playout before a fallback override is deleted. */
+	async transitionFallbackRemoval(channelId: string | null): Promise<void> {
+		const channelIds = channelId
+			? [channelId]
+			: (await this.repository.listChannels()).map((channel) => channel.id);
+		const active = new Set(channelIds.filter((id) => this.sessions.has(id)));
+		for (const activeChannelId of active) {
+			await this.stop(activeChannelId);
+		}
+		for (const affectedChannelId of channelIds) {
+			try {
+				if (active.has(affectedChannelId)) {
+					await this.restart(affectedChannelId);
+				}
+				else {
+					await this.playout.syncChannel(affectedChannelId);
+				}
+			}
+			catch (error) {
+				this.logger.warn({ error, channelId: affectedChannelId }, 'Fallback playback update failed');
+			}
+		}
+	}
+
+	/** Swap a fallback while affected workers are stopped and recover failures through later syncs. */
+	async transitionFallbackReplacement(
+		channelId: string | null,
+		activate: () => Promise<void>,
+	): Promise<void> {
+		const channelIds = channelId
+			? [channelId]
+			: (await this.repository.listChannels()).map((channel) => channel.id);
+		const active = new Set(channelIds.filter((id) => this.sessions.has(id)));
+		for (const activeChannelId of active) {
+			await this.stop(activeChannelId);
+		}
+		await activate();
+		for (const affectedChannelId of channelIds) {
+			try {
+				if (active.has(affectedChannelId)) {
+					await this.restart(affectedChannelId);
+				}
+				else {
+					await this.playout.syncChannel(affectedChannelId);
+				}
+			}
+			catch (error) {
+				this.logger.warn({ error, channelId: affectedChannelId }, 'Fallback playback update failed');
+			}
+		}
+	}
+
 	/** Replace Moirai's Automatic choice with worker-compatible runtime configuration. */
 	private async effectiveChannel(
 		channel: Channel,

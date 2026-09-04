@@ -12,6 +12,8 @@ import { channelSchema } from '@moirai/shared/api-contracts';
 import { ChannelLogoValidationError, type ChannelLogoStore } from '../artwork/channel-logo-store.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
+import type { FallbackFillerStore } from '../playback/fallback-filler-store.js';
+import type { PlaybackEngine } from '../playback/playback-engine.js';
 import { parseId } from './params.js';
 import {
 	apiOperation,
@@ -26,12 +28,14 @@ interface ChannelRouteDependencies {
 	repository: Repository;
 	events: LiveEventHub;
 	channelLogos: ChannelLogoStore;
+	fallbackFillers: FallbackFillerStore;
+	playback: PlaybackEngine;
 }
 
 /** Register channel configuration and managed-logo endpoints. */
 export function registerChannelRoutes(
 	app: FastifyInstance,
-	{ repository, events, channelLogos }: ChannelRouteDependencies,
+	{ repository, events, channelLogos, fallbackFillers, playback }: ChannelRouteDependencies,
 ): void {
 	// Channel configuration and normalization settings.
 	app.get('/api/v1/channels', {
@@ -209,8 +213,22 @@ export function registerChannelRoutes(
 			throw app.httpErrors.notFound('Channel not found');
 		}
 
-		await channelLogos.remove(id);
+		let playbackStopped = true;
+		try {
+			await playback.handleChannelChange(id, true);
+		}
+		catch (error) {
+			playbackStopped = false;
+			app.log.warn({ error, channelId: id }, 'Deleted channel playback cleanup failed');
+		}
+		const cleanup = await Promise.allSettled([
+			channelLogos.remove(id),
+			...(playbackStopped ? [fallbackFillers.removeChannel(id)] : []),
+		]);
 		publishChannelChange(id, 'deleted');
+		for (const failure of cleanup.filter((result) => result.status === 'rejected')) {
+			app.log.warn({ error: failure.reason, channelId: id }, 'Deleted channel cleanup failed');
+		}
 		return reply.status(204).send();
 	});
 

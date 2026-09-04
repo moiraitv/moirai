@@ -3,6 +3,15 @@
 ## Working Practices
 
 - Keep changes focused on the requested behavior. Preserve unrelated behavior, public interfaces, configuration, and manually maintained documentation unless the task requires changing them.
+- Use the simplest implementation that fully satisfies the requested behavior and established
+  repository constraints. Do not add speculative lifecycle management, configurability, abstraction,
+  or failure handling unless the request or a concrete existing requirement calls for it. When added
+  complexity is necessary, keep it bounded and make the requirement it serves clear.
+- Scale concurrency and failure handling to the frequency and impact of the operation. For rare
+  administrative changes, prefer safe commit-forward recovery through existing reconciliation over
+  cross-component rollback or lifecycle barriers unless an explicit contract requires an atomic
+  handoff or uninterrupted service. Still stop consumers before destructive cleanup can invalidate
+  resources they use.
 - Follow the repository's existing conventions where they are established. Prefer shared public constants and documented contracts over duplicated values or assumptions.
 - Before designing substantial new functionality, identify plausible maintained libraries that could
   provide the required behavior and surface strong candidates early. Compare their feature and

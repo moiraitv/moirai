@@ -13,6 +13,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
     "@fastify/formbody": "^8.0.2",
+    "@fastify/multipart": "^10.1.1",
     "@fastify/sensible": "^6.0.3",
     "@fastify/static": "^10.1.3",
     "@fastify/swagger": "^9.8.1",

@@ -382,6 +382,102 @@
 	width: auto;
 }
 
+.fallback-filler-panel {
+	display: grid;
+	gap: 14px;
+}
+
+.fallback-filler-panel > h2,
+.fallback-filler-panel > p {
+	margin: 0;
+}
+
+.fallback-filler-editor {
+	min-width: 0;
+	padding: 14px;
+	border: 1px solid #293e51;
+	border-radius: 10px;
+	background: rgba(5, 15, 24, 0.62);
+}
+
+.fallback-filler-heading {
+	margin-bottom: 12px;
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	color: #c7d0da;
+	font-size: 0.77rem;
+	font-weight: 650;
+}
+
+.fallback-filler-heading small,
+.fallback-filler-details small {
+	color: var(--muted);
+	font-size: 0.68rem;
+	font-weight: 500;
+}
+
+.fallback-filler-content {
+	display: grid;
+	grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+	align-items: center;
+	gap: 16px;
+}
+
+.fallback-filler-preview {
+	min-height: 110px;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border: 1px dashed #365269;
+	border-radius: 9px;
+	color: #718596;
+	background: #02080d;
+}
+
+.fallback-filler-preview video {
+	width: 100%;
+	max-height: 180px;
+	display: block;
+	background: #000;
+}
+
+.fallback-filler-details {
+	min-width: 0;
+	display: grid;
+	gap: 7px;
+}
+
+.fallback-filler-details strong,
+.fallback-filler-details small {
+	overflow-wrap: anywhere;
+}
+
+.fallback-filler-details .notice {
+	margin: 4px 0;
+}
+
+.fallback-filler-actions {
+	margin-top: 5px;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	flex-wrap: wrap;
+}
+
+.fallback-filler-actions .button {
+	min-height: 38px;
+	padding: 7px 11px;
+	font-size: 0.72rem;
+}
+
+.fallback-filler-loading {
+	padding: 28px;
+	color: var(--muted);
+	text-align: center;
+}
+
 .viewing-preference-list {
 	display: grid;
 	gap: 0.45rem;

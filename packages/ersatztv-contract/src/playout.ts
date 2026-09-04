@@ -13,6 +13,7 @@ export interface EtvLocalPlayoutItem {
 	path: string;
 	inPointMs: number | null;
 	outPointMs: number | null;
+	silentAudio?: boolean;
 }
 
 /** A bounded black-and-silent item used for intentional dead air. */
@@ -41,6 +42,18 @@ function toEtvPlayoutItem(item: EtvPlayoutItem): Record<string, unknown> {
 				...(item.inPointMs === null ? {} : { in_point_ms: item.inPointMs }),
 				...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs }),
 			},
+			...(item.silentAudio
+				? {
+					tracks: {
+						audio: {
+							source: {
+								source_type: 'lavfi',
+								params: 'anullsrc=channel_layout=stereo:sample_rate=48000',
+							},
+						},
+					},
+				}
+				: {}),
 		};
 	}
 

@@ -32,6 +32,7 @@ describe('media probe output', () => {
 					index: 0,
 					type: 'video',
 					codec: 'hevc',
+					durationMilliseconds: 65_000,
 					width: 3840,
 					height: 2160,
 					language: null,
@@ -45,6 +46,7 @@ describe('media probe output', () => {
 					index: 1,
 					type: 'audio',
 					codec: 'aac',
+					durationMilliseconds: 64_500,
 					width: null,
 					height: null,
 					language: null,
@@ -72,6 +74,22 @@ describe('media probe output', () => {
 			format: { duration: '10' },
 			streams: [{ codec_type: 'audio', codec_name: 'aac' }],
 		}), 1)).toThrow(MediaProbeError);
+	});
+
+	it('uses Matroska duration tags when native stream durations are unavailable', () => {
+		const result = parseMediaProbeOutput(JSON.stringify({
+			format: { format_name: 'matroska,webm' },
+			streams: [{
+				codec_type: 'video',
+				codec_name: 'vp9',
+				width: 1920,
+				height: 1080,
+				tags: { DURATION: '00:01:05.125000000' },
+			}],
+		}), 42);
+
+		expect(result.durationMilliseconds).toBe(65_125);
+		expect(result.streams[0]?.durationMilliseconds).toBe(65_125);
 	});
 
 	it('rejects measured durations beyond the scheduling limit', () => {

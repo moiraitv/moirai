@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
+import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { validatorCompiler } from 'fastify-type-provider-zod';
-import { CHANNEL_LOGO_MAX_BYTES } from '@moirai/shared';
+import { CHANNEL_LOGO_MAX_BYTES, FALLBACK_FILLER_MAX_BYTES } from '@moirai/shared';
 import { ArtworkCache } from './artwork/artwork-cache.js';
 import { registerAuthenticationGuard } from './auth/http.js';
 import { LogtoAuthenticationProvider } from './auth/logto-provider.js';
@@ -23,6 +24,7 @@ import { MediaProbe } from './media/media-probe.js';
 import { PlaybackEngine } from './playback/playback-engine.js';
 import { HardwareAccelerationResolver } from './playback/hardware-acceleration.js';
 import { PlayoutSynchronizer } from './playback/playout-synchronizer.js';
+import { FallbackFillerStore } from './playback/fallback-filler-store.js';
 import { Repository } from './repository/index.js';
 import { ResourcePressureCoordinator } from './operations/resource-pressure.js';
 import { ScannerManager } from './scanner/manager.js';
@@ -45,6 +47,7 @@ export interface AppServices {
 	events: LiveEventHub;
 	artworkCache: ArtworkCache;
 	channelLogos: ChannelLogoStore;
+	fallbackFillers: FallbackFillerStore;
 	epg: EpgService;
 	timelineMaterializer: TimelineMaterializer;
 	schedulingWorkers: SchedulingWorkerPool;
@@ -109,6 +112,13 @@ export async function buildApp(
 		resourcePressure,
 	);
 	await mediaProbe.start();
+	const fallbackFillers = new FallbackFillerStore(
+		config.fallbackFillerDir,
+		config.bundledFallbackFillerDir,
+		mediaProbe,
+		logs.logger as FastifyBaseLogger,
+	);
+	await fallbackFillers.start((await repository.listChannels()).map((channel) => channel.id));
 	const librarySources = new LibrarySourceRegistry([
 		new OnDiskSourceAdapter(mediaProbe),
 	]);
@@ -142,6 +152,7 @@ export async function buildApp(
 		config.timeZone,
 		config.playbackSyncIntervalSeconds,
 		() => timelineMaterializer.runNow(),
+		fallbackFillers,
 		events,
 		logs.logger as FastifyBaseLogger,
 	);
@@ -202,7 +213,12 @@ export async function buildApp(
 	const unsubscribePlayout = events.subscribe((event) => playout.handleEvent(event));
 	const unsubscribePlayback = events.subscribe((event) => {
 		if (event.type === 'channel.changed') {
-			void playback.handleChannelChange(event.data.channelId, event.data.change === 'deleted');
+			void playback.handleChannelChange(
+				event.data.channelId,
+				event.data.change === 'deleted',
+			).catch((error) => {
+				logs.logger.warn({ error, channelId: event.data.channelId }, 'Playback channel update failed');
+			});
 		}
 	});
 
@@ -230,6 +246,10 @@ export async function buildApp(
 	await app.register(sensible);
 	await app.register(cookie);
 	await app.register(formbody);
+	await app.register(multipart, {
+		limits: { files: 1, fields: 0, fileSize: FALLBACK_FILLER_MAX_BYTES },
+		throwFileSizeLimit: true,
+	});
 	registerAuthenticationGuard(app, authentication, config);
 
 	// Start and stop background services with the HTTP application lifecycle.
@@ -285,6 +305,7 @@ export async function buildApp(
 		events,
 		artworkCache,
 		channelLogos,
+		fallbackFillers,
 		epg,
 		timelineMaterializer,
 		schedulingWorkers,
@@ -317,6 +338,7 @@ export async function buildApp(
 			events,
 			artworkCache,
 			channelLogos,
+			fallbackFillers,
 			epg,
 			timelineMaterializer,
 			schedulingWorkers,

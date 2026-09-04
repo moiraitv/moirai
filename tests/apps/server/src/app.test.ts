@@ -30,6 +30,29 @@ const transparentPng = await sharp({
 	.png()
 	.toBuffer();
 
+/** Encode one deterministic multipart upload accepted by Fastify injection. */
+function multipartVideo(filename: string, content: Buffer, fieldname = 'file'): {
+	payload: Buffer;
+	headers: Record<string, string>;
+} {
+	const boundary = `moirai-${randomUUID()}`;
+	const payload = Buffer.concat([
+		Buffer.from(
+			`--${boundary}\r\nContent-Disposition: form-data; name="${fieldname}"; filename="${filename}"\r\n`
+			+ 'Content-Type: video/mp4\r\n\r\n',
+		),
+		content,
+		Buffer.from(`\r\n--${boundary}--\r\n`),
+	]);
+	return {
+		payload,
+		headers: {
+			'content-type': `multipart/form-data; boundary=${boundary}`,
+			'content-length': String(payload.length),
+		},
+	};
+}
+
 const cleanups: Array<() => Promise<void>> = [];
 async function eventually<T>(read: () => Promise<T>, accept: (value: T) => boolean): Promise<T> {
 	const deadline = Date.now() + 3_000;
@@ -46,7 +69,7 @@ function nextLiveEvent(
 	predicate: (event: LiveEvent) => boolean,
 ): Promise<LiveEvent> {
 	return new Promise((resolve, reject) => {
-		const timeout = setTimeout(() => reject(new Error('Timed out waiting for live event')), 2_000);
+		const timeout = setTimeout(() => reject(new Error('Timed out waiting for live event')), 10_000);
 		const onMessage = (message: RawData) => {
 			try {
 				const event = liveEventSchema.parse(JSON.parse(message.toString()));
@@ -1372,7 +1395,7 @@ describe('API', () => {
 		for (const issue of guide.channels[0].preview.issues) {
 			expect(issue).not.toHaveProperty('occurrenceCounts');
 		}
-	});
+	}, 15_000);
 
 	it('keeps a program type, source type, and library fixed after creation', async () => {
 		const { app, services } = await fixture();
@@ -1632,6 +1655,167 @@ describe('API', () => {
 		expect(removed.statusCode).toBe(200);
 		expect(removed.json().logo).toBeNull();
 		expect((await app.inject({ url: `/api/v1/channels/${created.id}/logo` })).statusCode).toBe(404);
+	}, 15_000);
+
+	it('uploads, inherits, previews, and removes managed playback fallback fillers', async () => {
+		const { app } = await fixture();
+		const wrongField = multipartVideo(
+			'wrong-field.mp4',
+			Buffer.from('rejected-fallback-video'),
+			'video',
+		);
+		const rejectedField = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/fallback-filler',
+			headers: wrongField.headers,
+			payload: wrongField.payload,
+		});
+		expect(rejectedField.statusCode).toBe(400);
+
+		const initial = await app.inject({ url: '/api/v1/playback/fallback-filler' });
+		expect(initial.statusCode).toBe(200);
+		expect(initial.json()).toMatchObject({
+			override: null,
+			overrideConfigured: false,
+			effective: { source: 'bundled', hasAudio: true },
+			inherited: { source: 'bundled', previewUrl: '/api/v1/playback/fallback-filler/bundled-preview' },
+		});
+		const bundledPreview = await app.inject({
+			url: '/api/v1/playback/fallback-filler/bundled-preview',
+			headers: { range: 'bytes=0-5' },
+		});
+		expect(bundledPreview.statusCode).toBe(206);
+		expect(bundledPreview.rawPayload).toHaveLength(6);
+
+		const globalBytes = Buffer.from('global-fallback-video');
+		const globalUpload = multipartVideo('global.mp4', globalBytes);
+		const uploadedGlobal = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/fallback-filler',
+			headers: globalUpload.headers,
+			payload: globalUpload.payload,
+		});
+		expect(uploadedGlobal.statusCode).toBe(200);
+		expect(uploadedGlobal.json()).toMatchObject({
+			override: { source: 'global', filename: 'global.mp4' },
+			overrideConfigured: true,
+			effective: { source: 'global' },
+			inherited: { source: 'bundled' },
+		});
+		const globalPreview = await app.inject({
+			url: '/api/v1/playback/fallback-filler/preview',
+			headers: { range: 'bytes=0-5' },
+		});
+		expect(globalPreview.statusCode).toBe(206);
+		expect(globalPreview.rawPayload).toEqual(globalBytes.subarray(0, 6));
+
+		const created = await app.inject({
+			method: 'POST',
+			url: '/api/v1/channels',
+			payload: { number: 'fallback-test', name: 'Fallback Test' },
+		});
+		const channel = created.json();
+		const inherited = await app.inject({
+			url: `/api/v1/channels/${channel.id}/fallback-filler`,
+		});
+		expect(inherited.json()).toMatchObject({
+			override: null,
+			overrideConfigured: false,
+			effective: { source: 'global' },
+			inherited: { source: 'global' },
+		});
+
+		const socket = await app.injectWS('/api/v1/events');
+		const uploadedChannelEvent = nextLiveEvent(
+			socket,
+			(event) => event.type === 'playback.changed'
+				&& event.data.channelId === channel.id
+				&& event.data.reason === 'fallback-applied',
+		);
+		const channelUpload = multipartVideo('channel.mp4', Buffer.from('channel-fallback-video'));
+		const uploadedChannel = await app.inject({
+			method: 'PUT',
+			url: `/api/v1/channels/${channel.id}/fallback-filler`,
+			headers: channelUpload.headers,
+			payload: channelUpload.payload,
+		});
+		expect(uploadedChannel.statusCode).toBe(200);
+		expect(uploadedChannel.json()).toMatchObject({
+			override: { source: 'channel', filename: 'channel.mp4' },
+			overrideConfigured: true,
+			effective: { source: 'channel' },
+			inherited: { source: 'global' },
+		});
+		await expect(uploadedChannelEvent).resolves.toMatchObject({
+			type: 'playback.changed',
+			data: { channelId: channel.id, reason: 'fallback-applied' },
+		});
+
+		const removedChannelEvent = nextLiveEvent(
+			socket,
+			(event) => event.type === 'playback.changed'
+				&& event.data.channelId === channel.id
+				&& event.data.reason === 'fallback-applied',
+		);
+		const removedChannel = await app.inject({
+			method: 'DELETE',
+			url: `/api/v1/channels/${channel.id}/fallback-filler`,
+		});
+		expect(removedChannel.json()).toMatchObject({
+			override: null,
+			overrideConfigured: false,
+			effective: { source: 'global' },
+		});
+		await expect(removedChannelEvent).resolves.toMatchObject({
+			type: 'playback.changed',
+			data: { channelId: channel.id, reason: 'fallback-applied' },
+		});
+		socket.close();
+		const removedGlobal = await app.inject({
+			method: 'DELETE',
+			url: '/api/v1/playback/fallback-filler',
+		});
+		expect(removedGlobal.json()).toMatchObject({
+			override: null,
+			overrideConfigured: false,
+			effective: { source: 'bundled' },
+		});
+	}, 30_000);
+
+	it('completes channel deletion while preserving fallback after playback cleanup fails', async () => {
+		const { app, services } = await fixture();
+		const created = await app.inject({
+			method: 'POST',
+			url: '/api/v1/channels',
+			payload: { number: 'cleanup-failure', name: 'Cleanup Failure' },
+		});
+		const channel = created.json() as { id: string };
+		await app.ready();
+		const socket = await app.injectWS('/api/v1/events');
+		const deletedEvent = nextLiveEvent(
+			socket,
+			(event) => event.type === 'channel.changed'
+				&& event.data.channelId === channel.id
+				&& event.data.change === 'deleted',
+		);
+		vi.spyOn(services.playback, 'handleChannelChange').mockImplementation(async () => {
+			throw new Error('simulated playback cleanup failure');
+		});
+		const removeFallback = vi.spyOn(services.fallbackFillers, 'removeChannel');
+
+		const removed = await app.inject({
+			method: 'DELETE',
+			url: `/api/v1/channels/${channel.id}`,
+		});
+
+		expect(removed.statusCode).toBe(204);
+		expect(await services.repository.getChannel(channel.id)).toBeNull();
+		expect(removeFallback).not.toHaveBeenCalled();
+		await expect(deletedEvent).resolves.toMatchObject({
+			type: 'channel.changed',
+			data: { channelId: channel.id, change: 'deleted' },
+		});
+		socket.close();
 	});
 
 	it('commits saved schedules while repeated draft previews leave committed state unchanged', async () => {

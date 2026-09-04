@@ -79,6 +79,7 @@ describe('embeddedSubtitleTracks', () => {
 				index: 4,
 				type: 'subtitle',
 				codec: 'ass',
+				durationMilliseconds: null,
 				width: null,
 				height: null,
 				language: 'eng',

@@ -44,6 +44,7 @@ import type {
 	LogPage,
 	DataConflictReport,
 	ViewingPreferenceSummary,
+	FallbackFillerStatus,
 } from '@moirai/shared';
 
 /** Current synchronizer token sent with unsafe administrator requests. */
@@ -205,6 +206,30 @@ async function uploadChannelLogo(id: string, image: Blob): Promise<Channel> {
 	return response.json() as Promise<Channel>;
 }
 
+/** Upload one managed fallback video without buffering it in the browser client. */
+async function uploadFallbackFiller(url: string, file: File): Promise<FallbackFillerStatus> {
+	const requestAuthenticationGeneration = authenticationGeneration;
+	const body = new FormData();
+	body.append('file', file, file.name);
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers: csrfToken ? { 'X-Moirai-CSRF': csrfToken } : {},
+		credentials: 'same-origin',
+		body,
+	});
+	if (!response.ok) {
+		if (
+			response.status === 401
+			&& activeAuthenticationTransitions === 0
+			&& requestAuthenticationGeneration === authenticationGeneration
+		) {
+			unauthorizedListener?.();
+		}
+		throw new ApiError((await response.json()) as ApiErrorBody, response.status);
+	}
+	return response.json() as Promise<FallbackFillerStatus>;
+}
+
 /** Module-level api value for api. */
 export const api = {
 	authenticationState: (signal?: AbortSignal) => request<AuthenticationState>(
@@ -349,6 +374,20 @@ export const api = {
 	uploadChannelLogo,
 	deleteChannelLogo: (id: string) =>
 		request<Channel>(`/api/v1/channels/${id}/logo`, { method: 'DELETE' }),
+	globalFallbackFiller: () =>
+		request<FallbackFillerStatus>('/api/v1/playback/fallback-filler'),
+	uploadGlobalFallbackFiller: (file: File) =>
+		uploadFallbackFiller('/api/v1/playback/fallback-filler', file),
+	deleteGlobalFallbackFiller: () =>
+		request<FallbackFillerStatus>('/api/v1/playback/fallback-filler', { method: 'DELETE' }),
+	channelFallbackFiller: (id: string) =>
+		request<FallbackFillerStatus>(`/api/v1/channels/${id}/fallback-filler`),
+	uploadChannelFallbackFiller: (id: string, file: File) =>
+		uploadFallbackFiller(`/api/v1/channels/${id}/fallback-filler`, file),
+	deleteChannelFallbackFiller: (id: string) =>
+		request<FallbackFillerStatus>(`/api/v1/channels/${id}/fallback-filler`, {
+			method: 'DELETE',
+		}),
 	schedulingOverview: () => request<SchedulingOverview>('/api/v1/scheduling/overview'),
 	createProgram: (body: ProgramCreate) =>
 		request<SchedulingProgram>('/api/v1/programs', {

@@ -21,20 +21,24 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'createProgram',
 	'createScheduleTemplate',
 	'deleteChannel',
+	'deleteChannelFallbackFiller',
 	'deleteChannelLogo',
 	'deleteChannelSchedule',
 	'deleteLibrary',
 	'deleteProgram',
+	'deleteGlobalFallbackFiller',
 	'deleteScheduleTemplate',
 	'downloadLogFile',
 	'getAuthenticationSession',
 	'getArtwork',
 	'getCapabilities',
 	'getChannelLogo',
+	'getChannelFallbackFiller',
 	'getChannelMasterPlaylist',
 	'getChannelPlaylist',
 	'getChannelSchedule',
 	'getGuideSegment',
+	'getGlobalFallbackFiller',
 	'getHealth',
 	'getLibrary',
 	'getLibraryReconciliation',
@@ -51,6 +55,9 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'getSchedulingOverview',
 	'getXmltvGuide',
 	'inspectMediaPreview-head',
+	'inspectBundledFallbackFiller-head',
+	'inspectChannelFallbackFiller-head',
+	'inspectGlobalFallbackFiller-head',
 	'listChannels',
 	'listDataConflicts',
 	'listLibraries',
@@ -69,8 +76,13 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'previewChannelTimeline',
 	'previewDraftChannelSchedule',
 	'previewDraftTemplate',
+	'previewChannelFallbackFiller',
+	'previewBundledFallbackFiller',
+	'previewGlobalFallbackFiller',
 	'previewMediaItem',
 	'putChannelLogo',
+	'putChannelFallbackFiller',
+	'putGlobalFallbackFiller',
 	'receiveLogtoBackchannelLogout',
 	'recoverLocalAuthentication',
 	'reconcileLibrary',
@@ -105,6 +117,9 @@ type OpenApiOperation = {
 	operationId?: string;
 	tags?: string[];
 	summary?: string;
+	requestBody?: {
+		content?: Record<string, { schema?: Record<string, unknown> }>;
+	};
 	responses?: Record<string, unknown>;
 	security?: Array<Record<string, unknown>>;
 };
@@ -182,6 +197,18 @@ describe('generated interface documentation', () => {
 					expect(operation.responses).toHaveProperty('403');
 				}
 			}
+		}
+	});
+
+	it('documents fallback uploads as a multipart binary file', () => {
+		for (const operationId of ['putGlobalFallbackFiller', 'putChannelFallbackFiller']) {
+			const schema = httpOperation(openapi, operationId).requestBody
+				?.content?.['multipart/form-data']?.schema as {
+					properties?: { file?: Record<string, unknown> };
+					required?: string[];
+				} | undefined;
+			expect(schema?.properties?.file).toMatchObject({ type: 'string', format: 'binary' });
+			expect(schema?.required).toContain('file');
 		}
 	});
 

@@ -6,7 +6,7 @@ import { resourceErrorCode, type ResourcePressureCoordinator } from '../operatio
 import { openSourceFile } from './source-file.js';
 
 /** Probe contract version included in cache identities. */
-export const MEDIA_PROBE_VERSION = 2;
+export const MEDIA_PROBE_VERSION = 3;
 /** Maximum ffprobe JSON accepted from one media file. */
 const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 /** Maximum stream records retained from an untrusted container. */
@@ -53,6 +53,7 @@ export interface ProbedMediaStream {
 	index: number;
 	type: 'video' | 'audio' | 'subtitle';
 	codec: string | null;
+	durationMilliseconds: number | null;
 	width: number | null;
 	height: number | null;
 	language: string | null;
@@ -159,6 +160,25 @@ function durationMilliseconds(value: unknown): number | null {
 		: null;
 }
 
+/** Parse an ffprobe stream duration tag expressed as hours, minutes, and fractional seconds. */
+function taggedDurationMilliseconds(tags: Record<string, unknown> | undefined): number | null {
+	const value = tagged(tags, 'duration');
+	const match = /^(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)$/u.exec(value ?? '');
+	if (!match) {
+		return null;
+	}
+
+	const seconds = Number(match[1]) * 3_600 + Number(match[2]) * 60 + Number(match[3]);
+	return durationMilliseconds(seconds);
+}
+
+/** Prefer a native stream duration while accepting Matroska's equivalent duration tag. */
+function streamDurationMilliseconds(
+	stream: NonNullable<ProbeDocument['streams']>[number],
+): number | null {
+	return durationMilliseconds(stream.duration) ?? taggedDurationMilliseconds(stream.tags);
+}
+
 /** Normalize a positive integer stream dimension. */
 function dimension(value: unknown): number | null {
 	return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
@@ -185,6 +205,7 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 			index: Number.isInteger(stream.index) && stream.index! >= 0 ? stream.index! : fallbackIndex,
 			type: stream.codec_type as ProbedMediaStream['type'],
 			codec: typeof stream.codec_name === 'string' ? stream.codec_name.slice(0, 64) : null,
+			durationMilliseconds: streamDurationMilliseconds(stream),
 			width: stream.codec_type === 'video' ? dimension(stream.width) : null,
 			height: stream.codec_type === 'video' ? dimension(stream.height) : null,
 			language: tagged(stream.tags, 'language')?.toLocaleLowerCase('en-US') ?? null,
@@ -203,7 +224,7 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 	const measuredDuration
 		= durationMilliseconds(document.format?.duration)
 			?? rawStreams.reduce<number | null>((longest, stream) => {
-				const current = durationMilliseconds(stream.duration);
+				const current = streamDurationMilliseconds(stream);
 				return current !== null && (longest === null || current > longest) ? current : longest;
 			}, null);
 	if (measuredDuration === null) {
@@ -302,7 +323,7 @@ export class MediaProbe {
 						'-v',
 						'error',
 						'-show_entries',
-						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,duration:stream_tags=language,title:stream_disposition=default,forced,hearing_impaired,comment',
+						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,duration:stream_tags=language,title,DURATION:stream_disposition=default,forced,hearing_impaired,comment',
 						'-of',
 						'json',
 						'-fd',

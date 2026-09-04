@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "file": "dead-air.mp4",
+  "filename": "dead-air.mp4",
+  "contentType": "video/mp4",
+  "fileSizeBytes": 63431559,
+  "durationMilliseconds": 161762,
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "hasAudio": true,
+  "updatedAt": null
+}

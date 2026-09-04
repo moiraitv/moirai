@@ -363,7 +363,13 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
 	await page.getByLabel('Name').fill(`${channelName} Edited`);
-	await page.locator('input[type="file"]').setInputFiles({
+	await page.locator('input[type="file"][accept*=".mp4"]').setInputFiles({
+		name: 'channel-fallback.mp4',
+		mimeType: 'video/mp4',
+		buffer: Buffer.from('fallback-video-fixture'),
+	});
+	await expect(page.locator('.fallback-filler-editor')).toContainText('Pending upload');
+	await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
 		name: 'channel-logo.svg',
 		mimeType: 'image/svg+xml',
 		buffer: wideLogoSvg,
@@ -378,7 +384,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.mouse.move(handleBox!.x - 60, handleBox!.y + handleBox!.height / 2);
 	await page.mouse.up();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(page.getByText(`${channelName} Edited`)).toBeVisible();
+	await expect(page.getByText(`${channelName} Edited`)).toBeVisible({ timeout: 15_000 });
 
 	const savedLogo = page
 		.locator('.guide-channel-cell')
@@ -406,6 +412,29 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	expect((await page.request.get(new URL(preservedLogoUrl!, page.url()).toString())).ok()).toBe(
 		true,
 	);
+
+	await page.getByRole('button', { name: `Edit ${channelName} Preserved` }).click();
+	const fallbackEditor = page.locator('.fallback-filler-editor');
+	await expect(fallbackEditor).toContainText('channel-fallback.mp4');
+	await expect(fallbackEditor).toContainText('Includes audio');
+	const removeFallback = fallbackEditor.getByRole('button', {
+		name: 'Remove fallback filler override',
+	});
+	await removeFallback.click();
+	await page.keyboard.press('Escape');
+	await expect(removeFallback).toBeVisible();
+	await removeFallback.click();
+	await fallbackEditor.getByRole('button', {
+		name: 'Confirm remove fallback filler override',
+	}).click();
+	await expect(fallbackEditor).toContainText('Effective global fallback after save');
+	await expect(fallbackEditor).toContainText('dead-air.mp4');
+	await expect(fallbackEditor.locator('video')).toBeVisible();
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
+	await page.getByRole('button', { name: 'Discard Changes' }).click();
+	await page.getByRole('button', { name: `Edit ${channelName} Preserved` }).click();
+	await expect(page.locator('.fallback-filler-editor')).toContainText('channel-fallback.mp4');
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
 
 	await page.route('**/api/v1/channels', async (route) => {
 		await new Promise((resolve) => setTimeout(resolve, 500));
@@ -1303,6 +1332,227 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateRow).toBeVisible();
 });
 
+test('retains only the fallback draft when a channel fallback upload fails', async ({ page }) => {
+	const csrfToken = await authenticateAdministrator(page);
+	const runId = String(Date.now());
+	const originalName = `Partial fallback ${runId}`;
+	const savedName = `${originalName} saved`;
+	const createdResponse = await page.request.post('/api/v1/channels', {
+		headers: { 'x-moirai-csrf': csrfToken },
+		data: { number: runId.slice(-8), name: originalName },
+	});
+	expect(createdResponse.ok()).toBe(true);
+	const created = await createdResponse.json() as { id: string };
+
+	await page.goto('/channels');
+	await page.getByRole('button', { name: `Edit ${originalName}` }).click();
+	await page.getByLabel('Name').fill(savedName);
+	await page.locator('.fallback-filler-editor input[type="file"]').setInputFiles({
+		name: 'retry-fallback.mp4',
+		mimeType: 'video/mp4',
+		buffer: Buffer.from('fallback-video-fixture'),
+	});
+	await page.route(`**/api/v1/channels/${created.id}/fallback-filler`, async (route) => {
+		if (route.request().method() === 'PUT') {
+			await route.fulfill({
+				status: 422,
+				json: { code: 'validation_error', message: 'Fallback upload failed' },
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByText(/Channel changes were saved, but the fallback filler was not/))
+		.toBeVisible();
+	await expect(page.getByLabel('Name')).toHaveValue(savedName);
+	await expect(page.locator('.fallback-filler-editor')).toContainText('retry-fallback.mp4');
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await page.unroute(`**/api/v1/channels/${created.id}/fallback-filler`);
+
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
+	await page.getByRole('button', { name: 'Discard Changes' }).click();
+	await expect(page.getByText(savedName)).toBeVisible();
+	await page.getByRole('button', { name: `Edit ${savedName}` }).click();
+	await expect(page.getByLabel('Name')).toHaveValue(savedName);
+	await expect(page.locator('.fallback-filler-editor')).not.toContainText('retry-fallback.mp4');
+});
+
+test('keeps the latest channel fallback response when editors change quickly', async ({ page }) => {
+	const csrfToken = await authenticateAdministrator(page);
+	const runId = String(Date.now());
+	const createChannel = async (suffix: string) => {
+		const response = await page.request.post('/api/v1/channels', {
+			headers: { 'x-moirai-csrf': csrfToken },
+			data: { number: `${runId.slice(-6)}${suffix}`, name: `Fallback race ${suffix} ${runId}` },
+		});
+		expect(response.ok()).toBe(true);
+		return response.json() as Promise<{ id: string; name: string }>;
+	};
+	const [first, second] = await Promise.all([createChannel('A'), createChannel('B')]);
+	let releaseFirst: (() => void) | undefined;
+	const firstGate = new Promise<void>((resolve) => {
+		releaseFirst = resolve;
+	});
+	const asset = (filename: string) => ({
+		source: 'channel',
+		filename,
+		contentType: 'video/mp4',
+		fileSizeBytes: 1024,
+		durationMilliseconds: 60_000,
+		resolution: { width: 640, height: 360 },
+		hasAudio: true,
+		updatedAt: '2026-09-03T12:00:00Z',
+		previewUrl: '/api/v1/playback/fallback-filler/preview',
+	});
+	await page.route('**/api/v1/channels/*/fallback-filler', async (route) => {
+		const requestedFirst = route.request().url().includes(first.id);
+		if (requestedFirst) {
+			await firstGate;
+		}
+		const current = asset(requestedFirst ? 'first-fallback.mp4' : 'second-fallback.mp4');
+		await route.fulfill({
+			json: {
+				override: current,
+				overrideConfigured: true,
+				effective: current,
+				inherited: { ...current, source: 'bundled', filename: 'dead-air.mp4' },
+				overrideError: null,
+			},
+		});
+	});
+
+	await page.goto('/channels');
+	await page.getByRole('button', { name: `Edit ${first.name}` }).click();
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
+	await page.getByRole('button', { name: `Edit ${second.name}` }).click();
+	await expect(page.locator('.fallback-filler-editor')).toContainText('second-fallback.mp4');
+	releaseFirst?.();
+	await expect(page.locator('.fallback-filler-editor')).not.toContainText('first-fallback.mp4');
+	await expect(page.locator('.fallback-filler-editor')).toContainText('second-fallback.mp4');
+});
+
+test('keeps the latest global fallback response when startup refreshes overlap', async ({ page }) => {
+	const csrfToken = await authenticateAdministrator(page);
+	let requestCount = 0;
+	let releaseFirst: (() => void) | undefined;
+	const firstGate = new Promise<void>((resolve) => {
+		releaseFirst = resolve;
+	});
+	const readyEvent = new Promise<void>((resolve) => {
+		page.on('websocket', (socket) => {
+			socket.on('framereceived', (event) => {
+				if (typeof event.payload === 'string' && event.payload.includes('system.ready')) {
+					resolve();
+				}
+			});
+		});
+	});
+	const asset = (filename: string) => ({
+		source: 'global',
+		filename,
+		contentType: 'video/mp4',
+		fileSizeBytes: 1024,
+		durationMilliseconds: 60_000,
+		resolution: { width: 640, height: 360 },
+		hasAudio: true,
+		updatedAt: '2026-09-03T12:00:00Z',
+		previewUrl: '/api/v1/playback/fallback-filler/preview',
+	});
+	await page.route('**/api/v1/playback/fallback-filler', async (route) => {
+		if (route.request().method() !== 'GET') {
+			await route.continue();
+			return;
+		}
+
+		requestCount += 1;
+		const current = asset(requestCount === 1 ? 'stale-fallback.mp4' : 'latest-fallback.mp4');
+		if (requestCount === 1) {
+			await firstGate;
+		}
+		await route.fulfill({
+			json: {
+				override: current,
+				overrideConfigured: true,
+				effective: current,
+				inherited: { ...current, source: 'bundled', filename: 'dead-air.mp4' },
+				overrideError: null,
+			},
+		});
+	});
+
+	await page.goto('/settings');
+	await expect.poll(() => requestCount).toBeGreaterThanOrEqual(1);
+	await readyEvent;
+	const removed = await page.request.delete('/api/v1/playback/fallback-filler', {
+		headers: { 'x-moirai-csrf': csrfToken },
+	});
+	expect(removed.ok()).toBe(true);
+	await expect.poll(() => requestCount).toBeGreaterThanOrEqual(2);
+	await expect(page.locator('.fallback-filler-panel')).toContainText('latest-fallback.mp4');
+	releaseFirst?.();
+	await expect(page.locator('.fallback-filler-panel')).not.toContainText('stale-fallback.mp4');
+	await expect(page.locator('.fallback-filler-panel')).toContainText('latest-fallback.mp4');
+});
+
+test('removes a configured channel fallback whose asset is unavailable', async ({ page }) => {
+	const csrfToken = await authenticateAdministrator(page);
+	const runId = String(Date.now());
+	const channelName = `Damaged fallback ${runId}`;
+	const createdResponse = await page.request.post('/api/v1/channels', {
+		headers: { 'x-moirai-csrf': csrfToken },
+		data: { number: runId.slice(-8), name: channelName },
+	});
+	expect(createdResponse.ok()).toBe(true);
+	const channel = await createdResponse.json() as { id: string };
+	const bundled = {
+		source: 'bundled',
+		filename: 'dead-air.mp4',
+		contentType: 'video/mp4',
+		fileSizeBytes: 1024,
+		durationMilliseconds: 60_000,
+		resolution: { width: 640, height: 360 },
+		hasAudio: true,
+		updatedAt: null,
+		previewUrl: '/api/v1/playback/fallback-filler/preview',
+	};
+	let removed = false;
+	await page.route(`**/api/v1/channels/${channel.id}/fallback-filler`, async (route) => {
+		if (route.request().method() === 'DELETE') {
+			removed = true;
+			await route.fulfill({
+				json: {
+					override: null,
+					overrideConfigured: false,
+					effective: bundled,
+					inherited: bundled,
+					overrideError: null,
+				},
+			});
+			return;
+		}
+		await route.fulfill({
+			json: {
+				override: null,
+				overrideConfigured: true,
+				effective: bundled,
+				inherited: bundled,
+				overrideError: 'The configured fallback override is unavailable; using an inherited fallback.',
+			},
+		});
+	});
+
+	await page.goto('/channels');
+	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
+	const editor = page.locator('.fallback-filler-editor');
+	await expect(editor).toContainText('configured fallback override is unavailable');
+	await editor.getByRole('button', { name: 'Remove fallback filler override' }).click();
+	await editor.getByRole('button', { name: 'Confirm remove fallback filler override' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect.poll(() => removed).toBe(true);
+});
+
 test('loads playback controls before tracking and independently saving panel drafts', async ({
 	page,
 }) => {
@@ -1315,12 +1565,34 @@ test('loads playback controls before tracking and independently saving panel dra
 		await settingsGate;
 		await route.continue();
 	});
+	let rejectFallbackLoad = true;
+	let rejectFallbackSave = false;
+	await page.route('**/api/v1/playback/fallback-filler', async (route) => {
+		if (route.request().method() === 'GET' && rejectFallbackLoad) {
+			await route.fulfill({
+				status: 500,
+				json: { code: 'load_failed', message: 'Fallback status could not be loaded.' },
+			});
+			return;
+		}
+		if (route.request().method() === 'PUT' && rejectFallbackSave) {
+			await route.fulfill({
+				status: 500,
+				json: { code: 'save_failed', message: 'Fallback could not be saved.' },
+			});
+			return;
+		}
+		await route.continue();
+	});
 	await page.goto('/settings');
 	const save = page.locator('form').getByRole('button', { name: 'Save Settings' });
 	await expect(page.getByRole('status')).toContainText('Loading playback settings');
 	await expect(save).toHaveCount(0);
 	releaseSettings?.();
 	await expect(save).toBeDisabled();
+	await expect(page.locator('.fallback-filler-panel')).toContainText(
+		'Fallback status could not be loaded.',
+	);
 	const disabledSaveOpacity = Number(await save.evaluate((element) =>
 		getComputedStyle(element).opacity));
 	expect(disabledSaveOpacity).toBeLessThan(0.6);
@@ -1392,6 +1664,41 @@ test('loads playback controls before tracking and independently saving panel dra
 		maxActiveSessions: updatedMaximum,
 		viewingPreferencesEnabled: !originalViewingEnabled,
 	});
+
+	const fallbackPanel = page.locator('.fallback-filler-panel');
+	const fallbackInput = fallbackPanel.locator('input[type="file"]');
+	const fallbackFixture = {
+		name: 'global-fallback.mp4',
+		mimeType: 'video/mp4',
+		buffer: Buffer.from('global-fallback-fixture'),
+	};
+	await fallbackInput.setInputFiles(fallbackFixture);
+	await expect(fallbackPanel).toContainText('Pending upload');
+	await fallbackPanel.getByRole('button', { name: 'Reset fallback draft' }).click();
+	await fallbackPanel.getByRole('button', { name: 'Confirm Reset fallback draft' }).click();
+	await expect(fallbackInput).toHaveValue('');
+	await fallbackInput.setInputFiles(fallbackFixture);
+	await expect(fallbackPanel).toContainText('Pending upload');
+	rejectFallbackLoad = false;
+	rejectFallbackSave = true;
+	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
+	await expect(fallbackPanel.getByText('Fallback could not be saved.')).toBeVisible();
+	await page.getByRole('button', { name: 'Refresh Status' }).click();
+	await expect(fallbackPanel.getByText('Fallback could not be saved.')).toBeVisible();
+	rejectFallbackSave = false;
+	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
+	await page.unroute('**/api/v1/playback/fallback-filler');
+	await expect(fallbackPanel).toContainText('Global override');
+	await expect(fallbackPanel).toContainText('global-fallback.mp4');
+	await fallbackPanel.getByRole('button', { name: 'Remove fallback filler override' }).click();
+	await fallbackPanel.getByRole('button', {
+		name: 'Confirm remove fallback filler override',
+	}).click();
+	await expect(fallbackPanel).toContainText('Bundled Moirai fallback after save');
+	await expect(fallbackPanel).toContainText('dead-air.mp4');
+	await expect(fallbackPanel.locator('video')).toBeVisible();
+	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
+	await expect(fallbackPanel).toContainText('Bundled Moirai fallback');
 
 	let viewingHistoryCleared = false;
 	await page.route('**/api/v1/viewing-preferences/clear', async (route) => {

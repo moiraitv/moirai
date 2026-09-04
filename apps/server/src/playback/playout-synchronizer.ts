@@ -5,6 +5,7 @@ import { Temporal } from '@js-temporal/polyfill';
 import type { FastifyBaseLogger } from 'fastify';
 import { XMLTV_EPG_DAYS, type Channel, type LiveEvent } from '@moirai/shared';
 import { buildEtvPlayoutFiles } from './playout-output.js';
+import type { FallbackFillerStore } from './fallback-filler-store.js';
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
 import { readCommittedChannelScheduleGuide } from '../guide/schedule-guide.js';
@@ -35,6 +36,7 @@ export interface PlayoutSynchronizationFailure {
  */
 export class PlayoutSynchronizer {
 	private readonly active = new Map<string, Promise<string>>();
+	private readonly pending = new Set<string>();
 	private readonly failures = new Map<string, PlayoutSynchronizationFailure>();
 	private timer: NodeJS.Timeout | null = null;
 	private running = false;
@@ -45,6 +47,7 @@ export class PlayoutSynchronizer {
 		private readonly timeZone: string,
 		private readonly intervalSeconds: number,
 		private readonly ensureMaterialized: () => Promise<void>,
+		private readonly fallbackFillers: FallbackFillerStore,
 		private readonly events: LiveEventPublisher,
 		private readonly logger: FastifyBaseLogger,
 	) {}
@@ -125,17 +128,69 @@ export class PlayoutSynchronizer {
 	}
 
 	/** Ensure one channel's current rolling window exists on disk. */
-	async syncChannel(channelId: string): Promise<string> {
+	syncChannel(channelId: string): Promise<string> {
 		const existing = this.active.get(channelId);
 		if (existing) {
+			this.pending.add(channelId);
 			return existing;
 		}
 
-		const operation = this.performChannelSync(channelId);
+		const operation = Promise.resolve().then(() => this.performQueuedChannelSync(channelId));
 		this.active.set(channelId, operation);
+		return operation;
+	}
+
+	/** Synchronize every channel while isolating channel-specific failures. */
+	async syncAll(): Promise<void> {
+		await this.ensureMaterialized().catch(() => undefined);
+		const channels = await this.repository.listChannels();
+		const channelIds = new Set(channels.map((channel) => channel.id));
+		for (const entry of await readdir(this.root, { withFileTypes: true }).catch(() => [])) {
+			if (entry.isDirectory() && CHANNEL_ID.test(entry.name) && !channelIds.has(entry.name)) {
+				await this.removeChannel(entry.name).catch((error) => {
+					this.logger.warn(
+						{ error, channelId: entry.name },
+						'Orphaned private channel playout cleanup failed',
+					);
+				});
+			}
+		}
+		await this.fallbackFillers.reconcileChannels(channelIds).catch((error) => {
+			this.logger.warn({ error }, 'Orphaned fallback filler cleanup failed');
+		});
+		for (const channel of channels) {
+			await this.syncChannel(channel.id).catch(() => undefined);
+		}
+	}
+
+	/** Repeat one channel pass when an invalidation arrives during its active write. */
+	private async performQueuedChannelSync(channelId: string): Promise<string> {
+		let folder: string | null = null;
+		let failed = false;
+		let failure: unknown;
 		try {
-			const folder = await operation;
+			do {
+				this.pending.delete(channelId);
+				try {
+					folder = await this.performChannelSync(channelId);
+					failed = false;
+					failure = undefined;
+				}
+				catch (error) {
+					failed = true;
+					failure = error;
+				}
+			}
+			while (this.pending.has(channelId));
+			if (failed) {
+				throw failure;
+			}
+			if (!folder) {
+				throw new Error('Playout synchronization completed without an output folder');
+			}
+
 			this.failures.delete(channelId);
+			this.active.delete(channelId);
 			this.events.publish({
 				type: 'playback.changed',
 				data: { channelId, reason: 'playout-synced' },
@@ -148,6 +203,7 @@ export class PlayoutSynchronizer {
 				message: 'Committed playout is not ready',
 				failedAt: currentTimestamp(),
 			});
+			this.active.delete(channelId);
 			if (firstFailure) {
 				this.logger.error({ error, channelId }, 'Private channel playout synchronization failed');
 				this.events.publish({
@@ -156,17 +212,6 @@ export class PlayoutSynchronizer {
 				});
 			}
 			throw error;
-		}
-		finally {
-			this.active.delete(channelId);
-		}
-	}
-
-	/** Synchronize every channel while isolating channel-specific failures. */
-	async syncAll(): Promise<void> {
-		await this.ensureMaterialized().catch(() => undefined);
-		for (const channel of await this.repository.listChannels()) {
-			await this.syncChannel(channel.id).catch(() => undefined);
 		}
 	}
 
@@ -199,7 +244,7 @@ export class PlayoutSynchronizer {
 			startDate,
 			XMLTV_EPG_DAYS,
 		);
-		const generated = this.channelFiles(channel, guide);
+		const fallback = await this.fallbackFillers.resolve(channel.id);
 		await mkdir(this.root, { recursive: true });
 		const resolvedRoot = await realpath(this.root);
 		const folder = this.channelFolder(channel.id);
@@ -208,6 +253,7 @@ export class PlayoutSynchronizer {
 		if (!resolvedFolder.startsWith(`${resolvedRoot}${path.sep}`)) {
 			throw new Error('Playback output directory is outside its configured root');
 		}
+		const generated = this.channelFiles(channel, guide, fallback);
 
 		for (const [filename, content] of generated) {
 			const destination = path.join(resolvedFolder, filename);
@@ -243,13 +289,18 @@ export class PlayoutSynchronizer {
 		return resolvedFolder;
 	}
 
-	/** Extract validated daily files from the generated channel playout paths. */
+	/** Build validated daily files from the generated channel playout paths. */
 	private channelFiles(
 		channel: Channel,
 		guide: Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>,
+		fallback: Awaited<ReturnType<FallbackFillerStore['resolve']>>,
 	): Map<string, string> {
 		const files = new Map<string, string>();
-		for (const [relativePath, content] of buildEtvPlayoutFiles([channel], guide)) {
+		for (const [relativePath, content] of buildEtvPlayoutFiles(
+			[channel],
+			guide,
+			new Map([[channel.id, fallback]]),
+		)) {
 			const filename = path.posix.basename(relativePath);
 			if (!PLAYOUT_FILENAME.test(filename)) {
 				throw new Error('Generated an invalid playout filename');

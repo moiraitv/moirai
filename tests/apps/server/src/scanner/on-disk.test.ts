@@ -513,6 +513,7 @@ describe('discoverOnDisk', () => {
 				index: 0,
 				type: 'video' as const,
 				codec: 'h264',
+				durationMilliseconds: file.endsWith('cd1.mkv') ? 60_000 : 90_000,
 				width: 1280,
 				height: 720,
 				language: null,

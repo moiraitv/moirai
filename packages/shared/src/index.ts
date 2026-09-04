@@ -31,6 +31,10 @@ export const MEDIA_EXTENSIONS = [
 	'.ts',
 	'.webm',
 ] as const;
+/** Maximum encoded size accepted for one managed playback fallback filler. */
+export const FALLBACK_FILLER_MAX_BYTES = 512 * 1024 * 1024;
+/** Minimum measured duration accepted for one managed playback fallback filler. */
+export const FALLBACK_FILLER_MIN_DURATION_MILLISECONDS = 60_000;
 /** Conclusive source observations required before an ordinary missing item is deleted. */
 export const REMOVAL_CONFIRMATION_OBSERVATIONS = 3;
 /** Minimum spacing between conclusive observations that confirm a removal. */
@@ -272,7 +276,16 @@ export const channelEventDataSchema = z.object({
 /** Validate the playback event data contract at runtime. */
 export const playbackEventDataSchema = z.object({
 	channelId: idSchema.nullable(),
-	reason: z.enum(['started', 'ready', 'stale', 'stopped', 'failed', 'settings-changed', 'playout-synced']),
+	reason: z.enum([
+		'started',
+		'ready',
+		'stale',
+		'stopped',
+		'failed',
+		'settings-changed',
+		'fallback-applied',
+		'playout-synced',
+	]),
 });
 /** Validate the scheduling event data contract at runtime. */
 export const schedulingEventDataSchema = z.object({
@@ -517,6 +530,40 @@ export const playbackSettingsSchema = z.object({
 });
 /** Shared wire contract for playback settings. */
 export type PlaybackSettings = z.infer<typeof playbackSettingsSchema>;
+
+/** Origin of the managed media currently protecting uncovered playback time. */
+export const fallbackFillerSourceSchema = z.enum(['channel', 'global', 'bundled']);
+/** Public metadata for one validated playback fallback asset. */
+export const fallbackFillerAssetSchema = z.object({
+	source: fallbackFillerSourceSchema,
+	filename: z.string(),
+	contentType: z.string(),
+	fileSizeBytes: z.number().int().positive(),
+	durationMilliseconds: z.number().int().positive(),
+	resolution: z.object({
+		width: z.number().int().positive(),
+		height: z.number().int().positive(),
+	}).nullable(),
+	hasAudio: z.boolean(),
+	updatedAt: z.iso.datetime({ offset: true }).nullable(),
+	previewUrl: z.string(),
+});
+/** Multipart body documented for one streamed playback fallback upload. */
+export const fallbackFillerUploadSchema = z.object({
+	file: z.file().describe('Playback fallback video file'),
+});
+/** Effective fallback plus the optional override owned by the requested scope. */
+export const fallbackFillerStatusSchema = z.object({
+	override: fallbackFillerAssetSchema.nullable(),
+	overrideConfigured: z.boolean(),
+	effective: fallbackFillerAssetSchema,
+	inherited: fallbackFillerAssetSchema,
+	overrideError: z.string().nullable(),
+});
+/** Public metadata for one validated playback fallback asset. */
+export type FallbackFillerAsset = z.infer<typeof fallbackFillerAssetSchema>;
+/** Effective fallback and optional scope-specific override. */
+export type FallbackFillerStatus = z.infer<typeof fallbackFillerStatusSchema>;
 
 /** One effective locally learned preference shown to an administrator. */
 export interface ViewingPreferenceSummary {

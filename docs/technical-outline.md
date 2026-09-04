@@ -81,7 +81,8 @@ output of scheduling rules, not the editable schedule itself.
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Materialized timeline | The durable rolling schedule generated from authored rules. It contains concrete timestamped segments and is output, not primary configuration. |
 | Segment               | One concrete interval of primary media, filler, or dead air in a materialized timeline.                                                         |
-| Dead air              | An explicit interval with no scheduled media or filler. Downstream playback synthesizes bounded black video and silent audio for it.            |
+| Dead air              | An explicit interval with no scheduled media or authored filler. It remains visible diagnostically even though playback covers it safely.       |
+| Playback fallback     | Managed video looped or truncated at playout time to cover intervals that remain dead air after schedule resolution.                            |
 | Playout document      | A validated daily JSON document derived from committed segments for the integrated ErsatzTV-Next channel worker.                                |
 | Guide or EPG          | The human- and client-visible channel schedule derived from committed timelines. Moirai publishes it in XMLTV format.                           |
 | XMLTV                 | The XML wire format served at `/epg.xml` for IPTV clients.                                                                                      |
@@ -661,7 +662,36 @@ The adapter produces validated, non-overlapping playout documents for each local
 - maps primary and filler content to playback-visible local paths;
 - expands multipart logical items into sequential physical playout entries;
 - expresses truncation and resumed fragments with millisecond offsets;
-- leaves intentional dead-air gaps for the pinned worker to synthesize safely.
+- replaces every remaining uncovered interval with channel, global, or bundled fallback video.
+
+Playback fallback is separate from authored schedule filler. A channel-specific managed upload wins
+over the global managed upload, which wins over Moirai's immutable bundled `dead-air.mp4`. Each
+observed continuous gap begins at source offset zero. When the rolling boundary advances inside a
+gap, regeneration derives the source offset from the materialized interval start; a guide with no
+segments instead uses a fixed epoch anchor. The selected file
+is truncated for a shorter gap or looped for a longer gap, with source position preserved when daily
+files split at midnight, cross a DST transition, or are regenerated after the rolling window advances.
+Moirai supplies stereo 48 kHz silence when fallback video has no audio stream. The
+adapter uses bounded local-source fragments so tuning never requires a long seek, while the resulting
+daily document still covers every instant without gaps or overlaps.
+
+Each managed scope owns one private asset and metadata pair. Replacements are streamed, probed, and
+staged together before the complete active directory is replaced with rollback protection. Startup
+restores the prior pair if replacement was interrupted. Uploads must contain exactly one video stream,
+and that stream must have a measured duration of at least one minute; a longer audio or container
+duration cannot satisfy this minimum. The minimum does not constrain authored schedule filler such as
+short commercials.
+Invalid or missing overrides fall through to the next source while remaining visible as management
+warnings. Settings owns the global override; each channel editor owns its optional channel override.
+Removing either override cannot alter the bundled final fallback. A fallback change briefly restarts
+only affected active channel workers after their playout files synchronize; inactive channels remain
+stopped. Global fallback changes synchronize every channel, while channel override changes synchronize
+only their owning channel without invalidating channel configuration or the EPG. Startup reconciliation
+removes managed fallback state owned by deleted channels. Removal keeps the old file available until
+affected workers have stopped and their inherited playout has been attempted. Replacement stops affected
+workers before the fixed asset path changes. A validated storage change remains committed if later
+playout synchronization or restart fails; the failed worker stays stopped and normal synchronization or
+the next tune retries recovery.
 
 Moirai writes playout files atomically before an active worker can read them. The standalone
 `ersatztv-channel` process starts on demand and writes HLS into a private runtime directory. No separate

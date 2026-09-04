@@ -42,6 +42,8 @@ export interface AppConfig {
 	scanCancellationGraceMs: number;
 	shutdownDeadlineMs: number;
 	channelLogoDir: string;
+	fallbackFillerDir: string;
+	bundledFallbackFillerDir: string;
 	playbackEnginePath: string;
 	playbackStreamDir: string;
 	playbackPlayoutDir: string;
@@ -276,6 +278,8 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 		overrides.managementUrl ?? process.env.MOIRAI_MANAGEMENT_URL,
 		publicUrl,
 	);
+	const sourceFallbackFillerDir = resolveFromProjectRoot('apps/server/assets');
+	const builtFallbackFillerDir = resolveFromProjectRoot('apps/server/dist/assets');
 	return {
 		host: overrides.host ?? process.env.MOIRAI_HOST ?? '127.0.0.1',
 		port,
@@ -390,6 +394,11 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 				'MOIRAI_SHUTDOWN_DEADLINE_MS',
 			),
 		channelLogoDir: overrides.channelLogoDir ?? path.join(dataDir, 'channel-logos'),
+		fallbackFillerDir: overrides.fallbackFillerDir ?? path.join(dataDir, 'fallback-fillers'),
+		bundledFallbackFillerDir: overrides.bundledFallbackFillerDir
+			?? (existsSync(path.join(sourceFallbackFillerDir, 'dead-air.mp4'))
+				? sourceFallbackFillerDir
+				: builtFallbackFillerDir),
 		playbackEnginePath: overrides.playbackEnginePath
 			?? resolvePlaybackEnginePath(process.env.MOIRAI_ETV_CHANNEL_PATH),
 		playbackStreamDir: overrides.playbackStreamDir

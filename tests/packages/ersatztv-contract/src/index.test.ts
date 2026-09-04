@@ -21,6 +21,26 @@ function channel(): EtvCompatibleChannel {
 }
 
 describe('ErsatzTV adapter', () => {
+	it('supports local fallback video with an explicit silent audio track', () => {
+		const document = toEtvPlayout([{
+			type: 'local',
+			id: 'silent-fallback',
+			start: '2026-01-01T00:00:00Z',
+			finish: '2026-01-01T00:01:00Z',
+			path: '/fallback/silent.mp4',
+			inPointMs: null,
+			outPointMs: 60_000,
+			silentAudio: true,
+		}]);
+
+		expect(document).toMatchObject({
+			items: [{
+				source: { source_type: 'local', path: '/fallback/silent.mp4' },
+				tracks: { audio: { source: { source_type: 'lavfi' } } },
+			}],
+		});
+	});
+
 	it('maps domain normalization to the pinned contract', () => {
 		const document = toEtvChannelConfig(channel());
 		expect(document).toMatchObject({

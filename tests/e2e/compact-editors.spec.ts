@@ -232,7 +232,7 @@ test('keeps acceleration and two-step logo draft actions usable in the channel e
 
 	await expect(page.getByRole('alertdialog')).toBeHidden();
 	await page.getByRole('button', { name: `Edit ${channel.name}`, exact: true }).click();
-	await page.locator('input[type="file"]').setInputFiles({
+	await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
 		name: 'draft.svg',
 		mimeType: 'image/svg+xml',
 		buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="blue"/></svg>'),

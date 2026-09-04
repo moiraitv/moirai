@@ -5,14 +5,17 @@ import type {
 	PlaybackEngineStatus,
 	PlaybackSettings,
 	ViewingPreferenceSummary,
+	FallbackFillerStatus,
 } from '@moirai/shared';
 import { api } from '../api';
 import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
+import FallbackFillerEditor from '../components/FallbackFillerEditor.vue';
 import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
 import TransientToast from '../components/TransientToast.vue';
+import TwoStepActionButton from '../components/TwoStepActionButton.vue';
 import { liveEvents } from '../live-events';
 
 const settings = reactive<PlaybackSettings>({
@@ -29,6 +32,13 @@ const preferences = ref<ViewingPreferenceSummary[]>([]);
 const preferencesLoading = ref(true);
 const preferencesError = ref('');
 const clearingPreferences = ref(false);
+const fallbackStatus = ref<FallbackFillerStatus | null>(null);
+const fallbackFile = ref<File | null>(null);
+const removeFallbackOnSave = ref(false);
+const fallbackLoading = ref(true);
+const savingFallback = ref(false);
+const fallbackError = ref('');
+const fallbackLoadError = ref('');
 const playbackSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.maxActiveSessions !== savedSettings.value.maxActiveSessions);
 const playbackSettingsValid = computed(() => Number.isInteger(settings.maxActiveSessions)
@@ -36,7 +46,9 @@ const playbackSettingsValid = computed(() => Number.isInteger(settings.maxActive
 	&& settings.maxActiveSessions <= 32);
 const viewingPreferenceSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.viewingPreferencesEnabled !== savedSettings.value.viewingPreferencesEnabled);
+const fallbackDirty = computed(() => fallbackFile.value !== null || removeFallbackOnSave.value);
 let refreshingStatus = false;
+let fallbackLoadSequence = 0;
 let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
 /** Polling interval that keeps client activity current without following every segment request. */
 const STATUS_REFRESH_INTERVAL_MS = 15_000;
@@ -54,6 +66,7 @@ async function load(): Promise<void> {
 		.finally(() => {
 			preferencesLoading.value = false;
 		});
+	const fallbackLoad = refreshFallback(true);
 	try {
 		const [loadedSettings, loadedStatus] = await Promise.all([
 			api.playbackSettings(),
@@ -70,7 +83,68 @@ async function load(): Promise<void> {
 	finally {
 		initialLoading.value = false;
 	}
-	await preferenceLoad;
+	await Promise.all([preferenceLoad, fallbackLoad]);
+}
+
+/** Refresh global fallback metadata without allowing an older request to replace newer state. */
+async function refreshFallback(showLoading = false): Promise<void> {
+	const sequence = ++fallbackLoadSequence;
+	if (showLoading) {
+		fallbackLoading.value = true;
+	}
+
+	try {
+		const loadedFallback = await api.globalFallbackFiller();
+		if (sequence !== fallbackLoadSequence) {
+			return;
+		}
+
+		fallbackStatus.value = loadedFallback;
+		fallbackLoadError.value = '';
+	}
+	catch (cause) {
+		if (sequence === fallbackLoadSequence) {
+			fallbackLoadError.value = errorMessage(cause);
+		}
+	}
+	finally {
+		if (sequence === fallbackLoadSequence) {
+			fallbackLoading.value = false;
+		}
+	}
+}
+
+/** Discard the staged fallback replacement or removal without changing the active override. */
+function resetFallbackDraft(): void {
+	fallbackFile.value = null;
+	removeFallbackOnSave.value = false;
+	fallbackError.value = '';
+}
+
+/** Apply the staged global fallback replacement or removal. */
+async function saveFallback(): Promise<void> {
+	if (!fallbackDirty.value || savingFallback.value || savingSection.value !== null) {
+		return;
+	}
+
+	savingFallback.value = true;
+	message.value = '';
+	fallbackError.value = '';
+	try {
+		fallbackStatus.value = fallbackFile.value
+			? await api.uploadGlobalFallbackFiller(fallbackFile.value)
+			: await api.deleteGlobalFallbackFiller();
+		fallbackLoadError.value = '';
+		fallbackFile.value = null;
+		removeFallbackOnSave.value = false;
+		message.value = 'Global fallback filler saved.';
+	}
+	catch (cause) {
+		fallbackError.value = errorMessage(cause);
+	}
+	finally {
+		savingFallback.value = false;
+	}
 }
 
 /** Clear local anonymous viewing history after styled modal confirmation. */
@@ -193,6 +267,14 @@ const unsubscribe = liveEvents.subscribe((event) => {
 	if (event.type === 'system.ready' || event.type === 'playback.changed') {
 		void refreshStatus();
 	}
+	if (
+		event.type === 'system.ready'
+		|| (event.type === 'playback.changed'
+			&& event.data.reason === 'fallback-applied'
+			&& event.data.channelId === null)
+	) {
+		void refreshFallback();
+	}
 });
 
 onMounted(() => {
@@ -265,6 +347,44 @@ onUnmounted(() => {
 				<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
 				<code>{{ status?.contractRevision.slice(0, 12) }}</code>
 			</aside>
+			<section class="panel fallback-filler-panel span-2">
+				<p class="eyebrow">Playback safety</p>
+				<h2>Global fallback filler</h2>
+				<p>Used when a channel has no channel-specific fallback and its schedule leaves time uncovered.</p>
+				<FallbackFillerEditor
+					v-model:selected-file="fallbackFile"
+					v-model:remove-on-save="removeFallbackOnSave"
+					heading="Global fallback override"
+					removal-source="Bundled Moirai fallback after save"
+					:status="fallbackStatus"
+					:loading="fallbackLoading"
+					:disabled="savingFallback || savingSection !== null"
+					@validation-error="fallbackError = $event"
+				/>
+				<p v-if="fallbackError" class="notice error">{{ fallbackError }}</p>
+				<p v-if="fallbackLoadError" class="notice error">{{ fallbackLoadError }}</p>
+				<div class="form-actions">
+					<TwoStepActionButton
+						class="button secondary"
+						label="Reset fallback draft"
+						confirm-label="Confirm Reset fallback draft"
+						confirm-text="Confirm Reset"
+						tone="caution"
+						:disabled="!fallbackDirty || savingFallback || savingSection !== null"
+						@confirm="resetFallbackDraft"
+					>
+						<RefreshCw :size="17" />Reset
+					</TwoStepActionButton>
+					<button
+						type="button"
+						class="button"
+						:disabled="!fallbackDirty || savingFallback || savingSection !== null"
+						@click="saveFallback"
+					>
+						<Save :size="17" />{{ savingFallback ? 'Saving…' : 'Save Fallback' }}
+					</button>
+				</div>
+			</section>
 			<section class="panel viewing-preferences-panel span-2">
 				<p class="eyebrow">Local viewing preferences</p>
 				<h2>Learn what viewers choose</h2>

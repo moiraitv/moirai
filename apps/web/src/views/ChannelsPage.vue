@@ -21,6 +21,7 @@ import {
 	managedChannelLogoId,
 	type Channel,
 	type ChannelCreate,
+	type FallbackFillerStatus,
 } from '@moirai/shared';
 import type { HardwareAccelerationPrediction } from '@moirai/shared/api-contracts';
 import { api } from '../api';
@@ -31,6 +32,7 @@ import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-
 import { errorMessage } from '../error-message';
 import GuideTimeline from '../components/GuideTimeline.vue';
 import DisabledActionHint from '../components/DisabledActionHint.vue';
+import FallbackFillerEditor from '../components/FallbackFillerEditor.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
@@ -68,6 +70,10 @@ const error = ref('');
 const logoInput = ref<HTMLInputElement>();
 const externalLogoUrl = ref('');
 const removeLogoOnSave = ref(false);
+const fallbackStatus = ref<FallbackFillerStatus | null>(null);
+const fallbackFile = ref<File | null>(null);
+const removeFallbackOnSave = ref(false);
+const fallbackLoading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const originalFormSnapshot = ref('');
@@ -77,6 +83,7 @@ const accelerationPredictionLoading = ref(false);
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let accelerationPredictionTimer: ReturnType<typeof setTimeout> | undefined;
 let accelerationPredictionSequence = 0;
+let fallbackLoadSequence = 0;
 let suppressChannelEventsUntil = 0;
 /** Channel guide row with layout metadata derived for the visible window. */
 type CropInteraction = 'move' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -240,6 +247,14 @@ function channelFormSnapshot(): string {
 		externalLogoUrl: externalLogoUrl.value,
 		removeLogoOnSave: removeLogoOnSave.value,
 		crop: cropSource.value ? { source: cropSource.value.url, ...logoCrop } : null,
+		fallbackFile: fallbackFile.value
+			? {
+				name: fallbackFile.value.name,
+				size: fallbackFile.value.size,
+				lastModified: fallbackFile.value.lastModified,
+			}
+			: null,
+		removeFallbackOnSave: removeFallbackOnSave.value,
 	});
 }
 
@@ -251,12 +266,55 @@ const channelSaveDisabled = computed(() =>
 
 /** Close the channel form after releasing any temporary crop image. */
 function finishCloseForm(): void {
+	fallbackLoadSequence += 1;
 	disposeCropSource();
+	fallbackFile.value = null;
+	removeFallbackOnSave.value = false;
+	fallbackStatus.value = null;
+	fallbackLoading.value = false;
 	showForm.value = false;
 	if (route.query.new === '1') {
 		const query = { ...route.query };
 		delete query.new;
 		void router.replace({ path: '/channels', query });
+	}
+}
+
+/** Load the effective fallback and any override owned by the channel editor. */
+async function loadEditorFallback(channelId?: string): Promise<void> {
+	const sequence = ++fallbackLoadSequence;
+	fallbackLoading.value = true;
+	fallbackStatus.value = null;
+	try {
+		let loaded: FallbackFillerStatus;
+		if (channelId) {
+			loaded = await api.channelFallbackFiller(channelId);
+		}
+		else {
+			const global = await api.globalFallbackFiller();
+			loaded = {
+				...global,
+				override: null,
+				overrideConfigured: false,
+				effective: global.effective,
+				inherited: global.effective,
+				overrideError: null,
+			};
+		}
+		if (sequence === fallbackLoadSequence) {
+			fallbackStatus.value = loaded;
+		}
+	}
+	catch (cause) {
+		if (sequence === fallbackLoadSequence) {
+			error.value = errorMessage(cause);
+			fallbackStatus.value = null;
+		}
+	}
+	finally {
+		if (sequence === fallbackLoadSequence) {
+			fallbackLoading.value = false;
+		}
 	}
 }
 
@@ -622,11 +680,33 @@ function payload(): ChannelCreate {
 	}
 	return result;
 }
+
+/** Adopt already-persisted channel fields while preserving an unsaved fallback operation for retry. */
+function retainFallbackDraftAfterPartialSave(saved: Channel): void {
+	const pendingFallbackFile = fallbackFile.value;
+	const pendingFallbackRemoval = removeFallbackOnSave.value;
+	const { id, createdAt, updatedAt, ...config } = saved;
+	void createdAt;
+	void updatedAt;
+	Object.assign(form, cloneContractValue(config) as ChannelCreate);
+	resetLogoEditor(saved.logo);
+	editingId.value = id;
+	formBaseline.value = cloneContractValue(config) as ChannelCreate;
+	fallbackFile.value = null;
+	removeFallbackOnSave.value = false;
+	originalFormSnapshot.value = channelFormSnapshot();
+	fallbackFile.value = pendingFallbackFile;
+	removeFallbackOnSave.value = pendingFallbackRemoval;
+}
+
 /** Open a blank channel form. */
 function add() {
 	Object.assign(form, defaults());
 	resetLogoEditor(null);
+	fallbackFile.value = null;
+	removeFallbackOnSave.value = false;
 	editingId.value = undefined;
+	void loadEditorFallback();
 	formBaseline.value = cloneContractValue(form) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
@@ -640,7 +720,10 @@ function edit(channel: Channel) {
 	void updatedAt;
 	Object.assign(form, cloneContractValue(config) as ChannelCreate);
 	resetLogoEditor(channel.logo);
+	fallbackFile.value = null;
+	removeFallbackOnSave.value = false;
 	editingId.value = channel.id;
+	void loadEditorFallback(channel.id);
 	formBaseline.value = cloneContractValue(config) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
@@ -678,6 +761,20 @@ async function save() {
 				});
 			}
 		}
+		try {
+			if (fallbackFile.value) {
+				fallbackStatus.value = await api.uploadChannelFallbackFiller(saved.id, fallbackFile.value);
+			}
+			else if (removeFallbackOnSave.value && fallbackStatus.value?.overrideConfigured) {
+				fallbackStatus.value = await api.deleteChannelFallbackFiller(saved.id);
+			}
+		}
+		catch (cause) {
+			retainFallbackDraftAfterPartialSave(saved);
+			error.value = `Channel changes were saved, but the fallback filler was not: ${errorMessage(cause)}`;
+			await Promise.allSettled([loadChannels(), scheduling.load(), loadGuide()]);
+			return;
+		}
 		void saved;
 		finishCloseForm();
 		await Promise.all([loadChannels(), scheduling.load()]);
@@ -699,6 +796,8 @@ function resetChannel(): void {
 	const baseline = cloneContractValue(formBaseline.value) as ChannelCreate;
 	Object.assign(form, baseline);
 	resetLogoEditor(baseline.logo);
+	fallbackFile.value = null;
+	removeFallbackOnSave.value = false;
 	error.value = '';
 }
 
@@ -1005,6 +1104,17 @@ onBeforeUnmount(() => {
 									/>
 								</label>
 							</div>
+							<FallbackFillerEditor
+								v-model:selected-file="fallbackFile"
+								v-model:remove-on-save="removeFallbackOnSave"
+								class="span-2"
+								heading="Channel fallback override"
+								removal-source="Effective global fallback after save"
+								:status="fallbackStatus"
+								:loading="fallbackLoading"
+								:disabled="saving || deleting"
+								@validation-error="error = $event"
+							/>
 						</div>
 					</fieldset>
 					<fieldset>

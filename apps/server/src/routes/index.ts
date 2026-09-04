@@ -8,6 +8,7 @@ import type { HealthService } from '../operations/health-service.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { LogService } from '../operations/log-service.js';
 import type { PlaybackEngine } from '../playback/playback-engine.js';
+import type { FallbackFillerStore } from '../playback/fallback-filler-store.js';
 import type { Repository } from '../repository/index.js';
 import type { ScannerManager } from '../scanner/manager.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
@@ -16,6 +17,7 @@ import { registerCatalogRoutes } from './catalog.js';
 import { registerAuthenticationRoutes } from './authentication.js';
 import { registerChannelRoutes } from './channels.js';
 import { registerGuideRoutes } from './guide.js';
+import { registerFallbackFillerRoutes } from './fallback-fillers.js';
 import { registerLibraryRoutes } from './libraries.js';
 import { registerPlaybackRoutes } from './playback.js';
 import { registerSchedulingRoutes } from './scheduling.js';
@@ -31,6 +33,7 @@ export interface HttpRouteDependencies {
 	events: LiveEventHub;
 	artworkCache: ArtworkCache;
 	channelLogos: ChannelLogoStore;
+	fallbackFillers: FallbackFillerStore;
 	epg: EpgService;
 	timelineMaterializer: TimelineMaterializer;
 	schedulingWorkers: SchedulingWorkerPool;
@@ -48,6 +51,7 @@ export function registerHttpRoutes(
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);
 	registerChannelRoutes(app, dependencies);
+	registerFallbackFillerRoutes(app, dependencies);
 	registerSchedulingRoutes(app, dependencies);
 	registerGuideRoutes(app, dependencies);
 	registerPlaybackRoutes(app, {

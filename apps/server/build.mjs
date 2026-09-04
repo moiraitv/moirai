@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { cp, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
@@ -29,3 +30,10 @@ await build({
 		),
 	},
 });
+
+const assetOutput = path.join(directory, 'dist', 'assets');
+await mkdir(assetOutput, { recursive: true });
+await Promise.all([
+	cp(path.join(directory, 'assets', 'dead-air.mp4'), path.join(assetOutput, 'dead-air.mp4')),
+	cp(path.join(directory, 'assets', 'dead-air.json'), path.join(assetOutput, 'dead-air.json')),
+]);

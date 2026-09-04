@@ -242,6 +242,10 @@
 	.settings-layout {
 		grid-template-columns: 1fr;
 	}
+
+	.fallback-filler-content {
+		grid-template-columns: 1fr;
+	}
 }
 
 @media (max-width: 680px) {
