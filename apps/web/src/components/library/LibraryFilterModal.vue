@@ -225,9 +225,9 @@ onUnmounted(() => genreCountsController?.abort());
 							<span class="filter-input"><input v-model="localDraft.name" placeholder="Partial title" /><Search :size="21" aria-hidden="true" /></span>
 						</label>
 
-						<fieldset class="filter-release-field">
+						<fieldset class="filter-range-field">
 							<legend>Release year</legend>
-							<div class="filter-release-inputs">
+							<div class="filter-range-inputs">
 								<label class="filter-field">
 									<span>From</span>
 									<span class="filter-input"><input v-model="localDraft.releaseFrom" type="number" inputmode="numeric" min="1800" max="2200" placeholder="YYYY" /><CalendarDays :size="19" aria-hidden="true" /></span>
@@ -239,14 +239,19 @@ onUnmounted(() => genreCountsController?.abort());
 							</div>
 						</fieldset>
 
-						<label class="filter-field">
-							<span>Added from</span>
-							<span class="filter-input"><input v-model="localDraft.addedFrom" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
-						</label>
-						<label class="filter-field">
-							<span>Added to</span>
-							<span class="filter-input"><input v-model="localDraft.addedTo" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
-						</label>
+						<fieldset class="filter-range-field">
+							<legend>Added</legend>
+							<div class="filter-range-inputs">
+								<label class="filter-field">
+									<span>From</span>
+									<span class="filter-input"><input v-model="localDraft.addedFrom" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
+								</label>
+								<label class="filter-field">
+									<span>To</span>
+									<span class="filter-input"><input v-model="localDraft.addedTo" type="date" /><CalendarDays :size="19" aria-hidden="true" /></span>
+								</label>
+							</div>
+						</fieldset>
 
 						<label class="filter-field">
 							<span>Minimum popular rating</span>

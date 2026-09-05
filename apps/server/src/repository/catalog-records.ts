@@ -94,6 +94,24 @@ export function metadataNumber(metadata: Record<string, unknown>, key: string): 
 	return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/** Read credited person names from either string or structured metadata entries. */
+export function metadataPersonNames(metadata: Record<string, unknown>, key: string): string[] {
+	const value = metadata[key];
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return value.flatMap((entry) => {
+		if (typeof entry === 'string' && entry.length > 0) {
+			return [entry];
+		}
+		if (entry && typeof entry === 'object' && typeof (entry as { name?: unknown }).name === 'string') {
+			return [(entry as { name: string }).name];
+		}
+		return [];
+	});
+}
+
 /** Read a normalized full release date from persisted provider metadata. */
 export function metadataReleaseDate(metadata: Record<string, unknown>): string | null {
 	if (Object.prototype.hasOwnProperty.call(metadata, 'releaseDate')) {

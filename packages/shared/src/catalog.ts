@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { MediaAvailability } from './availability.js';
+import { canonicalGenreKey } from './normalization.js';
 
 /** Hierarchy kinds used to organize episodic and music-video libraries. */
 export type MediaGroupKind = 'show' | 'season' | 'artist' | 'album';
@@ -107,7 +108,7 @@ export const MAX_MEDIA_GENRE_RULES = 100;
 const catalogGenreKeysSchema = z.array(z.string().trim().min(1).max(120))
 	.max(MAX_MEDIA_GENRE_RULES)
 	.default([])
-	.transform((values) => [...new Set(values)]);
+	.transform((values) => [...new Set(values.map(canonicalGenreKey))].sort());
 
 /** Required and disallowed genre keys accepted by catalog filtering contracts. */
 export interface MediaGenreRules {
@@ -144,11 +145,8 @@ export function validateMediaGenreRules(value: MediaGenreRules, context: z.Refin
 	}
 }
 
-/** Validate a recursive catalog query used to select items for an explicit program. */
-export const catalogProgramItemQuerySchema = z.object({
-	parentId: z.uuid().nullable().default(null),
-	sort: mediaSortSchema.default('title'),
-	direction: sortDirectionSchema.default('asc'),
+/** Fields shared by library browsing and dynamic scheduling filters. */
+export const catalogProgramItemFilterShape = {
 	name: z.string().trim().max(120).default(''),
 	releaseYearFrom: z.number().int().min(1800).max(2200).nullable().default(null),
 	releaseYearTo: z.number().int().min(1800).max(2200).nullable().default(null),
@@ -161,6 +159,19 @@ export const catalogProgramItemQuerySchema = z.object({
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
 	director: z.string().trim().max(120).default(''),
+};
+/** Validate reusable library filters independently of hierarchy and presentation ordering. */
+export const catalogProgramItemFilterSchema = z.object(catalogProgramItemFilterShape)
+	.superRefine(validateMediaGenreRules);
+/** Shared wire contract for reusable library filters. */
+export type CatalogProgramItemFilter = z.infer<typeof catalogProgramItemFilterSchema>;
+
+/** Validate a recursive catalog query used to select items for an explicit program. */
+export const catalogProgramItemQuerySchema = z.object({
+	parentId: z.uuid().nullable().default(null),
+	sort: mediaSortSchema.default('title'),
+	direction: sortDirectionSchema.default('asc'),
+	...catalogProgramItemFilterShape,
 }).superRefine(validateMediaGenreRules);
 /** Shared wire contract for media sort. */
 export type MediaSort = z.infer<typeof mediaSortSchema>;

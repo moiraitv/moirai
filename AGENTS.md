@@ -43,6 +43,8 @@
 
 ## User Interface
 
+- Presentations and controls for similar content should follow similar patterns. Typical exceptions
+  are adaptations for compactness or a more generic context.
 - Every asynchronously loaded collection must have an explicit initial loading state. Do not render an empty state, zero count, or other absence claim until the first load has completed successfully. Keep loading, loaded-empty, populated, and failed states distinguishable.
 - Present transient action confirmations, such as saved, copied, queued, or started messages, as
   auto-dismissing toasts with manual dismissal and enough time to read or interact. Keep failures,

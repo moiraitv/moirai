@@ -20,6 +20,7 @@ import { registerGuideRoutes } from './guide.js';
 import { registerFallbackFillerRoutes } from './fallback-fillers.js';
 import { registerLibraryRoutes } from './libraries.js';
 import { registerPlaybackRoutes } from './playback.js';
+import { registerQuickChannelSetupRoutes } from './quick-channel-setups.js';
 import { registerSchedulingRoutes } from './scheduling.js';
 import { registerSystemRoutes } from './system.js';
 
@@ -51,6 +52,7 @@ export function registerHttpRoutes(
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);
 	registerChannelRoutes(app, dependencies);
+	registerQuickChannelSetupRoutes(app, dependencies);
 	registerFallbackFillerRoutes(app, dependencies);
 	registerSchedulingRoutes(app, dependencies);
 	registerGuideRoutes(app, dependencies);

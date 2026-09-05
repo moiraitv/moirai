@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Asterisk, Trash2, X } from '@lucide/vue';
+import { Asterisk } from '@lucide/vue';
 import {
+	catalogProgramItemFilterSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
+	type MediaGenreFacet,
 	type MediaGroup,
 	type MediaItem,
 	type MediaSourcePickerEntry,
@@ -35,7 +37,8 @@ import { useSelectedMediaOrderState } from './selected-media-order-state';
 import { subscribeToSelectedMediaRefresh } from './selected-media-refresh';
 import { isProgramDraftValid } from './program-save-state';
 import { useProgramResourceActions } from './program-resource-actions';
-import TwoStepActionButton from '../TwoStepActionButton.vue';
+import ProgramLibraryQuery from './ProgramLibraryQuery.vue';
+import { emptyCatalogProgramItemFilter } from '../library/library-filter';
 
 const props = withDefaults(
 	defineProps<{
@@ -70,7 +73,6 @@ const sourceTotalPages = ref(1);
 const sourceSearch = ref('');
 const sourceBrowserOpen = ref(true);
 const selectedSourceLabel = ref('');
-const genreToAdd = ref('');
 const selectedItems = ref<MediaItem[]>([]);
 const selectedGroups = ref<MediaGroup[]>([]);
 const selectedItemsLoading = ref(false);
@@ -83,7 +85,8 @@ const selectionReviewButton = ref<HTMLButtonElement>();
 let selectedItemsLoadSequence = 0;
 let selectedGroupsLoadSequence = 0;
 let unsubscribeLiveEvents: (() => void) | undefined;
-const genres = ref<Array<{ key: string; name: string }>>([]);
+const genres = ref<MediaGenreFacet[]>([]);
+const queryPreviewRevision = ref(0);
 const editorOpen = computed(() =>
 	props.embedded ? Boolean(props.programId) : route.params.id !== undefined);
 const editingId = computed(() =>
@@ -166,7 +169,7 @@ const selectedLibraryType = computed(
 	() =>
 		librariesStore.libraries.find((library) => library.id === form.libraryId)?.typeKey ?? 'other',
 );
-const availableKinds = computed(() => {
+const libraryQueryKinds = computed(() => {
 	const type = librariesStore.libraries.find((library) => library.id === form.libraryId)?.typeKey;
 	if (type === 'movies') {
 		return ['movie'];
@@ -191,7 +194,12 @@ const form = reactive({
 	sourceId: '',
 	includeDescendants: true,
 	kinds: [] as string[],
-	genres: [] as string[],
+	filter: emptyCatalogProgramItemFilter(),
+	querySort: { type: 'name', direction: 'asc' } as {
+		type: 'name' | 'date-added' | 'release-date';
+		direction: 'asc' | 'desc';
+	},
+	queryItemLimit: null as number | null,
 	selectedItemIds: [] as string[],
 	selectedItemSort: 'date-added' as 'date-added' | 'name' | 'release-date' | 'manual',
 	selectedItemSortDirection: 'asc' as 'asc' | 'desc',
@@ -217,7 +225,9 @@ function resetForm(program?: SchedulingProgram): void {
 	form.sourceId = '';
 	form.includeDescendants = true;
 	form.kinds = [];
-	form.genres = [];
+	form.filter = emptyCatalogProgramItemFilter();
+	form.querySort = { type: 'name', direction: 'asc' };
+	form.queryItemLimit = null;
 	form.selectedItemIds = [];
 	form.selectedItemSort = 'date-added';
 	form.selectedItemSortDirection = 'asc';
@@ -233,7 +243,6 @@ function resetForm(program?: SchedulingProgram): void {
 	selectedItemsLoaded.value = false;
 	selectedGroups.value = [];
 	selectedGroupsLoaded.value = false;
-	genreToAdd.value = '';
 	if (program?.config.type === 'content') {
 		const source = program.config.source;
 		form.sourceType = source.type;
@@ -241,7 +250,9 @@ function resetForm(program?: SchedulingProgram): void {
 			case 'library-query':
 				form.libraryId = source.libraryId;
 				form.kinds = [...source.kinds];
-				form.genres = [...source.genres];
+				form.filter = catalogProgramItemFilterSchema.parse(source);
+				form.querySort = { ...(source.sort ?? { type: 'name', direction: 'asc' }) };
+				form.queryItemLimit = source.itemLimit ?? null;
 				break;
 			case 'collection':
 				form.libraryId = source.libraryId;
@@ -275,7 +286,7 @@ function resetForm(program?: SchedulingProgram): void {
 		form.entries = cloneContractValue(program.config.entries);
 	}
 	if (!program) {
-		form.kinds = [...availableKinds.value];
+		form.kinds = [...libraryQueryKinds.value];
 	}
 	sourceParentId.value = undefined;
 	sourcePage.value = 1;
@@ -599,9 +610,10 @@ function changeSourceLibrary(): void {
 	sourcePage.value = 1;
 	sourceSearch.value = '';
 	if (form.sourceType === 'library-query') {
-		form.kinds = [...availableKinds.value];
-		form.genres = [];
-		genreToAdd.value = '';
+		form.kinds = [...libraryQueryKinds.value];
+		form.filter = emptyCatalogProgramItemFilter();
+		form.querySort = { type: 'name', direction: 'asc' };
+		form.queryItemLimit = null;
 	}
 }
 
@@ -628,40 +640,14 @@ async function changeSourceType(): Promise<void> {
 		form.libraryId = sourceLibraries.value[0]?.id ?? '';
 	}
 	if (form.sourceType === 'library-query') {
-		form.kinds = [...availableKinds.value];
-		form.genres = [];
-		genreToAdd.value = '';
+		form.kinds = [...libraryQueryKinds.value];
+		form.filter = emptyCatalogProgramItemFilter();
+		form.querySort = { type: 'name', direction: 'asc' };
+		form.queryItemLimit = null;
 	}
 	if (previousLibraryId === form.libraryId) {
 		void loadSourceOptions();
 	}
-}
-
-/** Return the user-facing label for genre. */
-function genreLabel(key: string): string {
-	return genres.value.find((genre) => genre.key === key)?.name ?? key;
-}
-
-/** Add one deduplicated media-kind filter from the picker. */
-function addMediaKind(event: Event): void {
-	const select = event.target as HTMLSelectElement;
-	if (select.value && !form.kinds.includes(select.value)) {
-		form.kinds.push(select.value);
-	}
-	select.value = '';
-}
-
-/** Add the selected genre filter once, then reset the picker. */
-function addGenre(): void {
-	if (genreToAdd.value && !form.genres.includes(genreToAdd.value)) {
-		form.genres.push(genreToAdd.value);
-	}
-	genreToAdd.value = '';
-}
-
-/** Remove one genre from the library-query filters. */
-function removeGenre(key: string): void {
-	form.genres = form.genres.filter((genre) => genre !== key);
 }
 
 /** Restart source lookup from the first page using current search text. */
@@ -742,7 +728,9 @@ function payload(): ProgramCreate {
 							type: 'library-query',
 							libraryId: form.libraryId,
 							kinds: form.kinds,
-							genres: form.genres,
+							...form.filter,
+							sort: form.querySort,
+							itemLimit: form.queryItemLimit,
 						} as const);
 	return { name: form.name, config: { type: 'content', source, strategy } };
 }
@@ -822,8 +810,16 @@ onMounted(async () => {
 	document.addEventListener('keydown', handleSelectionDrawerKeydown);
 	unsubscribeLiveEvents = subscribeToSelectedMediaRefresh(
 		() => form.libraryId,
-		() => form.sourceType === 'collection',
-		() => void loadSelectedItems(),
+		() => form.sourceType === 'collection' || form.sourceType === 'library-query',
+		() => {
+			if (form.sourceType === 'collection') {
+				void loadSelectedItems();
+			}
+			else {
+				queryPreviewRevision.value += 1;
+				void loadSourceOptions();
+			}
+		},
 	);
 	try {
 		await Promise.all([
@@ -962,70 +958,17 @@ onBeforeUnmount(() => {
 										>
 									</div>
 									<template v-if="form.sourceType === 'library-query'">
-										<label>
-											<span>Media kinds</span>
-											<div class="program-token-field">
-												<span v-for="kind in form.kinds" :key="kind" class="program-token">
-													{{ kind }}
-													<button
-														type="button"
-														:aria-label="`Remove ${kind}`"
-														@click="form.kinds = form.kinds.filter((value) => value !== kind)"
-													>
-														<X :size="15" />
-													</button>
-												</span>
-												<select aria-label="Add media kind" @change="addMediaKind">
-													<option value="">Add media kind…</option>
-													<option
-														v-for="kind in availableKinds.filter(
-															(candidate) => !form.kinds.includes(candidate),
-														)"
-														:key="kind"
-														:value="kind"
-													>
-														{{ kind }}
-													</option>
-												</select>
-											</div>
-										</label>
-										<label>
-											<span>Genres <small>(optional)</small></span>
-											<div class="program-token-field">
-												<span v-for="genre in form.genres" :key="genre" class="program-token">
-													{{ genreLabel(genre) }}
-													<button
-														type="button"
-														:aria-label="`Remove ${genreLabel(genre)}`"
-														@click="removeGenre(genre)"
-													>
-														×
-													</button>
-												</span>
-												<select v-model="genreToAdd" aria-label="Add genre" @change="addGenre">
-													<option value="">Add genre…</option>
-													<option
-														v-for="genre in genres.filter(
-															(candidate) => !form.genres.includes(candidate.key),
-														)"
-														:key="genre.key"
-														:value="genre.key"
-													>
-														{{ genre.name }}
-													</option>
-												</select>
-											</div>
-										</label>
-										<TwoStepActionButton
-											v-if="form.kinds.length || form.genres.length"
-											class="program-clear-filters"
-											label="Clear all program filters"
-											confirm-label="Confirm clear all program filters"
-											confirm-text="Confirm Clear"
-											@confirm="form.kinds = []; form.genres = []"
-										>
-											Clear All <Trash2 :size="14" />
-										</TwoStepActionButton>
+										<ProgramLibraryQuery
+											v-model="form.filter"
+											v-model:sort="form.querySort"
+											v-model:item-limit="form.queryItemLimit"
+											:library-id="form.libraryId"
+											:library-type="selectedLibraryType"
+											:genres="genres"
+											:loading="sourceLoading"
+											:loaded="sourceLoaded"
+											:refresh-revision="queryPreviewRevision"
+										/>
 									</template>
 									<template v-else>
 										<p

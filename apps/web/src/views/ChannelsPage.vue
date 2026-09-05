@@ -28,6 +28,7 @@ import { api } from '../api';
 import { requestConfirmation } from '../confirmation';
 import { formatHardwareAccelerationPrediction } from '../channel-acceleration';
 import { channelLogoUrl } from '../channel-logo';
+import { loadChannelLogoImage, renderChannelLogoPng } from '../channel-logo-image';
 import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 import GuideTimeline from '../components/GuideTimeline.vue';
@@ -107,8 +108,6 @@ const cropSource = shallowRef<{
 }>();
 const LOGO_CROP_MAX_WIDTH = 240;
 const LOGO_CROP_MAX_HEIGHT = 260;
-const LOGO_SOURCE_MAX_BYTES = 25 * 1024 * 1024;
-const LOGO_SOURCE_MAX_PIXELS = 64_000_000;
 const defaults = (): ChannelCreate => ({
 	number: '',
 	name: '',
@@ -455,40 +454,18 @@ async function selectLogo(event: Event): Promise<void> {
 	}
 
 	error.value = '';
-	if (file.size > LOGO_SOURCE_MAX_BYTES) {
-		error.value = 'Choose an image smaller than 25 MiB.';
-		input.value = '';
-		return;
-	}
-
-	const url = URL.createObjectURL(file);
-	const image = new Image();
 	try {
-		await new Promise<void>((resolve, reject) => {
-			image.onload = () => resolve();
-			image.onerror = () => reject(new Error('The selected file is not a supported image.'));
-			image.src = url;
-		});
-		if (image.naturalWidth * image.naturalHeight > LOGO_SOURCE_MAX_PIXELS) {
-			throw new Error('Choose an image with no more than 64 megapixels.');
-		}
-
+		const source = await loadChannelLogoImage(file);
 		disposeCropSource();
-		cropSource.value = {
-			url,
-			image,
-			width: image.naturalWidth,
-			height: image.naturalHeight,
-		};
+		cropSource.value = source;
 		logoCrop.x = 0;
 		logoCrop.y = 0;
-		logoCrop.width = image.naturalWidth;
-		logoCrop.height = image.naturalHeight;
+		logoCrop.width = source.width;
+		logoCrop.height = source.height;
 		externalLogoUrl.value = '';
 		removeLogoOnSave.value = false;
 	}
 	catch (cause) {
-		URL.revokeObjectURL(url);
 		error.value = errorMessage(cause);
 	}
 }
@@ -514,68 +491,13 @@ async function renderCroppedLogo(): Promise<Blob | null> {
 		throw new Error('Set a channel width and height before saving a logo.');
 	}
 
-	const outputScale = Math.min(1, maximumWidth / logoCrop.width, maximumHeight / logoCrop.height);
-	let outputWidth = Math.max(1, Math.floor(logoCrop.width * outputScale));
-	let outputHeight = Math.max(1, Math.floor(logoCrop.height * outputScale));
-	const canvas = document.createElement('canvas');
-	canvas.width = outputWidth;
-	canvas.height = outputHeight;
-	const context = canvas.getContext('2d');
-	if (!context) {
-		throw new Error('This browser cannot prepare the channel logo.');
-	}
-
-	// Draw the selected unconstrained crop and encode it as PNG.
-	context.drawImage(
+	return await renderChannelLogoPng(
 		source.image,
-		logoCrop.x,
-		logoCrop.y,
-		logoCrop.width,
-		logoCrop.height,
-		0,
-		0,
-		outputWidth,
-		outputHeight,
+		logoCrop,
+		maximumWidth,
+		maximumHeight,
+		CHANNEL_LOGO_MAX_BYTES,
 	);
-	const encode = () =>
-		new Promise<Blob>((resolve, reject) => {
-			canvas.toBlob((blob) => {
-				if (blob) {
-					resolve(blob);
-				}
-				else {
-					reject(new Error('The browser could not encode the channel logo.'));
-				}
-			}, 'image/png');
-		});
-	let encoded = await encode();
-
-	// Reduce dimensions until the encoded logo satisfies the upload byte limit.
-	while (encoded.size > CHANNEL_LOGO_MAX_BYTES && (outputWidth > 1 || outputHeight > 1)) {
-		const reduction = Math.sqrt(CHANNEL_LOGO_MAX_BYTES / encoded.size) * 0.9;
-		outputWidth = Math.max(1, Math.min(outputWidth - 1, Math.floor(outputWidth * reduction)));
-		outputHeight = Math.max(1, Math.min(outputHeight - 1, Math.floor(outputHeight * reduction)));
-		canvas.width = outputWidth;
-		canvas.height = outputHeight;
-		const reducedContext = canvas.getContext('2d');
-		if (!reducedContext) {
-			throw new Error('This browser cannot downsize the channel logo.');
-		}
-
-		reducedContext.drawImage(
-			source.image,
-			logoCrop.x,
-			logoCrop.y,
-			logoCrop.width,
-			logoCrop.height,
-			0,
-			0,
-			outputWidth,
-			outputHeight,
-		);
-		encoded = await encode();
-	}
-	return encoded;
 }
 
 const displayedDays = computed(() => guide.value?.days ?? 7);
@@ -963,7 +885,10 @@ onBeforeUnmount(() => {
 				description="Create a channel, tune normalization, and stream it directly from Moirai."
 			>
 				<template #icon><RadioTower :size="37" /></template>
-				<button class="button" type="button" @click="add"><Plus :size="18" />Create Channel</button>
+				<div class="form-actions">
+					<RouterLink class="button" to="/quick"><Plus :size="18" />Quick Setup</RouterLink>
+					<button class="button secondary" type="button" @click="add">Advanced Channel</button>
+				</div>
 			</ResourceEmptyState>
 		</div>
 		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">

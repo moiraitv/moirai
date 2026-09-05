@@ -11,6 +11,7 @@ import type {
 	SelectionStateRecord,
 } from '@moirai/shared';
 import {
+	catalogProgramItemFilterSchema,
 	MAX_MEDIA_DURATION_MILLISECONDS,
 	MAX_TIMELINE_ISSUE_OCCURRENCES,
 	MAX_TIMELINE_SEGMENTS,
@@ -174,6 +175,32 @@ function primaryTitles(result: ReturnType<typeof generateTimeline>, slotIndex = 
 }
 
 describe('schedule timeline engine', () => {
+	it.each(['unavailable', 'unmeasured'] as const)(
+		'does not replace an %s limited query match with an item outside the preview',
+		(reason) => {
+			const query = program(10, {
+				type: 'content',
+				source: {
+					type: 'library-query', libraryId: uuid(900), kinds: ['movie'], genres: [],
+					sort: { type: 'name', direction: 'asc' }, itemLimit: 1,
+				},
+				strategy: { type: 'sequential' },
+			});
+			const first = media(1, reason === 'unmeasured' ? null : 3600, {
+				availability: reason === 'unavailable' ? 'unconfirmed' : 'available',
+			});
+			const daily = template([{ programId: query.id, startSeconds: 0 }]);
+			const fixture = input([query], [media(2, 3600), first], daily);
+			expect(primaryTitles(generateTimeline(fixture))).toEqual([]);
+
+			first.availability = 'available';
+			first.durationSeconds = 3600;
+			const titles = primaryTitles(generateTimeline(fixture));
+			expect(titles.length).toBeGreaterThan(0);
+			expect(new Set(titles)).toEqual(new Set([first.title]));
+		},
+	);
+
 	it.each(['best-fit-only', 'next-fit-only', 'best-fit-or-truncate', 'next-truncate'] as const)('fits early incoming %s filler against its nominal boundary across midnight', (policy) => {
 		const outgoing = contentProgram(10, 1);
 		const filler = contentProgram(11, 2);
@@ -1907,6 +1934,46 @@ describe('schedule timeline engine', () => {
 			itemIds: [newestAdded.id, oldestAdded.id, middleAdded.id],
 		})).toEqual(['Alpha Earlier', 'Zulu', 'Alpha Later']);
 	});
+
+	it.each(['sequential', 'shuffle'] as const)(
+		'preserves %s query playback when a rename saves explicit defaults',
+		(strategy) => {
+			const items = Array.from({ length: 5 }, (_, index) => media(index + 1, 6 * 3600));
+			const original = contentProgram(10, [1, 2, 3, 4, 5], strategy);
+			if (original.config.type !== 'content' || original.config.source.type !== 'library-query') {
+				throw new Error('Expected a library query');
+			}
+			const daily = template([{ programId: original.id, startSeconds: 0 }]);
+			const first = generateTimeline(input([original], items, daily));
+			const expected = generateTimeline(input([original], items, daily, {
+				startDate: '2026-01-06', state: first.proposedState,
+			}));
+			const edited: SchedulingProgram = {
+				...original,
+				name: 'Renamed program',
+				config: {
+					...original.config,
+					source: {
+						...original.config.source,
+						...catalogProgramItemFilterSchema.parse(original.config.source),
+						sort: { type: 'name', direction: 'asc' },
+						itemLimit: null,
+					},
+				},
+			};
+
+			// Accept both legacy omitted-default and previously persisted explicit-default identities.
+			for (const config of [original.config, edited.config]) {
+				const state = first.proposedState.map((record) => ({
+					...record, configFingerprint: stableJsonFingerprint(config),
+				}));
+				const continued = generateTimeline(input([edited], items, daily, {
+					startDate: '2026-01-06', state,
+				}));
+				expect(primaryTitles(continued)).toEqual(primaryTitles(expected));
+			}
+		},
+	);
 
 	it('preserves a legacy sequential collection cursor after adding the default sort', () => {
 		const items = [media(1, 60 * 60), media(2, 60 * 60), media(3, 60 * 60)];

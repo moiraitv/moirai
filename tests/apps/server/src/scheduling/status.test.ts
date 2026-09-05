@@ -83,6 +83,35 @@ describe('scheduling program status', () => {
 		});
 	});
 
+	it('sorts and limits a dynamic query before reporting its playable set', () => {
+		const fixture = catalog('available');
+		fixture.media = ['Alpha', 'Middle', 'Zulu'].map((title, index) => ({
+			...fixture.media[0]!,
+			id: `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+			title,
+			sortTitle: title,
+		}));
+		const limited: SchedulingProgram = {
+			...program,
+			config: {
+				type: 'content',
+				source: {
+					type: 'library-query',
+					libraryId: '00000000-0000-4000-8000-000000000002',
+					kinds: ['movie'],
+					genres: [],
+					sort: { type: 'name', direction: 'desc' },
+					itemLimit: 2,
+				},
+				strategy: { type: 'sequential' },
+			},
+		};
+
+		const status = schedulingProgramStatuses([limited], fixture)[0]!;
+		expect(status.indexedItemCount).toBe(2);
+		expect(status.previewItems.map((item) => item.title)).toEqual(['Zulu', 'Middle']);
+	});
+
 	it('reports a partially missing explicit collection as degraded', () => {
 		const fixture = catalog('available');
 		const collection: SchedulingProgram = {

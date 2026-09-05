@@ -14,6 +14,12 @@ import {
 	type ViewingPreferenceScores,
 } from '@moirai/shared';
 import { stableJson, stableJsonFingerprint } from '../stable-json.js';
+import {
+	compareLibraryQueryMedia,
+	compareSchedulingMedia,
+	libraryQueryStateSource,
+	mediaMatchesLibraryQuery,
+} from './content-query.js';
 import { recordTimelineIssue, type RecordedTimelineIssue } from './timeline-issues.js';
 
 /** Selected media item and the cursor state to persist after playback. */
@@ -180,44 +186,6 @@ export function addIssue(
 	}, context.issueIndex);
 }
 
-/** Compare media using stable episode and title ordering. */
-function mediaOrder(a: SchedulableMedia, b: SchedulableMedia): number {
-	const season
-		= (a.seasonNumber ?? Number.MAX_SAFE_INTEGER) - (b.seasonNumber ?? Number.MAX_SAFE_INTEGER);
-	if (season !== 0) {
-		return season;
-	}
-
-	const episode
-		= (a.episodeNumber ?? Number.MAX_SAFE_INTEGER) - (b.episodeNumber ?? Number.MAX_SAFE_INTEGER);
-	if (episode !== 0) {
-		return episode;
-	}
-
-	const group = (a.groupSortKey ?? '').localeCompare(b.groupSortKey ?? '', undefined, {
-		sensitivity: 'base',
-	});
-	if (group !== 0) {
-		return group;
-	}
-
-	const disc = (a.discNumber ?? 1) - (b.discNumber ?? 1);
-	if (disc !== 0) {
-		return disc;
-	}
-
-	const track
-		= (a.trackNumber ?? Number.MAX_SAFE_INTEGER) - (b.trackNumber ?? Number.MAX_SAFE_INTEGER);
-	if (track !== 0) {
-		return track;
-	}
-
-	return (
-		a.sortTitle.localeCompare(b.sortTitle, undefined, { sensitivity: 'base' })
-		|| a.id.localeCompare(b.id)
-	);
-}
-
 /** Return whether a media group belongs to the requested ancestor without following cycles. */
 function isDescendantOf(
 	groupId: string | null,
@@ -373,18 +341,7 @@ function candidatesFor(
 			);
 		}
 
-		if (media.libraryId !== config.source.libraryId) {
-			return false;
-		}
-
-		if (config.source.kinds.length > 0 && !config.source.kinds.includes(media.kind)) {
-			return false;
-		}
-
-		return (
-			config.source.genres.length === 0
-			|| config.source.genres.some((genre) => media.genres.includes(genre))
-		);
+		return mediaMatchesLibraryQuery(media, config.source);
 	});
 
 	// Report deleted explicit members separately from a missing source container.
@@ -414,8 +371,16 @@ function candidatesFor(
 		missingReferenceMessage = 'All selected items are no longer indexed.';
 	}
 
+	// Limit the authored query set before eligibility checks, matching status and previews.
+	const queryMatches = source.type === 'library-query'
+		? matching.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort))
+		: matching;
+	const selected = source.type === 'library-query' && source.itemLimit != null
+		? queryMatches.slice(0, source.itemLimit)
+		: queryMatches;
+
 	// Exclude unavailable or unmeasured media and cache the resulting diagnostics.
-	const unavailable = matching.filter((media) => {
+	const unavailable = selected.filter((media) => {
 		const sourceAvailability = context.catalog.libraryAvailability[media.libraryId] ?? 'unknown';
 		return (
 			media.availability !== 'available'
@@ -423,7 +388,7 @@ function candidatesFor(
 		);
 	});
 	const unavailableIds = new Set(unavailable.map((media) => media.id));
-	const candidates = matching.filter((media) => !unavailableIds.has(media.id));
+	const candidates = selected.filter((media) => !unavailableIds.has(media.id));
 	const missingDuration = candidates.filter(
 		(media) => !usableDurationSeconds(media.durationSeconds),
 	);
@@ -434,7 +399,9 @@ function candidatesFor(
 			source.sort,
 			source.additionBatches?.map((batch) => batch.map(canonicalItemId)),
 		)
-		: measured.sort(mediaOrder);
+		: source.type === 'library-query'
+			? measured
+			: measured.sort(compareSchedulingMedia);
 	context.candidateCache.set(programId, {
 		playable,
 		missingDuration,
@@ -539,8 +506,11 @@ function legacySetSelectionStateConfig(config: ProgramConfig): unknown | null {
 	};
 }
 
-/** Normalize collection state identity for legacy defaults and set-based strategies. */
+/** Normalize source state identity for legacy defaults and set-based collection strategies. */
 function selectionStateConfig(config: ProgramConfig): unknown {
+	if (config.type === 'content' && config.source.type === 'library-query') {
+		return { ...config, source: libraryQueryStateSource(config.source) };
+	}
 	if (
 		config.type !== 'content'
 		|| config.source.type !== 'collection'
@@ -604,7 +574,9 @@ function chooseContent(
 
 	const strategy = program.config.strategy;
 	const stateConfig = selectionStateConfig(program.config);
-	const legacyStateConfig = legacySetSelectionStateConfig(program.config);
+	const legacyStateConfig = program.config.source.type === 'library-query'
+		? program.config
+		: legacySetSelectionStateConfig(program.config);
 
 	// Advance a stable cursor through the source's natural media order.
 	if (strategy.type === 'sequential') {
@@ -614,6 +586,7 @@ function chooseContent(
 			stateConfig,
 			{ type: 'sequential', nextIndex: 0, lastItemId: null },
 			context.now,
+			legacyStateConfig,
 		);
 		const value = record.value as Extract<SelectionStateValue, { type: 'sequential' }>;
 		const afterLast = value.lastItemId

@@ -12,6 +12,7 @@ import GuidePage from './views/GuidePage.vue';
 import LogsPage from './views/LogsPage.vue';
 import AuthenticationPage from './views/AuthenticationPage.vue';
 import AccountPage from './views/AccountPage.vue';
+import QuickSetupPage from './views/QuickSetupPage.vue';
 
 /** Module-level router value for router. */
 export const router = createRouter({
@@ -30,6 +31,7 @@ export const router = createRouter({
 		{ path: '/libraries/:id', component: LibraryPage },
 		{ path: '/libraries/:libraryId/items/:id', component: MediaItemPage },
 		{ path: '/channels', component: ChannelsPage },
+		{ path: '/quick', component: QuickSetupPage },
 		{ path: '/schedules', redirect: '/schedules/channels' },
 		{ path: '/schedules/templates', component: TemplatesPage },
 		{ path: '/schedules/templates/:id', component: TemplatesPage },

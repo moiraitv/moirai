@@ -531,6 +531,31 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		.boundingBox();
 	const firstProgramType = await programTypes.locator('label').first().boundingBox();
 	expect(Math.abs((programTypeHeading?.x ?? 0) - (firstProgramType?.x ?? 0))).toBeLessThan(2);
+	await expect(page.getByText('Query parameters', { exact: true })).toBeVisible();
+	await expect(page.getByLabel('Order by')).toHaveValue('name');
+	await expect(page.getByLabel('Direction')).toHaveValue('asc');
+	await expect(page.getByLabel('Limit')).toHaveValue('');
+	const programQueryPreview = page.getByLabel('Currently matching media');
+	await expect(programQueryPreview).toContainText('Broadcast Fixture');
+	const queryCards = programQueryPreview.locator('.quick-query-carousel-item');
+	expect(await queryCards.count()).toBeGreaterThan(1);
+	const queryCardGaps = await queryCards
+		.evaluateAll((cards) => cards.slice(0, 3).map((card, index, visibleCards) => {
+			if (index === 0) {
+				return 0;
+			}
+			const previous = visibleCards[index - 1]!.getBoundingClientRect();
+			const current = card.getBoundingClientRect();
+			return current.left - previous.right;
+		}));
+	expect(queryCardGaps.slice(1).every((gap) => Math.abs(gap) < 1)).toBe(true);
+	await page.getByRole('button', { name: 'Configure Filters' }).click();
+	const programFilterDialog = page.getByRole('dialog', { name: 'Filter media' });
+	await expect(programFilterDialog.getByText('Minimum popular rating')).toBeVisible();
+	await expect(programFilterDialog.getByText('Minimum user rating')).toBeVisible();
+	await expect(programFilterDialog.getByLabel('Actor')).toBeVisible();
+	await expect(programFilterDialog.getByLabel('Director')).toBeVisible();
+	await programFilterDialog.getByRole('button', { name: 'Cancel' }).click();
 	await page.getByLabel('Name').fill(programName);
 	await page.getByLabel('Source type').selectOption('collection');
 	await expect(saveProgram).toBeDisabled();

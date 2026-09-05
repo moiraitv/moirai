@@ -307,7 +307,10 @@ onUnmounted(() => {
 				<Library :size="48" />
 				<h3>No libraries yet</h3>
 				<p>Add a media folder to begin building the index.</p>
-				<RouterLink class="button" to="/libraries">Add Library</RouterLink>
+				<div class="form-actions">
+					<RouterLink class="button" to="/quick">Quick Setup</RouterLink>
+					<RouterLink class="button secondary" to="/libraries">Manage Libraries</RouterLink>
+				</div>
 			</div>
 			<div class="section-heading">
 				<div>

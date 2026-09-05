@@ -573,7 +573,7 @@
 		grid-template-columns: 1fr;
 	}
 
-	.filter-release-field {
+	.filter-range-field {
 		width: 100%;
 	}
 
@@ -772,6 +772,19 @@
 		padding: 13px;
 	}
 
+	.library-query-filter-main {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.library-query-filter .button {
+		justify-content: center;
+	}
+
+	.library-query-order {
+		width: 100%;
+	}
+
 	.selected-item-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -945,7 +958,8 @@
 		grid-column: 1;
 	}
 
-	.filter-release-inputs,
+	.filter-range-inputs,
+	.library-query-order,
 	.genre-match,
 	.genre-choices {
 		grid-template-columns: 1fr;
@@ -1033,5 +1047,11 @@
 
 	.media-preview-stage {
 		min-height: 0;
+	}
+}
+@media (max-width: 640px) {
+	.quick-review-grid .quick-review-row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 10px;
 	}
 }

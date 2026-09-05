@@ -54,6 +54,10 @@
 	gap: 26px 28px;
 }
 
+.filter-name-field {
+	grid-column: 1 / -1;
+}
+
 .filter-field {
 	min-width: 0;
 	display: grid;
@@ -112,7 +116,7 @@
 	opacity: 0;
 }
 
-.filter-release-field {
+.filter-range-field {
 	width: 100%;
 	min-width: 0;
 	margin: 0;
@@ -120,7 +124,7 @@
 	border: 0;
 }
 
-.filter-release-field > legend {
+.filter-range-field > legend {
 	margin-bottom: 8px;
 	padding: 0;
 	color: #ced7e0;
@@ -128,13 +132,13 @@
 	font-weight: 680;
 }
 
-.filter-release-inputs {
+.filter-range-inputs {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 22px;
 }
 
-.filter-release-inputs .filter-field > span:first-child {
+.filter-range-inputs .filter-field > span:first-child {
 	color: var(--muted-strong);
 	font-size: 0.76rem;
 	font-weight: 500;

@@ -789,6 +789,7 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - library configuration, browsing, health, and reconciliation;
 - media details and best-effort in-browser file preview;
 - channel normalization and artwork;
+- guided Quick Setup for movie, show, and music-video channels;
 - reusable Programs and daily Templates;
 - layered Channel Schedules;
 - channel and dedicated EPG guide views;
@@ -819,6 +820,35 @@ Channel logos can be safe external HTTP(S) URLs or managed PNG files. Managed up
 unconstrained crop and never upscale beyond the source or channel resolution. Browser and server
 limits are 4096 pixels per edge and 10 MiB encoded output; source selection is limited to 25 MiB and
 64 megapixels. The server fully decodes and normalizes PNG data before storing it atomically.
+
+Quick Setup presents presets on a normal page; choosing one opens its library step in a
+resource-editor modal with a shared close header, scrolling steps, persistent
+navigation actions, and draft confirmation for close, backdrop, Escape, and route changes. It can
+reuse a compatible library or create one and immediately begin its asynchronous
+initial scan. Dynamic queries remain valid while that scan is empty, while explicit item, show, and
+season choices appear as the index fills. Library queries show every currently indexed match through
+an incrementally loaded, horizontally windowed carousel and refresh the loaded range after
+programming-affecting scan events. Quick Setup and the full Program editor share the library catalog's
+title, release-year, indexed-date, rating, actor, director, and include/exclude genre filters. Dynamic
+queries can order matches by title/episode, indexed date, or release date in either direction and
+optionally limit the resulting ordered set before excluding unavailable or unmeasured media, so
+playback never substitutes items outside the previewed limit. Programs evaluate those choices
+against each refreshed scheduling catalog without per-item queries.
+Playback-state identity treats omitted and explicit query defaults equally, preserving legacy
+sequential cursors and shuffle progress when a name-only edit saves the newer fields.
+Review presents four full-width rows with capped 12-item library and source samples, prepared channel
+branding, and a resolved sample day in the server timezone. The read-only Quick Setup preview endpoint
+shares resource construction and source validation with creation, runs in the scheduling worker pool,
+and persists neither resources nor playback state. Samples remain illustrative while indexing and
+randomized playback can change output; preview errors do not block valid creation. Completion morphs
+the dialog surface to a compact content-sized layout without scaling text, with immediate sizing for
+reduced motion. Both logo preparation paths and server PNG normalization preserve alpha transparency.
+Final submission atomically creates a content program, a
+single-slot daily template with a persistent cursor and unlimited finish-left midnight boundary, a
+channel using the standard normalization defaults, and its base assignment. A new library remains
+independent of that transaction because scanning may already be active. Optional local artwork is
+fitted without cropping and uploaded afterward; a failed upload leaves the playable core setup
+intact and can be retried from the completion screen.
 
 ### Live events
 

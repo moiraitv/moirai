@@ -16,6 +16,7 @@ import type {
 	PlaybackSettings,
 	ProgramCreate,
 	ProgramUpdate,
+	QuickChannelSetupCreate,
 	CatalogProgramItemQuery,
 	ScheduleTemplate,
 	ScheduleTemplateCreate,
@@ -28,6 +29,7 @@ import type {
 	ViewingPreferenceScores,
 	ViewingPreferenceSummary,
 } from '@moirai/shared';
+import type { QuickChannelSetupResult } from '@moirai/shared/api-contracts';
 import type { MoiraiDatabase } from '../db/index.js';
 import { MediaCatalogRepository } from './catalog.js';
 import { AuthenticationRepository } from './authentication.js';
@@ -36,6 +38,7 @@ import { SchedulingRepository } from './scheduling.js';
 import { SettingsRepository } from './settings.js';
 import { ViewingPreferenceRepository } from './viewing-preferences.js';
 import { LibraryRepository } from './libraries.js';
+import { QuickChannelSetupRepository } from './quick-channel-setups.js';
 import { listDataConflicts } from './conflicts.js';
 import type {
 	MediaBrowseQuery,
@@ -79,6 +82,7 @@ export class Repository extends LibraryRepository {
 	private readonly channels: ChannelRepository;
 	private readonly scheduling: SchedulingRepository;
 	private readonly settings: SettingsRepository;
+	private readonly quickChannelSetups: QuickChannelSetupRepository;
 	private readonly viewingPreferences: ViewingPreferenceRepository;
 
 	constructor(private readonly database: MoiraiDatabase) {
@@ -88,6 +92,7 @@ export class Repository extends LibraryRepository {
 		this.channels = new ChannelRepository(database);
 		this.scheduling = new SchedulingRepository(database);
 		this.settings = new SettingsRepository(database);
+		this.quickChannelSetups = new QuickChannelSetupRepository(database);
 		this.viewingPreferences = new ViewingPreferenceRepository(database);
 	}
 
@@ -222,6 +227,24 @@ export class Repository extends LibraryRepository {
 	/** Remove a channel and report whether it existed. */
 	async deleteChannel(id: string): Promise<boolean> {
 		return this.channels.deleteChannel(id);
+	}
+
+	/** Build validated sample resources without persistence or scheduling invalidation. */
+	previewQuickChannelSetup(
+		input: QuickChannelSetupCreate,
+		maxExplicitMediaItems: number,
+	): QuickChannelSetupResult {
+		return this.quickChannelSetups.preview(input, maxExplicitMediaItems);
+	}
+
+	/** Atomically create the core resources for one simple playable channel. */
+	createQuickChannelSetup(
+		input: QuickChannelSetupCreate,
+		maxExplicitMediaItems: number,
+	): QuickChannelSetupResult {
+		const result = this.quickChannelSetups.create(input, maxExplicitMediaItems);
+		this.scheduling.invalidateSchedulingCatalog();
+		return result;
 	}
 
 	/** List reusable scheduling programs. */

@@ -33,7 +33,10 @@ export {
 	artworkUrl,
 	cacheVersion,
 	decodedMetadata,
+	metadataNumber,
+	metadataPersonNames,
 	metadataReleaseDate,
+	metadataStrings,
 } from './catalog-records.js';
 
 /** Parameterized SQL fragments shared by flattened browsing and bulk program selection. */

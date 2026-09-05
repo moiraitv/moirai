@@ -4,7 +4,15 @@ import { Dices, ListOrdered, Shuffle, Sparkles } from '@lucide/vue';
 /** Selection strategies currently supported by content programs. */
 type SelectionStrategy = 'sequential' | 'shuffle' | 'random' | 'weighted-random';
 
-defineProps<{ modelValue: SelectionStrategy; seed: string }>();
+withDefaults(defineProps<{
+	modelValue: SelectionStrategy;
+	seed: string;
+	showSeed?: boolean;
+	showPlaybackState?: boolean;
+}>(), {
+	showSeed: true,
+	showPlaybackState: true,
+});
 const emit = defineEmits<{ 'update:modelValue': [value: SelectionStrategy]; 'update:seed': [value: string] }>();
 
 /** Update the optional deterministic seed from the text field. */
@@ -27,8 +35,8 @@ function updateSeed(event: Event): void {
 				<component :is="strategy.icon" :size="29" /><strong>{{ strategy.label }}</strong><span>{{ strategy.detail }}</span>
 			</button>
 		</div>
-		<label v-if="modelValue !== 'sequential'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="updateSeed" /></label>
-		<div class="program-playback-state">
+		<label v-if="showSeed && modelValue !== 'sequential'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="updateSeed" /></label>
+		<div v-if="showPlaybackState" class="program-playback-state">
 			<div class="program-playback-state-summary">
 				<strong>Playback state</strong>
 				<span>Configured in template schedule slots</span>

@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { RawData, WebSocket } from 'ws';
 import type { InjectOptions } from 'light-my-request';
 import sharp from 'sharp';
+import { Temporal } from '@js-temporal/polyfill';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	channelCreateSchema,
@@ -1513,6 +1514,192 @@ describe('API', () => {
 		expect(playlist.statusCode).toBe(200);
 		expect(playlist.body).toContain('Test Channel');
 		expect(playlist.body).toContain('https://moirai.example.test/iptv/channel/1.m3u8');
+	});
+
+	it('previews Quick Setup samples and a local day without persisting resources', async () => {
+		const { app, services, root } = await fixture();
+		const mediaRoot = path.join(root, 'quick-review-media');
+		await mkdir(mediaRoot);
+		for (let index = 0; index < 14; index += 1) {
+			await writeFile(path.join(mediaRoot, `Movie ${String(index).padStart(2, '0')}.mp4`), 'video');
+		}
+		const library = await services.repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Review Movies', typeKey: 'movies', sourceType: 'on-disk',
+			sourceConfig: { scanRoot: mediaRoot, playbackRoot: null },
+		}));
+		await services.scanner.scan(library.id, 'manual');
+		const payload = {
+			scenario: 'movies', libraryId: library.id, programName: 'Review program',
+			source: { type: 'library-query', name: 'Movie', itemLimit: 2, sort: { type: 'name', direction: 'desc' } },
+			strategy: { type: 'sequential' }, channel: { number: '91', name: 'Review channel', group: null },
+		};
+		const response = await app.inject({ method: 'POST', url: '/api/v1/quick-channel-setups/preview', payload });
+		expect(response.statusCode, response.body).toBe(200);
+		const review = response.json();
+		expect(review.library.items).toHaveLength(12);
+		expect(review.library.indexedItemCount).toBe(14);
+		expect(review.programming.items.map((item: { title: string }) => item.title)).toEqual(['Movie 13', 'Movie 12']);
+		expect(review.schedule.days).toBe(1);
+		expect(review.schedule.segments.length).toBeGreaterThan(0);
+		const midnight = Temporal.PlainDate.from(review.schedule.startDate)
+			.toZonedDateTime(review.schedule.timeZone);
+		expect(review.schedule.segments[0].start).toBe(midnight.toInstant().toString());
+		expect(Date.parse(review.schedule.segments.at(-1).finish))
+			.toBeGreaterThan(midnight.add({ days: 1 }).epochMilliseconds);
+		expect(await services.repository.listPrograms()).toEqual([]);
+		expect(await services.repository.listScheduleTemplates()).toEqual([]);
+		expect(await services.repository.listChannels()).toEqual([]);
+		expect(await services.repository.listChannelSchedules()).toEqual([]);
+		expect(await services.repository.getSelectionState(review.schedule.channelId)).toEqual([]);
+		const itemIds = review.programming.items.map((item: { id: string }) => item.id).reverse();
+		const explicit = await app.inject({ method: 'POST', url: '/api/v1/quick-channel-setups/preview',
+			payload: { ...payload, source: { type: 'collection', itemIds } } });
+		expect(explicit.statusCode).toBe(200);
+		expect(explicit.json().programming.items.map((item: { id: string }) => item.id)).toEqual(itemIds);
+		const empty = await app.inject({ method: 'POST', url: '/api/v1/quick-channel-setups/preview',
+			payload: { ...payload, source: { type: 'library-query', name: 'No matching title' } } });
+		expect(empty.statusCode).toBe(200);
+		expect(empty.json().programming.items).toEqual([]);
+		expect(empty.json().schedule.issues.length).toBeGreaterThan(0);
+	}, 30_000);
+
+	it('creates an atomic quick channel setup through the management API', async () => {
+		const { app, services } = await fixture();
+		const library = await services.repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Quick Movies',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: '/media/quick', playbackRoot: null },
+		}));
+		const preview = await app.inject({
+			method: 'POST',
+			url: '/api/v1/quick-channel-setups/query-preview',
+			payload: {
+				scenario: 'movies',
+				libraryId: library.id,
+				genres: ['drama'],
+			},
+		});
+		const created = await app.inject({
+			method: 'POST',
+			url: '/api/v1/quick-channel-setups',
+			payload: {
+				scenario: 'movies',
+				libraryId: library.id,
+				programName: 'Quick Movie Programming',
+				source: { type: 'library-query', genres: ['drama'], name: 'feature' },
+				strategy: { type: 'shuffle', seed: '' },
+				channel: { number: '71', name: 'Quick Movies', group: 'Movies' },
+			},
+		});
+
+		expect(preview.statusCode).toBe(200);
+		expect(preview.json()).toEqual({ indexedItemCount: 0, items: [], nextCursor: null });
+		expect(created.statusCode).toBe(201);
+		expect(created.json()).toMatchObject({
+			program: {
+				name: 'Quick Movie Programming',
+				config: {
+					source: {
+						libraryId: library.id,
+						kinds: ['movie'],
+						genres: ['drama'],
+						name: 'feature',
+					},
+				},
+			},
+			template: {
+				name: 'Quick Movies Daily',
+				boundaries: [{ policy: 'finish-left', maxDriftSeconds: null }],
+			},
+			channel: { number: '71', name: 'Quick Movies' },
+			schedule: { layers: [], defaultFiller: null },
+		});
+		expect(created.json().schedule.channelId).toBe(created.json().channel.id);
+		expect(created.json().schedule.defaultTemplateId).toBe(created.json().template.id);
+	});
+
+	it('paginates Quick Setup query matches in stable program order', async () => {
+		const { app, services, root } = await fixture();
+		const mediaRoot = path.join(root, 'quick-query-media');
+		await mkdir(mediaRoot);
+		for (const title of ['Zulu', 'Alpha', 'Middle']) {
+			await writeFile(path.join(mediaRoot, `${title}.mp4`), 'video');
+			await writeFile(
+				path.join(mediaRoot, `${title}.nfo`),
+				`<movie><title>${title}</title></movie>`,
+			);
+		}
+		const library = await services.repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Paged Quick Movies',
+			typeKey: 'movies',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: mediaRoot, playbackRoot: null },
+		}));
+		await services.scanner.scan(library.id, 'manual');
+
+		const first = await app.inject({
+			method: 'POST',
+			url: '/api/v1/quick-channel-setups/query-preview',
+			payload: {
+				scenario: 'movies',
+				libraryId: library.id,
+				genres: [],
+				limit: 2,
+			},
+		});
+		const firstPage = first.json();
+		const second = await app.inject({
+			method: 'POST',
+			url: '/api/v1/quick-channel-setups/query-preview',
+			payload: {
+				scenario: 'movies',
+				libraryId: library.id,
+				genres: [],
+				cursor: firstPage.nextCursor,
+				limit: 2,
+			},
+		});
+		const filtered = await app.inject({
+			method: 'POST',
+			url: '/api/v1/quick-channel-setups/query-preview',
+			payload: {
+				scenario: 'movies',
+				libraryId: library.id,
+				genres: [],
+				name: 'alpha',
+			},
+		});
+		const limited = await app.inject({
+			method: 'POST',
+			url: '/api/v1/quick-channel-setups/query-preview',
+			payload: {
+				scenario: 'movies',
+				libraryId: library.id,
+				genres: [],
+				sort: { type: 'name', direction: 'desc' },
+				itemLimit: 2,
+			},
+		});
+
+		expect(first.statusCode).toBe(200);
+		expect(firstPage.indexedItemCount).toBe(3);
+		expect(firstPage.items.map((item: { title: string }) => item.title))
+			.toEqual(['Alpha', 'Middle']);
+		expect(firstPage.nextCursor).toBe('2');
+		expect(second.statusCode).toBe(200);
+		expect(second.json().items.map((item: { title: string }) => item.title)).toEqual(['Zulu']);
+		expect(second.json().nextCursor).toBeNull();
+		expect(filtered.json()).toMatchObject({
+			indexedItemCount: 1,
+			items: [{ title: 'Alpha' }],
+			nextCursor: null,
+		});
+		expect(limited.json()).toMatchObject({
+			indexedItemCount: 2,
+			items: [{ title: 'Zulu' }, { title: 'Middle' }],
+			nextCursor: null,
+		});
 	});
 
 	it('uses distinct generated TVG identifiers in the client playlist', async () => {

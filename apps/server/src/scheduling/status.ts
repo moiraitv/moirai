@@ -7,6 +7,11 @@ import {
 	type SchedulingProgramHealth,
 	type SchedulingProgramStatus,
 } from '@moirai/shared';
+import {
+	compareLibraryQueryMedia,
+	compareSchedulingMedia,
+	mediaMatchesLibraryQuery,
+} from './content-query.js';
 
 /** Maximum media entries embedded in one program overview row. */
 const PROGRAM_PREVIEW_ITEM_LIMIT = 12;
@@ -35,7 +40,7 @@ function descendantOf(
 }
 
 /** Return catalog media eligible for one content source. */
-function contentMatches(
+export function schedulingContentMatches(
 	config: Extract<ProgramConfig, { type: 'content' }>,
 	catalog: SchedulingCatalog,
 ): SchedulableMedia[] {
@@ -83,12 +88,7 @@ function contentMatches(
 			);
 		}
 
-		return (
-			media.libraryId === config.source.libraryId
-			&& (config.source.kinds.length === 0 || config.source.kinds.includes(media.kind))
-			&& (config.source.genres.length === 0
-				|| config.source.genres.some((genre) => media.genres.includes(genre)))
-		);
+		return mediaMatchesLibraryQuery(media, config.source);
 	});
 }
 
@@ -147,10 +147,15 @@ function contentStatus(
 	else {
 		missing = !(source.libraryId in catalog.libraryAvailability);
 	}
-	const sourceMatches = contentMatches(program.config, catalog);
-	const matches = source.type === 'collection'
+	const sourceMatches = schedulingContentMatches(program.config, catalog);
+	const orderedMatches = source.type === 'collection'
 		? orderSelectedMedia(sourceMatches, source.sort, source.additionBatches)
-		: sourceMatches;
+		: source.type === 'library-query'
+			? sourceMatches.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort))
+			: sourceMatches.sort(compareSchedulingMedia);
+	const matches = source.type === 'library-query' && source.itemLimit != null
+		? orderedMatches.slice(0, source.itemLimit)
+		: orderedMatches;
 	const missingCollectionMembers
 		= source.type === 'collection' ? source.itemIds.length - matches.length : 0;
 	const missingGroupMembers

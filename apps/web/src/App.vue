@@ -16,6 +16,7 @@ import {
 	Menu,
 	Settings,
 	TvMinimal,
+	WandSparkles,
 	X,
 } from '@lucide/vue';
 import type { PlaybackEngineStatus } from '@moirai/shared';
@@ -192,6 +193,9 @@ onUnmounted(() => {
 				<RouterLink class="nav-link" to="/channels"
 				><TvMinimal :size="18" /><span>Channels</span></RouterLink
 				>
+				<RouterLink class="nav-link" to="/quick">
+					<WandSparkles :size="18" /><span>Quick Setup</span>
+				</RouterLink>
 				<div class="nav-section">
 					<div class="nav-section-heading">
 						<RouterLink class="nav-link nav-section-link" to="/schedules/channels">

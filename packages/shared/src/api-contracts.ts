@@ -332,6 +332,16 @@ export const channelScheduleSchema = channelScheduleConfigSchema.extend({
 	updatedAt: isoDateSchema,
 });
 
+/** Complete resource bundle returned by atomic quick channel creation. */
+export const quickChannelSetupResultSchema = z.object({
+	program: schedulingProgramSchema,
+	template: scheduleTemplateSchema,
+	channel: channelSchema,
+	schedule: channelScheduleSchema,
+});
+/** Shared result of atomic quick channel creation. */
+export type QuickChannelSetupResult = z.infer<typeof quickChannelSetupResultSchema>;
+
 /** One concrete item, filler interval, or dead-air interval in a timeline. */
 export const timelineSegmentSchema = z.object({
 	id: idSchema,
@@ -663,6 +673,34 @@ export const schedulingProgramStatusSchema = z.object({
 		availability: true,
 	})).max(12),
 });
+
+/** One cursor page of currently indexed matches for a Quick Setup library query. */
+export const quickChannelQueryPreviewResultSchema = z.object({
+	indexedItemCount: z.number().int().nonnegative(),
+	items: z.array(mediaItemSchema.pick({
+		id: true,
+		libraryId: true,
+		title: true,
+		year: true,
+		artworkUrl: true,
+		availability: true,
+	})).max(48),
+	nextCursor: z.string().nullable(),
+});
+/** Shared result of previewing a Quick Setup library query. */
+export type QuickChannelQueryPreviewResult = z.infer<
+	typeof quickChannelQueryPreviewResultSchema
+>;
+
+/** Read-only review samples and one resolved local day for an uncommitted Quick Setup. */
+export const quickChannelSetupPreviewResultSchema = z.object({
+	library: z.object({ items: schedulingProgramStatusSchema.shape.previewItems, indexedItemCount: z.number().int().nonnegative() }),
+	programming: z.object({ items: schedulingProgramStatusSchema.shape.previewItems, indexedItemCount: z.number().int().nonnegative() }),
+	templateName: z.string(),
+	schedule: timelinePreviewSchema,
+});
+/** Shared response for the enriched Quick Setup review. */
+export type QuickChannelSetupPreviewResult = z.infer<typeof quickChannelSetupPreviewResultSchema>;
 
 /** Scheduling editor overview assembled from authored configuration and catalog health. */
 export const schedulingOverviewSchema = z.object({

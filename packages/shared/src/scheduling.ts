@@ -1,11 +1,15 @@
 import { z } from 'zod';
 import type { MediaAvailability, SourceAvailability } from './index.js';
 import {
-	canonicalGenreKey,
 	canonicalNumberSet,
 	canonicalStringSet,
 } from './normalization.js';
-import { catalogProgramItemQuerySchema, sortDirectionSchema } from './catalog.js';
+import {
+	catalogProgramItemFilterShape,
+	catalogProgramItemQuerySchema,
+	sortDirectionSchema,
+	validateMediaGenreRules,
+} from './catalog.js';
 
 /** Number of nominal wall-clock seconds represented by a daily template. */
 export const SECONDS_PER_SCHEDULING_DAY = 86_400;
@@ -47,6 +51,8 @@ export const MAX_METADATA_TEXT_LENGTH = 512;
 export const MAX_METADATA_PLOT_LENGTH = 16 * 1024;
 /** Bound shared scheduling contracts resource use for metadata list items. */
 export const MAX_METADATA_LIST_ITEMS = 128;
+/** Bound an authored dynamic-query subset without limiting an unbounded All selection. */
+export const MAX_LIBRARY_QUERY_ITEMS = 100_000;
 /** Preserve extensive cast and contributor credits without unbounded metadata arrays. */
 export const MAX_METADATA_PEOPLE_ITEMS = 512;
 /** Bound shared scheduling contracts resource use for xmltv description length. */
@@ -75,6 +81,14 @@ export const selectedMediaSortSchema = z.discriminatedUnion('type', [
 ]);
 /** Shared wire contract for selected-media ordering. */
 export type SelectedMediaSort = z.infer<typeof selectedMediaSortSchema>;
+
+/** Validate stable ordering for media resolved dynamically from a library query. */
+export const libraryQuerySortSchema = z.object({
+	type: z.enum(['name', 'date-added', 'release-date']),
+	direction: sortDirectionSchema,
+});
+/** Shared wire contract for dynamic library-query ordering. */
+export type LibraryQuerySort = z.infer<typeof libraryQuerySortSchema>;
 
 /** Persist bounded insertion batches without duplicating selected-media identifiers. */
 const selectedMediaAdditionBatchesSchema = z.array(
@@ -205,13 +219,30 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 			.max(32)
 			.default([])
 			.transform((values) => canonicalStringSet(values)),
-		genres: z
-			.array(z.string().trim().min(1).max(120))
-			.max(64)
-			.default([])
-			.transform((values) => canonicalStringSet(values, canonicalGenreKey)),
+		name: catalogProgramItemFilterShape.name.removeDefault().optional(),
+		releaseYearFrom: catalogProgramItemFilterShape.releaseYearFrom.removeDefault().optional(),
+		releaseYearTo: catalogProgramItemFilterShape.releaseYearTo.removeDefault().optional(),
+		minimumRating: catalogProgramItemFilterShape.minimumRating.removeDefault().optional(),
+		minimumUserRating: catalogProgramItemFilterShape.minimumUserRating.removeDefault().optional(),
+		addedFrom: catalogProgramItemFilterShape.addedFrom.removeDefault().optional(),
+		addedBefore: catalogProgramItemFilterShape.addedBefore.removeDefault().optional(),
+		genres: catalogProgramItemFilterShape.genres,
+		excludedGenres: catalogProgramItemFilterShape.excludedGenres.optional(),
+		genreMatch: catalogProgramItemFilterShape.genreMatch.removeDefault().optional(),
+		actor: catalogProgramItemFilterShape.actor.removeDefault().optional(),
+		director: catalogProgramItemFilterShape.director.removeDefault().optional(),
+		sort: libraryQuerySortSchema.optional(),
+		itemLimit: z.number().int().min(1).max(MAX_LIBRARY_QUERY_ITEMS).nullable().optional(),
 	}),
 ]).superRefine((source, context) => {
+	if (source.type === 'library-query') {
+		validateMediaGenreRules({
+			genres: source.genres,
+			excludedGenres: source.excludedGenres ?? [],
+			genreMatch: source.genreMatch ?? 'all',
+		}, context);
+	}
+
 	if (source.type !== 'collection') {
 		return;
 	}
@@ -291,6 +322,78 @@ export const programUpdateSchema = programCreateSchema.partial();
 export type ProgramCreate = z.infer<typeof programCreateSchema>;
 /** Shared wire contract for program update. */
 export type ProgramUpdate = z.infer<typeof programUpdateSchema>;
+
+/** Quick-channel scenario backed by one built-in library category. */
+export const quickChannelScenarioSchema = z.enum(['movies', 'shows', 'music-videos']);
+/** Shared quick-channel scenario. */
+export type QuickChannelScenario = z.infer<typeof quickChannelScenarioSchema>;
+
+/** Simplified source choices accepted by the all-in-one channel setup workflow. */
+export const quickChannelSourceSchema = z.discriminatedUnion('type', [
+	z.object({
+		type: z.literal('library-query'),
+		...catalogProgramItemFilterShape,
+		sort: libraryQuerySortSchema.default({ type: 'name', direction: 'asc' }),
+		itemLimit: z.number().int().min(1).max(MAX_LIBRARY_QUERY_ITEMS).nullable().default(null),
+	}),
+	z.object({
+		type: z.literal('collection'),
+		itemIds: selectedMediaItemIdsSchema,
+	}),
+	z.object({
+		type: z.literal('group-collection'),
+		groupIds: z.array(z.uuid()).min(1).max(MAX_EXPLICIT_MEDIA_GROUPS)
+			.refine((ids) => new Set(ids).size === ids.length, 'Selected groups must be unique'),
+	}),
+]).superRefine((source, context) => {
+	if (source.type === 'library-query') {
+		validateMediaGenreRules(source, context);
+	}
+});
+/** Shared simplified source for quick channel creation. */
+export type QuickChannelSource = z.infer<typeof quickChannelSourceSchema>;
+
+/** Validate one atomic quick-channel setup request. */
+export const quickChannelSetupCreateSchema = z.object({
+	scenario: quickChannelScenarioSchema,
+	libraryId: z.uuid(),
+	programName: z.string().trim().min(1).max(120),
+	source: quickChannelSourceSchema,
+	strategy: selectionStrategySchema,
+	channel: z.object({
+		number: z.string().trim().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/)
+			.refine((value) => value !== '.' && value !== '..', {
+				message: 'Channel number cannot be a relative path segment',
+			}),
+		name: z.string().trim().min(1).max(120),
+		group: z.string().trim().max(120).nullable().default(null),
+	}),
+}).superRefine((input, context) => {
+	if (input.source.type === 'group-collection' && input.scenario !== 'shows') {
+		context.addIssue({
+			code: 'custom',
+			path: ['source'],
+			message: 'Selected shows or seasons require the shows scenario',
+		});
+	}
+});
+/** Shared request for atomically creating a simple playable channel. */
+export type QuickChannelSetupCreate = z.infer<typeof quickChannelSetupCreateSchema>;
+
+/** Validate a live preview request for a Quick Setup library query. */
+export const quickChannelQueryPreviewRequestSchema = z.object({
+	scenario: z.string().trim().min(1).max(64),
+	libraryId: z.uuid(),
+	...catalogProgramItemFilterShape,
+	sort: libraryQuerySortSchema.default({ type: 'name', direction: 'asc' }),
+	itemLimit: z.number().int().min(1).max(MAX_LIBRARY_QUERY_ITEMS).nullable().default(null),
+	cursor: z.string().regex(/^\d+$/).max(12).nullable().default(null),
+	limit: z.number().int().min(1).max(48).default(24),
+}).superRefine(validateMediaGenreRules);
+/** Shared request for previewing currently indexed dynamic library-query matches. */
+export type QuickChannelQueryPreviewRequest = z.infer<
+	typeof quickChannelQueryPreviewRequestSchema
+>;
 
 /** Validate a library-page request that creates or extends a selected-items program. */
 export const programItemAdditionSchema = z.object({
@@ -761,6 +864,11 @@ export interface SchedulableMedia {
 	plot: string | null;
 	year: number | null;
 	releaseDate?: string | null;
+	dateAddedAt?: string | null;
+	rating?: number | null;
+	userRating?: number | null;
+	actors?: string[];
+	directors?: string[];
 	artworkUrl: string | null;
 	availability: MediaAvailability;
 }

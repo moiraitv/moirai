@@ -22,6 +22,8 @@ import type {
 	MediaSort,
 	MediaSourcePickerResult,
 	ProgramCreate,
+	QuickChannelQueryPreviewRequest,
+	QuickChannelSetupCreate,
 	ProgramItemAddition,
 	ProgramItemAdditionResult,
 	ProgramUpdate,
@@ -46,6 +48,11 @@ import type {
 	ViewingPreferenceSummary,
 	FallbackFillerStatus,
 } from '@moirai/shared';
+import type {
+	QuickChannelQueryPreviewResult,
+	QuickChannelSetupPreviewResult,
+	QuickChannelSetupResult,
+} from '@moirai/shared/api-contracts';
 
 /** Current synchronizer token sent with unsafe administrator requests. */
 let csrfToken: string | null = null;
@@ -368,6 +375,20 @@ export const api = {
 	channels: () => request<Channel[]>('/api/v1/channels'),
 	createChannel: (body: ChannelCreate) =>
 		request<Channel>('/api/v1/channels', { method: 'POST', body: JSON.stringify(body) }),
+	createQuickChannelSetup: (body: QuickChannelSetupCreate) =>
+		request<QuickChannelSetupResult>('/api/v1/quick-channel-setups', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
+	previewQuickChannelSetup: (body: QuickChannelSetupCreate) =>
+		request<QuickChannelSetupPreviewResult>('/api/v1/quick-channel-setups/preview', {
+			method: 'POST', body: JSON.stringify(body),
+		}),
+	previewQuickChannelQuery: (body: QuickChannelQueryPreviewRequest) =>
+		request<QuickChannelQueryPreviewResult>('/api/v1/quick-channel-setups/query-preview', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
 	updateChannel: (id: string, body: ChannelCreate) =>
 		request<Channel>(`/api/v1/channels/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 	deleteChannel: (id: string) => request<void>(`/api/v1/channels/${id}`, { method: 'DELETE' }),

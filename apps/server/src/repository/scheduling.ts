@@ -27,7 +27,10 @@ import {
 	artworkUrl,
 	cacheVersion,
 	decodedMetadata,
+	metadataNumber,
+	metadataPersonNames,
 	metadataReleaseDate,
+	metadataStrings,
 } from './catalog.js';
 import { SchedulingConfigurationRepository } from './scheduling-config.js';
 
@@ -244,6 +247,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						artworkRelativePath: mediaItems.artworkRelativePath,
 						fingerprint: mediaItems.fingerprint,
 						availability: mediaItems.availability,
+						dateAddedAt: mediaItems.dateAddedAt,
 					})
 					.from(mediaItems)
 					.where(or(...mediaConditions))
@@ -364,6 +368,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					plot: item.plot,
 					year: item.year,
 					releaseDate: metadataReleaseDate(metadata),
+					dateAddedAt: item.dateAddedAt,
+					rating: metadataNumber(metadata, 'rating'),
+					userRating: metadataNumber(metadata, 'userRating'),
+					actors: metadataPersonNames(metadata, 'actors'),
+					directors: metadataStrings(metadata, 'directors'),
 					artworkUrl: artworkUrl(
 						'items',
 						item.id,

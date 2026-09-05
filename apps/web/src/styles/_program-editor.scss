@@ -216,6 +216,105 @@
 	margin-top: 0;
 }
 
+.library-query-filter {
+	display: grid;
+	gap: 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--panel-hover) 60%, transparent);
+}
+
+.library-query-filter-main {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+}
+
+.library-query-filter-copy {
+	min-width: 0;
+	flex: 1 1 220px;
+	display: grid;
+	gap: 5px;
+}
+
+.library-query-filter small {
+	color: var(--muted);
+}
+
+.library-query-filter-summary {
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+
+.library-query-filter-summary span {
+	max-width: 220px;
+	padding: 3px 7px;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+	border-radius: 999px;
+	color: var(--muted-strong);
+	background: color-mix(in srgb, var(--accent) 7%, transparent);
+	font-size: 0.72rem;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.library-query-filter-summary .library-query-filter-more {
+	color: var(--muted);
+	border-color: var(--line);
+	background: transparent;
+}
+
+.library-query-order {
+	width: min(100%, 430px);
+	display: grid;
+	grid-template-columns: minmax(138px, 1fr) minmax(112px, 0.8fr) 76px;
+	align-items: end;
+	gap: 7px;
+}
+
+.library-query-order label {
+	min-width: 0;
+	display: grid;
+	gap: 4px;
+}
+
+.library-query-order label > span {
+	color: var(--muted);
+	font-size: 0.68rem;
+	font-weight: 650;
+}
+
+.library-query-order select,
+.library-query-order input {
+	width: 100%;
+	min-height: 34px;
+	padding-block: 5px;
+	font-size: 0.78rem;
+}
+
+.library-query-order input {
+	padding-inline: 8px;
+}
+
+.library-query-filter .button {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	white-space: nowrap;
+}
+
+.program-library-query {
+	min-width: 0;
+	display: grid;
+	gap: 14px;
+}
+
 .program-fixed-field {
 	display: grid;
 	align-content: start;
@@ -278,18 +377,6 @@
 	background-color: transparent;
 	background-position: right 5px center;
 	box-shadow: none;
-}
-
-.program-clear-filters {
-	margin: 14px 0 0 auto;
-	padding: 5px;
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	border: 0;
-	color: var(--accent);
-	background: transparent;
-	font-size: 0.75rem;
 }
 
 .strategy-card-grid {

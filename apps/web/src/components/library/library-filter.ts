@@ -1,4 +1,8 @@
-import type { CatalogProgramItemQuery, GenreMatch } from '@moirai/shared';
+import type {
+	CatalogProgramItemFilter,
+	CatalogProgramItemQuery,
+	GenreMatch,
+} from '@moirai/shared';
 import type { MediaQuery } from '../../api';
 
 /** Editable catalog filters retained privately until the user applies them. */
@@ -32,6 +36,162 @@ export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 		genreMatch: 'all',
 		actor: '',
 		director: '',
+	};
+}
+
+/** Create the persisted empty filter shared by dynamic programs and Quick Setup. */
+export function emptyCatalogProgramItemFilter(): CatalogProgramItemFilter {
+	return {
+		name: '',
+		releaseYearFrom: null,
+		releaseYearTo: null,
+		minimumRating: null,
+		minimumUserRating: null,
+		addedFrom: null,
+		addedBefore: null,
+		genres: [],
+		excludedGenres: [],
+		genreMatch: 'all',
+		actor: '',
+		director: '',
+	};
+}
+
+/** Keep authored filter text readable without allowing one value to dominate the summary. */
+function compactFilterValue(value: string, maximumLength = 28): string {
+	return value.length > maximumLength ? `${value.slice(0, maximumLength - 1)}…` : value;
+}
+
+/** Describe an optional inclusive range in one compact label. */
+function compactFilterRange(
+	label: string,
+	from: string | number | null,
+	to: string | number | null,
+): string | null {
+	if (from !== null && to !== null) {
+		return `${label}: ${from}–${to}`;
+	}
+	if (from !== null) {
+		return `${label}: ${from}+`;
+	}
+	if (to !== null) {
+		return `${label}: through ${to}`;
+	}
+
+	return null;
+}
+
+/** Build prioritized, scan-friendly labels for an applied dynamic-library filter. */
+export function catalogProgramItemFilterSummary(
+	filter: CatalogProgramItemFilter,
+	genreNames: ReadonlyMap<string, string> = new Map(),
+): string[] {
+	const labels: string[] = [];
+	const genres = (keys: string[]) => keys.map((key) => genreNames.get(key) ?? key);
+	const genreList = (keys: string[]) => {
+		const names = genres(keys);
+		return `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` +${names.length - 2}` : ''}`;
+	};
+	const releaseYears = compactFilterRange(
+		'Years',
+		filter.releaseYearFrom,
+		filter.releaseYearTo,
+	);
+	const addedDates = libraryFilterDraft(filter);
+	const added = compactFilterRange('Added', addedDates.addedFrom || null, addedDates.addedTo || null);
+
+	if (filter.name) {
+		labels.push(`Title: ${compactFilterValue(filter.name)}`);
+	}
+	if (filter.genres.length > 0) {
+		labels.push(`${filter.genreMatch === 'any' ? 'Any genre' : 'All genres'}: ${genreList(filter.genres)}`);
+	}
+	if (filter.excludedGenres.length > 0) {
+		labels.push(`Exclude: ${genreList(filter.excludedGenres)}`);
+	}
+	if (releaseYears) {
+		labels.push(releaseYears);
+	}
+	if (filter.minimumRating !== null) {
+		labels.push(`Rating: ${filter.minimumRating}+`);
+	}
+	if (filter.minimumUserRating !== null) {
+		labels.push(`User rating: ${filter.minimumUserRating}+`);
+	}
+	if (filter.actor) {
+		labels.push(`Actor: ${compactFilterValue(filter.actor)}`);
+	}
+	if (filter.director) {
+		labels.push(`Director: ${compactFilterValue(filter.director)}`);
+	}
+	if (added) {
+		labels.push(added);
+	}
+
+	return labels;
+}
+
+/** Format a persisted instant as the local calendar date represented by a filter control. */
+function localDateValue(value: string | null, end = false): string {
+	if (!value) {
+		return '';
+	}
+
+	const date = new Date(value);
+	if (end) {
+		date.setDate(date.getDate() - 1);
+	}
+	const year = String(date.getFullYear());
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	return `${year}-${month}-${day}`;
+}
+
+/** Convert one local date input into an inclusive-start or exclusive-end instant. */
+function localDateInstant(value: string, end = false): string | null {
+	if (!value) {
+		return null;
+	}
+
+	const [year, month, day] = value.split('-').map(Number);
+	return new Date(year!, month! - 1, day! + (end ? 1 : 0)).toISOString();
+}
+
+/** Build an independently editable Filter Library draft from persisted program filters. */
+export function libraryFilterDraft(filter: CatalogProgramItemFilter): LibraryFilterDraft {
+	return {
+		name: filter.name,
+		releaseFrom: filter.releaseYearFrom === null ? '' : String(filter.releaseYearFrom),
+		releaseTo: filter.releaseYearTo === null ? '' : String(filter.releaseYearTo),
+		minimumRating: filter.minimumRating === null ? '' : String(filter.minimumRating),
+		minimumUserRating: filter.minimumUserRating === null ? '' : String(filter.minimumUserRating),
+		addedFrom: localDateValue(filter.addedFrom),
+		addedTo: localDateValue(filter.addedBefore, true),
+		genres: [...filter.genres],
+		excludedGenres: [...filter.excludedGenres],
+		genreMatch: filter.genreMatch,
+		actor: filter.actor,
+		director: filter.director,
+	};
+}
+
+/** Convert the Filter Library controls into the persisted dynamic-program filter contract. */
+export function catalogProgramItemFilter(
+	draft: LibraryFilterDraft,
+): CatalogProgramItemFilter {
+	return {
+		name: draft.name.trim(),
+		releaseYearFrom: draft.releaseFrom ? Number(draft.releaseFrom) : null,
+		releaseYearTo: draft.releaseTo ? Number(draft.releaseTo) : null,
+		minimumRating: draft.minimumRating ? Number(draft.minimumRating) : null,
+		minimumUserRating: draft.minimumUserRating ? Number(draft.minimumUserRating) : null,
+		addedFrom: localDateInstant(draft.addedFrom),
+		addedBefore: localDateInstant(draft.addedTo, true),
+		genres: [...draft.genres],
+		excludedGenres: draft.genreMatch === 'all' ? [...draft.excludedGenres] : [],
+		genreMatch: draft.genreMatch,
+		actor: draft.actor.trim(),
+		director: draft.director.trim(),
 	};
 }
 
