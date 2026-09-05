@@ -8,6 +8,7 @@ import {
 	listOutstandingReviews,
 	loadUserDocPages,
 	pageDigest,
+	writeUserDocsManifest,
 	type UserDocsPaths,
 } from '@scripts/user-docs.js';
 
@@ -64,6 +65,16 @@ afterEach(async () => {
 });
 
 describe('user documentation review tracking', () => {
+	it('renders contextual screenshots and guide links under the bundled help path', async () => {
+		const { paths, pagePath } = await fixture();
+		await writeFile(pagePath, `${await readFile(pagePath, 'utf8')}\n![Screenshot](/screenshots/example.png)\n[Read more](/example)\n<script>alert(1)</script>\n`);
+		await writeUserDocsManifest(paths);
+		const manifest = JSON.parse(await readFile(paths.generatedManifestPath, 'utf8'));
+		expect(manifest.topics.example.html).toContain('src="/help/screenshots/example.png"');
+		expect(manifest.topics.example.html).toContain('href="/help/example.html"');
+		expect(manifest.topics.example.html).not.toContain('<script>');
+	});
+
 	it('normalizes line endings and includes screenshot bytes in page digests', async () => {
 		const { paths, screenshotPath } = await fixture();
 		const source = await readFile(path.join(paths.sourceRoot, 'example.md'), 'utf8');

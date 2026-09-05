@@ -16,6 +16,11 @@ The filter editor can include or exclude genres and apply facts such as actors, 
 and dates when those values exist in the source metadata. An empty result means nothing matches the
 whole active filter; it does not mean the library is empty.
 
+The same filters are available in Quick Setup and program library queries. Use **Match all** when
+every selected genre must be present or **Match any** when one is enough; excluded genres remove
+matching items. Release-year and indexed-date filters answer different questions: when the media
+was released versus when Moirai added it to the catalog.
+
 Open an item to inspect its artwork, plot, credits, source paths, subtitles, and technical playback
 details. Missing information usually means it was absent from the NFO file or media probe.
 

@@ -11,6 +11,7 @@ describe('contextual help topics', () => {
 
 	it('maps management routes to the most specific stable topic', () => {
 		expect(helpTopicForPath('/')).toBe('operations.status');
+		expect(helpTopicForPath('/quick')).toBe('getting-started.first-channel');
 		expect(helpTopicForPath('/libraries/library-id/items/item-id')).toBe('libraries.browse');
 		expect(helpTopicForPath('/schedules/programs')).toBe('scheduling.programs');
 		expect(helpTopicForPath('/schedules/templates')).toBe('scheduling.templates');

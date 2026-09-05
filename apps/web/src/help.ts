@@ -2,6 +2,7 @@ import { ref } from 'vue';
 
 /** Stable topic identifiers that every application route mapping must resolve in the bundled guide. */
 export const helpTopicIds = [
+	'getting-started.first-channel',
 	'operations.status',
 	'playback.guide',
 	'libraries.browse',
@@ -30,6 +31,9 @@ export function closeHelp(): void {
 
 /** Select the most specific help topic for one management route. */
 export function helpTopicForPath(pathname: string): string {
+	if (pathname === '/quick') {
+		return 'getting-started.first-channel';
+	}
 	if (pathname === '/') {
 		return 'operations.status';
 	}

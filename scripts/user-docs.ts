@@ -203,6 +203,25 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 /** Render restricted, repository-authored Markdown for the in-app help drawer. */
 function contextualHtml(body: string): string {
 	const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
+	markdown.renderer.rules.image = (tokens, index, options, _env, renderer) => {
+		const token = tokens[index]!;
+		const source = token.attrGet('src');
+		if (source?.startsWith('/screenshots/')) {
+			token.attrSet('src', `/help${source}`);
+		}
+		token.attrSet('alt', renderer.renderInlineAsText(token.children ?? [], options, _env));
+		return renderer.renderToken(tokens, index, options);
+	};
+	markdown.renderer.rules.link_open = (tokens, index, options, _env, renderer) => {
+		const token = tokens[index]!;
+		const href = token.attrGet('href');
+		if (href?.startsWith('/') && !href.startsWith('//') && !href.startsWith('/help/')) {
+			const [pathname, anchor] = href.split('#');
+			const fullPath = pathname === '/' ? '/help/' : `/help${pathname}.html`;
+			token.attrSet('href', `${fullPath}${anchor ? `#${anchor}` : ''}`);
+		}
+		return renderer.renderToken(tokens, index, options);
+	};
 	const withoutTitle = body.replace(/^\s*#\s+[^\n]+\n+/u, '');
 	return markdown.render(withoutTitle);
 }

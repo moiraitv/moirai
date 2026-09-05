@@ -7,6 +7,9 @@ contextual: true
 
 # Channels
 
+To build a channel and its linked programming in one workflow, use
+[Quick Setup](/getting-started/first-channel). Return to the full editors for later adjustments.
+
 A channel combines a viewer-facing number and name with playback settings. Open **Channels** to create
 or edit one and to review its resolved seven-day timeline.
 

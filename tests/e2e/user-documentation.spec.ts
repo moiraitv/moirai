@@ -275,6 +275,21 @@ test('captures the released administrator workflows for the user guide', async (
 	await expect(page.getByRole('heading', { name: 'Moonrise Theater' })).toBeVisible();
 	await capture(page, 'media-item.png');
 
+	await page.goto('/quick');
+	await page.getByRole('button', { name: /Movie Channel/u }).click();
+	await page.getByRole('combobox', { name: 'Library', exact: true }).selectOption(libraryId);
+	await page.locator('#quick-setup-actions').getByRole('button', { name: 'Continue', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Choose the programming' })).toBeVisible();
+	await expect(page.locator('.quick-query-carousel-item').first()).toBeVisible();
+	await expect(page.locator('.quick-step')).not.toHaveClass(/quick-step-enter/u);
+	await expect(page.locator('.quick-step')).toHaveCSS('opacity', '1');
+	await capture(page, 'quick-setup.png');
+	await page.getByRole('button', { name: 'Close Quick Setup' }).click();
+	const discardSetup = page.getByRole('alertdialog', { name: 'Leave Quick Setup?' });
+	if (await discardSetup.isVisible()) {
+		await discardSetup.getByRole('button', { name: /Discard/u }).click();
+	}
+
 	const programResponse = await page.request.post('/api/v1/programs', {
 		headers: requestHeaders,
 		data: {
