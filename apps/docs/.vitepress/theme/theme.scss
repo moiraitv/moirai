@@ -1,0 +1,86 @@
+:root {
+	--vp-c-bg: var(--bg);
+	--vp-c-bg-alt: var(--sidebar);
+	--vp-c-bg-elv: var(--panel-2);
+	--vp-c-bg-soft: var(--panel);
+	--vp-c-border: var(--line);
+	--vp-c-divider: var(--line);
+	--vp-c-text-1: #eef3f8;
+	--vp-c-text-2: var(--muted-strong);
+	--vp-c-text-3: var(--muted);
+	--vp-c-brand-1: var(--accent);
+	--vp-c-brand-2: #64f4cf;
+	--vp-c-brand-3: #0ba57f;
+	--vp-c-brand-soft: rgba(22, 214, 164, 0.14);
+	--vp-font-family-base:
+		Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+html,
+body {
+	background: var(--bg);
+}
+
+.VPNav,
+.VPSidebar {
+	background: color-mix(in srgb, var(--sidebar) 95%, transparent) !important;
+}
+
+.VPDoc .container {
+	max-width: 1180px;
+}
+
+.docs-sidebar-brand {
+	display: grid;
+	justify-items: center;
+	gap: 0.6rem;
+	margin: 0 0 1.4rem;
+	padding: 0.85rem 0.75rem 1.25rem;
+	border-bottom: 1px solid var(--line);
+	color: var(--vp-c-text-1);
+	font-size: 0.78rem;
+	font-weight: 750;
+	letter-spacing: 0.12em;
+	text-decoration: none;
+	text-transform: uppercase;
+}
+
+.docs-sidebar-brand:hover {
+	color: var(--accent);
+}
+
+.docs-sidebar-brand img {
+	width: 86px;
+	height: 86px;
+	object-fit: contain;
+}
+
+.vp-doc img {
+	border: 1px solid var(--line-bright);
+	border-radius: 12px;
+	box-shadow: 0 22px 52px rgba(0, 0, 0, 0.28);
+}
+
+.review-banner {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 0.75rem;
+	align-items: center;
+	margin-bottom: 1.5rem;
+	padding: 0.85rem 1rem;
+	border: 1px solid rgba(255, 138, 61, 0.62);
+	border-radius: 10px;
+	background: rgba(125, 62, 18, 0.22);
+	color: #ffd4b6;
+}
+
+.review-banner a {
+	color: #fff0e6;
+	font-weight: 700;
+}
+
+@media (max-width: 720px) {
+	.review-banner {
+		grid-template-columns: 1fr;
+	}
+}

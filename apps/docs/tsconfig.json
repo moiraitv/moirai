@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vitepress/client"],
+    "rootDir": "../.."
+  },
+  "include": [".vitepress/**/*.ts", ".vitepress/**/*.vue"]
+}

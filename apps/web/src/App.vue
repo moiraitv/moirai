@@ -9,6 +9,7 @@ import {
 	ChevronRight,
 	CircleAlert,
 	CircleGauge,
+	CircleHelp,
 	FileText,
 	LayoutGrid,
 	Library,
@@ -23,7 +24,9 @@ import type { PlaybackEngineStatus } from '@moirai/shared';
 import logoUrl from './assets/moirai-logo.png';
 import { api } from './api';
 import ConfirmationModal from './components/ConfirmationModal.vue';
+import HelpDrawer from './components/HelpDrawer.vue';
 import { activeConfirmation, cancelConfirmations, settleConfirmation } from './confirmation';
+import { activeHelpTopic, closeHelp, helpTopicForPath, openHelp } from './help';
 import { liveEvents } from './live-events';
 import { clearMediaCardPreviewCache } from './media-card-preview';
 import { useLibrariesStore } from './stores/libraries';
@@ -119,6 +122,7 @@ watch(
 	() => route.fullPath,
 	() => {
 		closeDrawer();
+		closeHelp();
 		cancelConfirmations();
 	},
 );
@@ -147,7 +151,7 @@ onUnmounted(() => {
 
 <template>
 	<RouterView v-if="!authentication.authenticated" />
-	<div v-else class="app-shell" :inert="Boolean(activeConfirmation)">
+	<div v-else class="app-shell" :inert="Boolean(activeConfirmation) || Boolean(activeHelpTopic)">
 		<header class="mobile-header">
 			<RouterLink class="mobile-brand" to="/" aria-label="Moirai home">
 				<img :src="logoUrl" alt="" />
@@ -265,6 +269,13 @@ onUnmounted(() => {
 				<RouterLink class="nav-link" to="/logs"
 				><FileText :size="18" /><span>Logs</span></RouterLink
 				>
+				<button
+					type="button"
+					class="nav-link help-nav-button"
+					@click="openHelp(helpTopicForPath(route.path))"
+				>
+					<CircleHelp :size="18" /><span>Help</span>
+				</button>
 			</nav>
 
 			<footer class="sidebar-footer">
@@ -294,6 +305,7 @@ onUnmounted(() => {
 			<RouterView />
 		</main>
 	</div>
+	<HelpDrawer v-if="activeHelpTopic" :topic-id="activeHelpTopic" @close="closeHelp" />
 	<ConfirmationModal
 		v-if="activeConfirmation"
 		:key="activeConfirmation.instanceId"

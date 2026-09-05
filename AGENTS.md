@@ -136,6 +136,14 @@
   unless the user explicitly asks to change it. When code adds, removes, or materially changes
   behavior, update only the relevant technical section. Include security, compatibility, migration,
   and resource-limit behavior where those measures belong.
+- Treat `apps/docs` as the user-facing guide for released behavior. User-visible changes must update
+  the affected guide topics and any screenshots that no longer match the application. Keep prose
+  task-oriented and understandable without developer terminology when a plain-language explanation
+  is available.
+- Never approve a user-guide digest on the user's behalf. Authored or regenerated content must remain
+  unreviewed until the user explicitly instructs an approval. Use `npm run docs:user:review:list` to
+  surface the queue and `npm run docs:user:check` to validate page structure, links, topic mappings,
+  screenshots, and review state.
 
 ## Security and Compatibility
 

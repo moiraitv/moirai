@@ -20,6 +20,7 @@ import { errorMessage } from '../error-message';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import { hideBrokenImage } from '../image-error';
 import { countLabel } from '../count-label';
+import { openHelp } from '../help';
 
 /** TODO: Enable once the Programs catalog tip has been populated with finalized guidance. */
 const programsTipVisible = false;
@@ -30,7 +31,7 @@ const route = useRoute();
 const router = useRouter();
 const scheduling = useSchedulingStore();
 const librariesStore = useLibrariesStore();
-const { visible: programHelpVisible, dismiss: dismissProgramHelp, show: showProgramHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.programs);
+const { visible: programHelpVisible, dismiss: dismissProgramHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.programs);
 const initialLoading = ref(!(scheduling.loaded && librariesStore.loaded));
 const error = ref('');
 const editorOpen = computed(() => props.embedded ? Boolean(props.programId) : route.params.id !== undefined);
@@ -144,7 +145,7 @@ onMounted(async () => {
 					type="button"
 					class="page-help-button"
 					aria-label="Show program help"
-					@click="showProgramHelp"
+					@click="openHelp('scheduling.programs')"
 				>
 					<CircleHelp :size="20" />
 				</button>
@@ -252,7 +253,7 @@ onMounted(async () => {
 						<RouterLink v-if="programs.length" to="/schedules/programs/new">
 							<Plus :size="17" />New Program
 						</RouterLink>
-						<a v-else href="#program-types" @click="showProgramHelp">
+						<a v-else href="#program-types" @click.prevent="openHelp('scheduling.programs')">
 							<FileText :size="17" />Browse example programs
 						</a>
 					</template>

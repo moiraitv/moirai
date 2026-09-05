@@ -62,6 +62,7 @@ import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissibl
 import { liveEvents } from '../live-events';
 import { closeUnsavedEditor } from '../unsaved-editor';
 import { deadAirAction } from '../schedule-diagnostic-actions';
+import { openHelp } from '../help';
 import {
 	deadAirDiagnostics,
 	schedulingDurationLabel,
@@ -76,7 +77,6 @@ const scheduling = useSchedulingStore();
 const {
 	visible: channelSchedulesHelpVisible,
 	dismiss: dismissChannelSchedulesHelp,
-	show: showChannelSchedulesHelp,
 } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.channelSchedules);
 const { capabilitiesLoaded, channels, guide, timeZone }
 	= storeToRefs(channelsStore);
@@ -726,7 +726,7 @@ onBeforeUnmount(() => {
 					type="button"
 					class="page-help-button"
 					aria-label="Show channel schedule help"
-					@click="showChannelSchedulesHelp"
+					@click="openHelp('scheduling.channel-schedules')"
 				>
 					<CircleHelp :size="20" />
 				</button>

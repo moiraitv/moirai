@@ -7,13 +7,14 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/docs/package.json apps/docs/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/ersatztv-contract/package.json packages/ersatztv-contract/package.json
 RUN npm ci
 
 FROM dependencies AS build
 COPY . .
-RUN npm run build
+RUN npm run build:production
 
 FROM node:24-bookworm-slim AS node-runtime
 
@@ -36,6 +37,7 @@ COPY --from=build --chown=ersatztv:ersatztv /app/node_modules ./node_modules
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/server/dist ./apps/server/dist
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/web/dist ./apps/web/dist
+COPY --from=build --chown=ersatztv:ersatztv /app/apps/docs/dist ./apps/web/dist/help
 COPY --from=build --chown=ersatztv:ersatztv /app/drizzle ./drizzle
 RUN usermod --shell /bin/bash ersatztv \
     && mkdir -p /data /home/ersatztv \

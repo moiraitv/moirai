@@ -322,6 +322,9 @@ export async function buildApp(
 					.status(404)
 					.send({ code: 'not_found', message: 'Route not found', requestId: request.id });
 			}
+			if (request.url.startsWith('/help/')) {
+				return reply.status(404).sendFile('help/404.html');
+			}
 
 			return reply.sendFile('index.html');
 		});

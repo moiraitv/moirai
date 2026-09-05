@@ -816,6 +816,25 @@ directors. Items without the selected rating value do not satisfy a minimum-rati
 Media preview supports `GET`, `HEAD`, and one HTTP range, which permits scrubbing when the browser
 supports the source container and codecs. Moirai does not transcode preview files.
 
+### Bundled user documentation
+
+The `@moirai/docs` VitePress workspace builds a task-oriented, version-matched administrator guide.
+The runtime image places its normal `.html` output under the SPA distribution at `/help/`. Help
+pages, their contextual manifest, and screenshots are public so setup and recovery guidance remains
+available before authentication. Unknown `/help/` paths return the guide's 404 page instead of the
+management SPA.
+
+The Vue application maps management routes to stable topic IDs and presents restricted rendered
+Markdown in an accessible modal drawer. The public `/help/contextual-help.json` manifest contains the
+matching full-page path and review state. Vite development serves the generated manifest and source
+screenshots directly from the docs workspace.
+
+Each authored page is hashed from normalized Markdown and every referenced local screenshot. A
+versioned registry records explicitly approved digests and timestamps; prose, link, or screenshot
+changes therefore return the page to `needs-review`. Drafts remain visible in normal builds with a
+warning, while `build:production` and Docker builds reject any outstanding review. The generated
+`/help/review.html` dashboard and `docs:user:review:list` command expose the review queue.
+
 Channel logos can be safe external HTTP(S) URLs or managed PNG files. Managed uploads support an
 unconstrained crop and never upscale beyond the source or channel resolution. Browser and server
 limits are 4096 pixels per edge and 10 MiB encoded output; source selection is limited to 25 MiB and

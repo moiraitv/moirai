@@ -17,6 +17,7 @@ import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { scheduleClockLabel } from '../time-format';
 import { countLabel } from '../count-label';
+import { openHelp } from '../help';
 
 const props = withDefaults(defineProps<{ embedded?: boolean; templateId?: string | null }>(), { embedded: false, templateId: null });
 const emit = defineEmits<{ close: []; saved: [templateId: string] }>();
@@ -25,7 +26,7 @@ const router = useRouter();
 const scheduling = useSchedulingStore();
 const channelsStore = useChannelsStore();
 const { channels } = storeToRefs(channelsStore);
-const { visible: templateHelpVisible, dismiss: dismissTemplateHelp, show: showTemplateHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.templates);
+const { visible: templateHelpVisible, dismiss: dismissTemplateHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.templates);
 const initialLoading = ref(!(scheduling.loaded && channelsStore.loaded && channelsStore.capabilitiesLoaded));
 const error = ref('');
 const editing = computed(() => props.embedded ? Boolean(props.templateId) : route.params.id !== undefined);
@@ -189,7 +190,7 @@ onMounted(async () => {
 					type="button"
 					class="page-help-button"
 					aria-label="Show template help"
-					@click="showTemplateHelp"
+					@click="openHelp('scheduling.templates')"
 				>
 					<CircleHelp :size="20" />
 				</button>
