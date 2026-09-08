@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import {
-	ArrowRight, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Dices, FileText,
+	ArrowRight, ListVideo, ChevronLeft, ChevronRight, CircleHelp, Dices, FileText,
 	Layers3, Lightbulb, ListOrdered, Plus, Search, Shuffle, X, Zap,
 } from '@lucide/vue';
 import type { SchedulingProgram } from '@moirai/shared';
@@ -168,7 +168,7 @@ onMounted(async () => {
 					<X :size="18" />
 				</button>
 				<div class="programs-intro-copy">
-					<div class="programs-intro-icon"><CalendarDays :size="27" /></div>
+					<div class="programs-intro-icon"><ListVideo :size="27" /></div>
 					<div>
 						<h2 id="programs-intro-title">What is a program?</h2>
 						<p>

@@ -12,6 +12,7 @@ import {
 	FileText,
 	LayoutGrid,
 	Library,
+	ListVideo,
 	LogOut,
 	Menu,
 	Settings,
@@ -221,7 +222,7 @@ onUnmounted(() => {
 								<span>Templates</span>
 							</RouterLink>
 							<RouterLink class="library-nav-link" to="/schedules/programs">
-								<span class="library-nav-icon"><CalendarDays :size="16" /></span>
+								<span class="library-nav-icon"><ListVideo :size="16" /></span>
 								<span>Programs</span>
 							</RouterLink>
 						</div>
