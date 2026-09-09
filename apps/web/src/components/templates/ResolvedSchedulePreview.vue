@@ -61,6 +61,7 @@ function timeRange(start: string, finish: string): string {
 						v-for="segment in preview.segments"
 						:key="segment.id"
 						class="resolved-segment"
+						:data-program-id="segment.programId"
 						:class="[`role-${segment.role}`, { truncated: segment.truncated }]"
 						:style="{
 							...programColorStyle(segment.programId),

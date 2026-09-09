@@ -52,14 +52,26 @@
 .sidebar-footer {
 	margin-top: auto;
 	margin-inline: -16px;
-	padding: 14px 20px 0;
+	padding: 8px 20px 0;
 	border-top: 1px solid var(--line);
 }
 
 .sidebar-account {
+	position: relative;
+	padding-top: 12px;
+	margin-top: 8px;
 	display: flex;
 	align-items: center;
 	gap: 6px;
+}
+
+.sidebar-account::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: -20px;
+	right: -20px;
+	border-top: 1px solid var(--line);
 }
 
 .sidebar-account-link {

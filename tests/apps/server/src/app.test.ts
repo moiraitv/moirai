@@ -103,8 +103,10 @@ async function fixture(options: {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-api-'));
 	const webDistDir = path.join(root, 'web');
 	if (options.serveWeb) {
-		await mkdir(webDistDir, { recursive: true });
+		await mkdir(path.join(webDistDir, 'help'), { recursive: true });
 		await writeFile(path.join(webDistDir, 'index.html'), '<!doctype html><title>Moirai</title>');
+		await writeFile(path.join(webDistDir, 'help/index.html'), '<!doctype html><title>User guide</title>');
+		await writeFile(path.join(webDistDir, 'help/404.html'), '<!doctype html><title>Guide page missing</title>');
 	}
 
 	const config = loadConfig({
@@ -206,6 +208,18 @@ describe('API', () => {
 		const capabilities = await app.inject({ url: '/api/v1/capabilities' });
 		expect(capabilities.statusCode).toBe(401);
 		expect(capabilities.json()).toMatchObject({ code: 'authentication_required' });
+	});
+
+	it('serves bundled help publicly without falling through to the management SPA', async () => {
+		const { rawApp } = await fixture({ authenticated: false, serveWeb: true });
+
+		const guide = await rawApp.inject('/help/');
+		const missingGuidePage = await rawApp.inject('/help/not-a-page.html');
+		expect(guide.statusCode).toBe(200);
+		expect(guide.payload).toContain('<title>User guide</title>');
+		expect(missingGuidePage.statusCode).toBe(404);
+		expect(missingGuidePage.payload).toContain('<title>Guide page missing</title>');
+		expect(missingGuidePage.payload).not.toContain('<title>Moirai</title>');
 	});
 
 	it('protects canonically matched API routes with an encoded prefix', async () => {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Plus, Repeat2, Search, X } from '@lucide/vue';
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Eye, Plus, Repeat2, Search, X } from '@lucide/vue';
 import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
@@ -25,7 +25,7 @@ const router = useRouter();
 const scheduling = useSchedulingStore();
 const channelsStore = useChannelsStore();
 const { channels } = storeToRefs(channelsStore);
-const { visible: templateHelpVisible, dismiss: dismissTemplateHelp, show: showTemplateHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.templates);
+const { visible: templateHelpVisible, dismiss: dismissTemplateHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.templates);
 const initialLoading = ref(!(scheduling.loaded && channelsStore.loaded && channelsStore.capabilitiesLoaded));
 const error = ref('');
 const editing = computed(() => props.embedded ? Boolean(props.templateId) : route.params.id !== undefined);
@@ -183,17 +183,6 @@ onMounted(async () => {
 			title="Templates"
 			description="Allocate programs across a nominal day, then preview duration-aware resolution."
 		>
-			<Transition name="context-popover">
-				<button
-					v-if="!editing && !templateHelpVisible"
-					type="button"
-					class="page-help-button"
-					aria-label="Show template help"
-					@click="showTemplateHelp"
-				>
-					<CircleHelp :size="20" />
-				</button>
-			</Transition>
 			<RouterLink class="button" to="/schedules/templates/new"
 			><Plus :size="18" />New Template</RouterLink
 			>
@@ -296,6 +285,7 @@ onMounted(async () => {
 						<span class="template-row-grip" aria-hidden="true">⠿</span>
 						<div
 							class="template-row-icon"
+							:data-program-id="template.slots[0]?.programId"
 							:style="programColorStyle(template.slots[0]?.programId ?? null)"
 						>
 							<CalendarDays :size="23" />
@@ -323,6 +313,7 @@ onMounted(async () => {
 								:key="slot.id"
 								:class="{ 'fall-through-slot': slot.programId === null }"
 								:style="templateSlotStyle(template, slot)"
+								:data-program-id="slot.programId"
 								:title="`${programName(slot.programId)} · ${timeLabel(slot.startSeconds)}–${timeLabel(templateSlotEnd(template, slot))}`"
 							></span>
 						</div>

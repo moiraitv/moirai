@@ -9,6 +9,7 @@ import {
 	ChevronRight,
 	CircleAlert,
 	CircleGauge,
+	BookOpen,
 	FileText,
 	LayoutGrid,
 	Library,
@@ -17,6 +18,7 @@ import {
 	Menu,
 	Settings,
 	TvMinimal,
+	TvMinimalPlay,
 	WandSparkles,
 	X,
 } from '@lucide/vue';
@@ -24,7 +26,9 @@ import type { PlaybackEngineStatus } from '@moirai/shared';
 import logoUrl from './assets/moirai-logo.png';
 import { api } from './api';
 import ConfirmationModal from './components/ConfirmationModal.vue';
+import HelpDrawer from './components/HelpDrawer.vue';
 import { activeConfirmation, cancelConfirmations, settleConfirmation } from './confirmation';
+import { activeHelpTopic, closeHelp } from './help';
 import { liveEvents } from './live-events';
 import { clearMediaCardPreviewCache } from './media-card-preview';
 import { useLibrariesStore } from './stores/libraries';
@@ -120,6 +124,7 @@ watch(
 	() => route.fullPath,
 	() => {
 		closeDrawer();
+		closeHelp();
 		cancelConfirmations();
 	},
 );
@@ -148,7 +153,7 @@ onUnmounted(() => {
 
 <template>
 	<RouterView v-if="!authentication.authenticated" />
-	<div v-else class="app-shell" :inert="Boolean(activeConfirmation)">
+	<div v-else class="app-shell" :inert="Boolean(activeConfirmation) || Boolean(activeHelpTopic)">
 		<header class="mobile-header">
 			<RouterLink class="mobile-brand" to="/" aria-label="Moirai home">
 				<img :src="logoUrl" alt="" />
@@ -214,7 +219,7 @@ onUnmounted(() => {
 					<Transition name="moirai-collapse">
 						<div v-show="scheduleNavOpen" class="library-nav">
 							<RouterLink class="library-nav-link" to="/schedules/channels">
-								<span class="library-nav-icon"><TvMinimal :size="16" /></span>
+								<span class="library-nav-icon"><TvMinimalPlay :size="16" /></span>
 								<span>Channel Schedules</span>
 							</RouterLink>
 							<RouterLink class="library-nav-link" to="/schedules/templates">
@@ -269,6 +274,7 @@ onUnmounted(() => {
 			</nav>
 
 			<footer class="sidebar-footer">
+				<a class="nav-link" href="/help/" target="_blank" rel="noopener" title="Open User Guide in a new tab"><BookOpen :size="18" /><span>User Guide</span></a>
 				<div class="sidebar-account">
 					<RouterLink class="sidebar-account-link" to="/account">
 						<span>
@@ -295,6 +301,7 @@ onUnmounted(() => {
 			<RouterView />
 		</main>
 	</div>
+	<HelpDrawer v-if="activeHelpTopic" :topic-id="activeHelpTopic" @close="closeHelp" />
 	<ConfirmationModal
 		v-if="activeConfirmation"
 		:key="activeConfirmation.instanceId"

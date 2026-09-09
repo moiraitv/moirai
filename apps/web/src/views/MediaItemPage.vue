@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHelpButton from '../components/PageHelpButton.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -208,7 +209,7 @@ onUnmounted(closePlayer);
 
 			<div class="detail-copy">
 				<p class="eyebrow">{{ kindLabel(item.kind) }}</p>
-				<h1>{{ item.title }}</h1>
+				<div class="page-title-with-help"><h1>{{ item.title }}</h1><PageHelpButton label="media details" /></div>
 				<p v-if="item.groupTrail.length" class="detail-trail">
 					{{ item.groupTrail.map((group) => group.title).join(' / ') }}
 				</p>

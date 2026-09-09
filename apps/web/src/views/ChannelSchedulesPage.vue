@@ -7,7 +7,6 @@ import {
 	ArrowUp,
 	CircleAlert,
 	CircleCheck,
-	CircleHelp,
 	Info,
 	Layers3,
 	Pencil,
@@ -76,7 +75,6 @@ const scheduling = useSchedulingStore();
 const {
 	visible: channelSchedulesHelpVisible,
 	dismiss: dismissChannelSchedulesHelp,
-	show: showChannelSchedulesHelp,
 } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.channelSchedules);
 const { capabilitiesLoaded, channels, guide, timeZone }
 	= storeToRefs(channelsStore);
@@ -720,17 +718,6 @@ onBeforeUnmount(() => {
 			title="Channel schedules"
 			description="Choose a channel to configure its base and conditional template stack."
 		>
-			<Transition name="context-popover">
-				<button
-					v-if="!editing && !channelSchedulesHelpVisible"
-					type="button"
-					class="page-help-button"
-					aria-label="Show channel schedule help"
-					@click="showChannelSchedulesHelp"
-				>
-					<CircleHelp :size="20" />
-				</button>
-			</Transition>
 		</PageHeader>
 		<LoadingState v-if="initialLoading" label="Loading channel schedules…" />
 		<p v-else-if="error && !editing" class="notice error">{{ error }}</p>
@@ -876,6 +863,7 @@ onBeforeUnmount(() => {
 														(template) => template.id === layer.templateId,
 													)?.slots ?? []"
 													:key="slot.id"
+													:data-program-id="slot.programId"
 													:class="{ 'fall-through-slot': slot.programId === null }"
 													:style="
 														slotStyle(
@@ -916,6 +904,7 @@ onBeforeUnmount(() => {
 														(template) => template.id === draft?.defaultTemplateId,
 													)?.slots ?? []"
 													:key="slot.id"
+													:data-program-id="slot.programId"
 													:class="{ 'fall-through-slot': slot.programId === null }"
 													:style="
 														slotStyle(
@@ -936,7 +925,7 @@ onBeforeUnmount(() => {
 												<label class="layer-template-picker layer-title-picker">
 													<span class="sr-only">Conditional layer template</span>
 													<span class="layer-template-select">
-														<i :style="templateRepresentativeStyle(selectedLayer.templateId)"></i>
+														<i :data-program-id="templates.find((template) => template.id === selectedLayer?.templateId)?.slots.find((slot) => slot.programId)?.programId" :style="templateRepresentativeStyle(selectedLayer.templateId)"></i>
 														<select
 															v-model="selectedLayer.templateId"
 															aria-label="Conditional layer template"
@@ -1084,7 +1073,7 @@ onBeforeUnmount(() => {
 												<label class="layer-template-picker layer-title-picker">
 													<span class="sr-only">Base template</span>
 													<span class="layer-template-select">
-														<i :style="templateRepresentativeStyle(draft.defaultTemplateId)"></i>
+														<i :data-program-id="templates.find((template) => template.id === draft?.defaultTemplateId)?.slots.find((slot) => slot.programId)?.programId" :style="templateRepresentativeStyle(draft.defaultTemplateId)"></i>
 														<select v-model="draft.defaultTemplateId" aria-label="Base template">
 															<option
 																v-for="template in templates"
@@ -1119,6 +1108,7 @@ onBeforeUnmount(() => {
 													(template) => template.id === draft?.defaultTemplateId,
 												)?.slots ?? []"
 												:key="slot.id"
+												:data-program-id="slot.programId"
 												:class="{ 'fall-through-slot': slot.programId === null }"
 												:style="
 													slotStyle(
@@ -1164,6 +1154,7 @@ onBeforeUnmount(() => {
 											v-for="segment in preview.segments"
 											:key="segment.id"
 											class="resolved-segment"
+											:data-program-id="segment.programId"
 											:class="`role-${segment.role}`"
 											:style="{
 												...programColorStyle(segment.programId),
@@ -1234,6 +1225,7 @@ onBeforeUnmount(() => {
 												:key="programId ?? 'fall-through'"
 												:class="{ 'fall-through-slot': programId === null }"
 												:style="programColorStyle(programId)"
+												:data-program-id="programId"
 											></i>
 										</span>
 										<span> {{ entry.name }}<small v-if="entry.isBase"> (Base template)</small> </span>

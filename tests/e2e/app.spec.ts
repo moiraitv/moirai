@@ -502,8 +502,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(programHelpHeading).toBeHidden();
 	await page.reload();
 	await expect(programHelpHeading).toBeHidden();
-	await page.getByRole('button', { name: 'Show program help' }).click();
-	await expect(programHelpHeading).toBeVisible();
+	await page.getByRole('button', { name: 'Help with Programs' }).click();
+	await expect(page.getByRole('dialog').getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Close help' }).click();
 
 	const programName = `E2E Movie Picks ${runId}`;
 	await page.setViewportSize({ width: 768, height: 1024 });
@@ -982,8 +983,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(channelScheduleHelp).toBeHidden();
 	await page.reload();
 	await expect(channelScheduleHelp).toBeHidden();
-	await page.getByRole('button', { name: 'Show channel schedule help' }).click();
-	await expect(channelScheduleHelp).toBeVisible();
+	await page.getByRole('button', { name: 'Help with Channel schedules' }).click();
+	await expect(page.getByRole('dialog').getByRole('heading', { name: 'Channel schedules', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Close help' }).click();
 	await page.getByRole('searchbox', { name: 'Search channels' }).fill('No matching channel');
 	await expect(page.getByRole('heading', { name: 'No matching channels' })).toBeVisible();
 	await page.getByRole('button', { name: 'Clear search' }).click();
@@ -1312,8 +1314,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateHelpHeading).toBeHidden();
 	await page.reload();
 	await expect(templateHelpHeading).toBeHidden();
-	await page.getByRole('button', { name: 'Show template help' }).click();
-	await expect(templateHelpHeading).toBeVisible();
+	await page.getByRole('button', { name: 'Help with Templates' }).click();
+	await expect(page.getByRole('dialog').getByRole('heading', { name: 'Templates', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Close help' }).click();
 	await expect(page.getByLabel('Sort templates')).toHaveCount(0);
 	await expect(page.getByRole('group', { name: 'Template view' })).toHaveCount(0);
 	const templateSearchControl = page.locator('.template-search-control');

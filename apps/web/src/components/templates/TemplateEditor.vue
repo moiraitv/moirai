@@ -1085,7 +1085,7 @@ onBeforeUnmount(() => {
 										<span>Advanced scheduling behavior</span>
 										<ChevronDown :size="17" aria-hidden="true" />
 									</template>
-									<div class="form-grid">
+									<div class="form-grid" data-testid="slot-playback-fields">
 										<label
 										><span>Playback state</span
 										><select v-model="selectedSlot.stateScope" @change="markChanged">

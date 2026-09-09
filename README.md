@@ -61,7 +61,17 @@ npm start
 
 The production server listens at <http://127.0.0.1:3000> by default and serves both the API and built SPA.
 
+## User guide
+
+Moirai includes a version-matched administrator guide at `/help/`, plus contextual help inside the
+management application. Run `npm run docs:user:dev` and use the exact local port it prints to preview
+the guide, or
+`npm run docs:user:review:list` to see pages awaiting human review. Ordinary builds retain visible
+draft warnings; `npm run build:production` and Docker builds stop when any guide page is unreviewed.
+
 ## Technical documentation
+
+See [Contributing](CONTRIBUTING.md) for documentation workflows and the pre-release screenshot and review checklist.
 
 See the [technical outline](docs/technical-outline.md) for the system architecture, media indexing,
 scheduling and materialization model, IPTV delivery, operational limits, and deployment assumptions.
@@ -75,8 +85,8 @@ npm run docs:api
 ```
 
 The command writes OpenAPI 3.1 and AsyncAPI 3.1 JSON, YAML, and self-contained HTML under the ignored
-`dist/api-docs/` directory. Open `dist/api-docs/index.html` after generation. Moirai does not expose a
-documentation route in production.
+`dist/api-docs/` directory. Open `dist/api-docs/index.html` after generation. Moirai does not expose
+the developer API references as a production route.
 
 ## Configuration
 
@@ -85,9 +95,9 @@ documentation route in production.
 | `MOIRAI_HOST`                          | `127.0.0.1`             | Fastify bind address                                                            |
 | `MOIRAI_PORT`                          | `3000`                  | Fastify port                                                                    |
 | `MOIRAI_PUBLIC_URL`                    | `http://127.0.0.1:3000` | Client-visible HTTP(S) origin for EPG and artwork URLs; paths are not supported |
-| `MOIRAI_MANAGEMENT_URL`                | `MOIRAI_PUBLIC_URL`     | Browser UI origin; may differ only by port for split development servers       |
-| `MOIRAI_WEB_PORT`                      | `5173`                  | Development-only Vite server port; unused by production serving                  |
-| `MOIRAI_WEB_HOST`                      | Derived                | Optional Vite bind address for development                                      |
+| `MOIRAI_MANAGEMENT_URL`                | `MOIRAI_PUBLIC_URL`     | Browser UI origin; may differ only by port for split development servers        |
+| `MOIRAI_WEB_PORT`                      | `5173`                  | Development-only Vite server port; unused by production serving                 |
+| `MOIRAI_WEB_HOST`                      | Derived                 | Optional Vite bind address for development                                      |
 | `MOIRAI_TRUST_PROXY`                   | Unset                   | Comma-separated proxy IPs/CIDRs trusted to report original client addresses     |
 | `MOIRAI_LOGTO_ENDPOINT`                | Unset                   | Logto tenant origin; enables Logto only when all three Logto values are set     |
 | `MOIRAI_LOGTO_APP_ID`                  | Unset                   | Traditional-web application ID issued by Logto                                  |
@@ -191,9 +201,14 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run docs:user:check
 npm run docs:api:check
 npx playwright install chromium
 npm run test:e2e
 ```
+
+Use `npm run build:production` for a release-ready build after an authorized reviewer has approved
+all current guide digests with `npm run docs:user:review:approve -- <topic-id>` (or an explicitly
+requested `--all`). Regenerating guide screenshots invalidates the pages that use them.
 
 Set `PLAYWRIGHT_CHROME_PATH` to an existing Chrome or Chromium executable to run the browser test without Playwright's downloaded browser.

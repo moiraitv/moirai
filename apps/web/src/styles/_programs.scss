@@ -21,24 +21,6 @@
 	font-size: 0.94rem;
 }
 
-.page-help-button {
-	width: 46px;
-	height: 46px;
-	padding: 0;
-	display: grid;
-	flex: 0 0 auto;
-	place-items: center;
-	border: 1px solid var(--line-bright);
-	border-radius: 9px;
-	color: var(--accent);
-	background: rgba(10, 29, 40, 0.88);
-}
-
-.page-help-button:hover {
-	border-color: rgba(22, 214, 164, 0.6);
-	background: rgba(13, 63, 53, 0.6);
-}
-
 .dismissible-help-panel {
 	position: relative;
 }

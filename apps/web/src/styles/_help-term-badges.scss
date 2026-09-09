@@ -1,0 +1,33 @@
+// Shared resource badges for the bundled guide and restricted contextual Markdown.
+:is(.vp-doc, .help-markdown) .docs-term-badge {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.25em;
+	padding: 0.08em 0.45em 0.08em 0.12em;
+	border: 1px solid rgba(22, 214, 164, 0.25);
+	border-radius: 0.45em;
+	background: rgba(8, 74, 61, 0.35);
+	color: var(--accent);
+	font-size: 0.9em;
+	font-weight: 600;
+	line-height: 1.3;
+	vertical-align: baseline;
+	white-space: nowrap;
+
+	&[data-tone='blue'] {
+		border-color: rgba(41, 151, 255, 0.3);
+		background: rgba(20, 72, 117, 0.35);
+		color: var(--blue);
+	}
+
+	> img[src*='/icons/'] {
+		// Keep the icon out of baseline alignment so the label defines the inline baseline.
+		align-self: center;
+		width: 1.4em;
+		height: 1.4em;
+		margin: 0;
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+	}
+}

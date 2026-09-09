@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHelpButton from '../components/PageHelpButton.vue';
 import {
 	computed,
 	nextTick,
@@ -1180,12 +1181,11 @@ onUnmounted(() => {
 				<p class="eyebrow">Libraries</p>
 				<div class="title-row">
 					<h1>{{ library.name }}</h1>
-					<div class="library-title-actions">
-						<button class="square-button library-header-icon-button" aria-label="Sync library" :disabled="isScanRunning()" @click="scan"><RefreshCw :size="20" :class="{ spinning: isScanRunning() }" /></button>
-					</div>
+					<PageHelpButton label="Libraries" />
 				</div>
 			</div>
 			<div class="library-header-tools">
+				<button class="square-button library-header-icon-button" aria-label="Sync library" :disabled="isScanRunning()" @click="scan"><RefreshCw :size="20" :class="{ spinning: isScanRunning() }" /></button>
 				<button class="square-button library-header-icon-button" aria-label="Library settings" @click="showSettings = true"><Settings :size="20" /></button>
 				<label class="search-control">
 					<Search :size="19" />

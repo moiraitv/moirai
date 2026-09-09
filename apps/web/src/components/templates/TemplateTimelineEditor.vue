@@ -75,6 +75,7 @@ function handlePointerMove(event: PointerEvent): void {
 						v-for="slot in sortedSlots"
 						:key="slot.id"
 						class="template-slot"
+						:data-program-id="slot.programId"
 						:class="{
 							selected: slot.id === selectedSlotId,
 							'fall-through-slot': slot.programId === null,
@@ -125,6 +126,7 @@ function handlePointerMove(event: PointerEvent): void {
 							'fall-through-slot': slot.programId === null,
 						}"
 						:style="programColorStyle(slot.programId)"
+						:data-program-id="slot.programId"
 						@click="emit('update:selectedSlotId', slot.id)"
 					>
 						<span class="program-color-dot"></span>
@@ -141,6 +143,7 @@ function handlePointerMove(event: PointerEvent): void {
 					v-for="program in usedPrograms"
 					:key="program.id"
 					:style="programColorStyle(program.id)"
+					:data-program-id="program.id"
 				>
 					<i></i>{{ program.name }}
 				</span>

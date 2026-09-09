@@ -1,0 +1,19 @@
+{
+  "name": "@moirai/docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx ../../scripts/user-docs.ts manifest && vitepress dev",
+		"build": "tsx ../../scripts/user-docs.ts manifest && vitepress build && tsx ../../scripts/user-docs.ts bundle",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.0",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.0",
+    "vue-tsc": "^3.0.0"
+  }
+}
