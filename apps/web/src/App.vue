@@ -9,14 +9,16 @@ import {
 	ChevronRight,
 	CircleAlert,
 	CircleGauge,
-	CircleHelp,
+	BookOpen,
 	FileText,
 	LayoutGrid,
 	Library,
+	ListVideo,
 	LogOut,
 	Menu,
 	Settings,
 	TvMinimal,
+	TvMinimalPlay,
 	WandSparkles,
 	X,
 } from '@lucide/vue';
@@ -26,7 +28,7 @@ import { api } from './api';
 import ConfirmationModal from './components/ConfirmationModal.vue';
 import HelpDrawer from './components/HelpDrawer.vue';
 import { activeConfirmation, cancelConfirmations, settleConfirmation } from './confirmation';
-import { activeHelpTopic, closeHelp, helpTopicForPath, openHelp } from './help';
+import { activeHelpTopic, closeHelp } from './help';
 import { liveEvents } from './live-events';
 import { clearMediaCardPreviewCache } from './media-card-preview';
 import { useLibrariesStore } from './stores/libraries';
@@ -217,7 +219,7 @@ onUnmounted(() => {
 					<Transition name="moirai-collapse">
 						<div v-show="scheduleNavOpen" class="library-nav">
 							<RouterLink class="library-nav-link" to="/schedules/channels">
-								<span class="library-nav-icon"><TvMinimal :size="16" /></span>
+								<span class="library-nav-icon"><TvMinimalPlay :size="16" /></span>
 								<span>Channel Schedules</span>
 							</RouterLink>
 							<RouterLink class="library-nav-link" to="/schedules/templates">
@@ -225,7 +227,7 @@ onUnmounted(() => {
 								<span>Templates</span>
 							</RouterLink>
 							<RouterLink class="library-nav-link" to="/schedules/programs">
-								<span class="library-nav-icon"><CalendarDays :size="16" /></span>
+								<span class="library-nav-icon"><ListVideo :size="16" /></span>
 								<span>Programs</span>
 							</RouterLink>
 						</div>
@@ -269,16 +271,10 @@ onUnmounted(() => {
 				<RouterLink class="nav-link" to="/logs"
 				><FileText :size="18" /><span>Logs</span></RouterLink
 				>
-				<button
-					type="button"
-					class="nav-link help-nav-button"
-					@click="openHelp(helpTopicForPath(route.path))"
-				>
-					<CircleHelp :size="18" /><span>Help</span>
-				</button>
 			</nav>
 
 			<footer class="sidebar-footer">
+				<a class="nav-link" href="/help/" target="_blank" rel="noopener" title="Open User Guide in a new tab"><BookOpen :size="18" /><span>User Guide</span></a>
 				<div class="sidebar-account">
 					<RouterLink class="sidebar-account-link" to="/account">
 						<span>

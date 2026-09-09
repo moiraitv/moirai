@@ -4,7 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import MarkdownIt from 'markdown-it';
+import { userDocsTermBadges } from './user-docs-term-badges.js';
 import { helpTopicIds } from '../apps/web/src/help.js';
+import { helpReviewLabel, type HelpReviewReason } from '../apps/web/src/help-review.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const docsRoot = path.join(projectRoot, 'apps/docs');
@@ -42,11 +44,12 @@ export const defaultUserDocsPaths: UserDocsPaths = {
 interface ReviewRecord {
 	digest: string;
 	reviewedAt: string;
+	components?: Record<'text' | 'screenshots' | 'icons', { digest: string; reviewedAt: string }>;
 }
 
 /** Versioned durable registry of explicitly approved guide pages. */
 interface ReviewRegistry {
-	version: 1;
+	version: 1 | 2;
 	reviews: Record<string, ReviewRecord>;
 }
 
@@ -61,6 +64,8 @@ export interface UserDocPage {
 	source: string;
 	body: string;
 	digest: string;
+	componentDigests: Record<'text' | 'screenshots' | 'icons', string>;
+	reviewReasons: HelpReviewReason[];
 	reviewStatus: 'needs-review' | 'reviewed';
 }
 
@@ -86,9 +91,9 @@ function normalizedSource(value: string): string {
 	return `${value.replace(/\r\n?/gu, '\n').trimEnd()}\n`;
 }
 
-/** Resolve local screenshots referenced by one guide page. */
+/** Resolve local screenshots and icons referenced by one guide page. */
 export function referencedScreenshotPaths(source: string, assetsRoot = publicRoot): string[] {
-	const matches = source.matchAll(/!\[[^\]]*\]\((\/(?:help\/)?screenshots\/[^)\s]+)(?:\s+"[^"]*")?\)/gu);
+	const matches = source.matchAll(/!\[[^\]]*\]\((\/(?:help\/)?(?:screenshots|icons)\/[^)\s]+)(?:\s+"[^"]*")?\)/gu);
 	const assetPaths = [...matches]
 		.map((match) => match[1])
 		.filter((value): value is string => Boolean(value));
@@ -99,7 +104,7 @@ export function referencedScreenshotPaths(source: string, assetsRoot = publicRoo
 		.sort();
 }
 
-/** Hash the page source and exact bytes of every screenshot it presents. */
+/** Hash the page source and exact bytes of every screenshot and icon it presents. */
 export async function pageDigest(source: string, assetsRoot = publicRoot): Promise<string> {
 	const hash = createHash('sha256').update(normalizedSource(source));
 	for (const screenshotPath of referencedScreenshotPaths(source, assetsRoot)) {
@@ -109,6 +114,59 @@ export async function pageDigest(source: string, assetsRoot = publicRoot): Promi
 		hash.update(await readFile(screenshotPath));
 	}
 	return hash.digest('hex');
+}
+
+/** Hash independent approval categories using portable, sorted asset references. */
+export async function pageComponentDigests(source: string, assetsRoot = publicRoot): Promise<UserDocPage['componentDigests']> {
+	const hashes = { screenshots: createHash('sha256'), icons: createHash('sha256') };
+	for (const assetPath of referencedScreenshotPaths(source, assetsRoot)) {
+		const relative = path.relative(assetsRoot, assetPath).split(path.sep).join('/');
+		const category = relative.startsWith('icons/') ? 'icons' : 'screenshots';
+		hashes[category].update(JSON.stringify([relative, (await readFile(assetPath)).toString('base64')]));
+	}
+	return {
+		text: createHash('sha256').update(normalizedSource(source)).digest('hex'),
+		screenshots: hashes.screenshots.digest('hex'),
+		icons: hashes.icons.digest('hex'),
+	};
+}
+
+/** Determine review scope without guessing a legacy approval's component baselines. */
+function reviewReasons(record: ReviewRecord | undefined, digest: string, components: UserDocPage['componentDigests']): HelpReviewReason[] {
+	if (!record) {
+		return ['initial'];
+	}
+	if (!record.components) {
+		return record.digest === digest ? [] : ['unknown'];
+	}
+	return (['text', 'screenshots', 'icons'] as const)
+		.filter((category) => record.components?.[category]?.digest !== components[category]);
+}
+
+/** Preserve a human approval time while recording its verified component baselines. */
+function componentApprovals(page: UserDocPage, reviewedAt: string): NonNullable<ReviewRecord['components']> {
+	return {
+		text: { digest: page.componentDigests.text, reviewedAt },
+		screenshots: { digest: page.componentDigests.screenshots, reviewedAt },
+		icons: { digest: page.componentDigests.icons, reviewedAt },
+	};
+}
+
+/** Explicitly migrate only matching legacy digests; never approve changed content. */
+export async function migrateReviews(paths = defaultUserDocsPaths): Promise<void> {
+	const pages = await loadUserDocPages(paths);
+	const registry = await loadReviewRegistry(paths.reviewPath);
+	for (const page of pages) {
+		const record = registry.reviews[page.id];
+		if (record && !record.components && record.digest === page.digest) {
+			record.components = componentApprovals(page, record.reviewedAt);
+		}
+	}
+	registry.version = 2;
+	const serialized = `${JSON.stringify(registry, null, 2)}\n`;
+	if (serialized !== await readFile(paths.reviewPath, 'utf8')) {
+		await writeFile(paths.reviewPath, serialized);
+	}
 }
 
 /** Convert an authored Markdown path to its public VitePress HTML path. */
@@ -123,8 +181,8 @@ function publicPagePath(relativePath: string): string {
 /** Load the persisted approvals, rejecting incompatible registry versions. */
 export async function loadReviewRegistry(filePath = reviewPath): Promise<ReviewRegistry> {
 	const parsed = JSON.parse(await readFile(filePath, 'utf8')) as Partial<ReviewRegistry>;
-	if (parsed.version !== 1 || !parsed.reviews || Array.isArray(parsed.reviews)) {
-		throw new Error('apps/docs/reviews.json must contain a version 1 review registry');
+	if (![1, 2].includes(parsed.version ?? 0) || !parsed.reviews || Array.isArray(parsed.reviews)) {
+		throw new Error('apps/docs/reviews.json must contain a version 1 or 2 review registry');
 	}
 	return parsed as ReviewRegistry;
 }
@@ -158,6 +216,8 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 
 		const relativePath = path.relative(paths.sourceRoot, file).split(path.sep).join('/');
 		const digest = await pageDigest(source, paths.publicRoot);
+		const componentDigests = await pageComponentDigests(source, paths.publicRoot);
+		const reasons = reviewReasons(registry.reviews[id], digest, componentDigests);
 		pages.push({
 			id,
 			title,
@@ -168,7 +228,9 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 			source,
 			body: parsed.content,
 			digest,
-			reviewStatus: registry.reviews[id]?.digest === digest ? 'reviewed' : 'needs-review',
+			componentDigests,
+			reviewReasons: reasons,
+			reviewStatus: reasons.length ? 'needs-review' : 'reviewed',
 		});
 	}
 
@@ -203,10 +265,11 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 /** Render restricted, repository-authored Markdown for the in-app help drawer. */
 function contextualHtml(body: string): string {
 	const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
+	markdown.use(userDocsTermBadges);
 	markdown.renderer.rules.image = (tokens, index, options, _env, renderer) => {
 		const token = tokens[index]!;
 		const source = token.attrGet('src');
-		if (source?.startsWith('/screenshots/')) {
+		if (source?.startsWith('/screenshots/') || source?.startsWith('/icons/')) {
 			token.attrSet('src', `/help${source}`);
 		}
 		token.attrSet('alt', renderer.renderInlineAsText(token.children ?? [], options, _env));
@@ -233,7 +296,7 @@ export async function writeUserDocsManifest(paths = defaultUserDocsPaths): Promi
 	const manifest = {
 		version: 1,
 		guideVersion: packageJson.version,
-		pages: pages.map(({ id, title, fullPath, reviewStatus }) => ({ id, title, path: fullPath, reviewStatus })),
+		pages: pages.map(({ id, title, fullPath, reviewStatus, reviewReasons }) => ({ id, title, path: fullPath, reviewStatus, reviewReasons })),
 		topics: Object.fromEntries(pages.filter((page) => page.contextual).map((page) => [page.id, {
 			id: page.id,
 			title: page.title,
@@ -241,11 +304,12 @@ export async function writeUserDocsManifest(paths = defaultUserDocsPaths): Promi
 			html: contextualHtml(page.body),
 			fullPath: page.fullPath,
 			reviewStatus: page.reviewStatus,
+			reviewReasons: page.reviewReasons,
 		}])),
 	};
 	const outstanding = pages.filter((page) => page.reviewStatus === 'needs-review');
 	const reviewLines = outstanding.length
-		? outstanding.map((page) => `- [${page.title}](./${page.relativePath}) — \`${page.id}\``)
+		? outstanding.map((page) => `- [${page.title}](./${page.relativePath}) — \`${page.id}\` — ${helpReviewLabel(page.reviewReasons)}`)
 		: ['All user-guide pages have been reviewed.'];
 	const reviewPage = `---\ntitle: Documentation review status\ndescription: Pages awaiting human review before production packaging.\nsidebar: false\n---\n\n# Documentation review status\n\n**${outstanding.length} of ${pages.length} pages need review.**\n\n${reviewLines.join('\n')}\n`;
 
@@ -261,11 +325,12 @@ export async function listOutstandingReviews(
 ): Promise<UserDocPage[]> {
 	const outstanding = (await loadUserDocPages(paths)).filter((page) => page.reviewStatus === 'needs-review');
 	if (json) {
-		console.log(JSON.stringify(outstanding.map(({ id, title, relativePath, digest }) => ({
+		console.log(JSON.stringify(outstanding.map(({ id, title, relativePath, digest, reviewReasons }) => ({
 			id,
 			title,
 			relativePath,
 			digest,
+			reviewReasons,
 		})), null, 2));
 	}
 	else if (!outstanding.length) {
@@ -274,7 +339,7 @@ export async function listOutstandingReviews(
 	else {
 		console.log(`${outstanding.length} user-guide page(s) need review:`);
 		for (const page of outstanding) {
-			console.log(`- ${page.id}: ${page.title} (${page.relativePath})`);
+			console.log(`- ${page.id}: ${page.title} (${page.relativePath}) — ${helpReviewLabel(page.reviewReasons)}`);
 		}
 	}
 	return outstanding;
@@ -297,9 +362,10 @@ export async function approveReviews(
 	}
 
 	const registry = await loadReviewRegistry(paths.reviewPath);
+	registry.version = 2;
 	const reviewedAt = new Date().toISOString();
 	for (const page of selected) {
-		registry.reviews[page.id] = { digest: page.digest, reviewedAt };
+		registry.reviews[page.id] = { digest: page.digest, reviewedAt, components: componentApprovals(page, reviewedAt) };
 	}
 	await writeFile(paths.reviewPath, `${JSON.stringify(registry, null, 2)}\n`);
 	console.log(`Approved ${selected.length} current user-guide page digest(s).`);
@@ -324,6 +390,10 @@ export async function bundleUserDocs(): Promise<void> {
 /** Run the requested user-documentation maintenance command. */
 async function main(): Promise<void> {
 	const [command, ...args] = process.argv.slice(2);
+	if (command === 'migrate') {
+		await migrateReviews();
+		return;
+	}
 	if (command === 'manifest') {
 		await writeUserDocsManifest();
 		return;

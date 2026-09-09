@@ -42,7 +42,7 @@ export function developmentAllowedHosts(managementUrl: string | undefined): stri
 
 const managementUrl = process.env.MOIRAI_MANAGEMENT_URL;
 
-/** Serve generated contextual help and authored screenshots during Vite development. */
+/** Serve generated contextual help, screenshots, and icons during Vite development. */
 function userDocumentationPlugin(): Plugin {
 	const docsPublicRoot = fileURLToPath(new URL('../docs/src/public/', import.meta.url));
 	return {
@@ -59,6 +59,10 @@ function userDocumentationPlugin(): Plugin {
 				else if (/^\/help\/screenshots\/[a-z0-9-]+\.png$/u.test(pathname)) {
 					assetPath = path.join(docsPublicRoot, pathname.slice('/help/'.length));
 					contentType = 'image/png';
+				}
+				else if (/^\/help\/icons\/[a-z0-9-]+\.svg$/u.test(pathname)) {
+					assetPath = path.join(docsPublicRoot, pathname.slice('/help/'.length));
+					contentType = 'image/svg+xml';
 				}
 				if (!assetPath || !contentType) {
 					next();
@@ -83,6 +87,6 @@ export default defineConfig({
 		port: webPort,
 		strictPort: true,
 		allowedHosts: developmentAllowedHosts(managementUrl),
-		proxy: { '/api': { target: apiTarget, ws: true } },
+		proxy: { '/api': { target: apiTarget, ws: true }, '/help': { target: apiTarget } },
 	},
 });

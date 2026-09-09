@@ -7,21 +7,18 @@ contextual: true
 
 # Welcome to Moirai
 
-Moirai turns a collection of video files into continuously playing IPTV channels. You choose the
-media, describe how it should be arranged, and connect an IPTV application to the playlist and guide
-that Moirai publishes.
+Moirai turns a collection of video files into on-demand, continuously available IPTV channels. You choose the media, describe how it should be arranged, and connect an IPTV application to the playlist and guide that Moirai publishes.
 
-You do not need to prepare a separate video file for every day. Moirai builds a rolling schedule from
-reusable pieces:
+Moirai is a scheduling platform built on top of the [ErsatzTV Next playback engine](https://ersatztv.org/next-docs/). Moirai manages your libraries and decides what plays when; ErsatzTV Next handles converting the media for playback (transcoding) and streaming it to viewers.
 
-1. A **library** points to media that Moirai can scan.
-2. A **program** chooses eligible media and decides its order.
-3. A **template** places programs into parts of a day.
-4. A **channel schedule** assigns templates to a channel.
-5. A **channel** provides the number, name, streaming profile, and optional logo viewers see.
+Moirai builds a rolling schedule from reusable pieces:
 
-The quickest route through the guide is [Install with Docker](/getting-started/docker), then
-[Create your first channel](/getting-started/first-channel).
+- A **![](/icons/library.svg) Library** points to media that Moirai can scan.
+- A **![](/icons/list-video.svg) Program** chooses eligible media and decides its order.
+- A **![](/icons/calendar-range.svg) Template** places Programs into parts of a day.
+- A **![](/icons/tv-minimal-play.svg) Channel Schedule** assigns Templates to a Channel.
+- A **![](/icons/tv-minimal.svg) Channel** provides the number, name, streaming profile, and optional logo viewers see.
 
-Moirai is an administrative service. Anyone who can sign in can change libraries, schedules, and
-playback settings, so expose the management interface only to people you trust.
+The quickest route through this guide is [Install with Docker](/getting-started/docker), then [Create your first channel](/getting-started/first-channel).
+
+For help while using Moirai, select the question-mark button beside a page title to open instructions for that page. The **User Guide** link at the bottom of the sidebar opens this complete guide in a new tab.

@@ -1,3 +1,5 @@
+@use './help-term-badges';
+
 .help-drawer-backdrop {
 	position: fixed;
 	inset: 0;
@@ -89,21 +91,84 @@
 	margin: 1.6rem 0 0.6rem;
 }
 
+.help-markdown blockquote {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--line-bright);
+	border-radius: 10px;
+	background: var(--panel);
+	color: var(--muted-strong);
+	font-size: 0.9rem;
+}
+
+.help-markdown blockquote > p {
+	margin: 0;
+	font-size: inherit;
+	line-height: 1.6;
+}
+
 .help-markdown img {
 	max-width: 100%;
 	border: 1px solid var(--line-bright);
 	border-radius: 10px;
 }
 
+.help-markdown img[src*='/screenshots/template-slot-'],
+.help-markdown img[src*='/screenshots/channel-editor-'],
+.help-markdown img[src$='/screenshots/channel-schedule-predicates.png'],
+.help-markdown img[src$='/screenshots/channel-schedule-boundaries.png'],
+.help-markdown img[src$='/screenshots/template-preview.png'] {
+	box-sizing: border-box;
+	padding: 16px;
+	background: var(--bg);
+}
+
+.help-markdown img[src*='/icons/'] {
+	display: inline-block;
+	width: 2em;
+	height: 2em;
+	margin-right: 0.35em;
+	vertical-align: middle;
+	border: 0;
+	border-radius: 0;
+}
+
+.help-markdown blockquote img[src$='/icons/info.svg'] {
+	width: 1.15em;
+	height: 1.15em;
+	vertical-align: -0.15em;
+}
+
 .help-markdown a {
 	color: var(--accent);
 }
 
-.help-nav-button {
-	width: 100%;
+.page-title-with-help {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+}
+
+.page-help-button {
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	display: grid;
+	flex: 0 0 auto;
+	place-items: center;
 	border: 0;
-	text-align: left;
-	cursor: pointer;
+	border-radius: 6px;
+	color: var(--muted-strong);
+	background: transparent;
+}
+
+.page-help-button:hover {
+	color: var(--accent);
+	background: var(--panel);
+}
+
+.page-title-with-help .page-help-button {
+	flex-shrink: 0;
 }
 
 body:has(.help-drawer-backdrop) {

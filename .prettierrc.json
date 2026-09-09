@@ -5,6 +5,10 @@
   "printWidth": 100,
   "overrides": [
     {
+      "files": "apps/docs/src/**/*.md",
+      "options": { "proseWrap": "never" }
+    },
+    {
       "files": "*.{css,scss}",
       "options": { "useTabs": true }
     }

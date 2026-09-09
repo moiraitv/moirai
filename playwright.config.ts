@@ -7,6 +7,7 @@ const apiPort = Number(process.env.MOIRAI_E2E_API_PORT ?? 3008);
 
 export default defineConfig({
 	testDir: 'tests/e2e',
+	testIgnore: 'user-documentation.spec.ts',
 	outputDir: 'test-results/playwright',
 	use: {
 		baseURL: `http://127.0.0.1:${webPort}`,

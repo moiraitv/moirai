@@ -30,6 +30,21 @@ body {
 	max-width: 1180px;
 }
 
+@media (min-width: 960px) {
+	.VPNav:has(.VPNavBar.has-sidebar) {
+		background: transparent !important;
+	}
+
+	.VPNavBar.has-sidebar .container > .title,
+	.VPSidebar > .curtain {
+		display: none;
+	}
+
+	.VPSidebar:has(.docs-sidebar-brand) {
+		padding-top: 16px;
+	}
+}
+
 .docs-sidebar-brand {
 	display: grid;
 	justify-items: center;
@@ -49,16 +64,65 @@ body {
 	color: var(--accent);
 }
 
+.docs-sidebar-title {
+	font-size: 1rem;
+	letter-spacing: normal;
+	text-transform: none;
+}
+
 .docs-sidebar-brand img {
 	width: 86px;
 	height: 86px;
 	object-fit: contain;
 }
 
+.vp-doc blockquote {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--line-bright);
+	border-radius: 10px;
+	background: var(--panel);
+	color: var(--muted-strong);
+	font-size: 0.9rem;
+}
+
+.vp-doc blockquote > p {
+	margin: 0;
+	font-size: inherit;
+	line-height: 1.6;
+}
+
 .vp-doc img {
 	border: 1px solid var(--line-bright);
 	border-radius: 12px;
 	box-shadow: 0 22px 52px rgba(0, 0, 0, 0.28);
+}
+
+.vp-doc img[src*='/screenshots/template-slot-'],
+.vp-doc img[src*='/screenshots/channel-editor-'],
+.vp-doc img[src$='/screenshots/channel-schedule-predicates.png'],
+.vp-doc img[src$='/screenshots/channel-schedule-boundaries.png'],
+.vp-doc img[src$='/screenshots/template-preview.png'] {
+	box-sizing: border-box;
+	padding: 16px;
+	background: var(--bg);
+}
+
+.vp-doc img[src*='/icons/'] {
+	display: inline-block;
+	width: 2em;
+	height: 2em;
+	margin-right: 0.35em;
+	vertical-align: middle;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.vp-doc blockquote img[src$='/icons/info.svg'] {
+	width: 1.15em;
+	height: 1.15em;
+	vertical-align: -0.15em;
 }
 
 .review-banner {
@@ -77,6 +141,25 @@ body {
 .review-banner a {
 	color: #fff0e6;
 	font-weight: 700;
+}
+
+.review-banner-metadata {
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.35rem;
+	margin: 0;
+	font-size: 0.85rem;
+}
+
+.review-banner-metadata > div {
+	display: grid;
+	grid-template-columns: 4.5rem minmax(0, 1fr);
+	gap: 0.5rem;
+}
+
+.review-banner-metadata dd {
+	margin: 0;
+	overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {

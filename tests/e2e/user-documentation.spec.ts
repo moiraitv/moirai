@@ -1,87 +1,25 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { rename } from 'node:fs/promises';
+import { expect } from '@playwright/test';
 import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
-import { authenticateAdministrator } from './authentication';
+import { authenticateAdministrator, E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD } from './authentication';
+import { test } from './documentation/fixture';
+import { capture, captureSection, assertProgramColors } from './documentation/capture';
+import { seedLibrary, seedSchedule, normalizeFixtureLogs } from './documentation/seed';
+import { helpReviewLabel, type HelpReviewReason } from '../../apps/web/src/help-review';
+import MarkdownIt from 'markdown-it';
+import { userDocsTermBadges } from '../../scripts/user-docs-term-badges';
 
-const updateScreenshots = process.env.MOIRAI_DOCS_SCREENSHOT_UPDATE === '1';
-const screenshotRoot = updateScreenshots
-	? path.resolve('apps/docs/src/public/screenshots')
-	: path.resolve('test-results/docs-screenshots');
-const posterFixtureRoot = path.resolve('tests/e2e/fixtures/user-documentation');
-
-/** Load an optional purpose-built poster while retaining a usable bootstrap fallback. */
-async function documentationPoster(fileName: string): Promise<Buffer> {
-	try {
-		return await readFile(path.join(posterFixtureRoot, fileName));
-	}
-	catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-			throw error;
-		}
-
-		return readFile(path.resolve('apps/web/src/assets/moirai-logo.png'));
-	}
-}
-
-/** Replace changing human-readable timestamps before capturing documentation pixels. */
-async function sanitizeDynamicText(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-		let node = walker.nextNode();
-		while (node) {
-			node.textContent = node.textContent
-				?.replace(
-					/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}, \d{1,2}:\d{2}:\d{2} [AP]M\b/gu,
-					'Jan 15, 2026, 10:30:00 AM',
-				)
-				.replace(
-					/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}\b/gu,
-					'Jan 15, 2026',
-				)
-				.replace(
-					/\b\d{1,2}\/\d{1,2}\/\d{4}\b/gu,
-					'01/15/2026',
-				) ?? '';
-			node = walker.nextNode();
-		}
-		for (const input of document.querySelectorAll<HTMLInputElement>('input[type="date"]')) {
-			input.value = '2026-01-15';
-			input.setAttribute('value', '2026-01-15');
-		}
-		for (const element of document.querySelectorAll<HTMLElement>('[style*="--program-color"]')) {
-			element.style.setProperty('--program-color', '#2997ff', 'important');
-			element.style.setProperty('--program-color-dark', '#185895', 'important');
-			element.style.setProperty('--program-color-glow', 'rgba(41, 151, 255, 0.24)', 'important');
-			element.style.setProperty('--program-color-foreground', '#ffffff', 'important');
-		}
-		document.querySelector('.public-url-warning')?.remove();
-	});
-}
-
-/** Capture one stable documentation viewport after visible loading has settled. */
-async function capture(page: Page, name: string): Promise<void> {
-	await mkdir(screenshotRoot, { recursive: true });
-	await sanitizeDynamicText(page);
-	await page.screenshot({
-		path: path.join(screenshotRoot, name),
-		animations: 'disabled',
-		fullPage: false,
-	});
-}
-
-test('captures the released administrator workflows for the user guide', async ({ page }) => {
-	test.setTimeout(180_000);
-	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
-
+test('captures setup and authentication', async ({ page }) => {
 	await page.goto('/setup');
 	await expect(page.getByRole('heading', { name: 'Create user' })).toBeVisible();
 	await capture(page, 'administrator-setup.png');
 
-	const csrfToken = await authenticateAdministrator(page);
-	const requestHeaders = { 'x-moirai-csrf': csrfToken };
+	await page.getByLabel('Username', { exact: true }).fill(E2E_ADMIN_USERNAME);
+	await page.getByLabel('New password').fill(E2E_ADMIN_PASSWORD);
+	await page.getByLabel('Confirm password', { exact: true }).fill(E2E_ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Create User', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Create user', exact: true })).toBeHidden();
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: 'Moirai overview' })).toBeVisible();
 	await capture(page, 'dashboard.png');
@@ -90,186 +28,42 @@ test('captures the released administrator workflows for the user guide', async (
 	await expect(page.getByText('Build your first library')).toBeVisible();
 	await capture(page, 'libraries.png');
 
-	const mediaRoot = path.resolve('test-results/runtime/docs-media');
-	const mediaFixtures = [
-		{
-			title: 'Afterlight Station',
-			year: 2026,
-			plot: 'A repair crew receives one final transmission from an abandoned orbital station.',
-			rating: 8.1,
-			genre: 'Science Fiction',
-			poster: 'afterlight-station-poster.png',
-		},
-		{
-			title: 'Borrowed Summer',
-			year: 2020,
-			plot: 'Three generations return to a harbor town for one unforgettable summer.',
-			rating: 7.4,
-			genre: 'Drama',
-			poster: 'borrowed-summer-poster.png',
-		},
-		{
-			title: 'Checkout Please',
-			year: 2025,
-			plot: 'An understaffed neighborhood market survives its most chaotic sale day.',
-			rating: 7.7,
-			genre: 'Comedy',
-			poster: 'checkout-please-poster.png',
-		},
-		{
-			title: 'Cinder Atlas',
-			year: 2024,
-			plot: 'An explorer follows a scorched map toward a city hidden between volcanoes.',
-			rating: 8.3,
-			genre: 'Adventure',
-			poster: 'cinder-atlas-poster.png',
-		},
-		{
-			title: 'Echo Harbor',
-			year: 2023,
-			plot: 'A harbor radio operator follows an impossible signal through a citywide storm.',
-			rating: 7.6,
-			genre: 'Mystery',
-			poster: 'echo-garden-poster.png',
-		},
-		{
-			title: 'Glass Midnight',
-			year: 2022,
-			plot: 'A courier crosses a luminous city while its artificial moon begins to fracture.',
-			rating: 8,
-			genre: 'Science Fiction',
-			poster: 'glass-midnight-poster.png',
-		},
-		{
-			title: 'Harbor Static',
-			year: 2021,
-			plot: 'A vanished cargo ship returns as a pattern of light on the harbor water.',
-			rating: 7.5,
-			genre: 'Thriller',
-			poster: 'harbor-static-poster.png',
-		},
-		{
-			title: 'Little Machines',
-			year: 2024,
-			plot: 'A young inventor and a lively workshop of robots set out to repair their town.',
-			rating: 8.5,
-			genre: 'Animation',
-			poster: 'little-machines-poster.png',
-		},
-		{
-			title: 'Moonrise Theater',
-			year: 2024,
-			plot: 'A quiet late-night mystery staged inside a grand neighborhood cinema.',
-			rating: 8.2,
-			genre: 'Drama',
-			poster: 'moonrise-theater-poster.png',
-		},
-		{
-			title: 'Northbound Zero',
-			year: 2023,
-			plot: 'A rescue courier races across a frozen rail line before the final pass closes.',
-			rating: 7.9,
-			genre: 'Action',
-			poster: 'northbound-zero-poster.png',
-		},
-		{
-			title: 'Paper Constellations',
-			year: 2022,
-			plot: 'Two artists turn a rooftop installation into a map of their shared history.',
-			rating: 7.8,
-			genre: 'Romance',
-			poster: 'paper-constellations-poster.png',
-		},
-		{
-			title: 'Quiet Orbit',
-			year: 2025,
-			plot: 'A patient view of the instruments listening to Earth from above.',
-			rating: 8.6,
-			genre: 'Documentary',
-			poster: 'quiet-orbit-poster.png',
-		},
-		{
-			title: 'Red Current',
-			year: 2021,
-			plot: 'A fishing crew follows a glowing tide toward a lighthouse erased from every chart.',
-			rating: 7.3,
-			genre: 'Thriller',
-			poster: 'red-current-poster.png',
-		},
-		{
-			title: 'Signal Garden',
-			year: 2025,
-			plot: 'A botanist discovers that an abandoned glasshouse is receiving messages from the stars.',
-			rating: 7.8,
-			genre: 'Science Fiction',
-			poster: 'signal-garden-poster.png',
-		},
-		{
-			title: 'The Last Crossing',
-			year: 2019,
-			plot: 'A field hospital unit follows a ruined road toward the last bridge out of the valley.',
-			rating: 8.1,
-			genre: 'Historical Drama',
-			poster: 'the-last-crossing-poster.png',
-		},
-		{
-			title: 'The Last Lighthouse',
-			year: 2021,
-			plot: 'A solitary keeper climbs toward the final light during an unnatural coastal storm.',
-			rating: 8.4,
-			genre: 'Adventure',
-			poster: 'the-last-lighthouse-poster.png',
-		},
-		{
-			title: 'Winter Archive',
-			year: 2020,
-			plot: 'An archivist finds a sealed collection that rewrites the history of her frozen city.',
-			rating: 8.2,
-			genre: 'Mystery',
-			poster: 'winter-archive-poster.png',
-		},
-	] as const;
-	const authoredPosterFiles = (await readdir(posterFixtureRoot))
-		.filter((fileName) => fileName.endsWith('-poster.png'))
-		.sort();
-	expect(authoredPosterFiles).toEqual(mediaFixtures.map((fixture) => fixture.poster).sort());
-	await rm(mediaRoot, { recursive: true, force: true });
-	await mkdir(mediaRoot, { recursive: true });
-	await Promise.all(mediaFixtures.map(async (fixture) => {
-		const poster = await documentationPoster(fixture.poster);
-		await Promise.all([
-			writeFile(path.join(mediaRoot, `${fixture.title}.mp4`), 'documentation fixture'),
-			writeFile(
-				path.join(mediaRoot, `${fixture.title}.nfo`),
-				`<movie><title>${fixture.title}</title><year>${fixture.year}</year><plot>${fixture.plot}</plot><rating>${fixture.rating}</rating><genre>${fixture.genre}</genre><director>Sam Rivera</director><actor><name>Alex Morgan</name><role>Host</role></actor></movie>`,
-			),
-			writeFile(path.join(mediaRoot, `${fixture.title}-poster.png`), poster),
-		]);
-	}));
-
-	await page.locator('.resource-empty-state').getByRole('button', { name: 'Add Library' }).click();
-	await page.getByLabel('Name').fill('Evening Cinema');
-	await page.getByLabel('Path Moirai scans').fill(mediaRoot);
-	await page.getByRole('button', { name: 'Add and Scan' }).click();
-	const libraryLink = page.getByRole('link', { name: 'Open library Evening Cinema' });
-	await expect(libraryLink).toBeVisible();
-	await expect(page.getByText('17 indexed')).toBeVisible();
-	const libraryId = (await libraryLink.getAttribute('href'))?.split('/').at(-1);
-	if (!libraryId) {
-		throw new Error('Created library link did not contain an id');
-	}
-	await libraryLink.click();
-	await expect(page.getByRole('heading', { name: 'Evening Cinema' })).toBeVisible();
-	const mediaIds: string[] = [];
-	for (const fixture of mediaFixtures) {
-		const itemLink = page.getByRole('link', { name: new RegExp(fixture.title, 'u') }).first();
-		const itemId = (await itemLink.getAttribute('href'))?.split('/').at(-1);
-		if (!itemId) {
-			throw new Error(`Indexed media link for ${fixture.title} did not contain an id`);
-		}
-		mediaIds.push(itemId);
-	}
+});
+test('captures libraries and scanning', async ({ page, documentationServer }) => {
+	const { libraryId, mediaRoot } = await seedLibrary(page, documentationServer.directory, true);
 	await capture(page, 'library-catalog.png');
+	await rename(mediaRoot, `${mediaRoot}-offline`);
+	try {
+		await page.goto(`/libraries/${libraryId}`);
+		await expect(page.getByText('Media source may be offline', { exact: true })).toBeVisible();
+		await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+		await expect(page.locator('.source-outage-banner')).toBeInViewport();
+		await expect.poll(async () => {
+			const header = await page.locator('.library-page-header').boundingBox();
+			const warning = await page.locator('.source-outage-banner').boundingBox();
+			return Boolean(header && warning && warning.y >= header.y + header.height
+				&& warning.y + warning.height <= page.viewportSize()!.height);
+		}).toBe(true);
+		await capture(page, 'library-offline.png');
+	}
+	finally {
+		await rename(`${mediaRoot}-offline`, mediaRoot);
+	}
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Evening Cinema' })).toBeVisible();
+	await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+
+	await page.getByRole('button', { name: 'Filter media', exact: true }).click();
+	const filters = page.getByRole('dialog', { name: 'Filter media' });
+	await expect(filters).toBeVisible();
+	await expect(filters).toHaveCSS('opacity', '1');
+	await expect.poll(async () => {
+		const bounds = await filters.boundingBox();
+		return Boolean(bounds && bounds.y >= 0 && bounds.y + bounds.height <= page.viewportSize()!.height);
+	}).toBe(true);
+	await capture(page, 'library-filters.png');
+	await filters.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(filters).toBeHidden();
 
 	await page.getByRole('link', { name: /Moonrise Theater/u }).first().click();
 	await expect(page.getByRole('heading', { name: 'Moonrise Theater' })).toBeVisible();
@@ -290,60 +84,72 @@ test('captures the released administrator workflows for the user guide', async (
 		await discardSetup.getByRole('button', { name: /Discard/u }).click();
 	}
 
-	const programResponse = await page.request.post('/api/v1/programs', {
-		headers: requestHeaders,
-		data: {
-			name: 'Midnight Feature Collection',
-			config: {
-				type: 'content',
-				source: { type: 'collection', libraryId, itemIds: mediaIds },
-				strategy: { type: 'sequential' },
-			},
-		},
-	});
-	expect(programResponse.ok(), await programResponse.text()).toBe(true);
-	const program = await programResponse.json() as { id: string };
-	const slotId = randomUUID();
-	const templateResponse = await page.request.post('/api/v1/schedule-templates', {
-		headers: requestHeaders,
-		data: {
-			name: 'Evening Cinema Day',
-			slots: [{ id: slotId, startSeconds: 0, programId: program.id }],
-			boundaries: [{
-				id: randomUUID(),
-				leftSlotId: slotId,
-				rightSlotId: slotId,
-				targetSeconds: SECONDS_PER_SCHEDULING_DAY,
-				policy: 'hard',
-			}],
-		},
-	});
-	expect(templateResponse.ok(), await templateResponse.text()).toBe(true);
-	const template = await templateResponse.json() as { id: string };
-	const channelResponse = await page.request.post('/api/v1/channels', {
-		headers: requestHeaders,
-		data: { number: '7.1', name: 'Moonrise Classics' },
-	});
-	expect(channelResponse.ok(), await channelResponse.text()).toBe(true);
-	const channel = await channelResponse.json() as { id: string };
+});
+test('captures Programs', async ({ page, documentationServer }) => {
+	const { libraryId, sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
+	await page.goto('/schedules/programs');
+	await expect(page.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
+	await capture(page, 'programs.png');
+	await page.goto('/schedules/programs/new');
+	await expect(page.getByRole('dialog', { name: 'Create content rule' })).toBeVisible();
+	await page.getByPlaceholder('e.g. Primetime Movies').fill('Evening Cinema Selection');
+	await page.getByRole('combobox', { name: 'Library', exact: true }).selectOption(libraryId);
+	await expect(page.locator('.quick-query-carousel-item').first()).toBeVisible();
+	await capture(page, 'program-content-create.png');
 
-	const pages: Array<[string, string, string]> = [
-		['/schedules/programs', 'Programs', 'programs.png'],
-		['/schedules/templates', 'Templates', 'templates.png'],
-		['/channels', 'Channels', 'channels.png'],
-		['/guide', 'Guide', 'guide.png'],
-		['/settings', 'IPTV service', 'settings.png'],
-		['/logs', 'Logs', 'logs.png'],
-		['/account', 'Account', 'account.png'],
-	];
-	for (const [url, heading, screenshot] of pages) {
-		await page.goto(url);
-		await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible({
-			timeout: 20_000,
-		});
-		await capture(page, screenshot);
+	await page.getByRole('radio', { name: /^Sequence/u }).check();
+	await expect(page.getByRole('dialog', { name: 'Create sequence rule' })).toBeVisible();
+	await page.getByPlaceholder('e.g. Evening Lineup').fill('Evening Cinema Sequence');
+	for (const [index, programId] of sequenceProgramIds.entries()) {
+		await page.getByRole('button', { name: 'Add Step', exact: true }).click();
+		await page.locator('.sequence-entry select').nth(index).selectOption(programId);
+		await page.locator('.sequence-entry input').nth(index).fill(index === 0 ? '2' : '1');
 	}
+	await expect(page.locator('.sequence-entry')).toHaveCount(3);
+	await capture(page, 'program-sequence-create.png');
 
+});
+test('captures Templates', async ({ page, documentationServer }) => {
+	const { sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
+	await page.goto('/schedules/templates');
+	await expect(page.getByRole('heading', { name: 'Templates', exact: true })).toBeVisible();
+	await capture(page, 'templates.png');
+	// Capture the creation editors with representative values, leaving their drafts unsaved.
+	await page.goto('/schedules/templates/new');
+	const templateEditor = page.getByRole('dialog', { name: 'Template editor', exact: true });
+	await expect(templateEditor.getByRole('heading', { name: 'Create Template', exact: true })).toBeVisible();
+	await templateEditor.getByRole('textbox', { name: 'Template name' }).fill('Evening Cinema Day');
+	await templateEditor.locator('.template-slot-fields').getByRole('combobox', { name: /^Program\b/u }).selectOption(sequenceProgramIds[0]!);
+	for (const programId of sequenceProgramIds.slice(1)) {
+		await templateEditor.getByRole('button', { name: 'Add Slot', exact: true }).click();
+		await templateEditor.locator('.template-timeline').press('Enter');
+		await templateEditor.locator('.template-slot-fields').getByRole('combobox', { name: /^Program\b/u }).selectOption(programId);
+	}
+	await expect(templateEditor.locator('.template-slot')).toHaveCount(3);
+	await expect(templateEditor.locator('.resolved-segment').first()).toBeVisible({ timeout: 30_000 });
+	await expect.poll(async () => templateEditor.evaluate((editor) => {
+		const colors = (selector: string) => [...new Set(
+			Array.from(editor.querySelectorAll(selector), (element) =>
+				getComputedStyle(element).getPropertyValue('--program-color').trim()),
+		)].sort();
+		return JSON.stringify(colors('.template-slot')) === JSON.stringify(colors('.resolved-segment.role-primary'));
+	})).toBe(true);
+	await capture(page, 'template-editor.png');
+	await assertProgramColors(page, sequenceProgramIds);
+	await captureSection(page, templateEditor.locator('.resolved-preview'), 'template-preview.png');
+
+	await templateEditor.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
+	const advanced = templateEditor.locator('.slot-advanced');
+	await expect(advanced.getByRole('combobox', { name: 'Playback state', exact: true })).toBeVisible();
+	await captureSection(page, advanced.getByTestId('slot-playback-fields'), 'template-slot-playback.png');
+	await captureSection(page, advanced.getByRole('group', { name: /^Outgoing boundary/u }), 'template-slot-boundary.png');
+	const filler = advanced.getByRole('group', { name: 'Filler', exact: true });
+	await filler.getByRole('combobox', { name: 'Mode', exact: true }).selectOption('configured');
+	await captureSection(page, filler, 'template-slot-filler.png');
+
+});
+test('captures Channel Schedules and Guide', async ({ page, documentationServer }) => {
+	const { template, channel, sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	const scheduleResponse = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
 		headers: requestHeaders,
 		data: { defaultTemplateId: template.id },
@@ -361,20 +167,129 @@ test('captures the released administrator workflows for the user guide', async (
 		element.scrollTop = 0;
 	});
 	await capture(page, 'channel-schedules.png');
-});
 
+	// Capture the committed Guide only after the channel has real scheduled media.
+	await page.goto('/guide');
+	await expect(page.getByRole('heading', { name: 'Guide', exact: true })).toBeVisible();
+	await expect(page.locator('.guide-programme.role-primary').first()).toBeVisible({ timeout: 30_000 });
+	await capture(page, 'guide.png');
+	// Illustrate a weekend evening override and the controls governing its handoffs.
+	const conditionalSlotId = randomUUID();
+	const conditionalTemplateResponse = await page.request.post('/api/v1/schedule-templates', {
+		headers: requestHeaders,
+		data: {
+			name: 'Weekend Cinema',
+			slots: [{ id: conditionalSlotId, startSeconds: 0, programId: sequenceProgramIds[1] }],
+			boundaries: [{ id: randomUUID(), leftSlotId: conditionalSlotId, rightSlotId: conditionalSlotId, targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard' }],
+		},
+	});
+	expect(conditionalTemplateResponse.ok(), await conditionalTemplateResponse.text()).toBe(true);
+	const conditionalTemplate = await conditionalTemplateResponse.json() as { id: string };
+	await page.setViewportSize({ width: 1440, height: 1200 });
+	await page.goto(`/schedules/channels/${channel.id}`);
+	const channelEditor = page.getByRole('dialog', { name: 'Channel schedule editor' });
+	await channelEditor.getByRole('button', { name: 'Add Conditional Template' }).click();
+	await channelEditor.getByRole('combobox', { name: 'Conditional layer template' }).selectOption(conditionalTemplate.id);
+	const predicates = channelEditor.locator('.schedule-layer-inspector > .predicate-node');
+	for (const weekday of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']) {
+		await predicates.getByRole('checkbox', { name: weekday, exact: true }).uncheck();
+	}
+	await predicates.getByRole('button', { name: 'Condition', exact: true }).click();
+	const newWeekday = predicates.locator('.predicate-weekdays').filter({
+		has: page.getByRole('checkbox', { name: 'Mon', exact: true }).and(page.locator(':checked')),
+	});
+	await newWeekday.getByRole('combobox', { name: 'Predicate type' }).selectOption('time-range');
+	await predicates.getByLabel('Starts', { exact: true }).fill('18:00');
+	await predicates.getByLabel('Ends', { exact: true }).fill('23:00');
+	await predicates.getByLabel('Ends', { exact: true }).blur();
+	await expect(channelEditor.locator('.resolved-segment').first()).toBeVisible({ timeout: 30_000 });
+	await channelEditor.locator('.scheduling-workspace-scroll').evaluate((element) => {
+		element.scrollTop = 0;
+	});
+	await capture(page, 'channel-schedule-conditional.png');
+	await captureSection(page, predicates, 'channel-schedule-predicates.png');
+	const entry = channelEditor.getByRole('group', { name: 'Entry boundary', exact: true });
+	await entry.getByRole('combobox', { name: 'Boundary behavior' }).selectOption('finish-left');
+	await entry.getByLabel(/^Maximum drift past boundary/u).fill('15');
+	await entry.getByLabel(/^Maximum drift past boundary/u).blur();
+	await page.setViewportSize({ width: 1440, height: 1200 });
+	await captureSection(page, channelEditor.locator('.layer-boundary-grid'), 'channel-schedule-boundaries.png');
+
+});
+test('captures channel settings and operations', async ({ page, documentationServer }) => {
+	await seedSchedule(page, documentationServer.directory);
+	await page.goto('/channels');
+	await expect(page.getByRole('heading', { name: 'Channels', exact: true })).toBeVisible();
+	await capture(page, 'channels.png');
+	await page.goto('/settings');
+	await expect(page.getByRole('heading', { name: 'IPTV service', exact: true })).toBeVisible();
+	await expect(page.locator('.fallback-filler-loading')).toBeHidden();
+	await expect(page.locator('.fallback-filler-editor video')).toBeVisible();
+	await capture(page, 'settings.png');
+	await normalizeFixtureLogs(documentationServer.directory);
+	await page.goto('/logs');
+	await expect(page.getByRole('heading', { name: 'Logs', exact: true })).toBeVisible();
+	await capture(page, 'logs.png');
+	await page.goto('/account');
+	await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
+	await capture(page, 'account.png');
+	await page.setViewportSize({ width: 1440, height: 1200 });
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	const broadcastEditor = page.getByRole('dialog', { name: 'Broadcast profile', exact: true });
+	await expect(broadcastEditor.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Moonrise Classics');
+	await expect(broadcastEditor.locator('.fallback-filler-loading')).toBeHidden();
+	await expect(broadcastEditor.locator('.acceleration-prediction')).not.toHaveText('Checking…', { timeout: 45_000 });
+	await capture(page, 'channel-editor.png');
+	await captureSection(page, broadcastEditor.locator('.channel-logo-editor'), 'channel-editor-logo.png');
+	await captureSection(page, broadcastEditor.locator('.fallback-filler-editor'), 'channel-editor-fallback.png');
+	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Video normalization', exact: true }), 'channel-editor-video.png');
+	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Audio normalization', exact: true }), 'channel-editor-audio.png');
+});
 test('presents accessible contextual help with draft and failure states', async ({ page }) => {
+	let reviewStatus = 'needs-review';
+	await page.route('/help/contextual-help.json', (route) => route.fulfill({
+		json: {
+			version: 1,
+			guideVersion: 'test',
+			topics: {
+				'scheduling.programs': {
+					id: 'scheduling.programs',
+					title: 'Programs',
+					description: 'Choose media and playback order.',
+					html: '<h2>Content Programs</h2><p>Select media.</p><h2>Sequence Programs</h2>',
+					fullPath: '/help/scheduling/programs.html',
+					reviewStatus,
+				},
+			},
+		},
+	}));
 	await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
 	await page.goto('/setup');
 	await authenticateAdministrator(page);
 	await page.goto('/schedules/programs');
 
-	const helpButton = page.getByRole('button', { name: 'Help', exact: true });
+	const helpButton = page.getByRole('button', { name: 'Help with Programs', exact: true });
+	await expect(page.locator('.page-header').getByRole('button', { name: 'Help with Programs' })).toBeVisible();
+	await expect(page.locator('.sidebar-footer').getByRole('link', { name: 'User Guide', exact: true })).toHaveAttribute('href', '/help/');
+	await expect(page.locator('.sidebar-footer').getByRole('link', { name: 'User Guide', exact: true })).toHaveAttribute('target', '_blank');
+	const guidePopup = page.waitForEvent('popup');
+	await page.locator('.sidebar-footer').getByRole('link', { name: 'User Guide', exact: true }).click();
+	const fullGuidePage = await guidePopup;
+	await expect(fullGuidePage.getByRole('heading', { level: 1, name: /^Welcome to Moirai/u })).toBeVisible();
+	await fullGuidePage.close();
 	await helpButton.click();
 	const drawer = page.getByRole('dialog');
 	await expect(drawer).toBeFocused();
-	await expect(drawer.getByRole('heading', { name: 'Programs' })).toBeVisible();
+	await expect(drawer.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
 	await expect(drawer.getByText('Needs review', { exact: true })).toBeVisible();
+	const close = drawer.getByRole('button', { name: 'Close help' });
+	const fullGuide = drawer.getByRole('link', { name: 'Open full guide' });
+	await close.focus();
+	await page.keyboard.press('Shift+Tab');
+	await expect(fullGuide).toBeFocused();
+	await page.keyboard.press('Tab');
+	await expect(close).toBeFocused();
 	await expect(drawer.getByRole('link', { name: 'Open full guide' })).toHaveAttribute(
 		'href',
 		'/help/scheduling/programs.html',
@@ -387,9 +302,52 @@ test('presents accessible contextual help with draft and failure states', async 
 	await expect(drawer).toBeHidden();
 	await expect(helpButton).toBeFocused();
 
+	reviewStatus = 'reviewed';
+	await helpButton.click();
+	await expect(drawer.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
+	await expect(drawer.getByText('Needs review', { exact: true })).toHaveCount(0);
+	await page.locator('.help-drawer-backdrop').click({ position: { x: 2, y: 2 } });
+	await expect(drawer).toBeHidden();
+
 	await page.route('/help/contextual-help.json', (route) => route.fulfill({ status: 503 }));
 	await helpButton.click();
 	await expect(drawer.getByRole('alert')).toContainText('Help returned 503');
 	await drawer.getByRole('button', { name: 'Close help' }).click();
 	await expect(drawer).toBeHidden();
+});
+
+test('shows matching review scope in the guide and drawer', async ({ page }) => {
+	let reasons: HelpReviewReason[] = ['initial'];
+	await page.route('/help/contextual-help.json', (route) => route.fulfill({ json: {
+		version: 1, guideVersion: 'test',
+		pages: [{ id: 'scheduling.programs', path: '/help/scheduling/programs.html', reviewStatus: 'needs-review', reviewReasons: reasons }],
+		topics: { 'scheduling.programs': {
+			id: 'scheduling.programs', title: 'Programs', description: 'Fixture instructions', html: '<p>Fixture instructions</p>',
+			fullPath: '/help/scheduling/programs.html', reviewStatus: 'needs-review', reviewReasons: reasons,
+		} },
+	} }));
+	await page.goto('/setup');
+	await authenticateAdministrator(page);
+	for (const changed of [
+		['initial'], ['text'], ['screenshots'], ['icons'], ['text', 'screenshots'], ['screenshots', 'icons'], ['text', 'screenshots', 'icons'], ['unknown'],
+	] as HelpReviewReason[][]) {
+		reasons = changed;
+		await page.goto('/help/scheduling/programs.html');
+		await expect(page.locator('.review-banner > strong')).toHaveText(helpReviewLabel(reasons));
+		await page.goto('/schedules/programs');
+		await page.getByRole('button', { name: 'Help with Programs', exact: true }).click();
+		await expect(page.getByRole('dialog').getByRole('status')).toContainText(helpReviewLabel(reasons));
+		await page.keyboard.press('Escape');
+	}
+});
+
+test('renders term badge structure without depending on HTML serialization', async ({ page }) => {
+	const markdown = new MarkdownIt({ html: false }).use(userDocsTermBadges);
+	await page.setContent(markdown.render('A **![](/icons/library.svg) Library** holds media. ![](/icons/library.svg) [Libraries and scanning](/libraries/managing-libraries)'));
+	const boldBadge = page.locator('strong .docs-term-badge');
+	await expect(boldBadge).toHaveText('Library');
+	await expect(boldBadge.locator('img')).toHaveAttribute('src', '/icons/library.svg');
+	await expect(page.getByRole('link')).toHaveAttribute('href', '/libraries/managing-libraries');
+	await expect(page.getByRole('link').locator('.docs-term-badge')).toHaveText('Libraries');
+	await expect(page.locator('p')).toHaveText('A Library holds media. Libraries and scanning');
 });

@@ -248,6 +248,7 @@ onMounted(() => scrollToCurrentTime());
 									:key="segment.id"
 									type="button"
 									class="guide-programme"
+									:data-program-id="segment.programId"
 									:class="[`role-${segment.role}`, { truncated: segment.truncated }]"
 									:style="segmentStyle(segment)"
 									:title="`${segment.title}\n${segment.start} – ${segment.finish}`"

@@ -71,6 +71,8 @@ draft warnings; `npm run build:production` and Docker builds stop when any guide
 
 ## Technical documentation
 
+See [Contributing](CONTRIBUTING.md) for documentation workflows and the pre-release screenshot and review checklist.
+
 See the [technical outline](docs/technical-outline.md) for the system architecture, media indexing,
 scheduling and materialization model, IPTV delivery, operational limits, and deployment assumptions.
 The deeper [scheduling architecture](docs/scheduling-architecture.md) documents scheduling-specific

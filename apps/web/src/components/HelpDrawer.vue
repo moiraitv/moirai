@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ArrowUpRight, BookOpen, X } from '@lucide/vue';
 import LoadingState from './LoadingState.vue';
+import { helpReviewLabel, type HelpReviewReason } from '../help-review';
 
 /** One restricted contextual topic generated from the bundled guide. */
 interface HelpTopic {
@@ -11,6 +12,7 @@ interface HelpTopic {
 	html: string;
 	fullPath: string;
 	reviewStatus: 'needs-review' | 'reviewed';
+	reviewReasons?: HelpReviewReason[];
 }
 
 /** Versioned contextual-help manifest bundled with this application build. */
@@ -115,8 +117,8 @@ onUnmounted(() => opener?.focus());
 					</div>
 					<template v-else-if="topic">
 						<div v-if="topic.reviewStatus === 'needs-review'" class="help-review-warning" role="status">
-							<strong>Needs review</strong>
-							This first-pass guidance has not been approved for production.
+							<strong>{{ helpReviewLabel(topic.reviewReasons) }}</strong>
+							This guidance needs review before production.
 						</div>
 						<p class="eyebrow">Contextual guide</p>
 						<h2 id="help-drawer-title">{{ topic.title }}</h2>

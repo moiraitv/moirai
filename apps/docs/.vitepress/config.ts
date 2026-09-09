@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitepress';
-import packageJson from '../../../package.json' with { type: 'json' };
+import { userDocsTermBadges } from '../../../scripts/user-docs-term-badges';
 
 export default defineConfig({
 	title: 'Moirai User Guide',
@@ -10,14 +10,23 @@ export default defineConfig({
 	outDir: fileURLToPath(new URL('../dist/', import.meta.url)),
 	appearance: 'dark',
 	lastUpdated: true,
+	markdown: {
+		config: (markdown) => markdown.use(userDocsTermBadges),
+	},
 	ignoreDeadLinks: false,
 	head: [
 		['meta', { name: 'theme-color', content: '#06101a' }],
 		['meta', { name: 'color-scheme', content: 'dark' }],
 	],
 	themeConfig: {
+		lastUpdated: {
+			formatOptions: { dateStyle: 'short' },
+		},
 		logo: '/help/moirai-logo.png',
-		siteTitle: `Moirai ${packageJson.version}`,
+		siteTitle: false,
+		socialLinks: [
+			{ icon: 'github', link: 'https://github.com/moiraitv/moirai/', ariaLabel: 'Moirai on GitHub' },
+		],
 		nav: [
 			{ text: 'Guide', link: '/' },
 			{ text: 'Review status', link: '/review' },
@@ -27,6 +36,7 @@ export default defineConfig({
 				text: 'Start here',
 				items: [
 					{ text: 'Welcome', link: '/' },
+					{ text: 'Glossary and terminology', link: '/glossary' },
 					{ text: 'Install with Docker', link: '/getting-started/docker' },
 					{ text: 'Administrator access', link: '/getting-started/access' },
 					{ text: 'Create your first channel', link: '/getting-started/first-channel' },
@@ -36,6 +46,7 @@ export default defineConfig({
 				text: 'Media libraries',
 				items: [
 					{ text: 'Libraries and scanning', link: '/libraries/managing-libraries' },
+					{ text: 'Media file naming', link: '/libraries/media-file-naming' },
 					{ text: 'Browse and filter media', link: '/libraries/browsing-media' },
 					{ text: 'Missing media and conflicts', link: '/libraries/reconciliation' },
 				],
@@ -58,7 +69,6 @@ export default defineConfig({
 					{ text: 'Account and recovery', link: '/operations/account-and-recovery' },
 					{ text: 'Troubleshooting', link: '/operations/troubleshooting' },
 					{ text: 'Configuration reference', link: '/operations/configuration' },
-					{ text: 'Glossary', link: '/glossary' },
 				],
 			},
 		],

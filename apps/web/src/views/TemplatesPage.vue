@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Clock3, Eye, Plus, Repeat2, Search, X } from '@lucide/vue';
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Eye, Plus, Repeat2, Search, X } from '@lucide/vue';
 import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
@@ -17,7 +17,6 @@ import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { scheduleClockLabel } from '../time-format';
 import { countLabel } from '../count-label';
-import { openHelp } from '../help';
 
 const props = withDefaults(defineProps<{ embedded?: boolean; templateId?: string | null }>(), { embedded: false, templateId: null });
 const emit = defineEmits<{ close: []; saved: [templateId: string] }>();
@@ -184,17 +183,6 @@ onMounted(async () => {
 			title="Templates"
 			description="Allocate programs across a nominal day, then preview duration-aware resolution."
 		>
-			<Transition name="context-popover">
-				<button
-					v-if="!editing && !templateHelpVisible"
-					type="button"
-					class="page-help-button"
-					aria-label="Show template help"
-					@click="openHelp('scheduling.templates')"
-				>
-					<CircleHelp :size="20" />
-				</button>
-			</Transition>
 			<RouterLink class="button" to="/schedules/templates/new"
 			><Plus :size="18" />New Template</RouterLink
 			>
@@ -297,6 +285,7 @@ onMounted(async () => {
 						<span class="template-row-grip" aria-hidden="true">⠿</span>
 						<div
 							class="template-row-icon"
+							:data-program-id="template.slots[0]?.programId"
 							:style="programColorStyle(template.slots[0]?.programId ?? null)"
 						>
 							<CalendarDays :size="23" />
@@ -324,6 +313,7 @@ onMounted(async () => {
 								:key="slot.id"
 								:class="{ 'fall-through-slot': slot.programId === null }"
 								:style="templateSlotStyle(template, slot)"
+								:data-program-id="slot.programId"
 								:title="`${programName(slot.programId)} · ${timeLabel(slot.startSeconds)}–${timeLabel(templateSlotEnd(template, slot))}`"
 							></span>
 						</div>

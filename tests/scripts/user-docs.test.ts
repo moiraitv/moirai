@@ -9,6 +9,7 @@ import {
 	loadUserDocPages,
 	pageDigest,
 	writeUserDocsManifest,
+	migrateReviews,
 	type UserDocsPaths,
 } from '@scripts/user-docs.js';
 
@@ -65,6 +66,99 @@ afterEach(async () => {
 });
 
 describe('user documentation review tracking', () => {
+	it('migrates matching legacy approvals without changing approval times or read-only commands', async () => {
+		const { paths, pagePath } = await fixture();
+		const digest = await pageDigest(await readFile(pagePath, 'utf8'), paths.publicRoot);
+		const reviewedAt = '2026-01-01T00:00:00.000Z';
+		const legacy = JSON.stringify({ version: 1, reviews: { example: { digest, reviewedAt } } });
+		await writeFile(paths.reviewPath, legacy);
+		await loadUserDocPages(paths);
+		expect(await readFile(paths.reviewPath, 'utf8')).toBe(legacy);
+		await migrateReviews(paths);
+		const migrated = await readFile(paths.reviewPath, 'utf8');
+		const registry = JSON.parse(migrated);
+		expect(registry.version).toBe(2);
+		for (const approval of Object.values(registry.reviews.example.components)) {
+			expect(approval).toMatchObject({ reviewedAt });
+		}
+		await migrateReviews(paths);
+		expect(await readFile(paths.reviewPath, 'utf8')).toBe(migrated);
+		expect((await loadUserDocPages(paths))[0]?.reviewReasons).toEqual([]);
+	});
+
+	it('preserves mismatched legacy approvals as unknown instead of inventing baselines', async () => {
+		const { paths } = await fixture();
+		const old = { digest: 'a'.repeat(64), reviewedAt: '2026-01-01T00:00:00.000Z' };
+		await writeFile(paths.reviewPath, JSON.stringify({ version: 1, reviews: { example: old } }));
+		await migrateReviews(paths);
+		expect(JSON.parse(await readFile(paths.reviewPath, 'utf8')).reviews.example).toEqual(old);
+		expect((await loadUserDocPages(paths))[0]?.reviewReasons).toEqual(['unknown']);
+		await expect(assertUserDocsReviewed(paths)).rejects.toThrow();
+	});
+
+	it.each([
+		['text'], ['screenshots'], ['icons'], ['text', 'screenshots'], ['screenshots', 'icons'], ['text', 'screenshots', 'icons'],
+	])('classifies changed components %j and exposes reasons to all generated output', async (...categories: string[]) => {
+		const { paths, pagePath, screenshotPath } = await fixture();
+		const icon = path.join(paths.publicRoot, 'icons/library.svg');
+		await mkdir(path.dirname(icon), { recursive: true });
+		await writeFile(icon, '<svg/>');
+		await writeFile(pagePath, `${await readFile(pagePath, 'utf8')}\n![](/icons/library.svg) Library\n`);
+		vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		await approveReviews(['example'], false, paths);
+		if (categories.includes('text')) {
+			await writeFile(pagePath, `${await readFile(pagePath, 'utf8')}Changed prose.\n`);
+		}
+		if (categories.includes('screenshots')) {
+			await writeFile(screenshotPath, 'changed screenshot');
+		}
+		if (categories.includes('icons')) {
+			await writeFile(icon, '<svg><path/></svg>');
+		}
+		expect((await loadUserDocPages(paths))[0]?.reviewReasons).toEqual(categories);
+		await writeUserDocsManifest(paths);
+		const manifest = JSON.parse(await readFile(paths.generatedManifestPath, 'utf8'));
+		expect(manifest.pages[0].reviewReasons).toEqual(categories);
+		expect(manifest.topics.example.reviewReasons).toEqual(categories);
+		await listOutstandingReviews(true, paths);
+		expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])[0].reviewReasons).toEqual(categories);
+		await expect(assertUserDocsReviewed(paths)).rejects.toThrow();
+	});
+
+	it('flags initial pages, reference changes, missing assets, and shared image changes', async () => {
+		const { paths, pagePath, screenshotPath } = await fixture();
+		vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		expect((await loadUserDocPages(paths))[0]?.reviewReasons).toEqual(['initial']);
+		const source = await readFile(pagePath, 'utf8');
+		await writeFile(path.join(paths.sourceRoot, 'second.md'), source.replace('id: example', 'id: second'));
+		await approveReviews([], true, paths);
+		await writeFile(screenshotPath, 'shared change');
+		expect((await loadUserDocPages(paths)).map((page) => page.reviewReasons)).toEqual([['screenshots'], ['screenshots']]);
+		await approveReviews([], true, paths);
+		await writeFile(pagePath, source.replace('![Example](/help/screenshots/example.png)', ''));
+		expect((await loadUserDocPages(paths))[0]?.reviewReasons).toEqual(['text', 'screenshots']);
+		await approveReviews(['example'], false, paths);
+		await writeFile(pagePath, source);
+		expect((await loadUserDocPages(paths))[0]?.reviewReasons).toEqual(['text', 'screenshots']);
+		await rm(screenshotPath);
+		await expect(loadUserDocPages(paths)).rejects.toThrow();
+	});
+	it('serves contextual icons under help and includes their bytes in review digests', async () => {
+		const { paths, pagePath } = await fixture();
+		const iconPath = path.join(paths.publicRoot, 'icons/library.svg');
+		await mkdir(path.dirname(iconPath), { recursive: true });
+		await writeFile(iconPath, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+		const source = `${await readFile(pagePath, 'utf8')}\n![](/icons/library.svg) Library\n`;
+		await writeFile(pagePath, source);
+		await writeUserDocsManifest(paths);
+		const manifest = JSON.parse(await readFile(paths.generatedManifestPath, 'utf8'));
+		expect(manifest.topics.example.html).toContain('src="/help/icons/library.svg"');
+		expect(manifest.topics.example.html).toContain('docs-term-badge');
+		const digest = await pageDigest(source, paths.publicRoot);
+		await writeFile(iconPath, '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1"/></svg>');
+		expect(await pageDigest(source, paths.publicRoot)).not.toBe(digest);
+	});
+
 	it('renders contextual screenshots and guide links under the bundled help path', async () => {
 		const { paths, pagePath } = await fixture();
 		await writeFile(pagePath, `${await readFile(pagePath, 'utf8')}\n![Screenshot](/screenshots/example.png)\n[Read more](/example)\n<script>alert(1)</script>\n`);
