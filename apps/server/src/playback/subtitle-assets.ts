@@ -1,8 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { copyFile, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { openSourceFile, type OpenedSourceFile } from '../media/source-file.js';
 import type { Channel, MediaSubtitleTrack, ScheduleGuide, SubtitlePreferences, TimelineSegment } from '@moirai/shared';
 import type { EtvSubtitleSelection } from '@moirai/ersatztv-contract';
 import type { Repository } from '../repository/index.js';
@@ -66,6 +69,17 @@ export class SubtitleAssets {
 		}
 
 		const media = await this.repository.creditTemplates.media(selected.map((segment) => segment.mediaItemId!));
+		const sidecarLibraries = selected.flatMap((segment) => {
+			const item = media.get(segment.mediaItemId!);
+			const preferences = this.preferences(channel, segment, programs);
+			if (!item || !preferences.policy || preferences.policy === 'off' || (item.kind === 'music-video' && preferences.creditsTemplateId)) {
+				return [];
+			}
+			return [...item.subtitleTracks, ...item.parts.flatMap((part) => part.subtitleTracks)]
+				.some((track) => track.sourceType === 'sidecar') ? [item.libraryId] : [];
+		});
+		const roots = sidecarLibraries.length ? await this.repository.getLibraryPlaybackRoots(sidecarLibraries) : new Map<string, string>();
+
 		const templates = new Map((await this.repository.creditTemplates.list()).map((template) => [template.id, template]));
 		for (const segment of selected) {
 			const item = media.get(segment.mediaItemId!);
@@ -94,7 +108,7 @@ export class SubtitleAssets {
 					else {
 						const physicalPart = item.parts[index];
 						const tracks: MediaSubtitleTrack[] = [];
-						for (const candidate of [...item.subtitleTracks, ...item.parts.flatMap((value) => value.subtitleTracks)]) {
+						for (const candidate of preferences.policy && preferences.policy !== 'off' ? [...item.subtitleTracks, ...item.parts.flatMap((value) => value.subtitleTracks)] : []) {
 							if (candidate.partNumber !== null && candidate.partNumber !== (physicalPart?.number ?? 1)) {
 								continue;
 							}
@@ -105,7 +119,7 @@ export class SubtitleAssets {
 								}
 								let streams = sidecarStreams.get(candidate.id);
 								if (!streams) {
-									streams = this.sidecar(channel.id, candidate, file).then((snapshot) => probeSidecarStreams(snapshot, { ...candidate, playbackPaths: [snapshot] }, channel.ffprobePath ?? 'ffprobe')).catch(() => {
+									streams = this.sidecar(channel.id, candidate, file, roots.get(item.libraryId)).then((snapshot) => probeSidecarStreams(snapshot, { ...candidate, playbackPaths: [snapshot] }, channel.ffprobePath ?? 'ffprobe')).catch(() => {
 										issues.add(`${item.title}: unable to read a VobSub sidecar; other subtitle tracks remain available`);
 										return [];
 									});
@@ -128,7 +142,7 @@ export class SubtitleAssets {
 							}
 							await stat(file);
 							if (track.format !== 'vobsub') {
-								file = await this.sidecar(channel.id, track, file);
+								file = await this.sidecar(channel.id, track, file, roots.get(item.libraryId));
 								let streams = sidecarStreams.get(track.id);
 								if (!streams) {
 									streams = probeSidecarStreams(file, track, channel.ffprobePath ?? 'ffprobe');
@@ -167,26 +181,38 @@ export class SubtitleAssets {
 		return result;
 	}
 
-	/** Snapshot sidecars, keeping VobSub pairs together before probing or publishing their paths. */
-	private async sidecar(channelId: string, track: MediaSubtitleTrack, file: string): Promise<string> {
+	/** Validate all pair members, then snapshot through their opened descriptors before publishing. */
+	private async sidecar(channelId: string, track: MediaSubtitleTrack, file: string, root: string | undefined): Promise<string> {
+		if (!root) {
+			throw new Error('Selected subtitle library root is unavailable');
+		}
 		const files = track.format === 'vobsub'
 			? [file, track.playbackPaths.find((entry) => entry.toLowerCase().endsWith('.sub'))]
 			: [file];
-		const sources = await Promise.all(files.map(async (source) => {
-			if (!source) {
-				throw new Error('Selected VobSub pair is incomplete');
+		const sources: OpenedSourceFile[] = [];
+		try {
+			// Open every member before copying any bytes, retaining ownership through publication.
+			for (const source of files) {
+				if (!source) {
+					throw new Error('Selected VobSub pair is incomplete');
+				}
+				sources.push(await openSourceFile(root, source));
 			}
-			const info = await stat(source);
-			return { path: source, size: info.size, modified: info.mtimeMs };
-		}));
-		const key = JSON.stringify({ sidecar: sources });
-		const snapshots = [];
-		for (const source of sources) {
-			snapshots.push(await this.asset(channelId, key, path.extname(source.path).toLowerCase(), async (destination) => {
-				await copyFile(source.path, destination);
-			}));
+			const key = JSON.stringify({ sidecarVersion: 2, sidecar: sources.map((source) => ({
+				path: source.path, size: source.stat.size, modified: source.stat.mtimeMs,
+				device: source.stat.dev, inode: source.stat.ino,
+			})) });
+			const snapshots = [];
+			for (const source of sources) {
+				snapshots.push(await this.asset(channelId, key, path.extname(source.path).toLowerCase(), async (destination) => {
+					await pipeline(source.handle.createReadStream({ autoClose: false }), createWriteStream(destination, { flags: 'wx' }));
+				}));
+			}
+			return snapshots[0]!;
 		}
-		return snapshots[0]!;
+		finally {
+			await Promise.all(sources.map((source) => source.handle.close()));
+		}
 	}
 
 	/** Atomically publish content-addressed assets, reusing existing complete files. */

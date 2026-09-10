@@ -34,7 +34,7 @@
     "liquidjs": "^10.29.0",
     "openid-client": "^6.8.7",
     "pino": "^10.3.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "zod": "^4.1.0"
   },
   "devDependencies": {

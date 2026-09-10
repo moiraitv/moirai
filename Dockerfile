@@ -13,6 +13,9 @@ COPY packages/ersatztv-contract/package.json packages/ersatztv-contract/package.
 RUN npm ci
 
 FROM dependencies AS build
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y git \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN npm run build:production
 

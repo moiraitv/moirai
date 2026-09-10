@@ -102,8 +102,9 @@ export async function openSourceFile(
 			throw new SourceFileError('outside-root', 'Source path is outside the configured library');
 		}
 
+		// Nonblocking open lets us reject FIFOs even if a regular file was replaced before opening.
 		// Open without following links and enforce regular-file and byte-limit requirements.
-		handle = await open(resolvedBefore, constants.O_RDONLY | constants.O_NOFOLLOW);
+		handle = await open(resolvedBefore, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
 		const openedStat = await handle.stat({ bigint: false });
 		if (!openedStat.isFile()) {
 			throw new SourceFileError('not-file', 'Source path is not a regular file');

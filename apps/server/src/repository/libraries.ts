@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { asc, count, eq } from 'drizzle-orm';
+import { asc, count, eq, inArray } from 'drizzle-orm';
 import type {
 	Library,
 	LibraryCreate,
@@ -34,6 +34,20 @@ export abstract class LibraryRepository extends ScanRepository {
 			.groupBy(libraries.id)
 			.orderBy(asc(libraries.name));
 		return rows.map(({ library, itemCount }) => this.publicLibrary(library, itemCount));
+	}
+
+	/** Resolve only requested libraries' trusted playback roots in bounded batches. */
+	async getLibraryPlaybackRoots(ids: string[]): Promise<Map<string, string>> {
+		const unique = [...new Set(ids)];
+		const roots = new Map<string, string>();
+		for (let offset = 0; offset < unique.length; offset += 500) {
+			const rows = await this.db.select({ id: libraries.id, config: libraries.sourceConfig })
+				.from(libraries).where(inArray(libraries.id, unique.slice(offset, offset + 500)));
+			for (const row of rows) {
+				roots.set(row.id, row.config.playbackRoot ?? row.config.scanRoot);
+			}
+		}
+		return roots;
 	}
 
 	/** Return one configured media library. */

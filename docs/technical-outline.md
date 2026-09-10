@@ -206,7 +206,10 @@ HLS rendition metadata follows the active worker mode. No per-item worker contra
 
 Playback preparation batches catalog retrieval, writes content-addressed assets before publishing
 playout, and records contextual per-item failures while allowing video to continue. Selected sidecars
-are copied to immutable assets (including both VobSub files) and probed before publication; unreadable
+are opened against the configured library playback root (falling back to its scan root), rejecting
+symlinks, canonical root escapes, and nonregular files. Both VobSub members are validated before
+copying; immutable snapshots are streamed from those descriptors and probed before publication.
+Versioned cache keys prevent reuse of snapshots created before this boundary check. Unreadable
 or ambiguous subtitle streams are omitted. Subtitle metadata failures publish video without subtitles,
 and optional asset cleanup failures do not block synchronization. Rendering runs
 in two workers with at most 32 queued requests. Queue saturation omits optional credits for that pass;

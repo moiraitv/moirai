@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -51,4 +52,12 @@ describe('safe source files', () => {
 		await expect(openSourceFile(root, 'large.txt', 2)).rejects.toBeInstanceOf(SourceFileError);
 		await expect(openSourceFile(root, 'large.txt', 2)).rejects.toMatchObject({ reason: 'too-large' });
 	});
+});
+
+it('rejects a FIFO without waiting for a writer', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-source-fifo-'));
+	roots.push(root);
+	const fifo = path.join(root, 'subtitle.srt');
+	execFileSync('mkfifo', [fifo]);
+	await expect(openSourceFile(root, fifo)).rejects.toMatchObject({ reason: 'not-file' });
 });
