@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { useDisclosureState } from '../../disclosure-state';
+import { computed } from 'vue';
 import { RefreshCw } from '@lucide/vue';
 import type { TimelinePreview } from '@moirai/shared';
 import { guideSegmentPercent, guideWindowMilliseconds } from '../../guide-geometry';
@@ -15,7 +16,7 @@ const props = defineProps<{
 	error: string;
 }>();
 const emit = defineEmits<{ refresh: [] }>();
-const issuesOpen = ref(false);
+const issuesOpen = useDisclosureState('resolved-schedule-issues', false);
 const previewWindowMilliseconds = computed(() => props.preview
 	? guideWindowMilliseconds(props.preview.startDate, props.preview.days, props.preview.timeZone)
 	: 0);

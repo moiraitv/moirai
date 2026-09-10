@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
@@ -105,7 +106,7 @@ let allowRouteLeave = false;
 
 const channelId = computed(() => String(route.params.id ?? ''));
 const editing = computed(() => Boolean(channelId.value));
-const previewIssuesOpen = ref(false);
+const previewIssuesOpen = useDisclosureState('channel-schedule-issues', false);
 const channel = computed(() => channels.value.find((entry) => entry.id === channelId.value));
 const materialization = computed(() =>
 	materializations.value.find((entry) => entry.channelId === channelId.value));

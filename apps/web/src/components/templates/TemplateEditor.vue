@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
@@ -87,7 +88,7 @@ const editorView = ref<'timeline' | 'list'>('timeline');
 const addingSlot = ref(false);
 const slotPlacement = ref<SlotPlacement | null>(null);
 const placementAnnouncement = ref('');
-const advancedOpen = ref(false);
+const advancedOpen = useDisclosureState('template-advanced', false);
 const finiteBoundaryDrift = new Map<string, number>();
 const editing = computed(() =>
 	props.embedded ? Boolean(props.templateId) : route.params.id !== undefined);

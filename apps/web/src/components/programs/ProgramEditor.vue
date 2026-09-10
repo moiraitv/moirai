@@ -77,7 +77,7 @@ const sourcePage = ref(1);
 const sourceTotalPages = ref(1);
 const sourceSearch = ref('');
 const subtitlesOpen = useDisclosureState('program-subtitles');
-const sourceBrowserOpen = ref(true);
+const sourceBrowserOpen = useDisclosureState('program-source-browser', true);
 const selectedSourceLabel = ref('');
 const selectedItems = ref<MediaItem[]>([]);
 const selectedGroups = ref<MediaGroup[]>([]);
@@ -222,7 +222,6 @@ const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot.value);
 
 /** Initialize the form from an existing program or safe defaults for a new content rule. */
 function resetForm(program?: SchedulingProgram): void {
-	sourceBrowserOpen.value = !program;
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.name = program?.name ?? '';

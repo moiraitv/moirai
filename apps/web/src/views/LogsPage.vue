@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ChevronDown, ChevronRight, Download, FileText, Pause, Play, RefreshCw, Search } from '@lucide/vue';
@@ -30,7 +31,7 @@ const level = ref<LogLevel | ''>(activeLevel.value);
 const search = ref(activeSearch.value);
 const autoRefresh = ref(true);
 const selectedEntry = ref<CondensedLogEntry | null>(null);
-const retainedFilesOpen = ref(false);
+const retainedFilesOpen = useDisclosureState('retained-logs', false);
 let filterTimer: ReturnType<typeof setTimeout> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let selectedTrigger: HTMLElement | null = null;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../disclosure-state';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import {
 	computed,
@@ -82,7 +83,7 @@ const librariesStore = useLibrariesStore();
 const id = computed(() => String(route.params.id));
 const library = ref<Library>();
 const scans = ref<ScanRun[]>([]);
-const scanHistoryOpen = ref(false);
+const scanHistoryOpen = useDisclosureState('library-scan-history', false);
 const filterModalInstance = ref(0);
 const reconciliation = ref<LibraryReconciliation>();
 const genres = ref<MediaGenreFacet[]>([]);
@@ -97,7 +98,7 @@ const currentScanIssues = computed(() => {
 });
 const activeScanId = ref<string>();
 const activeScanProgress = ref<ScanProgress>();
-const showScanIssues = ref(false);
+const showScanIssues = useDisclosureState('library-scan-issues', false);
 const sourceUnavailable = computed(() =>
 	library.value ? isLibrarySourceUnavailable(library.value) : false);
 const scanProgressPercent = computed(() => {

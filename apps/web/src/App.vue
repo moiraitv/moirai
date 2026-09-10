@@ -44,8 +44,8 @@ const authentication = useAuthenticationStore();
 const { libraries, loaded } = storeToRefs(libraryStore);
 const { publicUrlStatus } = storeToRefs(channelsStore);
 const drawerOpen = ref(false);
-const libraryNavOpen = ref(true);
-const scheduleNavOpen = ref(true);
+const libraryNavOpen = useDisclosureState('navigation-libraries', true);
+const scheduleNavOpen = useDisclosureState('navigation-scheduling', true);
 const playbackNavOpen = useDisclosureState('navigation-playback', true);
 const playback = ref<PlaybackEngineStatus | null>(null);
 
