@@ -40,6 +40,11 @@ async function prepare(page: Page): Promise<void> {
 	});
 	await expect.poll(() => page.evaluate(() => Array.from(document.querySelectorAll('video'))
 		.every((video) => video.readyState === 4 && video.networkState === 1 && !video.seeking)), { timeout: 15_000 }).toBe(true);
+	// Chromium's native controls can keep their seek spinner briefly after video readiness.
+	// Let that presentation settle before freezing the screenshot.
+	if (await page.locator('video').count()) {
+		await page.waitForTimeout(1_000);
+	}
 	await page.evaluate(() => document.fonts.ready.then(() => undefined));
 	// Load authored image sources even when carousel clipping keeps lazy images deferred.
 	await page.evaluate(() => {

@@ -7,7 +7,7 @@ import stylistic from '@stylistic/eslint-plugin';
 import jsdoc from 'eslint-plugin-jsdoc';
 
 export default [
-	{ ignores: ['**/dist/**', '**/coverage/**', '**/vendor/**', '**/.vitepress/cache/**', 'playwright-report/**'] },
+	{ ignores: ['**/dist/**', '**/coverage/**', '**/vendor/**', '**/.vitepress/cache/**', 'playwright-report/**', 'data/**', 'test-results/**'] },
 	eslint.configs.recommended,
 	...tseslint.configs.recommended,
 	...vue.configs['flat/recommended'],

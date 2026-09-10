@@ -17,3 +17,5 @@ apps/docs/.vitepress/cache/
 apps/docs/.vitepress/.temp/
 apps/docs/src/public/contextual-help.json
 apps/docs/src/review.md
+
+apps/docs/src/public/review-assets/

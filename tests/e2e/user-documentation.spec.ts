@@ -4,6 +4,7 @@ import { expect } from '@playwright/test';
 import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 import { authenticateAdministrator, E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD } from './authentication';
 import { test } from './documentation/fixture';
+import { serveReviewFixture } from './documentation/review-fixture';
 import { capture, captureSection, assertProgramColors } from './documentation/capture';
 import { seedLibrary, seedSchedule, normalizeFixtureLogs } from './documentation/seed';
 import { helpReviewLabel, type HelpReviewReason } from '../../apps/web/src/help-review';
@@ -697,4 +698,47 @@ test('resets credit preview pagination when switching to a smaller library', asy
 	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Small library video');
 	await expect(preview.getByRole('button', { name: 'Render preview', exact: true })).toBeEnabled();
 	expect(requests.filter((request) => request.library === small)).toEqual([{ library: small, page: 1 }]);
+});
+
+test('compares pending guide images in place with After selected initially', async ({ page }, testInfo) => {
+	await serveReviewFixture(page);
+	await page.goto('/review-fixture/pending.html');
+	await expect(page.locator('.review-topic')).toHaveCount(1);
+	await expect(page.locator('.review-topic').getByRole('link', { name: 'Review fixture', exact: true })).toHaveAttribute('href', '/review-fixture/empty.html');
+	const comparison = page.locator('.review-image');
+	await expect(comparison).toHaveCount(1);
+	await comparison.scrollIntoViewIfNeeded();
+	const before = comparison.getByRole('button', { name: 'Before', exact: true });
+	const after = comparison.getByRole('button', { name: 'After', exact: true });
+	await expect(after).toHaveAttribute('aria-pressed', 'true');
+	await expect(comparison.getByAltText(/^After:/)).toBeVisible();
+	await expect.poll(() => comparison.locator('img').evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+	const originalBounds = await comparison.locator('.review-image-stage').boundingBox();
+	await comparison.screenshot({ path: testInfo.outputPath('review-after.png') });
+	await before.focus();
+	await page.keyboard.press('Enter');
+	await expect(before).toHaveAttribute('aria-pressed', 'true');
+	await expect(comparison.getByAltText(/^Before:/)).toBeVisible();
+	await expect(comparison.getByAltText(/^After:/)).toBeHidden();
+	expect(await comparison.locator('.review-image-stage').boundingBox()).toEqual(originalBounds);
+	await comparison.screenshot({ path: testInfo.outputPath('review-before.png') });
+	await after.click();
+	await expect(comparison.getByAltText(/^After:/)).toBeVisible();
+	const textDiff = page.locator('.review-text-diff').first();
+	await expect(textDiff).toContainText('-Old paragraph.');
+	await expect(textDiff).toContainText('+New paragraph with <script>literal markup</script>.');
+	await expect(textDiff.locator('script')).toHaveCount(0);
+	await textDiff.screenshot({ path: testInfo.outputPath('review-text-diff.png') });
+	await page.setViewportSize({ width: 390, height: 844 });
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('renders an empty comparison queue without image controls', async ({ page }) => {
+	await serveReviewFixture(page);
+	await page.goto('/review-fixture/empty.html');
+	await expect(page.getByRole('heading', { level: 1, name: /^Review fixture/ })).toBeVisible();
+	await expect(page.locator('.review-changes')).toBeAttached();
+	await expect(page.locator('.review-topic')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Before', exact: true })).toHaveCount(0);
+	await expect(page.locator('.review-text-diff')).toHaveCount(0);
 });

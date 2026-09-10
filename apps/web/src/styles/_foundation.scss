@@ -322,6 +322,9 @@ small {
 }
 
 .primary-nav {
+	min-height: 0;
+	overflow-y: auto;
+	flex: 0 1 auto;
 	display: grid;
 	gap: 3px;
 	margin-top: 30px;

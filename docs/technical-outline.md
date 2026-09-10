@@ -850,7 +850,8 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - playback, status, and log views.
 
 The primary Status navigation item also carries the live IPTV readiness state and active channel
-count without a separate sidebar card.
+count without a separate sidebar card. Navigation scrolls within the available viewport while the
+account and sign-out controls remain accessible in the sidebar footer.
 
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
@@ -893,7 +894,12 @@ Each authored page is hashed from normalized Markdown and every referenced local
 versioned registry records explicitly approved digests and timestamps; prose, link, or screenshot
 changes therefore return the page to `needs-review`. Drafts remain visible in normal builds with a
 warning, while `build:production` and Docker builds reject any outstanding review. The generated
-`/help/review.html` dashboard and `docs:user:review:list` command expose the review queue.
+`/help/review.html` dashboard and `docs:user:review:list` command expose the review queue. The
+dashboard includes in-place Before/After image comparisons, initially showing After, and unified
+Markdown text diffs. Build-time Git history lookup verifies each baseline against its approval digest
+within the last 100 guide commits; unavailable history is labeled explicitly. Generated comparison
+images use content-addressed URLs and are cleared on regeneration. Viewing comparisons never changes
+approvals, and builds from source archives remain supported without Git history.
 
 Channel logos can be safe external HTTP(S) URLs or managed PNG files. Managed uploads support an
 unconstrained crop and never upscale beyond the source or channel resolution. Browser and server

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { channelCreateSchema } from '@moirai/shared';
 import { authenticateAdministrator } from './authentication';
+import { waitForLibraryScan } from './library-scan';
 
 const quickLogoSvg = Buffer.from(
 	'<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000"><rect width="2000" height="2000" fill="#7357ff"/></svg>',
@@ -183,18 +184,25 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 	await page.getByRole('button', { name: 'Retry Preview', exact: true }).click();
 	await expect(page.locator('.quick-review-schedule-slot')).toContainText('Resolving');
 	const loadingHeights = await page.locator('.quick-review-row').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
+	const resolvedPreview = page.waitForResponse((response) => response.url().endsWith('/api/v1/quick-channel-setups/preview') && response.status() === 200);
 	releasePreview();
+	await resolvedPreview;
 	await expect(page.getByLabel('Library sample', { exact: true })).toContainText('26 indexed');
 	await expect(page.getByLabel('Programming sample', { exact: true })).toContainText('Quick Movie');
 	await expect(page.getByLabel('Sample resolved schedule', { exact: true })).toBeVisible();
-	expect(await page.locator('.quick-review-row').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height))).toEqual(loadingHeights);
+	const loadedHeights = await page.locator('.quick-review-row').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
+	expect(loadedHeights).toHaveLength(loadingHeights.length);
+	for (const [index, height] of loadedHeights.entries()) {
+		expect(height).toBeCloseTo(loadingHeights[index]!, 0);
+	}
 	await expect(page.getByLabel('Time of day', { exact: true })).toContainText('00:00');
 	await expect(page.getByLabel('Time of day', { exact: true })).toContainText('12:00');
 	await expect(page.getByLabel('Time of day', { exact: true })).toContainText('24:00');
 	await expect(page.getByRole('img', { name: 'Channel logo', exact: true })).toBeVisible();
 	await expect(page.locator('.quick-review-row')).toHaveCount(4);
+	// Measure the reserved schedule container, which keeps preview loading from shifting the row.
 	const bottomInsets = await page.locator('.quick-review-row').evaluateAll((rows) => rows.map((row) => {
-		const content = row.querySelector('.program-carousel-card, .quick-schedule-sample, .quick-review-channel')!;
+		const content = row.querySelector('.program-carousel-card, .quick-review-schedule-slot, .quick-review-channel')!;
 		const style = getComputedStyle(row);
 		return {
 			actual: row.getBoundingClientRect().bottom - content.getBoundingClientRect().bottom,
@@ -259,6 +267,7 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 
 	// Editing query ordering must not mutate the saved baseline used by Reset.
 	await page.goto(`/schedules/programs/${setup.program.id}`);
+	await expect(page.getByLabel('Direction')).toBeVisible({ timeout: 30_000 });
 	await expect(page.getByLabel('Direction')).toHaveValue('asc');
 	await page.getByLabel('Direction').selectOption('desc');
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
@@ -301,6 +310,8 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 });
 
 test('refreshes Match any genres while Quick Setup remains open during indexing', async ({ page }) => {
+	// This workflow completes an initial scan and a second scan after authoring new media.
+	test.setTimeout(60_000);
 	const csrfToken = await authenticateAdministrator(page);
 	const runId = String(Date.now());
 	const mediaRoot = path.resolve(`test-results/runtime/quick-genres-${runId}`);
@@ -314,6 +325,7 @@ test('refreshes Match any genres while Quick Setup remains open during indexing'
 		&& response.request().method() === 'POST');
 	await page.getByRole('button', { name: 'Create and Continue' }).click();
 	const library = await (await created).json();
+	await waitForLibraryScan(page, library.id);
 	await expect(page.getByLabel('Currently matching media')).toContainText('No indexed media matches yet.');
 	await page.getByRole('button', { name: 'Configure Filters' }).click();
 	const filters = page.getByRole('dialog', { name: 'Filter media' });

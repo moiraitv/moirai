@@ -80,7 +80,8 @@ for (const todayHasGap of [false, true]) {
 		});
 
 		for (const path of ['/guide', '/channels']) {
-			await page.clock.setSystemTime(frozenNow);
+			// UI interaction time must not consume the fixture's twelve-second ongoing gap.
+			await page.clock.setFixedTime(frozenNow);
 			await page.goto(path);
 			const row = page.locator('.guide-channel-cell').filter({ hasText: channelName });
 			const badge = row.getByRole('button', { name: /warning.*show details/ });
@@ -108,6 +109,7 @@ for (const todayHasGap of [false, true]) {
 			expect(guideRequests).toHaveLength(requestsBeforeNavigation);
 			expect(guideRequests.at(-1)).toBe(7);
 
+			await page.clock.setFixedTime(new Date(frozenNow.getTime() + 61_000));
 			await page.clock.fastForward(61_000);
 			await expect(card.locator('.next-day')).toContainText('1 scheduled item');
 			await expect(card).not.toHaveClass(/has-dead-air/);

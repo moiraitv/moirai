@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { waitForLibraryScan } from './library-scan';
 import { expect, test, type Locator } from '@playwright/test';
 import {
 	authenticateAdministrator,
@@ -173,8 +174,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		const name = await page.getByLabel('Name').boundingBox();
 		return Boolean(genres && name && genres.y < name.y);
 	}).toBe(true);
-	await expectControlHeight(page.getByLabel('Added from'), 42);
-	await expectControlHeight(page.getByLabel('Added to'), 42);
+	await expectControlHeight(page.getByRole('group', { name: 'Added', exact: true }).getByLabel('From'), 42);
+	await expectControlHeight(page.getByRole('group', { name: 'Added', exact: true }).getByLabel('To'), 42);
 	await expectControlHeight(page.getByLabel('Minimum popular rating'), 42);
 	await expectControlHeight(page.getByLabel('Minimum user rating'), 42);
 	await expect(page.getByText('Narrow down your results using the filters below.')).toBeVisible();
@@ -317,6 +318,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page).toHaveURL(/\/channels\?new=1$/);
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
+	await page.locator('.channel-encoding-disclosure > button').click();
 	await expect(page.locator('.acceleration-prediction')).toBeVisible();
 	const saveChannel = page.getByRole('button', { name: 'Save', exact: true });
 	const disabledScheduleAction = page.getByRole('button', { name: 'Manage Layered Schedule' });
@@ -414,6 +416,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	);
 
 	await page.getByRole('button', { name: `Edit ${channelName} Preserved` }).click();
+	await page.locator('.channel-fallback-disclosure > button').click();
 	const fallbackEditor = page.locator('.fallback-filler-editor');
 	await expect(fallbackEditor).toContainText('channel-fallback.mp4');
 	await expect(fallbackEditor).toContainText('Includes audio');
@@ -557,6 +560,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(programFilterDialog.getByLabel('Actor')).toBeVisible();
 	await expect(programFilterDialog.getByLabel('Director')).toBeVisible();
 	await programFilterDialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(page.locator('.filter-modal')).toHaveCount(0);
 	await page.getByLabel('Name').fill(programName);
 	await page.getByLabel('Source type').selectOption('collection');
 	await expect(saveProgram).toBeDisabled();
@@ -970,7 +974,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const deleteTemplateDialog = page.getByRole('alertdialog', { name: 'Delete Template?' });
 	await expect(deleteTemplateDialog).toBeVisible();
 	await deleteTemplateDialog.getByRole('button', { name: 'Cancel' }).click();
-	await page.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
+	await expect(advancedScheduling).toHaveAttribute('aria-expanded', 'true');
 	await expect(
 		page
 			.getByRole('group', { name: /Outgoing boundary at/ })
@@ -1573,6 +1577,7 @@ test('removes a configured channel fallback whose asset is unavailable', async (
 
 	await page.goto('/channels');
 	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
+	await page.locator('.channel-fallback-disclosure > button').click();
 	const editor = page.locator('.fallback-filler-editor');
 	await expect(editor).toContainText('configured fallback override is unavailable');
 	await editor.getByRole('button', { name: 'Remove fallback filler override' }).click();
@@ -1716,7 +1721,8 @@ test('loads playback controls before tracking and independently saving panel dra
 	rejectFallbackSave = false;
 	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
 	await page.unroute('**/api/v1/playback/fallback-filler');
-	await expect(fallbackPanel).toContainText('Global override');
+	await expect(fallbackPanel.getByRole('button', { name: 'Save Fallback' })).toBeDisabled({ timeout: 30_000 });
+	await expect(fallbackPanel).toContainText('Global override', { timeout: 30_000 });
 	await expect(fallbackPanel).toContainText('global-fallback.mp4');
 	await fallbackPanel.getByRole('button', { name: 'Remove fallback filler override' }).click();
 	await fallbackPanel.getByRole('button', {
@@ -1807,6 +1813,22 @@ test('uses an accessible navigation drawer on small screens', async ({ page }) =
 	const sidebar = page.locator('.sidebar');
 	await page.getByRole('button', { name: 'Open navigation' }).click();
 	await expect(sidebar).toHaveClass(/sidebar-open/);
+	for (const name of ['Toggle schedule navigation', 'Toggle playback navigation']) {
+		const toggle = page.getByRole('button', { name });
+		if (await toggle.getAttribute('aria-expanded') === 'false') {
+			await toggle.click();
+		}
+	}
+	for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+		await page.setViewportSize(viewport);
+		await expect(sidebar.getByRole('button', { name: 'Sign out' })).toBeInViewport();
+		await expect(sidebar.getByRole('link', { name: /Signed in via local/i })).toBeInViewport();
+		const templates = sidebar.getByRole('link', { name: 'Credit Templates', exact: true });
+		await templates.scrollIntoViewIfNeeded();
+		await expect(templates).toBeInViewport();
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+
 	await expect(page.getByRole('link', { name: 'Channels', exact: true })).toBeVisible();
 	const guideLink = page.getByRole('link', { name: 'Guide', exact: true });
 	await expect(guideLink).toBeVisible();
@@ -1888,6 +1910,7 @@ test('keeps catalog navigation sticky and synchronizes visible anchors with hist
 	});
 	expect(response.ok()).toBe(true);
 	const created = (await response.json()) as { id: string };
+	await waitForLibraryScan(page, created.id);
 	await expect
 		.poll(async () => {
 			const library = (await (
@@ -1977,6 +2000,8 @@ test('keeps catalog navigation sticky and synchronizes visible anchors with hist
 	await expect(page).toHaveURL(/\/login$/);
 	await page.getByLabel('Username').fill(E2E_ADMIN_USERNAME);
 	await page.getByLabel('Password').fill(E2E_ADMIN_PASSWORD);
+	const signedIn = page.waitForResponse((response) => response.url().endsWith('/api/v1/auth/login'));
 	await page.getByRole('button', { name: 'Sign in' }).click();
+	expect((await signedIn).ok()).toBe(true);
 	await expect(page).toHaveURL(/\/$/);
 });

@@ -7,7 +7,7 @@ contextual: true
 
 # Account and recovery
 
-The **Account** page shows the current sign-in methods and lets an administrator add, change, or remove the local fallback credentials when allowed.
+The **Account** page shows the current sign-in methods and lets an administrator add, change, or remove the local fallback credentials when allowed. It can be reached by clicking on your sign-in details at the bottom of the navigation.
 
 ![The administrator account page](/screenshots/account.png)
 

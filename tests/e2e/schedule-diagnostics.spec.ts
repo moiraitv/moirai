@@ -83,7 +83,9 @@ test('opens cause-specific editors without losing the channel draft', async ({ p
 		await route.fulfill({ response, json: body });
 	});
 	await page.goto(`/schedules/channels/${channel.id}?layer=${layerId}&previewDate=2026-09-02&boundary=layer-exit`);
-	await expect(page.getByRole('group', { name: 'Exit boundary' }).getByLabel('Boundary behavior')).toBeFocused();
+	const exitBoundary = page.getByRole('group', { name: 'Exit boundary' }).getByLabel('Boundary behavior');
+	await expect(exitBoundary).toBeVisible({ timeout: 30_000 });
+	await expect(exitBoundary).toBeFocused();
 	await expect(page.locator('.dead-air-diagnostics')).toContainText('2 gaps · 8m 12s total');
 	const entryBoundary = page.getByRole('group', { name: 'Entry boundary' });
 	await entryBoundary.getByLabel('Boundary behavior').selectOption('finish-left');

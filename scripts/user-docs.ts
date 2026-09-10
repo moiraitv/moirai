@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import MarkdownIt from 'markdown-it';
+import { buildReviewChanges, reviewChangesFrontmatter } from './user-docs-review.js';
 import { userDocsTermBadges } from './user-docs-term-badges.js';
 import { helpTopicIds } from '../apps/web/src/help.js';
 import { helpReviewLabel, type HelpReviewReason } from '../apps/web/src/help-review.js';
@@ -87,7 +88,7 @@ async function markdownFiles(directory: string, excludedPath: string): Promise<s
 }
 
 /** Normalize authored text so platform line endings do not invalidate a review. */
-function normalizedSource(value: string): string {
+export function normalizedSource(value: string): string {
 	return `${value.replace(/\r\n?/gu, '\n').trimEnd()}\n`;
 }
 
@@ -309,9 +310,10 @@ export async function writeUserDocsManifest(paths = defaultUserDocsPaths): Promi
 	};
 	const outstanding = pages.filter((page) => page.reviewStatus === 'needs-review');
 	const reviewLines = outstanding.length
-		? outstanding.map((page) => `- [${page.title}](./${page.relativePath}) — \`${page.id}\` — ${helpReviewLabel(page.reviewReasons)}`)
+		? outstanding.map((page) => `- [${page.title}](#review-${page.id}) — \`${page.id}\` — ${helpReviewLabel(page.reviewReasons)}`)
 		: ['All user-guide pages have been reviewed.'];
-	const reviewPage = `---\ntitle: Documentation review status\ndescription: Pages awaiting human review before production packaging.\nsidebar: false\n---\n\n# Documentation review status\n\n**${outstanding.length} of ${pages.length} pages need review.**\n\n${reviewLines.join('\n')}\n`;
+	const changes = await buildReviewChanges(paths, outstanding, (await loadReviewRegistry(paths.reviewPath)).reviews);
+	const reviewPage = `---\nreviewChanges: ${reviewChangesFrontmatter(changes)}\ntitle: Documentation review status\ndescription: Pages awaiting human review before production packaging.\nsidebar: false\n---\n\n# Documentation review status\n\n**${outstanding.length} of ${pages.length} pages need review.**\n\n${reviewLines.join('\n')}\n\n<ReviewChanges />\n`;
 
 	await mkdir(paths.publicRoot, { recursive: true });
 	await writeFile(paths.generatedManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 import { authenticateAdministrator } from './authentication';
+import { waitForLibraryScan } from './library-scan';
 
 type RequestHeaders = Record<string, string>;
 
@@ -40,10 +41,11 @@ async function createLibrary(page: Page, headers: RequestHeaders, id: string): P
 	});
 	expect(response.ok(), await response.text()).toBe(true);
 	const library = await response.json() as { id: string };
+	await waitForLibraryScan(page, library.id);
 	await expect.poll(async () => {
 		const detail = await (await page.request.get(`/api/v1/libraries/${library.id}`)).json();
 		return detail.itemCount as number;
-	}).toBe(1);
+	}, { timeout: 30_000 }).toBe(1);
 	const media = await (await page.request.get(`/api/v1/libraries/${library.id}/media`)).json() as {
 		items: Array<{ id: string }>;
 	};
@@ -135,18 +137,38 @@ async function assignTemplate(
 	expect(response.ok(), await response.text()).toBe(true);
 }
 
-test('defaults existing program media browsing to collapsed and contains selection drawers', async ({ page }) => {
+test('remembers program media browsing and contains selection drawers', async ({ page }) => {
 	test.setTimeout(90_000);
 	const headers = await authenticatedHeaders(page);
 	const id = randomUUID();
 	const library = await createLibrary(page, headers, id);
 	const programId = await createProgram(page, headers, id, library.id, library.mediaId);
 
-	await page.goto('/schedules/programs/new');
+	// A warm store must not expose an editable draft before its refresh finishes.
+	await page.goto('/schedules/programs');
+	await expect(page.getByRole('link', { name: `Compact program ${id}`, exact: true })).toBeVisible();
+	let releaseOverview!: () => void;
+	const overviewGate = new Promise<void>((resolve) => {
+		releaseOverview = resolve;
+	});
+	await page.route('**/api/v1/scheduling/overview', async (route) => {
+		await overviewGate;
+		await route.continue();
+	});
+	await page.getByRole('link', { name: 'New Program' }).click();
+	await expect(page.getByRole('heading', { name: 'Loading Program' })).toBeVisible();
+	await expect(page.getByLabel('Source type')).toHaveCount(0);
+	releaseOverview();
 	await page.getByLabel('Source type').selectOption('collection');
+	await page.unroute('**/api/v1/scheduling/overview');
 	await expect(page.getByRole('searchbox', { name: 'Search source media' })).toBeVisible();
+	await page.locator('.source-browser-disclosure summary').click();
+	await page.getByRole('button', { name: 'Close program editor' }).click();
+	await page.getByRole('button', { name: 'Discard Changes' }).click();
 	await page.goto(`/schedules/programs/${programId}`);
 	const search = page.getByRole('searchbox', { name: 'Search source media' });
+	await expect(search).toBeHidden();
+	await page.reload();
 	await expect(search).toBeHidden();
 	await expect(page.getByRole('button', { name: 'Review Selection' })).toBeEnabled();
 	await page.locator('.source-browser-disclosure summary').click();
@@ -209,6 +231,7 @@ test('keeps acceleration and two-step logo draft actions usable in the channel e
 	await page.getByRole('button', { name: `Edit ${channel.name}`, exact: true }).click();
 	await contained(page, page.getByRole('dialog'));
 	await contained(page, page.locator('.resource-editor-action-bar'));
+	await page.locator('.channel-encoding-disclosure > button').click();
 	const prediction = page.locator('.acceleration-prediction');
 	await prediction.scrollIntoViewIfNeeded();
 	await expect(prediction).toHaveText('VideoToolbox');
@@ -285,6 +308,7 @@ test('keeps incomplete schedule previews stable without repeated requests', asyn
 	});
 	await page.goto('/schedules/channels');
 	const card = page.locator('.schedule-channel-card').filter({ hasText: channel.name });
+	await expect(card).toBeVisible({ timeout: 30_000 });
 	await expect(card.locator('.next-day')).toContainText('Preview incomplete');
 	await page.clock.fastForward(180_000);
 	await expect(card.locator('.next-day')).toContainText('Preview incomplete');

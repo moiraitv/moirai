@@ -60,11 +60,7 @@ const router = useRouter();
 const scheduling = useSchedulingStore();
 const librariesStore = useLibrariesStore();
 const channelsStore = useChannelsStore();
-const initialLoading = ref(!(
-	scheduling.loaded
-	&& librariesStore.loaded
-	&& channelsStore.capabilitiesLoaded
-));
+const initialLoading = ref(true);
 const saving = ref(false);
 let allowRouteLeave = false;
 const error = ref('');
