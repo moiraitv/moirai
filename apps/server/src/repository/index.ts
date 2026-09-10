@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { CreditTemplateRepository } from './credit-templates.js';
 import type {
 	Channel,
 	ChannelCreate,
@@ -76,6 +77,8 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Reusable credit templates and subtitle playback metadata. */
+	readonly creditTemplates: CreditTemplateRepository;
 	/** Authentication persistence exposed to the cross-cutting authentication service. */
 	readonly authentication: AuthenticationRepository;
 	private readonly catalog: MediaCatalogRepository;
@@ -88,6 +91,7 @@ export class Repository extends LibraryRepository {
 	constructor(private readonly database: MoiraiDatabase) {
 		super(database);
 		this.authentication = new AuthenticationRepository(database);
+		this.creditTemplates = new CreditTemplateRepository(database);
 		this.catalog = new MediaCatalogRepository(database);
 		this.channels = new ChannelRepository(database);
 		this.scheduling = new SchedulingRepository(database);

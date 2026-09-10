@@ -1,3 +1,4 @@
+import { validateCreditReference } from './subtitle-validation.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Channel, ChannelCreate, ChannelUpdate } from '@moirai/shared';
@@ -47,6 +48,7 @@ export class ChannelRepository {
 
 	/** Create a channel with its stable Moirai XMLTV identifier. */
 	async createChannel(input: ChannelCreate): Promise<Channel> {
+		validateCreditReference(this.db, input.subtitlePreferences);
 		const timestamp = currentTimestamp();
 		const id = randomUUID();
 		const effectiveTvgId = effectiveChannelTvgId({ id, number: input.number });
@@ -91,6 +93,9 @@ export class ChannelRepository {
 		void _createdAt;
 		void _updatedAt;
 		const config = { ...currentConfig, ...input } as ChannelCreate;
+		if (input.subtitlePreferences !== undefined) {
+			validateCreditReference(this.db, input.subtitlePreferences);
+		}
 		const effectiveTvgId = effectiveChannelTvgId({ id, number: config.number });
 		const numberKey = canonicalChannelNumberKey(config.number);
 

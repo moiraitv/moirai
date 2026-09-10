@@ -1,3 +1,5 @@
+import { registerCreditTemplateRoutes } from './credit-templates.js';
+import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
 import type { FastifyInstance } from 'fastify';
 import type { ArtworkCache } from '../artwork/artwork-cache.js';
 import type { AuthenticationService } from '../auth/service.js';
@@ -27,6 +29,7 @@ import { registerSystemRoutes } from './system.js';
 /** Services captured by HTTP handlers after route registration. */
 export interface HttpRouteDependencies {
 	config: AppConfig;
+	playout: PlayoutSynchronizer;
 	authentication: AuthenticationService;
 	repository: Repository;
 	scanner: ScannerManager;
@@ -49,6 +52,7 @@ export function registerHttpRoutes(
 ): void {
 	registerAuthenticationRoutes(app, dependencies.config, dependencies.authentication);
 	registerSystemRoutes(app, dependencies);
+	registerCreditTemplateRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);
 	registerChannelRoutes(app, dependencies);

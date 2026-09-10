@@ -1,3 +1,4 @@
+import type { PreparedSubtitles } from './subtitle-assets.js';
 import { Temporal } from '@js-temporal/polyfill';
 import {
 	toEtvPlayout,
@@ -48,6 +49,7 @@ function playoutItems(
 	windowStart: Temporal.Instant,
 	windowEnd: Temporal.Instant,
 	date: string,
+	subtitles?: PreparedSubtitles,
 ): EtvPlayoutItem[] {
 	const segmentStart = Temporal.Instant.from(segment.start);
 	const segmentFinish = Temporal.Instant.from(segment.finish);
@@ -99,6 +101,7 @@ function playoutItems(
 				start: itemStart.toString(),
 				finish: itemFinish.toString(),
 				path: part.playbackPath,
+				subtitle: subtitles?.get(segment.id)?.[index] ?? null,
 				inPointMs: inPointMs === 0 ? null : inPointMs,
 				outPointMs,
 			});
@@ -290,6 +293,7 @@ export function buildEtvPlayoutFiles(
 	channels: Channel[],
 	guide: ScheduleGuide,
 	fallbacks: ReadonlyMap<string, PlayoutFallback> = new Map(),
+	subtitles?: PreparedSubtitles,
 ): Map<string, string> {
 	const files = new Map<string, string>();
 	const segmentsByChannel = new Map(
@@ -328,7 +332,7 @@ export function buildEtvPlayoutFiles(
 			const finish = zonedFinish.toInstant();
 			const items = [
 				...segments.flatMap((segment) => {
-					return playoutItems(segment, start, finish, date.toString());
+					return playoutItems(segment, start, finish, date.toString(), subtitles);
 				}),
 				...generatedFallback.flatMap((item) => {
 					return clipFallbackItem(item, start, finish);

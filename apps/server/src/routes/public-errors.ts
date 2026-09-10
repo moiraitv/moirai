@@ -1,3 +1,4 @@
+import { CreditTemplateError } from '../repository/credit-templates.js';
 import { ZodError } from 'zod';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import type { ApiErrorBody } from '@moirai/shared';
@@ -107,6 +108,10 @@ export function publicError(error: unknown, requestId: string): PublicError {
 				message: issue.message.slice(0, 512),
 			})),
 		);
+	}
+
+	if (error instanceof CreditTemplateError) {
+		return response(requestId, error.statusCode, 'request_failed', error.message, true);
 	}
 
 	if (error instanceof SchedulingValidationError) {

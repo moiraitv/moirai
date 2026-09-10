@@ -104,3 +104,17 @@ describe('embeddedSubtitleTracks', () => {
 		]);
 	});
 });
+
+it('recognizes SDH and commentary tokens without treating Hindi language as a hearing-impaired flag', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-subtitle-flags-'));
+	roots.push(root);
+	for (const filename of ['Movie.en.sdh.srt', 'Movie.en.hi.commentary.srt', 'Movie.hi.srt']) {
+		await writeFile(path.join(root, filename), 'captions');
+	}
+	const tracks = (await discoverSidecarSubtitles(root, path.join(root, 'Movie'), [], (value) => value)).map((entry) => entry.track);
+	expect(tracks).toEqual(expect.arrayContaining([
+		expect.objectContaining({ language: 'en', isHearingImpaired: true, isCommentary: false }),
+		expect.objectContaining({ language: 'en', isHearingImpaired: true, isCommentary: true }),
+		expect.objectContaining({ language: 'hi', isHearingImpaired: false }),
+	]));
+});

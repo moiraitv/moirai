@@ -67,7 +67,15 @@ An acceleration option appearing in the menu does not mean this machine supports
 - **Channels:** sets the output audio channel count—for example, 2 for stereo. This is not the number of IPTV ![](/icons/tv-minimal.svg) Channels.
 - **Sample rate:** sets the audio sampling frequency in hertz, such as 48000.
 - **Normalize loudness:** enables loudness normalization to reduce volume differences between source items.
-- **Subtitle mode:** selects the playback engine's **Burn** or **Convert** behavior. Burn renders selected subtitles into the picture; Convert uses the engine's subtitle-conversion path. Check the result with your source subtitle formats and playback clients.
+- **Subtitle mode:** **Burn** renders selected subtitles into the picture. **Convert** presents selected text subtitles as a selectable WebVTT track; image subtitles are still burned. Enabling music-video credits on the Channel or a Program in its prepared schedule automatically uses Burn for the whole Channel. Your saved mode is retained for when credits are disabled. A running stream restarts when the effective mode changes.
+
+![Subtitle selection and additional subtitle settings](/screenshots/channel-editor-subtitles.png)
+
+Expand **Additional subtitle settings** to choose music-video credits, subtitle mode, or a fonts folder. The panel opens and closes smoothly and respects reduced motion.
+
+Under **Subtitles**, choose **Off**, **Forced only**, **Prefer default**, or **Any matching track**. Prefer default falls back to another matching track when none is flagged default. Enter a two- or three-letter language code, such as `en` or `eng`, or leave it blank for any language. An explicit language never falls back to a different language. Programs can override these defaults.
+
+Choose a reusable [music-video credit template](/playback/credit-templates) independently of ordinary subtitle selection. Existing Channels start with both ordinary subtitles and credits Off. The **Subtitle fonts folder** supplements installed system fonts for ASS rendering.
 
 ## Save and verify
 

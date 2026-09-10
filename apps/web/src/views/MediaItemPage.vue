@@ -381,7 +381,7 @@ onUnmounted(closePlayer);
 				</dl>
 				<p v-else class="detail-empty-copy">No subtitle tracks were discovered.</p>
 				<p class="detail-empty-copy">
-					Subtitle tracks are indexed for future playback selection and do not change current playout.
+					Channel and Program subtitle settings determine which discovered track is used during playback.
 				</p>
 			</article>
 		</div>

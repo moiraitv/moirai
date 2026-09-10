@@ -61,6 +61,12 @@ export default defineConfig({
 				],
 			},
 			{
+				text: 'Playback',
+				items: [
+					{ text: 'Credit templates', link: '/playback/credit-templates' },
+				],
+			},
+			{
 				text: 'Watch and operate',
 				items: [
 					{ text: 'Guide and IPTV clients', link: '/playback/guide-and-clients' },

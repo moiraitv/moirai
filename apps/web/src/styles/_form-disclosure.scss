@@ -1,0 +1,84 @@
+.form-disclosure {
+	position: relative;
+	isolation: isolate;
+	margin-top: 1rem;
+	border: 1px solid transparent;
+	border-radius: .65rem;
+	background: transparent;
+
+	> .form-disclosure-trigger {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: .75rem;
+		padding: 1rem;
+		width: 100%;
+		border: 0;
+		border-radius: inherit;
+		background: transparent;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	&.is-open > .form-disclosure-trigger {
+		border-bottom: 1px solid var(--line-bright);
+	}
+}
+
+.form-disclosure-surface {
+	border: 1px solid var(--line-bright);
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	border-radius: inherit;
+	background: var(--panel);
+	transform-origin: top;
+	pointer-events: none;
+}
+
+.form-disclosure-content {
+	width: 100%;
+}
+
+.form-disclosure-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 3rem;
+	height: 3rem;
+	border: 1px solid var(--line-bright);
+	border-radius: 50%;
+	background: var(--panel-2);
+}
+
+.form-disclosure-copy {
+	flex: 1;
+	min-width: 0;
+
+	strong,
+	small {
+		display: block;
+	}
+
+	small {
+		margin-top: .25rem;
+		color: var(--muted-strong);
+	}
+}
+
+.form-disclosure-chevron {
+	flex-shrink: 0;
+	transition: transform var(--motion-system) var(--motion-system-ease);
+}
+
+.form-disclosure:not(.is-open) .form-disclosure-chevron {
+	transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.form-disclosure-chevron {
+		transition: none;
+	}
+}

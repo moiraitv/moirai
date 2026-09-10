@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import SubtitlePreferencesEditor from '../components/SubtitlePreferencesEditor.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RouterLink, useRoute, useRouter } from 'vue-router';
+import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import {
 	CalendarDays,
 	ChevronLeft,
@@ -67,6 +68,7 @@ const initialLoading = ref(
 const scheduling = useSchedulingStore();
 const editingId = ref<string>();
 const showForm = ref(false);
+let leavingPage = false;
 const error = ref('');
 const logoInput = ref<HTMLInputElement>();
 const externalLogoUrl = ref('');
@@ -136,6 +138,8 @@ const defaults = (): ChannelCreate => ({
 		deinterlace: false,
 	},
 	subtitleMode: 'burn',
+	subtitlePreferences: {},
+	subtitleFontsFolder: null,
 	ffmpegPath: null,
 	ffprobePath: null,
 	disabledFilters: [],
@@ -272,7 +276,7 @@ function finishCloseForm(): void {
 	fallbackStatus.value = null;
 	fallbackLoading.value = false;
 	showForm.value = false;
-	if (route.query.new === '1') {
+	if (!leavingPage && route.query.new === '1') {
 		const query = { ...route.query };
 		delete query.new;
 		void router.replace({ path: '/channels', query });
@@ -328,6 +332,19 @@ async function closeForm(): Promise<void> {
 		discard: finishCloseForm,
 	});
 }
+
+onBeforeRouteLeave(async () => {
+	leavingPage = true;
+	try {
+		if (showForm.value) {
+			await closeForm();
+		}
+		return !showForm.value;
+	}
+	finally {
+		leavingPage = false;
+	}
+});
 
 /** Close the channel editor with Escape when no confirmation owns the event. */
 function handleEditorKeydown(event: KeyboardEvent): void {
@@ -1121,15 +1138,13 @@ onBeforeUnmount(() => {
 							><label class="check"
 							><input v-model="form.audio.normalizeLoudness" type="checkbox" /> Normalize
 								loudness</label
-							><label
-							><span>Subtitle mode</span
-							><select v-model="form.subtitleMode">
-								<option value="burn">Burn</option>
-								<option value="convert">Convert</option>
-							</select></label
 							>
 						</div>
 					</fieldset>
+					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">
+						<label><span>Subtitle mode</span><select v-model="form.subtitleMode"><option value="burn">Burn</option><option value="convert">Convert</option></select></label>
+						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>
+					</SubtitlePreferencesEditor>
 					<p v-if="error" class="notice error">{{ error }}</p>
 				</div>
 				<ResourceEditorActionBar

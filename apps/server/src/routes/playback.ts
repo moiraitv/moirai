@@ -81,8 +81,7 @@ function masterPlaylist(channel: Channel, publicUrl: string): string {
 	const bandwidth = ((channel.video.bitrateKbps ?? 4_000) + (channel.audio.bitrateKbps ?? 192)) * 1_100;
 	return `#EXTM3U
 #EXT-X-VERSION:6
-#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,LANGUAGE="en",URI="${sessionUrl}/live_sub.m3u8"
-#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},SUBTITLES="subs"
+${channel.subtitleMode === 'convert' ? `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Subtitles",DEFAULT=NO,AUTOSELECT=NO,FORCED=NO,URI="${sessionUrl}/live_sub.m3u8"\n` : ''}#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}${channel.subtitleMode === 'convert' ? ',SUBTITLES="subs"' : ''}
 ${sessionUrl}/live.m3u8`;
 }
 
@@ -245,7 +244,7 @@ export function registerPlaybackRoutes(
 		return reply
 			.type('application/vnd.apple.mpegurl')
 			.header('Cache-Control', 'no-cache')
-			.send(masterPlaylist(channel, publicUrl));
+			.send(masterPlaylist({ ...channel, subtitleMode: playback.subtitleMode(channel) }, publicUrl));
 	});
 
 	app.get('/iptv/session/:channelId/:filename', {

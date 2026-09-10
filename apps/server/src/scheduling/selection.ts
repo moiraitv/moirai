@@ -24,6 +24,7 @@ import { recordTimelineIssue, type RecordedTimelineIssue } from './timeline-issu
 
 /** Selected media item and the cursor state to persist after playback. */
 export interface SelectionResult {
+	programAncestry?: string[];
 	media: SchedulableMedia;
 	state: Map<string, SelectionStateRecord>;
 }
@@ -506,8 +507,10 @@ function legacySetSelectionStateConfig(config: ProgramConfig): unknown | null {
 	};
 }
 
-/** Normalize source state identity for legacy defaults and set-based collection strategies. */
-function selectionStateConfig(config: ProgramConfig): unknown {
+/** Exclude presentation preferences and normalize legacy defaults and collection strategy identity. */
+function selectionStateConfig(input: ProgramConfig): unknown {
+	const { subtitlePreferences: _preferences, ...config } = input;
+	void _preferences;
 	if (config.type === 'content' && config.source.type === 'library-query') {
 		return { ...config, source: libraryQueryStateSource(config.source) };
 	}
@@ -806,15 +809,16 @@ export function selectProgram(
 		if (!media && fitSeconds !== null && (context.candidateCache.get(programId)?.playable.length ?? 0) > 0) {
 			context.fitRejectionCount += 1;
 		}
-		return media ? { media, state } : null;
+		return media ? { media, state, programAncestry: [...ancestry, programId] } : null;
 	}
 
 	const record = stateFor(
 		state,
 		consumerKey,
-		program.config,
+		selectionStateConfig(program.config),
 		{ type: 'sequence', entryIndex: 0, selectedInEntry: 0, completed: false },
 		context.now,
+		program.config,
 	);
 	const value = record.value as Extract<SelectionStateValue, { type: 'sequence' }>;
 	if (value.completed) {

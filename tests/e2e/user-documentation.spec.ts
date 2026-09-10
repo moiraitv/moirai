@@ -351,3 +351,136 @@ test('renders term badge structure without depending on HTML serialization', asy
 	await expect(page.getByRole('link').locator('.docs-term-badge')).toHaveText('Libraries');
 	await expect(page.locator('p')).toHaveText('A Library holds media. Libraries and scanning');
 });
+
+test('captures music-video credit templates and verifies draft actions', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/playback/credit-templates');
+	await capture(page, 'credit-templates.png');
+	await page.getByRole('button', { name: 'View', exact: true }).click();
+	const view = page.getByRole('dialog', { name: 'View credit template' });
+	await expect(view.getByLabel('Name', { exact: true })).toBeDisabled();
+	await expect(view.getByLabel('Credit template (Liquid)')).toHaveAttribute('readonly', '');
+	await expect(view.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+	await expect(view.getByRole('button', { name: 'Delete Credit Template' })).toHaveCount(0);
+	await capture(page, 'credit-template-view.png');
+	await view.getByRole('button', { name: 'Duplicate', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'New credit template' });
+	await expect(editor.getByLabel('Credit template (Liquid)')).toHaveValue(/\[Script Info\]/);
+	await capture(page, 'credit-template-editor.png');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toBeHidden();
+	await page.getByRole('button', { name: 'Edit', exact: true }).click();
+	const existing = page.getByRole('dialog', { name: 'Edit credit template' });
+	await expect(existing.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await existing.getByLabel('Name', { exact: true }).fill('Changed credits');
+	await existing.getByRole('button', { name: 'Reset', exact: true }).click();
+	await existing.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+	await expect(existing.getByLabel('Name', { exact: true })).toHaveValue('Music-video credits copy');
+	await existing.getByRole('button', { name: 'Close credit template' }).click();
+});
+
+test('protects program drafts when navigating to credit templates', async ({ page, documentationServer }) => {
+	const { program } = await seedSchedule(page, documentationServer.directory);
+	await page.goto(`/schedules/programs/${program.id}`);
+	const editor = page.getByRole('dialog', { name: 'Edit program', exact: true });
+	const name = editor.getByRole('textbox', { name: /^Name/u });
+	await editor.getByRole('button', { name: /Subtitles and music-video credits.*Optional/ }).click();
+	await name.fill('Pending program name');
+	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
+	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(name).toHaveValue('Pending program name');
+	await expect(page).toHaveURL(new RegExp(`/schedules/programs/${program.id}$`));
+
+	await page.route(`**/api/v1/programs/${program.id}`, async (route) => {
+		if (route.request().method() === 'PATCH') {
+			await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Save temporarily unavailable' }) });
+		}
+		else {
+			await route.continue();
+		}
+	});
+	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
+	await expect(editor.getByText('Save temporarily unavailable', { exact: true })).toBeVisible();
+	await expect(name).toHaveValue('Pending program name');
+	await page.unroute(`**/api/v1/programs/${program.id}`);
+
+	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
+	await expect(page).toHaveURL(/\/playback\/credit-templates$/u);
+	const overview = await (await page.request.get('/api/v1/scheduling/overview')).json();
+	expect(overview.programs.find((entry: { id: string }) => entry.id === program.id).name).toBe('Pending program name');
+
+	await page.goto(`/schedules/programs/${program.id}`);
+	await name.fill('Discarded program name');
+	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
+	await expect(page).toHaveURL(/\/playback\/credit-templates$/u);
+	await page.goto(`/schedules/programs/${program.id}`);
+	await expect(name).toHaveValue('Pending program name');
+	await name.fill('Saved with editor button');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page).toHaveURL(/\/schedules\/programs$/u);
+});
+
+
+test('preserves subtitle settings across the additional-settings disclosure', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Broadcast profile' });
+	await editor.getByLabel('Number', { exact: true }).fill('12');
+	await editor.getByLabel('Name', { exact: true }).fill('Subtitle layout');
+	const subtitles = editor.getByRole('group', { name: 'Subtitles', exact: true });
+	const trigger = subtitles.getByRole('button', { name: /Additional subtitle settings/ });
+	await subtitles.getByRole('combobox', { name: 'Subtitle selection', exact: true }).selectOption('any');
+	await subtitles.getByRole('textbox', { name: /^Preferred language code/ }).fill('eng');
+	await subtitles.getByRole('combobox', { name: 'Music-video credits', exact: true }).selectOption({ label: 'Music-video credits' });
+	await subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true }).selectOption('convert');
+	await subtitles.getByLabel('Subtitle fonts folder', { exact: true }).fill('/fonts');
+	await trigger.click();
+	await expect(subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true })).toBeHidden();
+	await expect(subtitles.getByRole('combobox', { name: 'Subtitle selection', exact: true })).toBeVisible();
+	await expect(subtitles.getByText('Burn mode is used while credits are enabled. Your Convert setting is retained.')).toBeVisible();
+	await trigger.press('Enter');
+	await expect(subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true })).toHaveValue('convert');
+	await trigger.press('Enter');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toBeHidden();
+	const saved = (await (await page.request.get('/api/v1/channels')).json())[0];
+	expect(saved).toMatchObject({ subtitleMode: 'convert', subtitleFontsFolder: '/fonts', subtitlePreferences: { policy: 'any', language: 'eng' } });
+	expect(saved.subtitlePreferences.creditsTemplateId).toBeTruthy();
+});
+
+test('resets credit preview pagination when switching to a smaller library', async ({ page }) => {
+	await authenticateAdministrator(page);
+	const large = randomUUID();
+	const small = randomUUID();
+	const requests: Array<{ library: string; page: number }> = [];
+	await page.route('**/api/v1/libraries', (route) => route.fulfill({ json: [
+		{ id: large, name: 'Large music library', typeKey: 'music-videos', enabled: true },
+		{ id: small, name: 'Small music library', typeKey: 'music-videos', enabled: true },
+	] }));
+	await page.route('**/api/v1/channels', (route) => route.fulfill({ json: [{ id: randomUUID(), name: 'Music', number: '1' }] }));
+	await page.route('**/media-source-options?*', (route) => {
+		const url = new URL(route.request().url());
+		const library = url.pathname.includes(small) ? small : large;
+		const requestedPage = Number(url.searchParams.get('page'));
+		requests.push({ library, page: requestedPage });
+		return route.fulfill({ json: {
+			entries: library === small && requestedPage > 1 ? [] : [{ item: { id: randomUUID(), title: library === small ? 'Small library video' : `Large library page ${requestedPage}` } }],
+			pagination: { page: requestedPage, pageSize: 20, totalPages: library === small ? 1 : 2, totalItems: library === small ? 1 : 21 },
+		} });
+	});
+	await page.goto('/playback/credit-templates');
+	await page.getByRole('button', { name: 'View', exact: true }).click();
+	const preview = page.locator('.credit-preview');
+	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Large library page 1');
+	await preview.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Large library page 2');
+	await preview.getByRole('combobox', { name: 'Library', exact: true }).selectOption(small);
+	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Small library video');
+	await expect(preview.getByRole('button', { name: 'Render preview', exact: true })).toBeEnabled();
+	expect(requests.filter((request) => request.library === small)).toEqual([{ library: small, page: 1 }]);
+});

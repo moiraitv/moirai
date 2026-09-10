@@ -409,7 +409,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 
 	const appendSelectedSegment = (entry: TimelineSegment, selected: SelectionResult): void => {
 		const stateDelta = changedStateRecords(state, selected.state);
-		appendSegment(entry, stateDelta);
+		appendSegment({ ...entry, programAncestry: selected.programAncestry ?? [] }, stateDelta);
 		state = selected.state;
 	};
 

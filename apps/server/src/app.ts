@@ -212,6 +212,11 @@ export async function buildApp(
 	});
 	const unsubscribePlayout = events.subscribe((event) => playout.handleEvent(event));
 	const unsubscribePlayback = events.subscribe((event) => {
+		if (event.type === 'playback.changed' && event.data.reason === 'playout-synced' && event.data.channelId) {
+			void playback.handlePlayoutChange(event.data.channelId).catch((error) => {
+				logs.logger.warn({ error }, 'Playback subtitle mode update failed');
+			});
+		}
 		if (event.type === 'channel.changed') {
 			void playback.handleChannelChange(
 				event.data.channelId,
@@ -297,6 +302,7 @@ export async function buildApp(
 
 	// Register API domains after their shared dependencies are ready.
 	registerHttpRoutes(app, {
+		playout,
 		config,
 		authentication,
 		repository,

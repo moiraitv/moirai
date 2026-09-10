@@ -354,6 +354,7 @@ export const timelineSegmentSchema = z.object({
 	mediaItemId: idSchema.nullable(),
 	title: z.string(),
 	playbackPath: z.string().nullable(),
+	programAncestry: z.array(z.uuid()).optional(),
 	playbackParts: z.array(z.object({
 		playbackPath: z.string(),
 		durationSeconds: z.number().positive(),

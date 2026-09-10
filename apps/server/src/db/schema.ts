@@ -579,6 +579,7 @@ export const materializedTimelineSegments = sqliteTable(
 		templateId: text('template_id').notNull(),
 		slotId: text('slot_id').notNull(),
 		programId: text('program_id'),
+		programAncestry: text('program_ancestry', { mode: 'json' }).$type<string[]>().notNull().default([]),
 		mediaItemId: text('media_item_id'),
 		role: text('role').$type<'primary' | 'filler' | 'dead-air'>().notNull(),
 		title: text('title').notNull(),
@@ -735,3 +736,14 @@ export const authenticationRecoveryTokens = sqliteTable(
 	},
 	(table) => [index('authentication_recovery_expiry_idx').on(table.expiresAt)],
 );
+
+/** Reusable administrator-authored Liquid templates for music-video credits. */
+export const creditTemplates = sqliteTable('credit_templates', {
+	description: text('description').notNull().default(''),
+	isBuiltin: integer('is_builtin', { mode: 'boolean' }).notNull().default(false),
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	nameKey: text('name_key').notNull(),
+	source: text('source').notNull(),
+	...timestamps,
+}, (table) => [uniqueIndex('credit_templates_name_key_unique').on(table.nameKey)]);

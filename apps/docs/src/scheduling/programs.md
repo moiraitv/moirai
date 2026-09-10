@@ -55,3 +55,11 @@ Each referenced ![](/icons/list-video.svg) Program keeps its own media-selection
 ## Preview, save, and delete
 
 The editor preview is safe to explore. Save only when the draft is valid and matches the intended audience. Deleting a program is permanent and can make template slots invalid, so inspect its usage before confirming deletion.
+
+Leaving an edited program, including through **Manage credit templates**, asks whether to save or discard your changes. Choose **Cancel** to keep editing. If saving fails, the draft stays open so you can retry.
+
+## Subtitles and music-video credits
+
+Open the optional **Subtitles and music-video credits** section below the main configuration steps to change these settings. It remembers whether you left it expanded in this browser.
+
+Programs inherit subtitle language, selection policy, and credit-template settings unless you override them. Each setting inherits independently. Changing subtitle or credit preferences preserves playback progress, including the current position and completion of a sequence. Credits automatically force Burn for the whole Channel while enabled in its prepared schedule; other selected subtitles on that Channel are also burned. Use `*` in the language field to allow any language, or choose **Off** to disable an inherited selection or credits template. A nested Program overrides its containing sequence; otherwise it inherits through the sequence to the Channel. See [music-video credit templates](/playback/credit-templates) for styling and timing.

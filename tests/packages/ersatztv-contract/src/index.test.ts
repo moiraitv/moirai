@@ -84,3 +84,9 @@ describe('ErsatzTV adapter', () => {
 		expect(() => validateEtvDocument('playout', document)).not.toThrow();
 	});
 });
+
+it('preserves subtitle source timing and simultaneous silent audio overrides', () => {
+	const document = toEtvPlayout([{ type: 'local', id: 'credits', start: '2026-01-01T00:00:00Z', finish: '2026-01-01T00:01:00Z', path: '/video.mp4',
+		inPointMs: 10_000, outPointMs: 70_000, silentAudio: true, subtitle: { path: '/credits.ass', offsetMs: 90_000 } }]);
+	expect(document).toMatchObject({ items: [{ tracks: { audio: { source: { source_type: 'lavfi' } }, subtitle: { source: { source_type: 'local', path: '/credits.ass', in_point_ms: 100_000, out_point_ms: 160_000 } } } }] });
+});

@@ -164,8 +164,44 @@ NFO data is never trusted for playback-critical facts. Moirai measures the media
 The same probe records embedded subtitle stream indexes, codecs, languages, titles, and default,
 forced, hearing-impaired, and commentary dispositions. Sidecar `.srt`, `.ass`, `.ssa`, `.vtt`,
 `.sub`/`.idx`, and `.sup` files are associated with either the logical item or a specific physical
-part. This inventory is exposed for future playback configuration; playback does not yet select or
-override subtitle tracks.
+part. Channel defaults and nested program overrides select one track using equivalent language
+codes and Off, Forced, Prefer default, or Any policies. Selected embedded text is extracted to an
+immutable sidecar for Burn; Convert passes the embedded stream index to the worker for WebVTT.
+VobSub sidecars are probed once per track during preparation so language and disposition selection
+passes a concrete stream index to the worker. Failed VobSub probes exclude only that sidecar,
+leaving other subtitle candidates available. Image subtitles remain burned. Logical and part-scoped sidecar offsets follow multipart clipping.
+
+The Playback management group owns reusable credit templates, including descriptions and a seeded,
+read-only music-video design protected from edits and deletion by the server. Users can duplicate
+it; upgrades preserve existing templates and resolve name conflicts.
+
+Reusable music-video credit templates use Liquid to generate subtitles in ASS format. They expose
+bounded catalog metadata, source duration converted from persisted milliseconds, and channel resolution. Isolated, resource-limited
+rendering escapes metadata text and disables file-loading tags. Generated credits take precedence
+over ordinary subtitles on music videos and force channel-wide Burn mode. Source-relative cues do not restart when viewers tune in. Templates have unique
+case-insensitive names and cannot be deleted while referenced; existing resources inherit disabled
+subtitle/credit defaults without changing normalization or playback cursor state.
+Credit references are validated without global assignment graph reads. Content and sequence cursor
+fingerprints exclude subtitle preferences, preserving sequence counts, entry positions, and completion.
+Channel credits or effective program credits in the prepared guide override the runtime subtitle mode
+without changing the saved preference. Disabling credits restores that preference on reconciliation.
+Worker configuration delivery and playout publication are serialized per channel; startup rechecks
+the effective subtitle mode inside that boundary. Incompatible workers stop before replacement
+playout is published and resume after synchronization. Failed restarts remain pending for
+reconciliation to retry, including when a forcibly stopped worker has not yet exited;
+HLS rendition metadata follows the active worker mode. No per-item worker contract change is needed.
+
+Playback preparation batches catalog retrieval, writes content-addressed assets before publishing
+playout, and records contextual per-item failures while allowing video to continue. Selected sidecars
+are copied to immutable assets (including both VobSub files) and probed before publication; unreadable
+or ambiguous subtitle streams are omitted. Subtitle metadata failures publish video without subtitles,
+and optional asset cleanup failures do not block synchronization. Rendering runs
+in two workers with at most 32 queued requests. Queue saturation omits optional credits for that pass;
+reconciliation retries rendering, while interactive requests receive a retryable 503. Obsolete assets
+are reclaimed only without active worker ownership, comparing canonical paths so symlinked playback
+roots retain referenced files. Channel fonts folders pass through to the
+worker. Convert playlists advertise a neutral subtitle rendition because program languages may
+vary; Burn playlists omit subtitle rendition metadata.
 
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured
 duration of at most 366 days and a usable video stream remains browsable, but scheduling excludes it
@@ -351,6 +387,7 @@ SQLite stores:
 - show, season, artist, and album groups; media items and multipart aliases; genres, people,
   subtitle inventory, and technical probes;
 - channels and normalization settings;
+- reusable music-video credit templates;
 - programs, templates, slots, boundaries, and channel template stacks;
 - playback-selection state and committed timeline segments;
 - playback settings.
@@ -789,6 +826,7 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - library configuration, browsing, health, and reconciliation;
 - media details and best-effort in-browser file preview;
 - channel normalization and artwork;
+- a Playback group for reusable music-video credit templates;
 - guided Quick Setup for movie, show, and music-video channels;
 - reusable Programs and daily Templates;
 - layered Channel Schedules;

@@ -1,3 +1,6 @@
+import { subtitlePreferencesSchema } from './subtitles.js';
+export * from './subtitles.js';
+export * from './credit-template-starter.js';
 import { z } from 'zod';
 import type {
 	ReconciliationStatus,
@@ -289,7 +292,7 @@ export const playbackEventDataSchema = z.object({
 });
 /** Validate the scheduling event data contract at runtime. */
 export const schedulingEventDataSchema = z.object({
-	entity: z.enum(['program', 'template', 'assignment']),
+	entity: z.enum(['program', 'template', 'assignment', 'credit-template']),
 	change: z.enum(['created', 'updated', 'deleted']),
 	id: idSchema,
 });
@@ -498,6 +501,8 @@ export const channelCreateSchema = z.object({
 		deinterlace: false,
 	}),
 	subtitleMode: z.enum(['burn', 'convert']).default('burn'),
+	subtitlePreferences: subtitlePreferencesSchema.optional(),
+	subtitleFontsFolder: z.string().trim().min(1).nullable().optional(),
 	ffmpegPath: z.string().trim().nullable().default(null),
 	ffprobePath: z.string().trim().nullable().default(null),
 	disabledFilters: z.array(z.string()).default([]),

@@ -176,7 +176,7 @@ Afterlight Station (2026).eng.forced.srt
 
 Here, `eng` identifies English and `spa` identifies Spanish. A `forced` track typically supplies translations for selected dialogue or signs; `default` expresses a preferred track. Subtitles can also be embedded inside the video, which keeps them together when copying the file.
 
-Moirai inventories embedded and matching sidecar subtitle tracks. Discovery is not a guarantee that a particular track will be selected or shown during playback; do not rely on the filename flag alone to determine what viewers see. Test the channel with your playback settings and IPTV client.
+Moirai inventories embedded and matching sidecar subtitle tracks. Channel and Program settings select tracks by language and policy; discovery alone does not enable them. Sidecar names can include `forced`, `default`, `sdh`, `hi`, `cc`, and `commentary` flags. Use two- or three-letter language codes, such as `en` or `eng`. For VobSub (`.idx`/`.sub`) pairs containing multiple languages, Moirai inspects the streams and passes the selected stream to playback. Keep both files together. Moirai copies selected sidecars into its playback storage and checks those copies before playback; unreadable subtitles are reported and omitted so the video can continue without them. Test the Channel with your playback settings and IPTV client.
 
 ## Organize music videos and other material
 

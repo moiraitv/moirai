@@ -1046,3 +1046,16 @@
 		transition: none;
 	}
 }
+
+.program-subtitle-disclosure {
+	margin-top: 20px;
+
+	.program-section-heading {
+		flex: 1;
+		margin: 0;
+	}
+
+	.subtitle-preferences {
+		margin: 1rem;
+	}
+}

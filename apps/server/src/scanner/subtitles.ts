@@ -60,14 +60,18 @@ function subtitleTokens(value: string): {
 	language: string | null;
 	isDefault: boolean;
 	isForced: boolean;
+	isHearingImpaired: boolean;
+	isCommentary: boolean;
 } {
 	const tokens = value.split('.').map((token) => token.trim()).filter(Boolean);
 	const flags = new Set(tokens.map((token) => token.toLocaleLowerCase('en-US')));
-	const language = tokens.find((token) => !['default', 'forced'].includes(token.toLocaleLowerCase('en-US')));
+	const language = tokens.find((token) => !['default', 'forced', 'sdh', 'cc', 'commentary'].includes(token.toLocaleLowerCase('en-US')));
 	return {
 		language: language?.toLocaleLowerCase('en-US') ?? null,
 		isDefault: flags.has('default'),
 		isForced: flags.has('forced'),
+		isHearingImpaired: flags.has('sdh') || flags.has('cc') || (flags.has('hi') && language?.toLowerCase() !== 'hi'),
+		isCommentary: flags.has('commentary'),
 	};
 }
 
@@ -159,8 +163,8 @@ export async function discoverSidecarSubtitles(
 					title: null,
 					isDefault: candidate.tokens.isDefault,
 					isForced: candidate.tokens.isForced,
-					isHearingImpaired: false,
-					isCommentary: false,
+					isHearingImpaired: candidate.tokens.isHearingImpaired,
+					isCommentary: candidate.tokens.isCommentary,
 					relativePaths,
 					playbackPaths: relativePaths.map(playbackPath),
 				},

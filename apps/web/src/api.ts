@@ -1,3 +1,4 @@
+import type { CreditTemplate, CreditTemplateCreate, CreditPreview, CreditPreviewResult } from '@moirai/shared';
 import type {
 	ApiErrorBody,
 	AppCapabilities,
@@ -239,6 +240,12 @@ async function uploadFallbackFiller(url: string, file: File): Promise<FallbackFi
 
 /** Module-level api value for api. */
 export const api = {
+	creditTemplates: () => request<CreditTemplate[]>('/api/v1/credit-templates'),
+	createCreditTemplate: (body: CreditTemplateCreate) => request<CreditTemplate>('/api/v1/credit-templates', { method: 'POST', body: JSON.stringify(body) }),
+	updateCreditTemplate: (id: string, body: CreditTemplateCreate) => request<CreditTemplate>(`/api/v1/credit-templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+	deleteCreditTemplate: (id: string) => request<void>(`/api/v1/credit-templates/${id}`, { method: 'DELETE' }),
+	previewCreditTemplate: (body: CreditPreview) => request<CreditPreviewResult>('/api/v1/credit-templates/preview', { method: 'POST', body: JSON.stringify(body) }),
+	subtitleIssues: (id: string) => request<string[]>(`/api/v1/channels/${id}/subtitle-issues`),
 	authenticationState: (signal?: AbortSignal) => request<AuthenticationState>(
 		'/api/v1/auth/session',
 		{ cache: 'no-store', signal: signal ?? null },

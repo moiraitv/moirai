@@ -29,7 +29,7 @@ const liveEventDescriptions = [
 	['scan.changed', 'Reports scan lifecycle, progress, counts, and programming impact.'],
 	['channel.changed', 'Reports channel creation, updates, and deletion.'],
 	['playback.changed', 'Reports playback process and playout synchronization changes.'],
-	['scheduling.changed', 'Reports program, template, and assignment changes.'],
+	['scheduling.changed', 'Reports program, schedule-template, credit-template, and assignment changes.'],
 	['timeline.changed', 'Reports durable timeline materialization health changes.'],
 ] as const;
 

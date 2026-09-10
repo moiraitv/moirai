@@ -62,6 +62,7 @@ export class PlaybackCapacityError extends Error {
 /** Runtime state owned for one child process. */
 interface ActiveSession {
 	channel: Channel;
+	subtitleMode: Channel['subtitleMode'];
 	child: ChildProcessWithoutNullStreams;
 	clients: PlaybackClientTracker;
 	acceleration: PlaybackSessionAcceleration;
@@ -111,6 +112,7 @@ function nowPlayingStatus(
  * and failure state to clients.
  */
 export class PlaybackEngine {
+	private readonly subtitleRestarts = new Set<string>();
 	private readonly sessions = new Map<string, ActiveSession>();
 	private readonly starts = new Map<string, Promise<void>>();
 	private readonly reservations = new Set<string>();
@@ -132,7 +134,16 @@ export class PlaybackEngine {
 		private readonly readyTimeoutMs: number,
 		private readonly stopGraceMs: number,
 		private readonly resourcePressure?: ResourcePressureCoordinator,
-	) {}
+	) {
+		playout.consumerActive = (id) => this.sessions.has(id) || this.starts.has(id);
+		playout.beforeSubtitleModeChange = async (id, mode) => {
+			const session = this.sessions.get(id);
+			if (session && session.subtitleMode !== mode) {
+				this.subtitleRestarts.add(id);
+				await this.stop(id);
+			}
+		};
+	}
 
 	/** Probe the configured binary without preventing the management UI from starting. */
 	async start(): Promise<void> {
@@ -378,49 +389,75 @@ export class PlaybackEngine {
 	private async launchSession(channel: Channel, client?: PlaybackClientObservation): Promise<void> {
 		const playoutFolder = this.playout.channelFolder(channel.id);
 		const effectiveChannel = await this.effectiveChannel(channel, true);
-		const document = toEtvChannelConfig(effectiveChannel, playoutFolder);
-		const config = `${JSON.stringify(document)}\n`;
-		const outputFolder = this.outputFolder(channel.id);
-		await rm(outputFolder, { recursive: true, force: true });
-		await mkdir(outputFolder, { recursive: true });
-		if (!this.running) {
-			throw new PlaybackUnavailableError('Playback engine is stopping');
-		}
+		const session = await this.playout.withChannelConfiguration(channel.id, async () => {
+			effectiveChannel.subtitleMode = this.playout.subtitleMode(channel);
+			const document = toEtvChannelConfig(effectiveChannel, playoutFolder);
+			const config = `${JSON.stringify(document)}\n`;
+			const outputFolder = this.outputFolder(channel.id);
+			await rm(outputFolder, { recursive: true, force: true });
+			await mkdir(outputFolder, { recursive: true });
+			if (!this.running) {
+				throw new PlaybackUnavailableError('Playback engine is stopping');
+			}
 
-		let resolveReady = (): void => undefined;
-		let rejectReady: (error: Error) => void = () => undefined;
-		const ready = new Promise<void>((resolve, reject) => {
-			resolveReady = resolve;
-			rejectReady = reject;
+			let resolveReady = (): void => undefined;
+			let rejectReady: (error: Error) => void = () => undefined;
+			const ready = new Promise<void>((resolve, reject) => {
+				resolveReady = resolve;
+				rejectReady = reject;
+			});
+			const child = await this.spawnEngine(
+				['run', '--output-folder', outputFolder, '--number', channel.number, '-'],
+				process.platform !== 'win32',
+			);
+			const session: ActiveSession = {
+				channel,
+				subtitleMode: effectiveChannel.subtitleMode,
+				child,
+				clients: new PlaybackClientTracker(),
+				acceleration: 'pending',
+				stderrLineBuffer: '',
+				configDigest: this.configDigest(channel, config),
+				startedAt: currentTimestamp(),
+				state: 'starting',
+				ready,
+				resolveReady,
+				rejectReady,
+			};
+			if (client) {
+				this.observeClient(session, client);
+			}
+			this.sessions.set(channel.id, session);
+			this.failures.delete(channel.id);
+			this.logChildOutput(session);
+			this.observeExit(session);
+			child.stdin.end(config);
+			this.events.publish({ type: 'playback.changed', data: { channelId: channel.id, reason: 'started' } });
+			return session;
 		});
-		const child = await this.spawnEngine(
-			['run', '--output-folder', outputFolder, '--number', channel.number, '-'],
-			process.platform !== 'win32',
-		);
-		const session: ActiveSession = {
-			channel,
-			child,
-			clients: new PlaybackClientTracker(),
-			acceleration: 'pending',
-			stderrLineBuffer: '',
-			configDigest: this.configDigest(channel, config),
-			startedAt: currentTimestamp(),
-			state: 'starting',
-			ready,
-			resolveReady,
-			rejectReady,
-		};
-		if (client) {
-			this.observeClient(session, client);
-		}
-		this.sessions.set(channel.id, session);
-		this.failures.delete(channel.id);
-		this.logChildOutput(session);
-		this.observeExit(session);
-		child.stdin.end(config);
-		this.events.publish({ type: 'playback.changed', data: { channelId: channel.id, reason: 'started' } });
 		void this.waitUntilReady(session);
-		await ready;
+		await session.ready;
+	}
+
+	/** Resume after subtitle publication, retaining failed restarts for reconciliation to retry. */
+	async handlePlayoutChange(channelId: string): Promise<void> {
+		if (!this.subtitleRestarts.has(channelId)) {
+			return;
+		}
+		await this.starts.get(channelId)?.catch(() => undefined);
+		const channel = await this.repository.getChannel(channelId);
+		if (channel && this.running) {
+			await this.ensureSession(channel);
+			this.subtitleRestarts.delete(channelId);
+		}
+		else if (!channel) {
+			this.subtitleRestarts.delete(channelId);
+		}
+	}
+
+	/** Report the active worker mode so playlist renditions agree with its output. */
+	subtitleMode(channel: Channel): Channel['subtitleMode'] {
+		return this.sessions.get(channel.id)?.subtitleMode ?? this.playout.subtitleMode(channel);
 	}
 
 	/** Mark an active session stale when its effective runtime configuration changes. */
@@ -520,6 +557,7 @@ export class PlaybackEngine {
 		channel: Channel,
 		logDecision = false,
 	): Promise<EtvCompatibleChannel> {
+		channel = { ...channel, subtitleMode: this.playout.subtitleMode(channel) };
 		if (channel.video.accel !== 'automatic') {
 			return {
 				...channel,

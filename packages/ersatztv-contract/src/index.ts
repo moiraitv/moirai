@@ -119,7 +119,7 @@ export function toEtvChannelConfig(
 			},
 			subtitle: {
 				mode: channel.subtitleMode,
-				fonts_folder: null,
+				fonts_folder: channel.subtitleFontsFolder ?? null,
 				force_style: null,
 			},
 		},

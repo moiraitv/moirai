@@ -616,3 +616,26 @@ describe('database compatibility migrations', () => {
 		);
 	});
 });
+
+it('upgrades subtitle settings without changing existing normalization or authored values', async () => {
+	await upgradeFrom('0018_timeline_continuation', (sqlite) => {
+		sqlite.prepare('INSERT INTO channels (id, number, number_key, name, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run('subtitle-channel', '98', '98', 'Music', JSON.stringify({ number: '98', name: 'Music', subtitleMode: 'convert', customValue: 'preserved' }), '2026-09-01', '2026-09-01');
+	}, (sqlite) => {
+		const row = sqlite.prepare("SELECT config FROM channels WHERE id = 'subtitle-channel'").get() as { config: string };
+		expect(JSON.parse(row.config)).toMatchObject({ subtitleMode: 'convert', customValue: 'preserved', subtitlePreferences: {}, subtitleFontsFolder: null });
+		expect(sqlite.prepare('SELECT * FROM credit_templates WHERE is_builtin = 0').all()).toEqual([]);
+		expect(sqlite.prepare('PRAGMA table_info(materialized_timeline_segments)').all()).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'program_ancestry', dflt_value: "'[]'" })]));
+	});
+});
+
+it('installs the built-in credit design without replacing an existing same-name template', async () => {
+	const { BUILTIN_CREDIT_TEMPLATE } = await import('@moirai/shared');
+	await upgradeFrom('0019_subtitles', (sqlite) => {
+		sqlite.prepare('INSERT INTO credit_templates (id,name,name_key,source,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('custom', BUILTIN_CREDIT_TEMPLATE.name, BUILTIN_CREDIT_TEMPLATE.name.toLowerCase(), 'Authored source', 'before', 'before');
+	}, (sqlite) => {
+		const rows = sqlite.prepare('SELECT id,name,source,description,is_builtin AS isBuiltin FROM credit_templates').all() as Array<{ id: string; name: string; source: string; description: string; isBuiltin: number }>;
+		expect(rows.find((row) => row.id === 'custom')).toEqual({ id: 'custom', name: BUILTIN_CREDIT_TEMPLATE.name, source: 'Authored source', description: '', isBuiltin: 0 });
+		expect(rows.find((row) => row.id === BUILTIN_CREDIT_TEMPLATE.id)).toMatchObject({ source: BUILTIN_CREDIT_TEMPLATE.source, description: BUILTIN_CREDIT_TEMPLATE.description, isBuiltin: 1 });
+		expect(new Set(rows.map((row) => row.name.toLowerCase())).size).toBe(2);
+	});
+});

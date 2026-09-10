@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import CreditTemplatesPage from './views/CreditTemplatesPage.vue';
 import DashboardPage from './views/DashboardPage.vue';
 import LibrariesPage from './views/LibrariesPage.vue';
 import LibraryPage from './views/LibraryPage.vue';
@@ -37,6 +38,8 @@ export const router = createRouter({
 		{ path: '/schedules/templates/:id', component: TemplatesPage },
 		{ path: '/schedules/channels', component: ChannelSchedulesPage },
 		{ path: '/schedules/channels/:id', component: ChannelSchedulesPage },
+		{ path: '/playback', redirect: '/playback/credit-templates' },
+		{ path: '/playback/credit-templates', component: CreditTemplatesPage },
 		{ path: '/schedules/programs', component: ProgramsPage },
 		{ path: '/schedules/programs/:id', component: ProgramsPage },
 		{ path: '/settings', component: SettingsPage },

@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../../disclosure-state';
+import FormDisclosure from '../FormDisclosure.vue';
+import SubtitlePreferencesEditor from '../SubtitlePreferencesEditor.vue';
+import type { SubtitlePreferences } from '@moirai/shared';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Asterisk } from '@lucide/vue';
+import { Asterisk, ChevronDown } from '@lucide/vue';
 import {
 	catalogProgramItemFilterSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
@@ -12,7 +16,7 @@ import {
 	type SchedulingProgram,
 	type SelectedMediaSort,
 } from '@moirai/shared';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import { cloneContractValue } from '../../reactive-clone';
@@ -62,6 +66,7 @@ const initialLoading = ref(!(
 	&& channelsStore.capabilitiesLoaded
 ));
 const saving = ref(false);
+let allowRouteLeave = false;
 const error = ref('');
 const sourceEntries = ref<MediaSourcePickerEntry[]>([]);
 const sourceLoading = ref(false);
@@ -71,6 +76,7 @@ const sourceParentId = ref<string>();
 const sourcePage = ref(1);
 const sourceTotalPages = ref(1);
 const sourceSearch = ref('');
+const subtitlesOpen = useDisclosureState('program-subtitles');
 const sourceBrowserOpen = ref(true);
 const selectedSourceLabel = ref('');
 const selectedItems = ref<MediaItem[]>([]);
@@ -186,6 +192,7 @@ const libraryQueryKinds = computed(() => {
 	return ['other'];
 });
 const form = reactive({
+	subtitlePreferences: {} as SubtitlePreferences,
 	name: '',
 	type: 'content' as 'content' | 'sequence',
 	sourceType: 'library-query' as
@@ -219,6 +226,7 @@ function resetForm(program?: SchedulingProgram): void {
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.name = program?.name ?? '';
+	form.subtitlePreferences = cloneContractValue(program?.config.subtitlePreferences ?? {});
 	form.type = program?.config.type ?? 'content';
 	form.sourceType = 'library-query';
 	form.libraryId = librariesStore.libraries[0]?.id ?? '';
@@ -686,7 +694,7 @@ function payload(): ProgramCreate {
 	if (form.type === 'sequence') {
 		return {
 			name: form.name,
-			config: { type: 'sequence', entries: form.entries, repeat: form.repeat },
+			config: { type: 'sequence', entries: form.entries, repeat: form.repeat, subtitlePreferences: form.subtitlePreferences },
 		};
 	}
 
@@ -732,7 +740,7 @@ function payload(): ProgramCreate {
 							sort: form.querySort,
 							itemLimit: form.queryItemLimit,
 						} as const);
-	return { name: form.name, config: { type: 'content', source, strategy } };
+	return { name: form.name, config: { type: 'content', source, strategy, subtitlePreferences: form.subtitlePreferences } };
 }
 const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	program: () => programs.value.find((candidate) => candidate.id === editingId.value),
@@ -747,7 +755,7 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	]).then(() => undefined),
 	onDeleted: async () => {
 		await scheduling.load();
-		await router.push('/schedules/programs');
+		await leaveEditor();
 	},
 	onError: (cause) => error.value = errorMessage(cause),
 });
@@ -757,9 +765,9 @@ const programSaveDisabled = computed(() =>
 	|| (Boolean(editingId.value) && !isDirty.value));
 
 /** Validate and save the program draft. */
-async function save(): Promise<void> {
+async function save(stayOnPage = false): Promise<boolean> {
 	if (programSaveDisabled.value) {
-		return;
+		return false;
 	}
 
 	saving.value = true;
@@ -770,18 +778,35 @@ async function save(): Promise<void> {
 			: api.createProgram(payload());
 		const saved = await operation;
 		await scheduling.load();
+		originalSnapshot.value = JSON.stringify(form);
+		if (stayOnPage) {
+			return true;
+		}
 		if (props.embedded) {
 			emit('saved', saved.id);
 		}
 		else {
-			await router.push('/schedules/programs');
+			await leaveEditor();
 		}
+		return true;
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
 	}
 	finally {
 		saving.value = false;
+	}
+	return false;
+}
+
+/** Navigate after an explicit save or discard without prompting for the same draft twice. */
+async function leaveEditor(): Promise<void> {
+	allowRouteLeave = true;
+	try {
+		await router.push('/schedules/programs');
+	}
+	finally {
+		allowRouteLeave = false;
 	}
 }
 
@@ -793,9 +818,29 @@ async function closeEditor(): Promise<void> {
 		key: `unsaved-program:${editingId.value ?? 'new'}`,
 		message: 'Save this program before closing?',
 		save: () => save(),
-		discard: () => props.embedded ? emit('close') : router.push('/schedules/programs'),
+		discard: () => props.embedded ? emit('close') : leaveEditor(),
 	});
 }
+
+onBeforeRouteLeave(async () => {
+	if (allowRouteLeave || !editorOpen.value) {
+		return true;
+	}
+	let proceed = false;
+	await closeUnsavedEditor({
+		blocked: saving.value || deleting.value,
+		dirty: isDirty.value,
+		key: `unsaved-program:${editingId.value ?? 'new'}`,
+		message: 'Save this program before leaving?',
+		save: async () => {
+			proceed = await save(true);
+		},
+		discard: () => {
+			proceed = true;
+		},
+	});
+	return proceed;
+});
 
 watch(
 	() => [route.params.id, props.programId],
@@ -1106,6 +1151,19 @@ onBeforeUnmount(() => {
 							@move="moveEntry"
 							@remove="form.entries.splice($event, 1)"
 						/>
+						<FormDisclosure v-model:open="subtitlesOpen" class="program-subtitle-disclosure">
+							<template #summary>
+								<div class="program-section-heading">
+									<span>{{ form.type === 'content' ? 3 : 2 }}</span>
+									<div class="program-section-heading-copy">
+										<strong>Subtitles and music-video credits · Optional</strong>
+										<p class="program-section-description">Override inherited subtitle settings for this program.</p>
+									</div>
+								</div>
+								<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
+							</template>
+							<SubtitlePreferencesEditor v-model="form.subtitlePreferences" inherit unframed />
+						</FormDisclosure>
 					</div>
 				</div>
 				<ResourceEditorActionBar

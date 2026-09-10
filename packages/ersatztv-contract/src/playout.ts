@@ -4,6 +4,27 @@ import { validateEtvDocument } from './index.js';
 /** ErsatzTV playout schema URI written into every generated document. */
 export const ETV_PLAYOUT_VERSION = playoutSchema.$id;
 
+/** Concrete subtitle stream or separate source selected by the scheduler. */
+export interface EtvSubtitleSelection {
+	streamIndex?: number;
+	path?: string;
+	offsetMs?: number;
+}
+
+/** Serialize subtitle source offsets independently of the physical video part. */
+function subtitleTrack(item: EtvLocalPlayoutItem): Record<string, unknown> {
+	const selection = item.subtitle!;
+	return {
+		...(selection.streamIndex === undefined ? {} : { stream_index: selection.streamIndex }),
+		...(selection.path ? { source: {
+			source_type: 'local',
+			path: selection.path,
+			in_point_ms: (item.inPointMs ?? 0) + (selection.offsetMs ?? 0),
+			...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs + (selection.offsetMs ?? 0) }),
+		} } : {}),
+	};
+}
+
 /** A concrete local media item in a generated ErsatzTV playout window. */
 export interface EtvLocalPlayoutItem {
 	type: 'local';
@@ -14,6 +35,7 @@ export interface EtvLocalPlayoutItem {
 	inPointMs: number | null;
 	outPointMs: number | null;
 	silentAudio?: boolean;
+	subtitle?: EtvSubtitleSelection | null;
 }
 
 /** A bounded black-and-silent item used for intentional dead air. */
@@ -42,15 +64,16 @@ function toEtvPlayoutItem(item: EtvPlayoutItem): Record<string, unknown> {
 				...(item.inPointMs === null ? {} : { in_point_ms: item.inPointMs }),
 				...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs }),
 			},
-			...(item.silentAudio
+			...(item.silentAudio || item.subtitle
 				? {
 					tracks: {
-						audio: {
+						...(item.subtitle ? { subtitle: subtitleTrack(item) } : {}),
+						...(item.silentAudio ? { audio: {
 							source: {
 								source_type: 'lavfi',
 								params: 'anullsrc=channel_layout=stereo:sample_rate=48000',
 							},
-						},
+						} } : {}),
 					},
 				}
 				: {}),

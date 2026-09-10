@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDisclosureState } from './disclosure-state';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
@@ -45,6 +46,7 @@ const { publicUrlStatus } = storeToRefs(channelsStore);
 const drawerOpen = ref(false);
 const libraryNavOpen = ref(true);
 const scheduleNavOpen = ref(true);
+const playbackNavOpen = useDisclosureState('navigation-playback', true);
 const playback = ref<PlaybackEngineStatus | null>(null);
 
 const playbackLabel = computed(() => {
@@ -265,6 +267,15 @@ onUnmounted(() => {
 					</Transition>
 				</div>
 
+				<div class="nav-section">
+					<div class="nav-section-heading">
+						<RouterLink class="nav-link nav-section-link" to="/playback"><TvMinimalPlay :size="18" /><span>Playback</span></RouterLink>
+						<button class="nav-section-toggle" :aria-expanded="playbackNavOpen" aria-label="Toggle playback navigation" @click="playbackNavOpen = !playbackNavOpen"><ChevronDown :size="16" :class="{ rotated: !playbackNavOpen }" /></button>
+					</div>
+					<Transition name="moirai-collapse"><div v-show="playbackNavOpen" class="library-nav">
+						<RouterLink class="library-nav-link" to="/playback/credit-templates"><span class="library-nav-icon"><FileText :size="16" /></span><span>Credit Templates</span></RouterLink>
+					</div></Transition>
+				</div>
 				<RouterLink class="nav-link" to="/settings"
 				><Settings :size="18" /><span>Settings</span></RouterLink
 				>

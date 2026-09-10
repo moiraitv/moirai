@@ -1,5 +1,7 @@
+import { channelCreateSchema, type ScheduleGuide } from '@moirai/shared';
+import * as scheduleGuide from '@server/guide/schedule-guide.js';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -141,4 +143,59 @@ describe('playout synchronizer', () => {
 		await expect(queued).resolves.toBe('/playout/second');
 		expect(perform).toHaveBeenCalledTimes(2);
 	});
+});
+
+it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playback root and tolerates cleanup failures', async (extension) => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-symlink-'));
+	const actual = path.join(root, 'actual');
+	const linked = path.join(root, 'linked');
+	const channelId = randomUUID();
+	await mkdir(path.join(actual, channelId, 'subtitles'), { recursive: true });
+	await symlink(actual, linked);
+	const retained = path.join(linked, channelId, 'subtitles', `retained.${extension}`);
+	const paired = path.join(linked, channelId, 'subtitles', 'retained.sub');
+	const obsolete = path.join(linked, channelId, 'subtitles', 'obsolete.ass');
+	await writeFile(retained, 'retained');
+	if (extension === 'idx') {
+		await writeFile(paired, 'paired');
+	}
+	await writeFile(obsolete, 'obsolete');
+	const configured = { ...channelCreateSchema.parse({ number: '1', name: 'Music', subtitleMode: 'convert' }), id: channelId, createdAt: '', updatedAt: '' };
+	const warn = vi.fn();
+	const synchronizer = new PlayoutSynchronizer(
+		{ getChannel: async () => configured } as unknown as Repository,
+		linked,
+		'UTC',
+		60,
+		async () => undefined,
+		{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
+		{ publish: vi.fn() } as LiveEventPublisher,
+		{ error: vi.fn(), warn } as unknown as FastifyBaseLogger,
+	);
+	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue({} as ScheduleGuide);
+	const selections = new Map([['segment', [{ path: retained }]]]);
+	vi.spyOn(synchronizer.subtitles, 'prepare')
+		.mockResolvedValue(selections)
+		.mockResolvedValueOnce(Object.assign(new Map(selections), { subtitleMode: 'burn' as const }));
+	vi.spyOn(synchronizer as unknown as { channelFiles(): Map<string, string> }, 'channelFiles').mockReturnValue(new Map([['2026-09-09.json', JSON.stringify({ path: retained })]]));
+	try {
+		await synchronizer.syncChannel(channelId);
+		await expect(readFile(retained, 'utf8')).resolves.toBe('retained');
+		if (extension === 'idx') {
+			await expect(readFile(paired, 'utf8')).resolves.toBe('paired');
+		}
+
+		await expect(access(obsolete)).rejects.toMatchObject({ code: 'ENOENT' });
+		await synchronizer.syncChannel(channelId);
+		await expect(readFile(retained, 'utf8')).resolves.toBe('retained');
+		await rm(retained);
+		await expect(synchronizer.syncChannel(channelId)).resolves.toBeTruthy();
+		expect(synchronizer.channelFailure(channelId)).toBeNull();
+		expect(warn).toHaveBeenCalled();
+		expect(synchronizer.subtitleMode(configured)).toBe('burn');
+	}
+	finally {
+		guide.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
 });

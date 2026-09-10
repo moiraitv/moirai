@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { subtitlePreferencesSchema } from './subtitles.js';
 import type { MediaAvailability, SourceAvailability } from './index.js';
 import {
 	canonicalNumberSet,
@@ -293,11 +294,13 @@ export type SequenceEntry = z.infer<typeof sequenceEntrySchema>;
 export const programConfigSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('content'),
+		subtitlePreferences: subtitlePreferencesSchema.optional(),
 		source: contentSourceSchema,
 		strategy: selectionStrategySchema,
 	}),
 	z.object({
 		type: z.literal('sequence'),
+		subtitlePreferences: subtitlePreferencesSchema.optional(),
 		entries: z
 			.array(sequenceEntrySchema)
 			.min(1)
@@ -953,6 +956,7 @@ export type ChannelScheduleDraftPreview = z.infer<typeof channelScheduleDraftPre
 
 /** Shared wire contract for timeline segment. */
 export interface TimelineSegment {
+	programAncestry?: string[] | undefined;
 	id: string;
 	role: 'primary' | 'filler' | 'dead-air';
 	channelId: string;

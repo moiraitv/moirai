@@ -1,3 +1,4 @@
+import { SubtitleAssets, type PreparedSubtitles } from './subtitle-assets.js';
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -37,9 +38,17 @@ export interface PlayoutSynchronizationFailure {
 export class PlayoutSynchronizer {
 	private readonly active = new Map<string, Promise<string>>();
 	private readonly pending = new Set<string>();
+	private readonly configurationWrites = new Map<string, Promise<unknown>>();
+	private readonly subtitleModes = new Map<string, Channel['subtitleMode']>();
 	private readonly failures = new Map<string, PlayoutSynchronizationFailure>();
 	private timer: NodeJS.Timeout | null = null;
 	private running = false;
+	/** Subtitle rendering and persistent per-channel preparation issues. */
+	readonly subtitles: SubtitleAssets;
+	/** Query worker ownership before collecting obsolete assets. */
+	consumerActive: (channelId: string) => boolean = () => false;
+	/** Stop a worker using an incompatible subtitle mode before publishing replacement playout. */
+	beforeSubtitleModeChange: (id: string, mode: Channel['subtitleMode']) => Promise<void> = async () => {};
 
 	constructor(
 		private readonly repository: Repository,
@@ -50,7 +59,29 @@ export class PlayoutSynchronizer {
 		private readonly fallbackFillers: FallbackFillerStore,
 		private readonly events: LiveEventPublisher,
 		private readonly logger: FastifyBaseLogger,
-	) {}
+	) {
+		this.subtitles = new SubtitleAssets(root, repository);
+	}
+
+	/** Serialize worker configuration delivery with playout publication for the same channel. */
+	async withChannelConfiguration<T>(channelId: string, operation: () => Promise<T>): Promise<T> {
+		const previous = this.configurationWrites.get(channelId);
+		const pending = (previous ?? Promise.resolve()).catch(() => undefined).then(operation);
+		this.configurationWrites.set(channelId, pending);
+		try {
+			return await pending;
+		}
+		finally {
+			if (this.configurationWrites.get(channelId) === pending) {
+				this.configurationWrites.delete(channelId);
+			}
+		}
+	}
+
+	/** Return the rendering mode used by the latest prepared channel playout. */
+	subtitleMode(channel: Channel): Channel['subtitleMode'] {
+		return this.subtitleModes.get(channel.id) ?? (channel.subtitlePreferences?.creditsTemplateId ? 'burn' : channel.subtitleMode);
+	}
 
 	/** Start periodic synchronization and an immediate initial pass. */
 	start(): void {
@@ -90,7 +121,10 @@ export class PlayoutSynchronizer {
 
 	/** Synchronize affected channels after authoritative schedule or presentation changes. */
 	handleEvent(event: LiveEvent): void {
-		if (event.type === 'timeline.changed' && event.data.status === 'ready') {
+		if (event.type === 'scheduling.changed' && event.data.entity === 'credit-template') {
+			void this.syncAll().catch(() => undefined);
+		}
+		else if (event.type === 'timeline.changed' && event.data.status === 'ready') {
 			void this.syncChannel(event.data.channelId).catch(() => undefined);
 		}
 		else if (event.type === 'channel.changed' && event.data.change !== 'deleted') {
@@ -113,7 +147,12 @@ export class PlayoutSynchronizer {
 	/** Remove private playout files after their channel is deleted. */
 	async removeChannel(channelId: string): Promise<void> {
 		await this.active.get(channelId)?.catch(() => undefined);
+		if (this.consumerActive(channelId)) {
+			return;
+		}
 		this.failures.delete(channelId);
+		this.subtitles.issues.delete(channelId);
+		this.subtitleModes.delete(channelId);
 		await rm(this.channelFolder(channelId), { recursive: true, force: true });
 	}
 
@@ -253,40 +292,63 @@ export class PlayoutSynchronizer {
 		if (!resolvedFolder.startsWith(`${resolvedRoot}${path.sep}`)) {
 			throw new Error('Playback output directory is outside its configured root');
 		}
-		const generated = this.channelFiles(channel, guide, fallback);
+		const selections = await this.subtitles.prepare(channel, guide);
+		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
+		return this.withChannelConfiguration(channelId, async () => {
+			await this.beforeSubtitleModeChange(channelId, subtitleMode);
+			const generated = this.channelFiles(channel, guide, fallback, selections);
 
-		for (const [filename, content] of generated) {
-			const destination = path.join(resolvedFolder, filename);
-			try {
-				const existing = await lstat(destination);
-				const unchanged
-					= existing.isFile()
-						&& !existing.isSymbolicLink()
-						&& await readFile(destination, 'utf8') === content;
-				if (unchanged) {
-					continue;
+			for (const [filename, content] of generated) {
+				const destination = path.join(resolvedFolder, filename);
+				try {
+					const existing = await lstat(destination);
+					const unchanged
+						= existing.isFile()
+							&& !existing.isSymbolicLink()
+							&& await readFile(destination, 'utf8') === content;
+					if (unchanged) {
+						continue;
+					}
+				}
+				catch {
+					// A missing or unreadable destination is replaced atomically below.
+				}
+				const temporary = `${destination}.tmp-${randomUUID()}`;
+				try {
+					await writeFile(temporary, content, { mode: 0o644 });
+					await rename(temporary, destination);
+				}
+				catch (error) {
+					await unlink(temporary).catch(() => undefined);
+					throw error;
 				}
 			}
-			catch {
-				// A missing or unreadable destination is replaced atomically below.
+			const current = new Set(generated.keys());
+			for (const entry of await readdir(resolvedFolder, { withFileTypes: true })) {
+				if (entry.isFile() && PLAYOUT_FILENAME.test(entry.name) && !current.has(entry.name)) {
+					await unlink(path.join(resolvedFolder, entry.name));
+				}
 			}
-			const temporary = `${destination}.tmp-${randomUUID()}`;
-			try {
-				await writeFile(temporary, content, { mode: 0o644 });
-				await rename(temporary, destination);
+			if (!this.consumerActive(channelId)) {
+				try {
+					const paths = [...selections.values()].flat().flatMap((selection) => selection?.path ? [selection.path] : []);
+					const pairedPaths = paths.flatMap((file) => file.endsWith('.idx') ? [file, file.slice(0, -4) + '.sub'] : [file]);
+					const used = new Set(await Promise.all([...new Set(pairedPaths)].map((file) => realpath(file))));
+					const assets = path.join(resolvedFolder, 'subtitles');
+					for (const entry of await readdir(assets, { withFileTypes: true }).catch(() => [])) {
+						const file = path.join(assets, entry.name);
+						if (entry.isFile() && !used.has(file)) {
+							await unlink(file);
+						}
+					}
+				}
+				catch (error) {
+					this.logger.warn({ error, channelId }, 'Optional subtitle cleanup failed; will retry during reconciliation');
+				}
 			}
-			catch (error) {
-				await unlink(temporary).catch(() => undefined);
-				throw error;
-			}
-		}
-		const current = new Set(generated.keys());
-		for (const entry of await readdir(resolvedFolder, { withFileTypes: true })) {
-			if (entry.isFile() && PLAYOUT_FILENAME.test(entry.name) && !current.has(entry.name)) {
-				await unlink(path.join(resolvedFolder, entry.name));
-			}
-		}
-		return resolvedFolder;
+			this.subtitleModes.set(channelId, subtitleMode);
+			return resolvedFolder;
+		});
 	}
 
 	/** Build validated daily files from the generated channel playout paths. */
@@ -294,12 +356,14 @@ export class PlayoutSynchronizer {
 		channel: Channel,
 		guide: Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>,
 		fallback: Awaited<ReturnType<FallbackFillerStore['resolve']>>,
+		subtitles?: PreparedSubtitles,
 	): Map<string, string> {
 		const files = new Map<string, string>();
 		for (const [relativePath, content] of buildEtvPlayoutFiles(
 			[channel],
 			guide,
 			new Map([[channel.id, fallback]]),
+			subtitles,
 		)) {
 			const filename = path.posix.basename(relativePath);
 			if (!PLAYOUT_FILENAME.test(filename)) {

@@ -2187,3 +2187,38 @@ describe('schedule timeline engine', () => {
 		expect(result.segments[1]?.finish).toContain('02:00:00.25');
 	});
 });
+
+it('captures nested program ancestry without changing selection state for subtitle-only changes', () => {
+	const leaf = contentProgram(10, [1, 2]);
+	const sequence = program(12, { type: 'sequence', entries: [{ id: uuid(401), programId: leaf.id, count: 1 }], repeat: true });
+	const daily = template([{ programId: sequence.id, startSeconds: 0 }]);
+	const initial = input([leaf, sequence], [media(1, 3600), media(2, 3600)], daily);
+	const before = generateTimeline(initial);
+	expect(before.segments.filter((entry) => entry.role === 'primary').every((entry) => JSON.stringify(entry.programAncestry) === JSON.stringify([sequence.id, leaf.id]))).toBe(true);
+	leaf.config.subtitlePreferences = { language: 'en', policy: 'forced' };
+	const after = generateTimeline(initial);
+	expect(after.proposedState).toEqual(before.proposedState);
+	expect(primaryTitles(after)).toEqual(primaryTitles(before));
+});
+
+it.each([1, 2])('preserves sequence progress after subtitle edits with entry count %i', (count) => {
+	const a = contentProgram(10, 1);
+	const b = contentProgram(11, 2);
+	const sequence = program(12, { type: 'sequence', repeat: false, entries: [
+		{ id: uuid(401), programId: a.id, count },
+		{ id: uuid(402), programId: b.id, count: 1 },
+	] });
+	const daily = template([{ programId: sequence.id, startSeconds: 0 }]);
+	const fixture = input([a, b, sequence], [media(1, SECONDS_PER_SCHEDULING_DAY), media(2, SECONDS_PER_SCHEDULING_DAY)], daily);
+	let result = generateTimeline(fixture);
+	expect(primaryTitles(result)).toEqual(['Item 1']);
+	for (let day = 1; day <= count + 1; day += 1) {
+		const continued = { ...fixture, startDate: `2026-01-${String(5 + day).padStart(2, '0')}`, state: result.proposedState };
+		const baseline = generateTimeline(continued);
+		sequence.config.subtitlePreferences = { language: day % 2 ? 'en' : 'fr', policy: 'forced' };
+		result = generateTimeline(continued);
+		expect(primaryTitles(result)).toEqual(primaryTitles(baseline));
+		expect(result.proposedState).toEqual(baseline.proposedState);
+	}
+	expect(primaryTitles(result)).toEqual([]);
+});

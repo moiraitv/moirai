@@ -2299,3 +2299,31 @@ describe('API', () => {
 		expect(await services.repository.getSelectionState(channel.id)).toEqual([]);
 	}, 15_000);
 });
+
+describe('music-video credit template API', () => {
+	it('validates templates, enforces references, and preserves independent subtitle settings', async () => {
+		const { MUSIC_VIDEO_CREDIT_TEMPLATE } = await import('@moirai/shared');
+		const { app } = await fixture();
+		const builtin = (await app.inject('/api/v1/credit-templates')).json().find((entry: { isBuiltin: boolean }) => entry.isBuiltin);
+		expect((await app.inject({ method: 'DELETE', url: `/api/v1/credit-templates/${builtin.id}` })).statusCode).toBe(409);
+		expect((await app.inject({ method: 'PUT', url: `/api/v1/credit-templates/${builtin.id}`, payload: { name: builtin.name, source: MUSIC_VIDEO_CREDIT_TEMPLATE } })).statusCode).toBe(409);
+		const created = await app.inject({ method: 'POST', url: '/api/v1/credit-templates', payload: { name: 'Music credits', source: MUSIC_VIDEO_CREDIT_TEMPLATE } });
+		expect(created.statusCode).toBe(201);
+		const template = created.json();
+		const duplicate = await app.inject({ method: 'POST', url: '/api/v1/credit-templates', payload: { name: 'MUSIC CREDITS', source: MUSIC_VIDEO_CREDIT_TEMPLATE } });
+		expect(duplicate.statusCode).toBe(409);
+		const invalid = await app.inject({ method: 'PUT', url: `/api/v1/credit-templates/${template.id}`, payload: { name: 'Music credits', source: MUSIC_VIDEO_CREDIT_TEMPLATE + '{{ missing_margin }}' } });
+		expect(invalid.statusCode).toBe(400);
+		const channel = await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '77', name: 'Music', subtitlePreferences: { policy: 'off', creditsTemplateId: template.id } } });
+		expect(channel.statusCode).toBe(201);
+		const configured = channel.json();
+		const converted = await app.inject({ method: 'PATCH', url: `/api/v1/channels/${configured.id}`, payload: { subtitleMode: 'convert' } });
+		expect(converted.statusCode).toBe(200);
+		const referenced = await app.inject({ method: 'DELETE', url: `/api/v1/credit-templates/${template.id}` });
+		expect(referenced.statusCode).toBe(409);
+		await app.inject({ method: 'PATCH', url: `/api/v1/channels/${configured.id}`, payload: { subtitlePreferences: { policy: 'any', language: 'eng', creditsTemplateId: null } } });
+		const removed = await app.inject({ method: 'DELETE', url: `/api/v1/credit-templates/${template.id}` });
+		expect(removed.statusCode).toBe(204);
+		expect((await app.inject('/api/v1/credit-templates')).json().filter((entry: { isBuiltin: boolean }) => !entry.isBuiltin)).toEqual([]);
+	});
+});

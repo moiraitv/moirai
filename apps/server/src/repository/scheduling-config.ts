@@ -1,3 +1,4 @@
+import { validateCreditReference } from './subtitle-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { asc, eq, inArray } from 'drizzle-orm';
 import type {
@@ -99,6 +100,7 @@ export class SchedulingConfigurationRepository {
 
 	/** Persist a reusable scheduling program. */
 	async createProgram(input: ProgramCreate): Promise<SchedulingProgram> {
+		validateCreditReference(this.db, input.config.subtitlePreferences);
 		const timestamp = currentTimestamp();
 		const config = this.normalizeCollectionAdditionOrder(null, input.config);
 		const program: SchedulingProgram = {
@@ -249,6 +251,10 @@ export class SchedulingConfigurationRepository {
 			: current.config;
 		if (input.config) {
 			await this.validateProgramStructure(current.config, config);
+		}
+
+		if (current.config.subtitlePreferences?.creditsTemplateId !== config.subtitlePreferences?.creditsTemplateId) {
+			validateCreditReference(this.db, config.subtitlePreferences);
 		}
 
 		const updated: SchedulingProgram = {
