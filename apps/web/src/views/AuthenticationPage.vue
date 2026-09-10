@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { KeyRound, LogIn, ShieldCheck } from '@lucide/vue';
 import logoUrl from '../assets/moirai-logo.png';
 import { errorMessage } from '../error-message';
+import { authenticationReturnPath } from '../authentication-navigation';
 import { captureRecoveryFragment } from '../recovery-fragment';
 import { useAuthenticationStore } from '../stores/authentication';
 
@@ -29,8 +30,7 @@ const submitLabel = computed(() => recovering.value
 
 /** Return a safe internal destination after authentication succeeds. */
 function returnPath(): string {
-	const value = typeof route.query.returnTo === 'string' ? route.query.returnTo : '/';
-	return value.startsWith('/') && !value.startsWith('//') ? value : '/';
+	return authenticationReturnPath(route.query.returnTo);
 }
 
 /** Create or authenticate the local administrator using the current page mode. */

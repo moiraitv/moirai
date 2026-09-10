@@ -857,6 +857,10 @@ returns to a page; initial empty collections have explicit loading states.
 Disclosure and navigation-section expansion preferences are stored per section in browser local storage;
 storage failures leave controls usable. Choosing Custom encoding still opens its controls.
 
+Session expiry preserves one internal return destination and leaves authentication pages in place
+when further unauthorized requests arrive. Sign-in unwraps older nested authentication destinations
+with a bounded depth, preserves the final query encoding, and rejects external return addresses.
+
 Library catalog pages window responsive rows with bounded overscan. Full-width section headings and
 unmounted title or genre anchors retain virtual positions so sticky navigation can scroll directly to
 them without rendering every card on the page.

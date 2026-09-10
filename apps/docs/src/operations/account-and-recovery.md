@@ -9,6 +9,8 @@ contextual: true
 
 The **Account** page shows the current sign-in methods and lets an administrator add, change, or remove the local fallback credentials when allowed.
 
+If your session expires, sign in again to return to the page you were viewing, including its filters and position. Repeated sign-in requests keep that destination instead of adding another sign-in page to the return address.
+
 ![The administrator account page](/screenshots/account.png)
 
 Use a unique password stored in a password manager. Removing the local account leaves provider sign-in as the only route back in, so verify Logto first.

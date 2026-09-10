@@ -15,7 +15,10 @@ const authentication = useAuthenticationStore(pinia);
 /** Leave the protected shell when HTTP or live-event traffic reveals an invalid session. */
 function handleAuthenticationExpiry(): void {
 	authentication.markAnonymous();
-	void router.replace({ path: '/login', query: { returnTo: router.currentRoute.value.fullPath } });
+	const redirect = authenticationNavigationRedirect(false, authentication.initialized, router.currentRoute.value);
+	if (redirect) {
+		void router.replace(redirect);
+	}
 }
 
 /** Return authoritative session validity while preserving retries during HTTP outages. */
