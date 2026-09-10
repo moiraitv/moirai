@@ -628,9 +628,56 @@ it('upgrades subtitle settings without changing existing normalization or author
 	});
 });
 
+it('upgrades existing channels to Custom while preserving every authored setting', async () => {
+	const prior = { number: '98', name: 'Existing', video: { width: 640, height: 480, accel: null }, audio: { bitrateKbps: 128 }, subtitleMode: 'convert', subtitlePreferences: { language: 'eng', policy: 'forced' }, subtitleFontsFolder: '/fonts', ffmpegPath: '/custom/ffmpeg' };
+	await upgradeFrom('0019_subtitles', (sqlite) => {
+		sqlite.prepare('INSERT INTO channels (id, number, number_key, name, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run('existing-channel', '98', '98', 'Existing', JSON.stringify(prior), '2026-09-01', '2026-09-01');
+	}, (sqlite) => {
+		const row = sqlite.prepare("SELECT config FROM channels WHERE id = 'existing-channel'").get() as { config: string };
+		expect(JSON.parse(row.config)).toEqual({ ...prior, encodingProfileId: null });
+		expect(sqlite.prepare('SELECT * FROM encoding_profiles WHERE is_builtin = 0').all()).toEqual([]);
+	});
+});
+
+it('seeds presets during upgrade without replacing custom profiles or channel settings', async () => {
+	const { BUILTIN_ENCODING_PROFILES, DEFAULT_ENCODING_PROFILE_ID } = await import('@moirai/shared');
+	const custom = { name: '1080p', audio: { bitrateKbps: 123 }, video: { width: 987 } };
+	await upgradeFrom('0020_encoding_profiles', (sqlite) => {
+		sqlite.prepare('INSERT INTO encoding_profiles (id,name,name_key,config,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('custom', custom.name, '1080p', JSON.stringify(custom), 'before', 'before');
+		sqlite.prepare('INSERT INTO channels (id,number,number_key,name,config,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('channel', '1', '1', 'Existing', JSON.stringify({ encodingProfileId: 'custom', ...custom }), 'before', 'before');
+	}, (sqlite) => {
+		const rows = sqlite.prepare('SELECT id,config,is_builtin AS isBuiltin,is_default AS isDefault FROM encoding_profiles').all() as Array<{ id: string; config: string; isBuiltin: number; isDefault: number }>;
+		expect(JSON.parse(rows.find((row) => row.id === 'custom')!.config)).toEqual({ ...custom, description: '' });
+		expect(rows.filter((row) => row.isDefault).map((row) => row.id)).toEqual([DEFAULT_ENCODING_PROFILE_ID]);
+		for (const expected of BUILTIN_ENCODING_PROFILES) {
+			const row = rows.find((row) => row.id === expected.id)!;
+			expect(row.isBuiltin).toBe(1);
+			expect(JSON.parse(row.config)).toMatchObject({ description: expected.description, audio: expected.audio, video: expected.video });
+		}
+		const channel = sqlite.prepare("SELECT config FROM channels WHERE id='channel'").get() as { config: string };
+		expect(JSON.parse(channel.config)).toEqual({ encodingProfileId: 'custom', ...custom });
+	});
+});
+
+it('adds descriptions to existing presets while preserving authored metadata and defaults', async () => {
+	const { BUILTIN_ENCODING_PROFILES } = await import('@moirai/shared');
+	const custom = { name: 'Music videos', description: 'Living room', audio: { bitrateKbps: 123 }, video: { width: 987 } };
+	await upgradeFrom('0021_encoding_presets', (sqlite) => {
+		sqlite.prepare('UPDATE encoding_profiles SET is_default = 0').run();
+		sqlite.prepare('INSERT INTO encoding_profiles (id,name,name_key,config,is_default,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('custom', custom.name, 'music videos', JSON.stringify(custom), 1, 'before', 'before');
+	}, (sqlite) => {
+		const rows = sqlite.prepare('SELECT id,config,is_default AS isDefault FROM encoding_profiles').all() as Array<{ id: string; config: string; isDefault: number }>;
+		expect(JSON.parse(rows.find((row) => row.id === 'custom')!.config)).toEqual(custom);
+		expect(rows.filter((row) => row.isDefault).map((row) => row.id)).toEqual(['custom']);
+		for (const expected of BUILTIN_ENCODING_PROFILES) {
+			expect(JSON.parse(rows.find((row) => row.id === expected.id)!.config)).toMatchObject({ description: expected.description, audio: expected.audio, video: expected.video });
+		}
+	});
+});
+
 it('installs the built-in credit design without replacing an existing same-name template', async () => {
 	const { BUILTIN_CREDIT_TEMPLATE } = await import('@moirai/shared');
-	await upgradeFrom('0019_subtitles', (sqlite) => {
+	await upgradeFrom('0022_encoding_profile_descriptions', (sqlite) => {
 		sqlite.prepare('INSERT INTO credit_templates (id,name,name_key,source,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('custom', BUILTIN_CREDIT_TEMPLATE.name, BUILTIN_CREDIT_TEMPLATE.name.toLowerCase(), 'Authored source', 'before', 'before');
 	}, (sqlite) => {
 		const rows = sqlite.prepare('SELECT id,name,source,description,is_builtin AS isBuiltin FROM credit_templates').all() as Array<{ id: string; name: string; source: string; description: string; isBuiltin: number }>;

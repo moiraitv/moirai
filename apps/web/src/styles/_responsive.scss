@@ -1057,6 +1057,12 @@
 }
 
 @media (max-width: 640px) {
+	.channel-identity-fields {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 640px) {
 	.channel-subtitles .subtitle-selection-fields {
 		grid-template-columns: 1fr;
 	}

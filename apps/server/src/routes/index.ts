@@ -1,3 +1,4 @@
+import { registerEncodingProfileRoutes } from './encoding-profiles.js';
 import { registerCreditTemplateRoutes } from './credit-templates.js';
 import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
 import type { FastifyInstance } from 'fastify';
@@ -53,6 +54,7 @@ export function registerHttpRoutes(
 	registerAuthenticationRoutes(app, dependencies.config, dependencies.authentication);
 	registerSystemRoutes(app, dependencies);
 	registerCreditTemplateRoutes(app, dependencies);
+	registerEncodingProfileRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);
 	registerChannelRoutes(app, dependencies);

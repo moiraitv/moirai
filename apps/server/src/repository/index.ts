@@ -1,3 +1,4 @@
+import { EncodingProfileRepository } from './encoding-profiles.js';
 import { sql } from 'drizzle-orm';
 import { CreditTemplateRepository } from './credit-templates.js';
 import type {
@@ -77,6 +78,8 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Reusable audio/video profiles and linked channel settings. */
+	readonly encodingProfiles: EncodingProfileRepository;
 	/** Reusable credit templates and subtitle playback metadata. */
 	readonly creditTemplates: CreditTemplateRepository;
 	/** Authentication persistence exposed to the cross-cutting authentication service. */
@@ -91,6 +94,7 @@ export class Repository extends LibraryRepository {
 	constructor(private readonly database: MoiraiDatabase) {
 		super(database);
 		this.authentication = new AuthenticationRepository(database);
+		this.encodingProfiles = new EncodingProfileRepository(database);
 		this.creditTemplates = new CreditTemplateRepository(database);
 		this.catalog = new MediaCatalogRepository(database);
 		this.channels = new ChannelRepository(database);
@@ -214,8 +218,8 @@ export class Repository extends LibraryRepository {
 	}
 
 	/** Create a channel with its stable Moirai XMLTV identifier. */
-	async createChannel(input: ChannelCreate): Promise<Channel> {
-		return this.channels.createChannel(input);
+	async createChannel(input: ChannelCreate, useDefaultProfile = false): Promise<Channel> {
+		return this.channels.createChannel(input, useDefaultProfile);
 	}
 
 	/** Merge channel changes and refresh the derived Moirai XMLTV identifier. */

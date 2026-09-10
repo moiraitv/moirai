@@ -242,9 +242,19 @@ test('captures channel settings and operations', async ({ page, documentationSer
 	await expect(broadcastEditor.locator('.acceleration-prediction')).not.toHaveText('Checking…', { timeout: 45_000 });
 	await capture(page, 'channel-editor.png');
 	await captureSection(page, broadcastEditor.locator('.channel-logo-editor'), 'channel-editor-logo.png');
-	await captureSection(page, broadcastEditor.locator('.fallback-filler-editor'), 'channel-editor-fallback.png');
-	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Video normalization', exact: true }), 'channel-editor-video.png');
-	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Audio normalization', exact: true }), 'channel-editor-audio.png');
+	await broadcastEditor.getByRole('button', { name: /Channel fallback override/ }).click();
+	await captureSection(page, broadcastEditor.locator('.channel-fallback-disclosure'), 'channel-editor-fallback.png');
+	await broadcastEditor.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption({ label: 'Custom' });
+	await expect(broadcastEditor.getByLabel('Width', { exact: true })).toBeEnabled();
+	await page.setViewportSize({ width: 1440, height: 1700 });
+	await captureSection(page, broadcastEditor.locator('.channel-encoding-disclosure'), 'channel-editor-encoding.png');
+	await page.setViewportSize({ width: 1440, height: 1200 });
+	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Video', exact: true }), 'channel-editor-video.png');
+	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Audio', exact: true }), 'channel-editor-audio.png');
+	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Subtitles', exact: true }), 'channel-editor-subtitles.png');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await broadcastEditor.locator('.channel-encoding-disclosure .form-disclosure-trigger').scrollIntoViewIfNeeded();
+	expect(await broadcastEditor.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 test('presents accessible contextual help with draft and failure states', async ({ page }) => {
 	let reviewStatus = 'needs-review';
@@ -379,6 +389,134 @@ test('captures music-video credit templates and verifies draft actions', async (
 	await existing.getByRole('button', { name: 'Close credit template' }).click();
 });
 
+test('captures encoding profiles and assigns or detaches channel settings', async ({ page }) => {
+	const csrf = await authenticateAdministrator(page);
+	await page.goto('/playback/encoding-profiles');
+	await page.getByRole('button', { name: 'New profile', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'New encoding profile', exact: true });
+	await editor.getByLabel('Name', { exact: true }).fill('HD broadcast');
+	await editor.getByLabel('Width', { exact: true }).fill('1280');
+	await editor.getByLabel('Height', { exact: true }).fill('720');
+	await capture(page, 'encoding-profile-editor.png');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toBeHidden();
+	const profile = (await (await page.request.get('/api/v1/encoding-profiles')).json()).find((entry: { name: string }) => entry.name === 'HD broadcast');
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+	const channel = page.getByRole('dialog', { name: 'Broadcast profile' });
+	await channel.getByLabel('Number', { exact: true }).fill('1');
+	await channel.getByLabel('Name', { exact: true }).fill('Music');
+	await channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption(profile.id);
+	await expect(channel.locator('.encoding-disclosure-badges')).toContainText('1280 × 720');
+	const encodingToggle = channel.getByRole('button', { name: /Video & audio settings/ });
+	if (await encodingToggle.getAttribute('aria-expanded') === 'false') {
+		await encodingToggle.click();
+	}
+	await expect(channel.getByLabel('Width', { exact: true })).toBeVisible();
+	await expect(channel.getByLabel('Width', { exact: true })).toHaveValue('1280');
+	await expect(channel.getByLabel('Width', { exact: true })).toBeDisabled();
+	await channel.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(channel).toBeHidden();
+	let saved = (await (await page.request.get('/api/v1/channels')).json())[0];
+	expect(saved.encodingProfileId).toBe(profile.id);
+	await page.goto('/playback/encoding-profiles');
+	await page.getByRole('button', { name: 'Edit', exact: true }).click();
+	const existing = page.getByRole('dialog', { name: 'Edit encoding profile', exact: true });
+	await existing.getByLabel('Width', { exact: true }).fill('1920');
+	await existing.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(existing).toBeHidden();
+	await page.route('https://example.test/channel-logo.svg', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="blue"/></svg>' }));
+	const independent = await page.request.post('/api/v1/channels', { headers: { 'x-moirai-csrf': csrf }, data: { number: '2', name: 'Independent', logo: 'https://example.test/channel-logo.svg', video: { width: 800 } } });
+	expect(independent.status()).toBe(201);
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'Edit Music' }).click();
+	await expect(channel.getByLabel('Width', { exact: true })).toHaveValue('1920');
+	await channel.getByRole('button', { name: 'Close channel editor' }).click();
+	await page.getByRole('button', { name: 'Edit Independent' }).click();
+	await expect(channel.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toHaveValue('');
+	await expect(channel.getByLabel('Width', { exact: true })).toBeVisible();
+	await expect(channel.getByLabel('Width', { exact: true })).toHaveValue('800');
+	await expect(channel.getByLabel('Width', { exact: true })).toBeEnabled();
+	await expect(channel.getByLabel('Or use an external logo URL')).toHaveCount(0);
+	await channel.getByRole('button', { name: 'Remove logo', exact: true }).click();
+	await channel.getByRole('button', { name: 'Confirm remove logo', exact: true }).click();
+	await channel.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(channel).toBeHidden();
+	expect((await (await page.request.get('/api/v1/channels')).json()).find((entry: { name: string }) => entry.name === 'Independent').logo).toBeNull();
+	await page.getByRole('button', { name: 'Edit Music' }).click();
+	await channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption({ label: 'Custom' });
+	await expect(channel.getByLabel('Width', { exact: true })).toHaveValue('1920');
+	await expect(channel.getByLabel('Width', { exact: true })).toBeEnabled();
+	await channel.getByLabel('Width', { exact: true }).fill('640');
+	await channel.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(channel).toBeHidden();
+	saved = (await (await page.request.get('/api/v1/channels')).json()).find((entry: { name: string }) => entry.name === 'Music');
+	expect(saved).toMatchObject({ encodingProfileId: null, video: { ...profile.video, width: 640 }, audio: profile.audio });
+	await page.getByRole('button', { name: 'Edit Independent' }).click();
+	await channel.getByLabel('Group', { exact: true }).fill('Unsaved group');
+	await channel.getByRole('link', { name: 'Manage encoding profiles' }).click();
+	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
+	await expect(confirmation).toBeVisible();
+	await confirmation.getByRole('button', { name: 'Discard Changes' }).click();
+	await expect(page).toHaveURL(/\/playback\/encoding-profiles$/);
+	const independentSaved = (await (await page.request.get('/api/v1/channels')).json()).find((entry: { name: string }) => entry.name === 'Independent');
+	expect(independentSaved.group).toBeNull();
+});
+
+test('chooses built-in defaults and protects presets while allowing custom copies', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/playback/encoding-profiles');
+	const selector = page.getByRole('combobox', { name: 'Default for new channels', exact: true });
+	await expect(selector.locator('option:checked')).toHaveText('1080p');
+	await capture(page, 'encoding-presets.png');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.reload();
+	await expect(selector).toBeVisible();
+	await expect(page.getByRole('button', { name: 'New profile', exact: true })).toBeInViewport();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const preset = page.locator('article').filter({ has: page.getByRole('heading', { name: '720p', exact: true }) });
+	await preset.getByRole('button', { name: 'View', exact: true }).click();
+	const view = page.getByRole('dialog', { name: 'View encoding profile' });
+	await expect(view.getByLabel('Width', { exact: true })).toBeDisabled();
+	await expect(view.getByLabel('Description', { exact: true })).toBeDisabled();
+	await expect(view.getByRole('button', { name: 'Delete Encoding Profile' })).toHaveCount(0);
+	await expect(view.locator('.builtin-badge')).toBeVisible();
+	await capture(page, 'encoding-profile-view.png');
+	await page.setViewportSize({ width: 390, height: 844 });
+	expect(await view.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+	await expect(view.getByRole('button', { name: 'Duplicate', exact: true })).toBeInViewport();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await view.getByRole('button', { name: 'Close', exact: true }).click();
+	await selector.selectOption({ label: '720p' });
+	await expect(preset).toContainText('Default');
+	await preset.getByRole('button', { name: 'View', exact: true }).click();
+	await view.getByRole('button', { name: 'Duplicate', exact: true }).click();
+	const copy = page.getByRole('dialog', { name: 'New encoding profile' });
+	await expect(copy.getByLabel('Width', { exact: true })).toBeEnabled();
+	await expect(copy.getByLabel('Description', { exact: true })).not.toHaveValue('');
+	await copy.getByLabel('Name', { exact: true }).fill('My preset');
+	await copy.getByLabel('Description', { exact: true }).fill('Music videos for the living room.');
+	await copy.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(copy).toBeHidden();
+	await page.reload();
+	await expect(page.locator('article').filter({ has: page.getByRole('heading', { name: 'My preset', exact: true }) })).toContainText('Music videos for the living room.');
+	await selector.selectOption({ label: 'My preset' });
+	await expect(page.locator('article').filter({ has: page.getByRole('heading', { name: 'My preset', exact: true }) })).toContainText('Default');
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+	const channel = page.getByRole('dialog', { name: 'Broadcast profile' });
+	await expect(channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).locator('option:checked')).toHaveText('My preset (default)');
+	await expect(channel.getByLabel('Height', { exact: true })).toHaveValue('720');
+	await expect(channel.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
+	await channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption({ label: 'Custom' });
+	await expect(channel.getByLabel('Height', { exact: true })).toBeEnabled();
+	await expect(channel.getByLabel('Height', { exact: true })).toHaveValue('720');
+	await channel.getByRole('button', { name: 'Reset', exact: true }).click();
+	await channel.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+	await expect(channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).locator('option:checked')).toHaveText('My preset (default)');
+});
+
 test('protects program drafts when navigating to credit templates', async ({ page, documentationServer }) => {
 	const { program } = await seedSchedule(page, documentationServer.directory);
 	await page.goto(`/schedules/programs/${program.id}`);
@@ -425,6 +563,49 @@ test('protects program drafts when navigating to credit templates', async ({ pag
 });
 
 
+test('animates encoding disclosure layout and respects reduced motion', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Broadcast profile' });
+	const disclosure = editor.locator('.channel-encoding-disclosure');
+	const trigger = disclosure.getByRole('button', { name: /Video & audio settings/ });
+	await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
+	if (await trigger.getAttribute('aria-expanded') === 'true') {
+		await trigger.click();
+	}
+	await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+	await trigger.scrollIntoViewIfNeeded();
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await trigger.click();
+	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+	const properties = await editor.evaluate((element) => element.getAnimations({ subtree: true }).flatMap((animation) => (animation.effect as KeyframeEffect).getKeyframes().flatMap(Object.keys)));
+	expect(properties).toContain('transform');
+	expect(properties).not.toContain('height');
+	expect(await editor.locator('.subtitle-preferences').evaluate((element) => element.getAnimations().some((animation) => (animation.effect as KeyframeEffect).getKeyframes().some((frame) => 'transform' in frame)))).toBe(true);
+	await expect.poll(() => editor.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+	await trigger.click();
+	await expect(disclosure.locator('.form-disclosure-content')).toHaveAttribute('inert', '');
+	await expect(disclosure.locator('.form-disclosure-content')).toBeHidden();
+	await expect.poll(() => editor.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await trigger.press('Enter');
+	await expect(disclosure.locator('.form-disclosure-content')).toBeVisible();
+	expect(await editor.evaluate((element) => element.getAnimations({ subtree: true }).filter((animation) => (animation.effect as KeyframeEffect).getKeyframes().some((frame) => 'transform' in frame || 'height' in frame)).map((animation) => ({ duration: animation.effect?.getTiming().duration, frames: (animation.effect as KeyframeEffect).getKeyframes() })))).toEqual([]);
+	await trigger.press('Enter');
+	await expect(disclosure.locator('.form-disclosure-content')).toBeHidden();
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await trigger.press('Enter');
+	await trigger.press('Enter');
+	await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+	await expect(disclosure.locator('.form-disclosure-content')).toBeHidden();
+	await editor.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption({ label: 'Custom' });
+	await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+	await expect(editor.getByLabel('Width', { exact: true })).toBeVisible();
+});
+
+
 test('preserves subtitle settings across the additional-settings disclosure', async ({ page }) => {
 	await authenticateAdministrator(page);
 	await page.goto('/channels');
@@ -451,6 +632,35 @@ test('preserves subtitle settings across the additional-settings disclosure', as
 	const saved = (await (await page.request.get('/api/v1/channels')).json())[0];
 	expect(saved).toMatchObject({ subtitleMode: 'convert', subtitleFontsFolder: '/fonts', subtitlePreferences: { policy: 'any', language: 'eng' } });
 	expect(saved.subtitlePreferences.creditsTemplateId).toBeTruthy();
+});
+
+test('remembers channel disclosures after reopening and refreshing', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Broadcast profile' });
+	await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
+	const states = [
+		{ name: /Video & audio settings/, open: false },
+		{ name: /Additional subtitle settings/, open: false },
+		{ name: /Channel fallback override/, open: true },
+	];
+	for (const state of states) {
+		const trigger = editor.getByRole('button', { name: state.name });
+		if (await trigger.getAttribute('aria-expanded') !== String(state.open)) {
+			await trigger.click();
+		}
+	}
+	await editor.getByRole('button', { name: 'Close channel editor' }).click();
+	await expect(editor).toBeHidden();
+	await page.reload();
+	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+	await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
+	for (const state of states) {
+		await expect(editor.getByRole('button', { name: state.name })).toHaveAttribute('aria-expanded', String(state.open));
+	}
+	await editor.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption({ label: 'Custom' });
+	await expect(editor.getByRole('button', { name: /Video & audio settings/ })).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('resets credit preview pagination when switching to a smaller library', async ({ page }) => {

@@ -2327,3 +2327,54 @@ describe('music-video credit template API', () => {
 		expect((await app.inject('/api/v1/credit-templates')).json().filter((entry: { isBuiltin: boolean }) => !entry.isBuiltin)).toEqual([]);
 	});
 });
+
+describe('encoding profile API', () => {
+	it('validates settings, updates linked channels, and blocks deletion until detached', async () => {
+		const { app, services } = await fixture();
+		const created = await app.inject({ method: 'POST', url: '/api/v1/encoding-profiles', payload: { name: 'Shared HD', audio: {}, video: { width: 1280, height: 720 } } });
+		expect(created.statusCode).toBe(201);
+		const profile = created.json();
+		const channel = (await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '55', name: 'Linked', encodingProfileId: profile.id } })).json();
+		expect(channel.video.width).toBe(1280);
+		const changes: LiveEvent[] = [];
+		const unsubscribe = services.events.subscribe((event) => changes.push(event));
+		try {
+			const payload = { name: profile.name, audio: profile.audio, video: { ...profile.video, width: 1920 } };
+			expect((await app.inject({ method: 'PUT', url: `/api/v1/encoding-profiles/${profile.id}`, payload })).statusCode).toBe(200);
+			expect(changes).toContainEqual(expect.objectContaining({ type: 'channel.changed', data: { channelId: channel.id, change: 'updated' } }));
+			expect((await app.inject('/api/v1/channels')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ id: channel.id, video: expect.objectContaining({ width: 1920 }) })]));
+			expect((await app.inject({ method: 'PUT', url: `/api/v1/encoding-profiles/${profile.id}`, payload: { ...payload, video: { width: -1 } } })).statusCode).toBe(400);
+			expect((await app.inject({ method: 'DELETE', url: `/api/v1/encoding-profiles/${profile.id}` })).statusCode).toBe(409);
+			await app.inject({ method: 'PATCH', url: `/api/v1/channels/${channel.id}`, payload: { encodingProfileId: null } });
+			expect((await app.inject({ method: 'DELETE', url: `/api/v1/encoding-profiles/${profile.id}` })).statusCode).toBe(204);
+			expect((await app.inject('/api/v1/encoding-profiles')).json().filter((entry: { isBuiltin: boolean }) => !entry.isBuiltin)).toEqual([]);
+		}
+		finally {
+			unsubscribe();
+		}
+	});
+});
+
+it('applies the configured encoding default only to new channels without manual settings', async () => {
+	const { DEFAULT_ENCODING_PROFILE_ID, BUILTIN_ENCODING_PROFILES } = await import('@moirai/shared');
+	const { app, services } = await fixture();
+	// Exercise persisted API settings without generating rolling playout for four empty channels.
+	vi.spyOn(services.playout, 'handleEvent').mockImplementation(() => {});
+	const first = await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '81', name: 'Default' } });
+	expect(first.statusCode).toBe(201);
+	expect(first.json().encodingProfileId).toBe(DEFAULT_ENCODING_PROFILE_ID);
+	const preset = BUILTIN_ENCODING_PROFILES.find((entry) => entry.video.height === 720)!;
+	expect((await app.inject({ method: 'PUT', url: `/api/v1/encoding-profiles/${preset.id}/default` })).statusCode).toBe(200);
+	const next = await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '82', name: 'New default' } });
+	expect(next.json()).toMatchObject({ encodingProfileId: preset.id, video: { height: 720 } });
+	const custom = await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '83', name: 'Explicit custom', encodingProfileId: null } });
+	expect(custom.json().encodingProfileId).toBeNull();
+	const manual = await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '84', name: 'Manual', video: { height: 480 } } });
+	expect(manual.json().video.height).toBe(480);
+	expect(manual.json().encodingProfileId).toBeUndefined();
+	expect((await app.inject({ method: 'DELETE', url: `/api/v1/encoding-profiles/${preset.id}` })).statusCode).toBe(409);
+	expect((await app.inject('/api/v1/channels')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ id: first.json().id, encodingProfileId: DEFAULT_ENCODING_PROFILE_ID })]));
+	for (const result of [first, next, custom, manual]) {
+		await app.inject({ method: 'DELETE', url: `/api/v1/channels/${result.json().id}` });
+	}
+}, 15_000);

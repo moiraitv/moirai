@@ -1,3 +1,4 @@
+import type { EncodingProfile, EncodingProfileCreate } from '@moirai/shared';
 import type { CreditTemplate, CreditTemplateCreate, CreditPreview, CreditPreviewResult } from '@moirai/shared';
 import type {
 	ApiErrorBody,
@@ -240,6 +241,11 @@ async function uploadFallbackFiller(url: string, file: File): Promise<FallbackFi
 
 /** Module-level api value for api. */
 export const api = {
+	setDefaultEncodingProfile: (id: string) => request<EncodingProfile>(`/api/v1/encoding-profiles/${id}/default`, { method: 'PUT' }),
+	encodingProfiles: () => request<EncodingProfile[]>('/api/v1/encoding-profiles'),
+	createEncodingProfile: (body: EncodingProfileCreate) => request<EncodingProfile>('/api/v1/encoding-profiles', { method: 'POST', body: JSON.stringify(body) }),
+	updateEncodingProfile: (id: string, body: EncodingProfileCreate) => request<EncodingProfile>(`/api/v1/encoding-profiles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+	deleteEncodingProfile: (id: string) => request<void>(`/api/v1/encoding-profiles/${id}`, { method: 'DELETE' }),
 	creditTemplates: () => request<CreditTemplate[]>('/api/v1/credit-templates'),
 	createCreditTemplate: (body: CreditTemplateCreate) => request<CreditTemplate>('/api/v1/credit-templates', { method: 'POST', body: JSON.stringify(body) }),
 	updateCreditTemplate: (id: string, body: CreditTemplateCreate) => request<CreditTemplate>(`/api/v1/credit-templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),

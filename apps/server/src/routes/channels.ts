@@ -1,3 +1,4 @@
+import { channelCreateRequestSchema } from '@moirai/shared';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
@@ -58,17 +59,20 @@ export function registerChannelRoutes(
 			operationId: 'createChannel',
 			tags: ['Channels'],
 			summary: 'Create an IPTV channel',
-			body: channelCreateSchema,
+			body: channelCreateRequestSchema,
 			response: { 201: responseContent('Created channel', 'application/json', channelSchema) },
 			errors: [400, 409, 500, 503],
 		}),
 	}, async (request, reply) => {
-		const input = channelCreateSchema.parse(request.body);
+		const requestInput = channelCreateRequestSchema.parse(request.body);
+		const input = channelCreateSchema.parse(requestInput);
 		if (input.logo?.startsWith(MANAGED_CHANNEL_LOGO_PREFIX)) {
 			throw app.httpErrors.badRequest('Managed channel logos must be uploaded after creation');
 		}
 
-		const channel = await repository.createChannel(input);
+		const useDefaultProfile = requestInput.encodingProfileId === undefined
+			&& requestInput.audio === undefined && requestInput.video === undefined;
+		const channel = await repository.createChannel(input, useDefaultProfile);
 		publishChannelChange(channel.id, 'created');
 		return reply.status(201).send(channel);
 	});

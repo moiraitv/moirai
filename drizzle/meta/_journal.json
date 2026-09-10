@@ -143,6 +143,27 @@
       "breakpoints": true
     },
     {
+      "idx": 20,
+      "version": "6",
+      "when": 1789002000000,
+      "tag": "0020_encoding_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1789005600000,
+      "tag": "0021_encoding_presets",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1789092000000,
+      "tag": "0022_encoding_profile_descriptions",
+      "breakpoints": true
+    },
+    {
       "idx": 23,
       "version": "6",
       "when": 1789095600000,

@@ -1,3 +1,4 @@
+import EncodingProfilesPage from './views/EncodingProfilesPage.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import CreditTemplatesPage from './views/CreditTemplatesPage.vue';
 import DashboardPage from './views/DashboardPage.vue';
@@ -38,8 +39,9 @@ export const router = createRouter({
 		{ path: '/schedules/templates/:id', component: TemplatesPage },
 		{ path: '/schedules/channels', component: ChannelSchedulesPage },
 		{ path: '/schedules/channels/:id', component: ChannelSchedulesPage },
-		{ path: '/playback', redirect: '/playback/credit-templates' },
+		{ path: '/playback', redirect: '/playback/encoding-profiles' },
 		{ path: '/playback/credit-templates', component: CreditTemplatesPage },
+		{ path: '/playback/encoding-profiles', component: EncodingProfilesPage },
 		{ path: '/schedules/programs', component: ProgramsPage },
 		{ path: '/schedules/programs/:id', component: ProgramsPage },
 		{ path: '/settings', component: SettingsPage },

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../../disclosure-state';
 import QuickStepActions from './QuickStepActions.vue';
 import type { Library, QuickChannelSetupCreate } from '@moirai/shared';
 import { RefreshCw } from '@lucide/vue';
@@ -11,6 +12,8 @@ import { errorMessage } from '../../error-message';
 import QuickQueryPreview from './QuickQueryPreview.vue';
 import QuickScheduleSample from './QuickScheduleSample.vue';
 import LoadingState from '../LoadingState.vue';
+
+const warningsOpen = useDisclosureState('quick-review-warnings');
 
 const props = defineProps<{
 	request: QuickChannelSetupCreate;
@@ -100,7 +103,7 @@ onBeforeUnmount(() => {
 					<LoadingState v-else-if="loading" label="Resolving…" />
 					<p v-else>Schedule sample unavailable.</p>
 				</div>
-				<details v-if="preview?.schedule.issues.length" class="notice warning quick-review-schedule-warnings">
+				<details v-if="preview?.schedule.issues.length" :open="warningsOpen" class="notice warning quick-review-schedule-warnings" @toggle="warningsOpen = ($event.target as HTMLDetailsElement).open">
 					<summary>{{ preview.schedule.issues.length }} scheduling warning(s)</summary>
 					<p v-for="(issue, index) in preview.schedule.issues" :key="index">{{ issue.message }}</p>
 				</details>

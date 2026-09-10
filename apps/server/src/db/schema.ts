@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
 	ChannelCreate,
+	EncodingProfileCreate,
 	ChannelScheduleLayer,
 	ChannelScheduleConfig,
 	FillerConfig,
@@ -747,3 +748,14 @@ export const creditTemplates = sqliteTable('credit_templates', {
 	source: text('source').notNull(),
 	...timestamps,
 }, (table) => [uniqueIndex('credit_templates_name_key_unique').on(table.nameKey)]);
+
+/** Reusable encoding profiles; linked channels persist the effective settings for playback reads. */
+export const encodingProfiles = sqliteTable('encoding_profiles', {
+	id: text('id').primaryKey(),
+	isBuiltin: integer('is_builtin', { mode: 'boolean' }).notNull().default(false),
+	isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+	name: text('name').notNull(),
+	nameKey: text('name_key').notNull(),
+	config: text('config', { mode: 'json' }).$type<EncodingProfileCreate>().notNull(),
+	...timestamps,
+}, (table) => [uniqueIndex('encoding_profiles_name_key_unique').on(table.nameKey), uniqueIndex('encoding_profiles_one_default').on(table.isDefault).where(sql`${table.isDefault} = 1`)]);

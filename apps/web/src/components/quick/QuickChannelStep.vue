@@ -71,7 +71,7 @@ function removeLogo(): void {
 		<div class="quick-step-heading">
 			<p class="eyebrow">Step 3 of 4</p>
 			<h2 id="quick-channel-title">Name and brand the channel</h2>
-			<p>Advanced encoding and normalization use Moirai’s current automatic defaults.</p>
+			<p>Audio and video settings use the default encoding profile selected under Playback.</p>
 		</div>
 		<div class="panel form-grid">
 			<label><span>Channel number</span><input v-model="draft.number" required pattern="[A-Za-z0-9._-]+" /></label>

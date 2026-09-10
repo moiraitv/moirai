@@ -1,3 +1,4 @@
+import { applyDefaultEncodingProfile } from './encoding-profiles.js';
 import { eq, inArray } from 'drizzle-orm';
 import {
 	canonicalChannelNumberKey,
@@ -52,11 +53,13 @@ export class QuickChannelSetupRepository {
 	preview(input: QuickChannelSetupCreate, maxExplicitMediaItems: number): QuickChannelSetupResult {
 		this.validateSource(input, maxExplicitMediaItems, this.db);
 		let identity = 0;
-		return quickSetupResources(
+		const result = quickSetupResources(
 			input,
 			availableTemplateName(this.db, input.channel.name),
 			() => `00000000-0000-4000-8000-${String(++identity).padStart(12, '0')}`,
 		);
+		Object.assign(result.channel, applyDefaultEncodingProfile(this.db, channelCreateSchema.strip().parse(result.channel)));
+		return result;
 	}
 
 	/** Check library compatibility and explicit member ownership through bounded queries. */
@@ -144,7 +147,8 @@ export class QuickChannelSetupRepository {
 			const templateId = template.id;
 			const channelId = channel.id;
 			const timestamp = program.createdAt;
-			const channelConfig = channelCreateSchema.strip().parse(channel);
+			const channelConfig = applyDefaultEncodingProfile(transaction, channelCreateSchema.strip().parse(channel));
+			Object.assign(channel, channelConfig);
 
 			transaction.insert(schedulingPrograms).values({ ...program, nameKey: programNameKey }).run();
 			transaction.insert(scheduleTemplates).values({

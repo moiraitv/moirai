@@ -121,3 +121,14 @@ describe('quick channel setup repository', () => {
 		expect(await subject.listPrograms()).toHaveLength(0);
 	});
 });
+
+it('uses the saved encoding default when Quick Setup creates a channel', async () => {
+	const subject = repository();
+	const request = await fixture(subject);
+	const presets = await subject.encodingProfiles.list();
+	const selected = presets.find((profile) => profile.video.height === 720)!;
+	await subject.encodingProfiles.setDefault(selected.id);
+	expect(subject.previewQuickChannelSetup(request, 5_000).channel).toMatchObject({ encodingProfileId: selected.id, video: selected.video });
+	subject.createQuickChannelSetup(request, 5_000);
+	expect((await subject.listChannels())[0]).toMatchObject({ encodingProfileId: selected.id, audio: selected.audio, video: selected.video });
+});

@@ -1,3 +1,4 @@
+import { applyDefaultEncodingProfile, applyEncodingProfile } from './encoding-profiles.js';
 import { validateCreditReference } from './subtitle-validation.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, sql } from 'drizzle-orm';
@@ -47,7 +48,7 @@ export class ChannelRepository {
 	}
 
 	/** Create a channel with its stable Moirai XMLTV identifier. */
-	async createChannel(input: ChannelCreate): Promise<Channel> {
+	async createChannel(input: ChannelCreate, useDefaultProfile = false): Promise<Channel> {
 		validateCreditReference(this.db, input.subtitlePreferences);
 		const timestamp = currentTimestamp();
 		const id = randomUUID();
@@ -71,7 +72,7 @@ export class ChannelRepository {
 					numberKey,
 					name: input.name,
 					effectiveTvgId,
-					config: input,
+					config: useDefaultProfile ? applyDefaultEncodingProfile(tx, input) : applyEncodingProfile(tx, input),
 					createdAt: timestamp,
 					updatedAt: timestamp,
 				})
@@ -115,7 +116,7 @@ export class ChannelRepository {
 					numberKey,
 					name: config.name,
 					effectiveTvgId,
-					config,
+					config: applyEncodingProfile(tx, config),
 					updatedAt: currentTimestamp(),
 				})
 				.where(eq(channels.id, id))
@@ -131,7 +132,7 @@ export class ChannelRepository {
 		void _updatedAt;
 		const updatedAt = currentTimestamp();
 		const config = { ...currentConfig, logo } as ChannelCreate;
-		await this.db.update(channels).set({ config, updatedAt }).where(eq(channels.id, id));
+		await this.db.update(channels).set({ config: sql`json_set(${channels.config}, '$.logo', ${logo})`, updatedAt }).where(eq(channels.id, id));
 		return { ...config, id, createdAt, updatedAt };
 	}
 

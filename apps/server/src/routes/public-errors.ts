@@ -1,3 +1,4 @@
+import { EncodingProfileError } from '../repository/encoding-profiles.js';
 import { CreditTemplateError } from '../repository/credit-templates.js';
 import { ZodError } from 'zod';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
@@ -110,7 +111,7 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
-	if (error instanceof CreditTemplateError) {
+	if (error instanceof CreditTemplateError || error instanceof EncodingProfileError) {
 		return response(requestId, error.statusCode, 'request_failed', error.message, true);
 	}
 

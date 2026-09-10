@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { useDisclosureState } from '../disclosure-state';
+import EncodingProfileSelector from '../components/EncodingProfileSelector.vue';
+import FormDisclosure from '../components/FormDisclosure.vue';
+import ChannelEncodingSettings from '../components/ChannelEncodingSettings.vue';
 import SubtitlePreferencesEditor from '../components/SubtitlePreferencesEditor.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import {
 	CalendarDays,
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	Clock3,
@@ -14,6 +19,7 @@ import {
 	RadioTower,
 	Trash2,
 	Upload,
+	Video,
 } from '@lucide/vue';
 import {
 	CHANNEL_LOGO_MAX_BYTES,
@@ -68,13 +74,14 @@ const initialLoading = ref(
 const scheduling = useSchedulingStore();
 const editingId = ref<string>();
 const showForm = ref(false);
+const encodingProfilesReady = ref(false);
 let leavingPage = false;
 const error = ref('');
 const logoInput = ref<HTMLInputElement>();
-const externalLogoUrl = ref('');
 const removeLogoOnSave = ref(false);
 const fallbackStatus = ref<FallbackFillerStatus | null>(null);
 const fallbackFile = ref<File | null>(null);
+const fallbackExpanded = useDisclosureState('channel-fallback', false);
 const removeFallbackOnSave = ref(false);
 const fallbackLoading = ref(false);
 const saving = ref(false);
@@ -111,6 +118,7 @@ const cropSource = shallowRef<{
 const LOGO_CROP_MAX_WIDTH = 240;
 const LOGO_CROP_MAX_HEIGHT = 260;
 const defaults = (): ChannelCreate => ({
+	encodingProfileId: null,
 	number: '',
 	name: '',
 	logo: null,
@@ -218,7 +226,7 @@ function existingLogoUrl(): string | null {
 		return channel ? channelLogoUrl(channel) : null;
 	}
 
-	return externalLogoUrl.value.trim() || null;
+	return form.logo;
 }
 
 /** Revoke the temporary image URL and reset crop selection state. */
@@ -236,10 +244,9 @@ function disposeCropSource(): void {
 	}
 }
 
-/** Reset logo edits while preserving whether the saved logo is managed or external. */
-function resetLogoEditor(logo: string | null): void {
+/** Clear staged crop and removal state while retaining the saved logo in the channel draft. */
+function resetLogoEditor(): void {
 	disposeCropSource();
-	externalLogoUrl.value = managedChannelLogoId(logo) ? '' : (logo ?? '');
 	removeLogoOnSave.value = false;
 }
 
@@ -247,7 +254,6 @@ function resetLogoEditor(logo: string | null): void {
 function channelFormSnapshot(): string {
 	return JSON.stringify({
 		form,
-		externalLogoUrl: externalLogoUrl.value,
 		removeLogoOnSave: removeLogoOnSave.value,
 		crop: cropSource.value ? { source: cropSource.value.url, ...logoCrop } : null,
 		fallbackFile: fallbackFile.value
@@ -265,7 +271,7 @@ const channelFormDirty = computed(() =>
 	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
 const channelFormValid = computed(() => channelCreateSchema.safeParse(payload()).success);
 const channelSaveDisabled = computed(() =>
-	saving.value || !channelFormValid.value || (Boolean(editingId.value) && !channelFormDirty.value));
+	saving.value || (!editingId.value && !encodingProfilesReady.value) || !channelFormValid.value || (Boolean(editingId.value) && !channelFormDirty.value));
 
 /** Close the channel form after releasing any temporary crop image. */
 function finishCloseForm(): void {
@@ -479,7 +485,6 @@ async function selectLogo(event: Event): Promise<void> {
 		logoCrop.y = 0;
 		logoCrop.width = source.width;
 		logoCrop.height = source.height;
-		externalLogoUrl.value = '';
 		removeLogoOnSave.value = false;
 	}
 	catch (cause) {
@@ -490,7 +495,6 @@ async function selectLogo(event: Event): Promise<void> {
 /** Clear staged logo data and mark the persisted logo for removal on save. */
 function removeSelectedLogo(): void {
 	disposeCropSource();
-	externalLogoUrl.value = '';
 	removeLogoOnSave.value = true;
 }
 
@@ -611,11 +615,8 @@ async function showToday(): Promise<void> {
 /** Build the validated request body from the current editor form. */
 function payload(): ChannelCreate {
 	const result = cloneContractValue(form) as ChannelCreate;
-	if (cropSource.value || managedChannelLogoId(form.logo)) {
-		result.logo = form.logo;
-	}
-	else {
-		result.logo = externalLogoUrl.value.trim() || null;
+	if (removeLogoOnSave.value && !managedChannelLogoId(form.logo)) {
+		result.logo = null;
 	}
 	return result;
 }
@@ -627,8 +628,8 @@ function retainFallbackDraftAfterPartialSave(saved: Channel): void {
 	const { id, createdAt, updatedAt, ...config } = saved;
 	void createdAt;
 	void updatedAt;
-	Object.assign(form, cloneContractValue(config) as ChannelCreate);
-	resetLogoEditor(saved.logo);
+	Object.assign(form, defaults(), cloneContractValue(config) as ChannelCreate);
+	resetLogoEditor();
 	editingId.value = id;
 	formBaseline.value = cloneContractValue(config) as ChannelCreate;
 	fallbackFile.value = null;
@@ -638,10 +639,23 @@ function retainFallbackDraftAfterPartialSave(saved: Channel): void {
 	removeFallbackOnSave.value = pendingFallbackRemoval;
 }
 
+/** Adopt the asynchronously loaded default into the opening baseline without capturing user edits. */
+function encodingProfilesLoaded(ready: boolean): void {
+	if (ready && !encodingProfilesReady.value && !editingId.value && formBaseline.value) {
+		const encoding = { encodingProfileId: form.encodingProfileId ?? null, audio: cloneContractValue(form.audio), video: cloneContractValue(form.video) };
+		Object.assign(formBaseline.value, encoding);
+		const original = JSON.parse(originalFormSnapshot.value) as { form: ChannelCreate };
+		Object.assign(original.form, encoding);
+		originalFormSnapshot.value = JSON.stringify(original);
+	}
+	encodingProfilesReady.value = ready;
+}
+
 /** Open a blank channel form. */
 function add() {
+	encodingProfilesReady.value = false;
 	Object.assign(form, defaults());
-	resetLogoEditor(null);
+	resetLogoEditor();
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
 	editingId.value = undefined;
@@ -657,8 +671,8 @@ function edit(channel: Channel) {
 	void id;
 	void createdAt;
 	void updatedAt;
-	Object.assign(form, cloneContractValue(config) as ChannelCreate);
-	resetLogoEditor(channel.logo);
+	Object.assign(form, defaults(), cloneContractValue(config) as ChannelCreate);
+	resetLogoEditor();
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
 	editingId.value = channel.id;
@@ -679,7 +693,6 @@ async function save() {
 	try {
 		const croppedLogo = await renderCroppedLogo();
 		const priorManagedLogo = managedChannelLogoId(form.logo);
-		const replacementExternalLogo = externalLogoUrl.value.trim() || null;
 		let saved: Channel;
 		if (editingId.value) {
 			saved = await api.updateChannel(editingId.value, payload());
@@ -691,14 +704,8 @@ async function save() {
 		if (croppedLogo) {
 			saved = await api.uploadChannelLogo(saved.id, croppedLogo);
 		}
-		else if (priorManagedLogo && (removeLogoOnSave.value || replacementExternalLogo !== null)) {
+		else if (priorManagedLogo && removeLogoOnSave.value) {
 			saved = await api.deleteChannelLogo(saved.id);
-			if (replacementExternalLogo) {
-				saved = await api.updateChannel(saved.id, {
-					...payload(),
-					logo: replacementExternalLogo,
-				});
-			}
 		}
 		try {
 			if (fallbackFile.value) {
@@ -733,8 +740,8 @@ function resetChannel(): void {
 	}
 
 	const baseline = cloneContractValue(formBaseline.value) as ChannelCreate;
-	Object.assign(form, baseline);
-	resetLogoEditor(baseline.logo);
+	Object.assign(form, defaults(), baseline);
+	resetLogoEditor();
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
 	error.value = '';
@@ -921,230 +928,146 @@ onBeforeUnmount(() => {
 					<h2 id="channel-editor-title">Broadcast profile</h2>
 				</ResourceEditorHeader>
 				<div class="resource-editor-scroll">
-					<fieldset>
-						<legend>Lineup</legend>
-						<div class="form-grid">
-							<label
-							><span>Number</span
-							><input v-model="form.number" required pattern="[A-Za-z0-9._-]+" /></label
-							><label><span>Name</span><input v-model="form.name" autocapitalize="words" required /></label
-							><label><span>Group</span><input v-model="form.group" autocapitalize="words" /></label>
-							<div class="span-2 channel-schedule-link">
-								<span>Schedule</span>
-								<RouterLink
-									v-if="editingId && !channelFormDirty"
-									class="button secondary"
-									:to="`/schedules/channels/${editingId}`"
-								>
-									Manage Layered Schedule
-								</RouterLink>
-								<DisabledActionHint
-									v-else
-									label="Manage Layered Schedule"
-									message="Save the channel before configuring its schedule."
-								>
-									<button type="button" class="button secondary" disabled>
-										Manage Layered Schedule
-									</button>
-								</DisabledActionHint>
-							</div>
-							<div class="channel-logo-editor span-2">
-								<div class="channel-logo-heading">
-									<span>Channel logo</span>
-									<small>PNG on save · maximum {{ configuredLogoLimit }}</small>
-								</div>
-								<input
-									ref="logoInput"
-									class="visually-hidden"
-									type="file"
-									accept="image/*"
-									@change="selectLogo"
-								/>
-								<div v-if="cropSource" class="channel-logo-workspace">
-									<div class="channel-logo-crop-area">
-										<div
-											class="channel-logo-crop-stage"
-											:class="{ dragging: logoDrag.active }"
-											:style="cropStageStyle"
-											role="img"
-											aria-label="Channel logo crop preview"
-											@pointermove="moveCropInteraction"
-											@pointerup="endCropInteraction"
-											@pointercancel="endCropInteraction"
-										>
-											<img :src="cropSource.url" alt="" draggable="false" />
-											<div
-												class="channel-logo-selection"
-												:style="cropSelectionStyle"
-												@pointerdown="startCropInteraction($event, 'move')"
-											>
-												<button
-													v-for="handle in cropHandles"
-													:key="handle"
-													type="button"
-													class="channel-logo-crop-handle"
-													:class="`handle-${handle}`"
-													:aria-label="`Resize crop ${handle}`"
-													@pointerdown.stop="startCropInteraction($event, handle)"
-												></button>
-											</div>
-										</div>
-									</div>
-									<div class="channel-logo-controls">
-										<p>
-											Drag the selection to move it. Resize any edge or corner freely; its aspect
-											ratio is not constrained.
-										</p>
-										<p class="channel-logo-crop-size">
-											Selected: {{ Math.round(logoCrop.width) }}×{{ Math.round(logoCrop.height) }}
-											source pixels
-										</p>
-										<div class="channel-logo-buttons">
-											<button type="button" class="button secondary" @click="logoInput?.click()">
-												<ImagePlus :size="16" />Choose Another
-											</button>
-											<TwoStepActionButton
-												class="icon-button danger-text"
-												label="Remove selected logo"
-												confirm-label="Confirm remove selected logo"
-												@confirm="removeSelectedLogo"
-											>
-												<Trash2 :size="17" />
-											</TwoStepActionButton>
-										</div>
-									</div>
-								</div>
-								<div v-else class="channel-logo-picker">
-									<div class="channel-logo-current">
-										<img v-if="existingLogoUrl()" :src="existingLogoUrl() ?? undefined" alt="" />
-										<ImagePlus v-else :size="30" />
-									</div>
-									<div>
-										<button type="button" class="button secondary" @click="logoInput?.click()">
-											<Upload :size="16" />Choose Image
-										</button>
-										<TwoStepActionButton
-											v-if="existingLogoUrl()"
-											class="icon-button danger-text"
-											label="Remove logo"
-											confirm-label="Confirm remove logo"
-											@confirm="removeSelectedLogo"
-										>
-											<Trash2 :size="17" />
-										</TwoStepActionButton>
-										<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
-									</div>
-								</div>
-								<label class="channel-logo-url">
-									<span>Or use an external logo URL</span>
-									<input
-										v-model="externalLogoUrl"
-										type="url"
-										placeholder="https://…"
-										:disabled="Boolean(cropSource)"
-										@input="removeLogoOnSave = false"
-									/>
-								</label>
-							</div>
-							<FallbackFillerEditor
-								v-model:selected-file="fallbackFile"
-								v-model:remove-on-save="removeFallbackOnSave"
-								class="span-2"
-								heading="Channel fallback override"
-								removal-source="Effective global fallback after save"
-								:status="fallbackStatus"
-								:loading="fallbackLoading"
-								:disabled="saving || deleting"
-								@validation-error="error = $event"
-							/>
+					<div class="channel-identity-fields">
+						<label
+						><span>Number</span
+						><input v-model="form.number" required pattern="[A-Za-z0-9._-]+" /></label
+						><label><span>Name</span><input v-model="form.name" autocapitalize="words" required /></label
+						><label><span>Group</span><input v-model="form.group" autocapitalize="words" /></label>
+					</div>
+					<div class="channel-schedule-link">
+						<span>Schedule</span>
+						<RouterLink
+							v-if="editingId && !channelFormDirty"
+							class="button secondary"
+							:to="`/schedules/channels/${editingId}`"
+						>
+							Manage Layered Schedule
+						</RouterLink>
+						<DisabledActionHint
+							v-else
+							label="Manage Layered Schedule"
+							message="Save the channel before configuring its schedule."
+						>
+							<button type="button" class="button secondary" disabled>
+								Manage Layered Schedule
+							</button>
+						</DisabledActionHint>
+					</div>
+					<div class="channel-logo-editor">
+						<div class="channel-logo-heading">
+							<span>Channel logo</span>
+							<small>PNG on save · maximum {{ configuredLogoLimit }}</small>
 						</div>
-					</fieldset>
-					<fieldset>
-						<legend>Video normalization</legend>
-						<div class="form-grid three">
-							<label
-							><span>Format</span
-							><select v-model="form.video.format">
-								<option value="h264">H.264</option>
-								<option value="hevc">HEVC</option>
-							</select></label
-							><label
-							><span>Width</span><input v-model.number="form.video.width" type="number" /></label
-							><label
-							><span>Height</span><input v-model.number="form.video.height" type="number" /></label
-							><label
-							><span>Bitrate kbps</span
-							><input v-model.number="form.video.bitrateKbps" type="number" /></label
-							><label
-							><span>Buffer kbps</span
-							><input v-model.number="form.video.bufferKbps" type="number" /></label
-							><label
-							><span>Bit depth</span
-							><input v-model.number="form.video.bitDepth" type="number" /></label
-							><label
-							><span>Scaling</span
-							><select v-model="form.video.scalingMode">
-								<option value="scale_and_pad">Scale and pad</option>
-								<option value="stretch">Stretch</option>
-								<option value="crop">Crop</option>
-							</select></label
-							><label class="acceleration-field">
-								<span class="acceleration-heading">
-									Acceleration
-									<small
-										v-if="form.video.accel === 'automatic' && accelerationPredictionText"
-										class="acceleration-prediction"
-										role="status"
-										:title="accelerationPrediction?.detail"
+						<input
+							ref="logoInput"
+							class="visually-hidden"
+							type="file"
+							accept="image/*"
+							@change="selectLogo"
+						/>
+						<div v-if="cropSource" class="channel-logo-workspace">
+							<div class="channel-logo-crop-area">
+								<div
+									class="channel-logo-crop-stage"
+									:class="{ dragging: logoDrag.active }"
+									:style="cropStageStyle"
+									role="img"
+									aria-label="Channel logo crop preview"
+									@pointermove="moveCropInteraction"
+									@pointerup="endCropInteraction"
+									@pointercancel="endCropInteraction"
+								>
+									<img :src="cropSource.url" alt="" draggable="false" />
+									<div
+										class="channel-logo-selection"
+										:style="cropSelectionStyle"
+										@pointerdown="startCropInteraction($event, 'move')"
 									>
-										{{ accelerationPredictionText }}
-									</small>
-								</span>
-								<select v-model="form.video.accel">
-									<option value="automatic">Automatic</option>
-									<option :value="null">None</option>
-									<option value="amf">AMF</option>
-									<option value="cuda">CUDA</option>
-									<option value="qsv">QSV</option>
-									<option value="rkmpp">RKMPP</option>
-									<option value="vaapi">VAAPI</option>
-									<option value="videotoolbox">VideoToolbox</option>
-									<option value="vulkan">Vulkan</option>
-								</select>
-							</label
-							><label class="check"
-							><input v-model="form.video.deinterlace" type="checkbox" /> Deinterlace</label
-							>
+										<button
+											v-for="handle in cropHandles"
+											:key="handle"
+											type="button"
+											class="channel-logo-crop-handle"
+											:class="`handle-${handle}`"
+											:aria-label="`Resize crop ${handle}`"
+											@pointerdown.stop="startCropInteraction($event, handle)"
+										></button>
+									</div>
+								</div>
+							</div>
+							<div class="channel-logo-controls">
+								<p>
+									Drag the selection to move it. Resize any edge or corner freely; its aspect
+									ratio is not constrained.
+								</p>
+								<p class="channel-logo-crop-size">
+									Selected: {{ Math.round(logoCrop.width) }}×{{ Math.round(logoCrop.height) }}
+									source pixels
+								</p>
+								<div class="channel-logo-buttons">
+									<button type="button" class="button secondary" @click="logoInput?.click()">
+										<ImagePlus :size="16" />Choose Another
+									</button>
+									<TwoStepActionButton
+										class="icon-button danger-text"
+										label="Remove selected logo"
+										confirm-label="Confirm remove selected logo"
+										@confirm="removeSelectedLogo"
+									>
+										<Trash2 :size="17" />
+									</TwoStepActionButton>
+								</div>
+							</div>
 						</div>
-					</fieldset>
-					<fieldset>
-						<legend>Audio normalization</legend>
-						<div class="form-grid three">
-							<label
-							><span>Format</span
-							><select v-model="form.audio.format">
-								<option value="aac">AAC</option>
-								<option value="ac3">AC3</option>
-							</select></label
-							><label
-							><span>Bitrate kbps</span
-							><input v-model.number="form.audio.bitrateKbps" type="number" /></label
-							><label
-							><span>Channels</span
-							><input v-model.number="form.audio.channels" type="number" /></label
-							><label
-							><span>Sample rate</span
-							><input v-model.number="form.audio.sampleRateHz" type="number" /></label
-							><label class="check"
-							><input v-model="form.audio.normalizeLoudness" type="checkbox" /> Normalize
-								loudness</label
-							>
+						<div v-else class="channel-logo-picker">
+							<div class="channel-logo-current">
+								<img v-if="existingLogoUrl()" :src="existingLogoUrl() ?? undefined" alt="" />
+								<ImagePlus v-else :size="30" />
+							</div>
+							<div>
+								<button type="button" class="button secondary" @click="logoInput?.click()">
+									<Upload :size="16" />Choose Image
+								</button>
+								<TwoStepActionButton
+									v-if="existingLogoUrl()"
+									class="icon-button danger-text"
+									label="Remove logo"
+									confirm-label="Confirm remove logo"
+									@confirm="removeSelectedLogo"
+								>
+									<Trash2 :size="17" />
+								</TwoStepActionButton>
+								<p>JPEG, PNG, WebP, or another browser-supported image up to 25 MiB.</p>
+							</div>
 						</div>
-					</fieldset>
+
+					</div>
+
+					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
+						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" />
+					</EncodingProfileSelector>
 					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">
 						<label><span>Subtitle mode</span><select v-model="form.subtitleMode"><option value="burn">Burn</option><option value="convert">Convert</option></select></label>
 						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>
 					</SubtitlePreferencesEditor>
+					<FormDisclosure v-model:open="fallbackExpanded" class="channel-fallback-disclosure">
+						<template #summary>
+							<span class="form-disclosure-icon" aria-hidden="true"><Video :size="26" /></span>
+							<span class="form-disclosure-copy"><strong>Channel fallback override</strong><small>Use a fallback video just for this channel</small></span>
+							<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
+						</template>
+						<FallbackFillerEditor
+							v-model:selected-file="fallbackFile"
+							v-model:remove-on-save="removeFallbackOnSave"
+							heading="Channel fallback override"
+							removal-source="Effective global fallback after save"
+							:status="fallbackStatus"
+							:loading="fallbackLoading"
+							:disabled="saving || deleting"
+							@validation-error="error = $event"
+						/>
+					</FormDisclosure>
 					<p v-if="error" class="notice error">{{ error }}</p>
 				</div>
 				<ResourceEditorActionBar

@@ -10,6 +10,7 @@ export const helpTopicIds = [
 	'channels.manage',
 	'scheduling.programs',
 	'playback.credit-templates',
+	'playback.encoding-profiles',
 	'scheduling.templates',
 	'scheduling.channel-schedules',
 	'playback.settings',
@@ -55,6 +56,9 @@ export function helpTopicForPath(pathname: string): string {
 	}
 	if (pathname.startsWith('/playback/credit-templates')) {
 		return 'playback.credit-templates';
+	}
+	if (pathname.startsWith('/playback')) {
+		return 'playback.encoding-profiles';
 	}
 	if (pathname.startsWith('/schedules/programs')) {
 		return 'scheduling.programs';

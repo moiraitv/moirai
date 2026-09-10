@@ -273,6 +273,7 @@ onUnmounted(() => {
 						<button class="nav-section-toggle" :aria-expanded="playbackNavOpen" aria-label="Toggle playback navigation" @click="playbackNavOpen = !playbackNavOpen"><ChevronDown :size="16" :class="{ rotated: !playbackNavOpen }" /></button>
 					</div>
 					<Transition name="moirai-collapse"><div v-show="playbackNavOpen" class="library-nav">
+						<RouterLink class="library-nav-link" to="/playback/encoding-profiles"><span class="library-nav-icon"><Settings :size="16" /></span><span>Encoding Profiles</span></RouterLink>
 						<RouterLink class="library-nav-link" to="/playback/credit-templates"><span class="library-nav-icon"><FileText :size="16" /></span><span>Credit Templates</span></RouterLink>
 					</div></Transition>
 				</div>

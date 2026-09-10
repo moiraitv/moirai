@@ -462,6 +462,10 @@ legend {
 	line-height: 1.5;
 }
 
+.channel-logo-picker p {
+	margin-top: .75rem;
+}
+
 .channel-logo-controls .channel-logo-crop-size {
 	color: #9fb1bf;
 	font-variant-numeric: tabular-nums;
@@ -506,6 +510,130 @@ legend {
 	object-fit: contain;
 }
 
-.channel-logo-url {
-	margin-top: 14px;
+
+.channel-identity-fields {
+	display: grid;
+	grid-template-columns: minmax(0, .6fr) minmax(0, 1.4fr) minmax(0, 1fr);
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+
+.channel-fallback-disclosure {
+	margin-block: 1rem;
+
+	.fallback-filler-editor {
+		padding: 1rem;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+	}
+}
+
+.channel-editor-modal {
+	.channel-schedule-link {
+		margin-bottom: 1rem;
+	}
+
+	.subtitle-preferences > label + label {
+		margin-top: .75rem;
+	}
+}
+
+.channel-encoding-disclosure {
+	&:not(.is-open) .encoding-disclosure-chevron svg {
+		transform: rotate(-90deg);
+	}
+
+	.encoding-settings-sections {
+		gap: 0;
+		padding: 1rem;
+	}
+
+	.encoding-settings-section {
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+
+		+ .encoding-settings-section {
+			margin-top: 1rem;
+			padding-top: 1.5rem;
+			border-top: 1px solid var(--line-bright);
+		}
+
+		legend small {
+			display: block;
+			margin-top: .25rem;
+			font-size: .875rem;
+			font-weight: 400;
+			color: var(--muted-strong);
+		}
+
+		.form-grid {
+			grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+			margin-bottom: 0;
+		}
+	}
+}
+
+.encoding-disclosure-chevron {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 50%;
+	background: var(--panel-2);
+}
+
+.encoding-disclosure-icon {
+	flex-shrink: 0;
+	color: var(--muted-strong);
+}
+
+.encoding-disclosure-copy {
+	flex: 1 1 10rem;
+
+	strong,
+	small {
+		display: block;
+	}
+
+	small {
+		margin-top: .3rem;
+		color: var(--muted-strong);
+	}
+}
+
+.encoding-disclosure-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+
+	span {
+		padding: .35rem .5rem;
+		border: 1px solid var(--line-bright);
+		border-radius: .4rem;
+		background: var(--panel-2);
+		color: var(--muted-strong);
+		font-size: .75rem;
+	}
+}
+
+.encoding-check-description {
+	display: block;
+	margin-top: .3rem;
+	font-weight: 400;
+	color: var(--muted-strong);
+}
+
+.encoding-disclosure-chevron svg {
+	transition: transform var(--motion-system) var(--motion-system-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.encoding-disclosure-chevron svg {
+		transition: none;
+	}
 }

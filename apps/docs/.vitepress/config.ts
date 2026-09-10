@@ -63,6 +63,7 @@ export default defineConfig({
 			{
 				text: 'Playback',
 				items: [
+					{ text: 'Encoding profiles', link: '/playback/encoding-profiles' },
 					{ text: 'Credit templates', link: '/playback/credit-templates' },
 				],
 			},

@@ -1,7 +1,9 @@
+import { audioNormalizationSchema, videoNormalizationSchema, type ConcreteHardwareAcceleration } from './encoding.js';
+export * from './encoding.js';
+import { z } from 'zod';
 import { subtitlePreferencesSchema } from './subtitles.js';
 export * from './subtitles.js';
 export * from './credit-template-starter.js';
-import { z } from 'zod';
 import type {
 	ReconciliationStatus,
 	SourceAvailability,
@@ -351,59 +353,6 @@ export type LiveEventInput
 		| { type: 'scheduling.changed'; data: z.infer<typeof schedulingEventDataSchema> }
 		| { type: 'timeline.changed'; data: z.infer<typeof timelineEventDataSchema> };
 
-/** Validate the audio normalization contract at runtime. */
-export const audioNormalizationSchema = z.object({
-	format: z.enum(['aac', 'ac3']).nullable().default('aac'),
-	bitrateKbps: z.number().int().positive().nullable().default(192),
-	bufferKbps: z.number().int().positive().nullable().default(384),
-	channels: z.number().int().min(1).max(16).nullable().default(2),
-	sampleRateHz: z.number().int().positive().nullable().default(48_000),
-	normalizeLoudness: z.boolean().default(true),
-	loudness: z
-		.object({
-			integratedTarget: z.number().nullable().default(-16),
-			rangeTarget: z.number().nullable().default(11),
-			truePeak: z.number().nullable().default(-1.5),
-		})
-		.nullable()
-		.default({ integratedTarget: -16, rangeTarget: 11, truePeak: -1.5 }),
-});
-
-/** Concrete hardware backends understood by the integrated playback worker. */
-export const concreteHardwareAccelerationSchema = z.enum([
-	'amf',
-	'cuda',
-	'qsv',
-	'rkmpp',
-	'vaapi',
-	'videotoolbox',
-	'vulkan',
-]);
-/** Hardware-acceleration choices authored in a Moirai channel. */
-export const hardwareAccelerationSchema = z.union([
-	z.literal('automatic'),
-	concreteHardwareAccelerationSchema,
-]).nullable();
-/** Concrete playback-worker hardware acceleration backend. */
-export type ConcreteHardwareAcceleration = z.infer<typeof concreteHardwareAccelerationSchema>;
-/** Authored channel acceleration choice, including Moirai-owned automatic selection. */
-export type HardwareAcceleration = z.infer<typeof hardwareAccelerationSchema>;
-
-/** Validate the video normalization contract at runtime. */
-export const videoNormalizationSchema = z.object({
-	format: z.enum(['h264', 'hevc']).nullable().default('h264'),
-	bitDepth: z.number().int().min(8).max(16).nullable().default(8),
-	width: z.number().int().positive().nullable().default(1920),
-	height: z.number().int().positive().nullable().default(1080),
-	scalingMode: z.enum(['scale_and_pad', 'stretch', 'crop']).default('scale_and_pad'),
-	bitrateKbps: z.number().int().positive().nullable().default(2000),
-	bufferKbps: z.number().int().positive().nullable().default(4000),
-	accel: hardwareAccelerationSchema.default('automatic'),
-	vaapiDevice: z.string().nullable().default(null),
-	vaapiDriver: z.enum(['ihd', 'i965', 'radeonsi']).nullable().default(null),
-	deinterlace: z.boolean().default(false),
-});
-
 /** URI prefix that distinguishes Moirai-managed logos from external artwork. */
 export const MANAGED_CHANNEL_LOGO_PREFIX = 'moirai://channel-logo/';
 /** Maximum encoded size accepted for a managed channel logo. */
@@ -476,6 +425,7 @@ export const channelCreateSchema = z.object({
 			message: 'Channel number cannot be a relative path segment',
 		}),
 	name: z.string().trim().min(1).max(120),
+	encodingProfileId: z.uuid().nullable().optional(),
 	logo: channelLogoSchema.nullable().default(null),
 	group: z.string().trim().max(120).nullable().default(null),
 	audio: audioNormalizationSchema.default({
@@ -508,6 +458,12 @@ export const channelCreateSchema = z.object({
 	disabledFilters: z.array(z.string()).default([]),
 	preferredFilters: z.array(z.string()).default([]),
 }).strict();
+
+/** Preserve omitted normalization fields so creation can distinguish defaults from Custom input. */
+export const channelCreateRequestSchema = channelCreateSchema.extend({
+	audio: audioNormalizationSchema.optional(),
+	video: videoNormalizationSchema.optional(),
+});
 
 /** Validate the channel update contract at runtime. */
 export const channelUpdateSchema = channelCreateSchema.partial();

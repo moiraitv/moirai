@@ -171,9 +171,22 @@ VobSub sidecars are probed once per track during preparation so language and dis
 passes a concrete stream index to the worker. Failed VobSub probes exclude only that sidecar,
 leaving other subtitle candidates available. Image subtitles remain burned. Logical and part-scoped sidecar offsets follow multipart clipping.
 
-The Playback management group owns reusable credit templates, including descriptions and a seeded,
-read-only music-video design protected from edits and deletion by the server. Users can duplicate
-it; upgrades preserve existing templates and resolve name conflicts.
+The Playback management group owns reusable encoding profiles and credit templates. Credit templates
+include descriptions and a seeded, read-only music-video design protected from edits and deletion
+by the server. Users can duplicate it; upgrades preserve existing templates and resolve name conflicts. Profiles
+include optional descriptions, copied when duplicated from the collection or built-in viewer;
+built-in presets include usage descriptions.
+Description-only edits preserve linked channel settings and playback state. Encoding
+profiles contain the existing audio/video normalization contracts. Linked channels retain effective
+settings as persisted snapshots; profile edits atomically update those fields and publish the
+existing channel-change events, so playback reads add no joins or per-channel profile queries.
+Assignments validate references, names are case-insensitively unique, and deletion is blocked while
+referenced. Custom channels retain independent settings, including on upgrade or when detaching a
+profile. Built-in 480p, 576p, 720p, 1080p, 1440p, and 4K presets are immutable and non-deletable.
+A single saved default starts at 1080p and applies only to new channels; Quick Setup and API creation
+without explicit normalization use it. Explicit Custom or legacy manual API input stays independent.
+Migrations preserve existing profiles and assignments, suffixing colliding built-in names.
+Subtitle choices, fonts, process paths, presentation, and scheduling remain channel-owned.
 
 Reusable music-video credit templates use Liquid to generate subtitles in ASS format. They expose
 bounded catalog metadata, source duration converted from persisted milliseconds, and channel resolution. Isolated, resource-limited
@@ -386,7 +399,7 @@ SQLite stores:
 - scan runs, tombstones, reconciliation state, and catalog conflicts;
 - show, season, artist, and album groups; media items and multipart aliases; genres, people,
   subtitle inventory, and technical probes;
-- channels and normalization settings;
+- channels, reusable encoding profiles, and effective normalization settings;
 - reusable music-video credit templates;
 - programs, templates, slots, boundaries, and channel template stacks;
 - playback-selection state and committed timeline segments;
@@ -826,7 +839,7 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - library configuration, browsing, health, and reconciliation;
 - media details and best-effort in-browser file preview;
 - channel normalization and artwork;
-- a Playback group for reusable music-video credit templates;
+- a Playback group for reusable encoding profiles and music-video credit templates;
 - guided Quick Setup for movie, show, and music-video channels;
 - reusable Programs and daily Templates;
 - layered Channel Schedules;
@@ -902,7 +915,7 @@ the dialog surface to a compact content-sized layout without scaling text, with 
 reduced motion. Both logo preparation paths and server PNG normalization preserve alpha transparency.
 Final submission atomically creates a content program, a
 single-slot daily template with a persistent cursor and unlimited finish-left midnight boundary, a
-channel using the standard normalization defaults, and its base assignment. A new library remains
+channel using the saved default encoding profile, and its base assignment. A new library remains
 independent of that transaction because scanning may already be active. Optional local artwork is
 fitted without cropping and uploaded afterward; a failed upload leaves the playable core setup
 intact and can be retried from the completion screen.
