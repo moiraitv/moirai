@@ -34,8 +34,6 @@ A logo is optional. Choose **Choose Image** to select a local image, then adjust
 
 Remove an existing logo with its remove button and confirm the action, then save the profile. Choosing or removing an image is a draft change until **Save**.
 
-Disclosure sections remember whether you left them open or closed in this browser, including after reopening the editor or refreshing the page. Choosing **Custom** still opens the video and audio controls automatically.
-
 ### Channel fallback override
 
 ![Channel fallback video controls showing the effective source and upload action](/screenshots/channel-editor-fallback.png)
@@ -44,21 +42,23 @@ Disclosure sections remember whether you left them open or closed in this browse
 
 Removing the override and saving returns this ![](/icons/tv-minimal.svg) Channel to the effective global fallback, which may be a global custom video or Moirai's bundled fallback. This is different from selecting a filler ![](/icons/list-video.svg) Program in a ![](/icons/calendar-range.svg) Template or ![](/icons/tv-minimal-play.svg) Channel Schedule: those rules schedule library media, while this setting supplies the playback fallback video. It does not remove ![](/icons/calendar-days.svg) Guide warnings; fix recurring scheduling gaps where possible.
 
-The **Channel fallback override** disclosure at the bottom of the editor, below Subtitles, opens the fallback controls. **Subtitle mode** and **Subtitle fonts folder** are inside **Subtitles → Additional subtitle settings**.
+## Audio and video encoding settings
 
-## Reuse audio and video settings
+New channels start with the saved default encoding profile (initially 1080p). Choose an [encoding profile](/playback/encoding-profiles) under **Encoding profile** to select a preset or to apply custom settings to the channel. 
 
-New channels start with the saved default encoding profile (initially 1080p). Choose an [encoding profile](/playback/encoding-profiles) under **Encoding profile → Audio and video settings** to share its settings with other channels. Named profiles display inherited audio and video controls as read-only. Updating a profile updates every linked channel. Active sessions with changed encoding settings are marked stale; restart them from Status when you are ready.
+Named profiles display the audio and video encoding settings that will apply, and updating a profile updates every linked channel.
 
-Choose **Custom** for channel-specific settings. **Video & audio settings** opens automatically for Custom; expand it to inspect a linked profile’s read-only values. Use **Manage encoding profiles** beside the selector to manage reusable profiles. The **Video** and **Audio** sections use the same icons and labels inside field borders as the encoding profile editor. Switching from a profile to **Custom** copies its audio and video values as your starting point and detaches the channel when saved. Upgrades preserve existing profile assignments and Custom settings. Subtitle settings, logos, schedules, fallback media, and FFmpeg paths remain independent of encoding profiles.
+Choose **Custom** for channel-specific settings. Switching from a profile to **Custom** copies its audio and video values as your starting point and detaches the channel when saved.
 
-The panel expands and collapses smoothly, or immediately when reduced motion is enabled. The disclosure header summarizes the selected mode, video codec and resolution, audio codec, and audio bitrate even while collapsed.
+Active sessions with changed encoding settings are marked stale; restart them from Status when you are ready.
 
 ![Expanded encoding settings with summary badges and video and audio sections](/screenshots/channel-editor-encoding.png)
 
 ## Video normalization
 
 ![Video normalization controls for format, resolution, bitrate, scaling, acceleration, and deinterlacing](/screenshots/channel-editor-video.png)
+
+These settings are available either by using `Custom` for the channel or with a shared [encoding profile](/playback/encoding-profiles).
 
 Normalization gives the ![](/icons/tv-minimal.svg) Channel a consistent output format even when its source files differ. Start with the defaults and change settings to match your clients and server capacity.
 
@@ -72,9 +72,11 @@ Normalization gives the ![](/icons/tv-minimal.svg) Channel a consistent output f
 
 An acceleration option appearing in the menu does not mean this machine supports it. Test live playback after changing codec, bit depth, resolution, or acceleration, and check logs if the stream fails.
 
-## Audio normalization and subtitles
+## Audio normalization
 
 ![Audio normalization controls for codec, bitrate, channels, sample rate, buffers, and loudness](/screenshots/channel-editor-audio.png)
+
+These settings are available either by using `Custom` for the channel or with a shared [encoding profile](/playback/encoding-profiles).
 
 - **Format:** choose AAC or AC3 to suit the playback clients.
 - **Bitrate kbps:** sets the target audio bitrate.
@@ -82,15 +84,50 @@ An acceleration option appearing in the menu does not mean this machine supports
 - **Sample rate:** sets the audio sampling frequency in hertz, such as 48000.
 - **Buffer kbps:** sets the audio encoder’s rate-control buffer.
 - **Normalize loudness:** enables loudness normalization to reduce volume differences between source items. Set the integrated loudness target (LUFS), loudness range (LU), and true peak limit (dBTP) when enabled.
-- **Subtitle mode:** **Burn** renders selected subtitles into the picture. **Convert** presents selected text subtitles as a selectable WebVTT track; image subtitles are still burned. Enabling music-video credits on the Channel or a Program in its prepared schedule automatically uses Burn for the whole Channel. Your saved mode is retained for when credits are disabled. A running stream restarts when the effective mode changes.
+
+## Subtitles
 
 ![Subtitle selection and additional subtitle settings](/screenshots/channel-editor-subtitles.png)
 
-Expand **Additional subtitle settings** to choose music-video credits, subtitle mode, or a fonts folder. The panel opens and closes with the same motion as the encoding settings, and respects reduced motion.
+Subtitles and music video credits are optional and start Off. They're for different purposes but share settings and presentation.
 
-Under **Subtitles**, choose **Off**, **Forced only**, **Prefer default**, or **Any matching track**. Prefer default falls back to another matching track when none is flagged default. Enter a two- or three-letter language code, such as `en` or `eng`, or leave it blank for any language. An explicit language never falls back to a different language. Programs can override these defaults.
+Subtitles come from embedded or sidecar subtitle data. Moirai uses subtitle tracks discovered during library scanning; see [subtitle sidecar naming](/libraries/media-file-naming) if matching files are not appearing in the media details.
 
-Choose a reusable [music-video credit template](/playback/credit-templates) independently of ordinary subtitle selection. Existing Channels start with both ordinary subtitles and credits Off. The **Subtitle fonts folder** supplements installed system fonts for ASS rendering.
+Music video credits use metadata about the content itself to generate and render opening and closing classic music video style credits. They're intended for content like music videos where movie/show-style subtitles are not used.
+
+### Subtitle selection
+
+Choose how Moirai selects an ordinary subtitle track for each video:
+
+- **Off:** do not select ordinary subtitles. Music video credits can still be enabled separately.
+- **Forced only:** select a matching track marked **forced**. These tracks commonly translate foreign-language dialogue or signs rather than every spoken line. The track must carry the forced flag; Moirai does not infer it from the dialogue. If no matching forced track exists, the video plays without ordinary subtitles.
+- **Prefer default:** prefer a matching track marked **default**. If none is marked default, select another matching track. This is useful when your files already identify the subtitle track you normally want.
+- **Any matching track:** select an available track that matches the language setting, without preferring default or forced flags. This selects one track; it does not send every available language to the viewer.
+
+If several tracks qualify, Moirai prefers a track associated with the current physical part of a multipart video, then an embedded track over a sidecar. Prefer default checks the default flag before these tie-breakers. Selection is consistent between runs; it does not combine tracks or offer a track picker here. Hearing-impaired and commentary flags are recorded during scanning but are not separate selection filters.
+
+### Preferred language code
+
+Enter a two- or three-letter language code, such as `en` or `eng` for English, or `fr` or `fra` for French. Equivalent codes match the same language. Leave the field blank to allow any language, including tracks with no language tag.
+
+A specified language is a strict filter. For example, **Forced only** with `en` selects an English forced track; an English non-forced track or a French forced track does not qualify. If no track matches, Moirai omits ordinary subtitles instead of falling back to another language. Tracks with an unknown language do not satisfy an explicit language choice.
+
+These are Channel defaults. A [Program](/scheduling/programs) can override subtitle selection, language, and music video credits independently. In nested sequences, more-specific Program choices override inherited values; fields left at **Inherit** retain the enclosing Program or Channel setting. Subtitle mode and the fonts folder remain Channel settings.
+
+### Additional subtitle settings
+
+Expand **Additional subtitle settings** to configure credits, presentation, and fonts.
+
+- **Music video credits:** leave **Off** to use ordinary subtitle selection, or choose a reusable [credit template](/playback/credit-templates) to display music video metadata such as the artist and song title. Credits replace ordinary subtitles on music videos; they are not added on top of lyrics or another subtitle track. Other media continues to use ordinary subtitle selection. Credits work even when **Subtitle selection** is Off, and the preferred subtitle language does not filter generated credits. Use **Manage credit templates** to view, duplicate, or customize a template.
+- **Subtitle mode — Burn:** render the selected subtitles into the video picture. Viewers cannot switch these subtitles off in their player. Use this when subtitles should always be visible or when the client cannot display a separate subtitle track.
+- **Subtitle mode — Convert:** provide selected text subtitles as a selectable WebVTT track. Viewers need a compatible player to display or hide it. Image-based subtitles, such as PGS or VobSub, are still burned into the picture. Choosing Convert does not enable subtitle selection by itself.
+- **Subtitle fonts folder:** optionally supply a folder containing fonts for subtitles in ASS format, including generated credits. Leave it blank to use installed system fonts. The path must be readable by the playback process; in Docker, use the path inside the container and mount the font files there. The folder supplies fonts, while the subtitle file or credit template determines which font to request.
+
+Music video credits on the Channel or a Program in its prepared schedule automatically force **Burn** for the whole Channel, including ordinary subtitles on other videos. Your saved Convert preference is retained and restored when credits are no longer enabled in that schedule. A running stream restarts when the effective mode changes, so enabling or disabling credits can briefly interrupt viewing.
+
+### Check the result
+
+Save the Channel and test a video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. Missing tracks, unreadable sidecars, and credit-preparation failures are omitted so Moirai can publish the video without them; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.
 
 ## Save and verify
 

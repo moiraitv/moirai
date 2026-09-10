@@ -1,29 +1,29 @@
 ---
 id: playback.credit-templates
-title: Music-video credit templates
+title: Music video credit templates
 description: Create styled artist, song, and album credits and choose when they appear.
 contextual: true
 ---
 
-# Music-video credit templates
+# Music video credit templates
 
-Credit templates show song information over music videos. Open **Playback → Credit templates**, choose **New template**, and start with the included design. Templates are reusable: choose a default in a Channel’s **Subtitles and music-video credits** settings, or select an override in a Program.
+Credit templates show song information over music videos. Open **Playback → Credit templates**, choose **New template**, and start with the included design. Templates are reusable: choose a default in a Channel’s **Subtitles and music video credits** settings, or select an override in a Program.
 
 ## Built-in template
 
-The included **Music-video credits** template is marked **Built-in** and cannot be edited or deleted. Choose **View** to inspect its source or render a preview. Choose **Duplicate** on its card or in the viewer to create an editable copy, including its description. Existing templates remain editable after an upgrade; if a name is already taken, the built-in receives a suffix.
+The included **Music video credits** template offers a classic-style music video credits intro and outro. Choose **View** to inspect its source or render a preview. Choose **Duplicate** on its card or in the viewer to create an editable copy.
 
-![Credit template cards with the built-in music-video design](/screenshots/credit-templates.png)
+![Credit template cards with the built-in music video design](/screenshots/credit-templates.png)
 
 ![Built-in credit template viewer with a Duplicate action](/screenshots/credit-template-view.png)
 
 ## Edit and preview a template
 
-Give the template a distinct name and an optional single-line description. The **Credit template (Liquid)** editor uses Liquid expressions and tags to generate a subtitle document in Advanced SubStation Alpha (ASS) format. Existing ErsatzTV `.ass.sbntxt` files need their Scriban syntax converted to Liquid; changing the filename alone does not convert them.
+Give the template a distinct name and an optional single-line description. The **Credit template (Liquid)** editor uses [Liquid expressions and tags](https://liquidjs.com/tutorials/intro-to-liquid.html) to generate a subtitle document in Advanced SubStation Alpha (ASS) format.
 
-![Credit template editor with the included music-video design](/screenshots/credit-template-editor.png)
+![Credit template editor with the included music video design](/screenshots/credit-template-editor.png)
 
-Choose a music-video library and a Channel under **Preview on a music video**. Search for a video, select its source time in seconds, and choose **Render preview**. The preview uses that Channel’s resolution and fonts. Expand **Generated subtitles (.ass)** to inspect the output. Errors stay beside the controls so you can correct the draft before saving.
+Choose a music video library and a Channel under **Preview on a music video**. Search for a video, select its source time in seconds, and choose **Render preview**. The preview uses that Channel’s resolution and fonts. Expand **Generated subtitles (.ass)** to inspect the output. Errors stay beside the controls so you can correct the draft before saving.
 
 **Save** stores the template. **Reset** asks for a second confirmation before restoring the opening draft. **Duplicate** creates an independently editable copy. Deleting a template requires confirmation and is blocked while a Channel or Program references it.
 
@@ -39,6 +39,6 @@ Timing is fixed relative to the original video. Tuning in midway does not restar
 
 Moirai automatically uses **Burn** for the whole Channel when credits are enabled on the Channel or a Program in its prepared schedule. The saved subtitle mode is retained and resumes when credits are no longer enabled in that schedule. A running stream restarts when the effective mode changes. Generated credits take precedence over ordinary subtitles on music videos; they do not appear on other media. Credits can be enabled while ordinary subtitle selection is **Off**. A Program can inherit settings or explicitly disable or replace its inherited template. In nested sequences, the most specific Program override wins.
 
-The included design names Neue Kabel and Courier Prime fonts. Install those fonts on the playback server, change the template to use installed fonts, or set the Channel’s **Subtitle fonts folder** to a directory visible to the playback worker. Missing fonts may be substituted. FFmpeg must include the ASS subtitle filter (libass) for rendering and preview.
+The included design uses Noto Sans for song, artist, and album text, and Noto Mono for studio and director credits. Both fonts are available in the Moirai Docker image. For other installations, install those fonts on the playback server. To use different fonts in a custom template, choose installed fonts or set the Channel’s **Subtitle fonts folder** to a directory visible to the playback worker. Missing fonts may be substituted. FFmpeg must include the ASS subtitle filter (libass) for rendering and preview.
 
 Templates are limited to 65,536 characters and generated documents to 1 MiB. Rendering has execution limits, and templates cannot load files. If a template or subtitle cannot be prepared, the video continues without it and the Channel editor shows the issue. When the renderer is busy, work waits for capacity; if its queue is full, playback continues without those credits and retries during the next update. Retry a preview or save if it reports that the renderer is busy. Saved changes are picked up by playback reconciliation; already buffered video is unchanged.

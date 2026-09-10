@@ -134,7 +134,7 @@ contain only bounded display metadata and never inspect or open the source media
 
 ### Metadata and playback facts
 
-Kodi-compatible movie, episode, show, and music-video NFO files provide descriptive metadata:
+Kodi-compatible movie, episode, show, and music video NFO files provide descriptive metadata:
 
 - titles, plots, release dates, and years;
 - genres, studios, countries, certifications, community ratings, and user ratings;
@@ -147,9 +147,9 @@ poster-reference forms emitted by maintained Kodi-style metadata exporters while
 field's distinct meaning.
 
 Portable filename parsing fills gaps when NFO metadata is absent. It recognizes the documented
-movie year, provider-ID, edition, multipart, episode-coordinate, and music-video track forms. Show
+movie year, provider-ID, edition, multipart, episode-coordinate, and music video track forms. Show
 folder years and provider IDs remain structural disambiguation metadata rather than display-title
-text. Music-video libraries build artist and album groups from the documented directory hierarchy;
+text. Music video libraries build artist and album groups from the documented directory hierarchy;
 item metadata prefers NFO values, then embedded container tags, then filename and folder values.
 
 NFO data is never trusted for playback-critical facts. Moirai measures the media file directly with
@@ -172,7 +172,7 @@ passes a concrete stream index to the worker. Failed VobSub probes exclude only 
 leaving other subtitle candidates available. Image subtitles remain burned. Logical and part-scoped sidecar offsets follow multipart clipping.
 
 The Playback management group owns reusable encoding profiles and credit templates. Credit templates
-include descriptions and a seeded, read-only music-video design protected from edits and deletion
+include descriptions and a seeded, read-only music video design protected from edits and deletion
 by the server. Users can duplicate it; upgrades preserve existing templates and resolve name conflicts. Profiles
 include optional descriptions, copied when duplicated from the collection or built-in viewer;
 built-in presets include usage descriptions.
@@ -188,7 +188,7 @@ without explicit normalization use it. Explicit Custom or legacy manual API inpu
 Migrations preserve existing profiles and assignments, suffixing colliding built-in names.
 Subtitle choices, fonts, process paths, presentation, and scheduling remain channel-owned.
 
-Reusable music-video credit templates use Liquid to generate subtitles in ASS format. They expose
+Reusable music video credit templates use Liquid to generate subtitles in ASS format. They expose
 bounded catalog metadata, source duration converted from persisted milliseconds, and channel resolution. Isolated, resource-limited
 rendering escapes metadata text and disables file-loading tags. Generated credits take precedence
 over ordinary subtitles on music videos and force channel-wide Burn mode. Source-relative cues do not restart when viewers tune in. Templates have unique
@@ -213,7 +213,9 @@ in two workers with at most 32 queued requests. Queue saturation omits optional 
 reconciliation retries rendering, while interactive requests receive a retryable 503. Obsolete assets
 are reclaimed only without active worker ownership, comparing canonical paths so symlinked playback
 roots retain referenced files. Channel fonts folders pass through to the
-worker. Convert playlists advertise a neutral subtitle rendition because program languages may
+worker. The built-in credit template uses Noto Sans and Noto Mono from the Docker image;
+font upgrades update only the protected built-in template, preserving authored copies.
+Convert playlists advertise a neutral subtitle rendition because program languages may
 vary; Burn playlists omit subtitle rendition metadata.
 
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured
@@ -400,7 +402,7 @@ SQLite stores:
 - show, season, artist, and album groups; media items and multipart aliases; genres, people,
   subtitle inventory, and technical probes;
 - channels, reusable encoding profiles, and effective normalization settings;
-- reusable music-video credit templates;
+- reusable music video credit templates;
 - programs, templates, slots, boundaries, and channel template stacks;
 - playback-selection state and committed timeline segments;
 - playback settings.
@@ -839,8 +841,8 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - library configuration, browsing, health, and reconciliation;
 - media details and best-effort in-browser file preview;
 - channel normalization and artwork;
-- a Playback group for reusable encoding profiles and music-video credit templates;
-- guided Quick Setup for movie, show, and music-video channels;
+- a Playback group for reusable encoding profiles and music video credit templates;
+- guided Quick Setup for movie, show, and music video channels;
 - reusable Programs and daily Templates;
 - layered Channel Schedules;
 - channel and dedicated EPG guide views;

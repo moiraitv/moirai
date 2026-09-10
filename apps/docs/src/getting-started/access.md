@@ -18,5 +18,3 @@ For local sign-in, the first person to open a new Moirai installation creates it
 When an operator has configured Logto, choose **Sign In with Logto** to authenticate through that provider. Local credentials can coexist with provider sign-in and remain useful as a fallback unless they are deliberately removed. Provider users accepted for the Moirai application receive the same full access as the local administrator.
 
 If local credentials are lost, use the single-use recovery command described in [Account and recovery](/operations/account-and-recovery). Do not expose an uninitialized installation to the internet: another visitor could claim it first.
-
-Expandable sections and navigation groups remember whether you left them open or closed in this browser. These preferences stay on this device; clearing browser site data resets them.

@@ -686,3 +686,28 @@ it('installs the built-in credit design without replacing an existing same-name 
 		expect(new Set(rows.map((row) => row.name.toLowerCase())).size).toBe(2);
 	});
 });
+
+it('renames the built-in music video template while preserving colliding user templates', async () => {
+	const { BUILTIN_CREDIT_TEMPLATE } = await import('@moirai/shared');
+	await upgradeFrom('0023_builtin_credit_template', (sqlite) => {
+		sqlite.prepare('INSERT INTO credit_templates (id,name,name_key,source,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('custom-name', BUILTIN_CREDIT_TEMPLATE.name, BUILTIN_CREDIT_TEMPLATE.name.toLowerCase(), 'User source', 'before', 'before');
+	}, (sqlite) => {
+		const builtin = sqlite.prepare('SELECT name, name_key AS nameKey FROM credit_templates WHERE id = ?').get(BUILTIN_CREDIT_TEMPLATE.id) as { name: string; nameKey: string };
+		expect(builtin.name).toBe(`${BUILTIN_CREDIT_TEMPLATE.name} (built-in 1)`);
+		expect(builtin.nameKey).toBe(builtin.name.toLowerCase());
+		expect(sqlite.prepare("SELECT name,source FROM credit_templates WHERE id='custom-name'").get()).toEqual({ name: BUILTIN_CREDIT_TEMPLATE.name, source: 'User source' });
+	});
+});
+
+it('updates built-in credit fonts while preserving user copies', async () => {
+	const { BUILTIN_CREDIT_TEMPLATE } = await import('@moirai/shared');
+	let previousSource = '';
+	await upgradeFrom('0024_credit_template_display_name', (sqlite) => {
+		previousSource = (sqlite.prepare('SELECT source FROM credit_templates WHERE id = ?').get(BUILTIN_CREDIT_TEMPLATE.id) as { source: string }).source;
+		expect(previousSource).not.toBe(BUILTIN_CREDIT_TEMPLATE.source);
+		sqlite.prepare('INSERT INTO credit_templates (id,name,name_key,source,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('custom-fonts', 'My credits', 'my credits', previousSource, 'before', 'before');
+	}, (sqlite) => {
+		expect(sqlite.prepare('SELECT source FROM credit_templates WHERE id = ?').get(BUILTIN_CREDIT_TEMPLATE.id)).toEqual({ source: BUILTIN_CREDIT_TEMPLATE.source });
+		expect(sqlite.prepare("SELECT source FROM credit_templates WHERE id='custom-fonts'").get()).toEqual({ source: previousSource });
+	});
+});

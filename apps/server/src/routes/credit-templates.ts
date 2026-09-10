@@ -22,7 +22,7 @@ export function registerCreditTemplateRoutes(app: FastifyInstance, dependencies:
 }): void {
 	const { repository, playout, events } = dependencies;
 	app.get('/api/v1/credit-templates', { schema: apiOperation({
-		operationId: 'listCreditTemplates', tags: ['Credit templates'], summary: 'List music-video credit templates',
+		operationId: 'listCreditTemplates', tags: ['Credit templates'], summary: 'List music video credit templates',
 		response: { 200: responseContent('Credit templates', 'application/json', z.array(creditTemplateSchema)) }, errors: [500, 503],
 	}) }, async () => repository.creditTemplates.list());
 
@@ -30,7 +30,7 @@ export function registerCreditTemplateRoutes(app: FastifyInstance, dependencies:
 		app.route({
 			method: update ? 'PUT' : 'POST', url: update ? '/api/v1/credit-templates/:id' : '/api/v1/credit-templates',
 			schema: apiOperation({ operationId: update ? 'updateCreditTemplate' : 'createCreditTemplate', tags: ['Credit templates'],
-				summary: update ? 'Replace a music-video credit template' : 'Create a music-video credit template',
+				summary: update ? 'Replace a music video credit template' : 'Create a music video credit template',
 				...(update ? { params: idParamsSchema } : {}), body: creditTemplateCreateSchema,
 				response: { [update ? 200 : 201]: responseContent('Credit template', 'application/json', creditTemplateSchema) }, errors: [400, 404, 409, 500, 503],
 			}),

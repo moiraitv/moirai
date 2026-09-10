@@ -113,7 +113,7 @@ onMounted(load);
 		<h3>Preview on a music video</h3>
 		<LoadingState v-if="!loaded && !error" />
 		<template v-if="loaded">
-			<p v-if="!libraries.length || !channels.length">Create a music-video library and channel to preview credits.</p>
+			<p v-if="!libraries.length || !channels.length">Create a music video library and channel to preview credits.</p>
 			<div v-else class="form-grid three">
 				<label><span>Library</span><select v-model="libraryId"><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.name }}</option></select></label>
 				<label><span>Channel resolution and fonts</span><select v-model="channelId"><option v-for="channel in channels" :key="channel.id" :value="channel.id">{{ channel.name }}</option></select></label>
@@ -128,6 +128,6 @@ onMounted(load);
 			<button class="button secondary" type="button" :disabled="rendering || !itemId || !channelId" @click="render">{{ rendering ? 'Rendering…' : 'Render preview' }}</button>
 		</template>
 		<p v-if="error" class="notice error">{{ error }}</p>
-		<template v-if="preview"><img :src="preview.image" alt="Music-video frame with the generated credits" /><details :open="sourceOpen" @toggle="sourceOpen = ($event.target as HTMLDetailsElement).open"><summary>Generated subtitles (.ass)</summary><pre>{{ preview.ass }}</pre></details></template>
+		<template v-if="preview"><img :src="preview.image" alt="Music video frame with the generated credits" /><details :open="sourceOpen" @toggle="sourceOpen = ($event.target as HTMLDetailsElement).open"><summary>Generated subtitles (.ass)</summary><pre>{{ preview.ass }}</pre></details></template>
 	</section>
 </template>

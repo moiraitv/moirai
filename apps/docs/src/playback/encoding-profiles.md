@@ -53,7 +53,3 @@ Moirai includes non-deletable, read-only presets for 480p, 576p, 720p, 1080p, 14
 | 4K     | 3840 × 2160 | 32,000 kbps   |
 
 **1080p** is the initial default. Choose any preset or custom profile under **Default for new channels** to change it. This selection applies to the new-channel editor and Quick Setup; it never reassigns existing channels. Choose Custom in the channel editor to opt out. A custom profile selected as the default cannot be deleted until you choose another default.
-
-API channel creation also uses the saved default when the request omits a profile and manual audio/video settings. Send `encodingProfileId: null` for Custom. Requests supplying manual audio or video settings without a profile keep those settings for compatibility.
-
-Upgrades preserve existing profiles and channel settings. If an existing custom name matches a preset, the new preset receives a built-in suffix.

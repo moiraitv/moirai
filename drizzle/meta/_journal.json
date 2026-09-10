@@ -169,6 +169,20 @@
       "when": 1789095600000,
       "tag": "0023_builtin_credit_template",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1789099200000,
+      "tag": "0024_credit_template_display_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1789102800000,
+      "tag": "0025_credit_template_noto_fonts",
+      "breakpoints": true
     }
   ]
 }

@@ -180,7 +180,7 @@ Moirai inventories embedded and matching sidecar subtitle tracks. Channel and Pr
 
 ## Organize music videos and other material
 
-For a music-video library, use artist and album folders with numbered video files:
+For a music video library, use artist and album folders with numbered video files:
 
 ```text
 Music Videos/
@@ -192,7 +192,7 @@ Music Videos/
         └── cover.jpg
 ```
 
-Moirai uses this hierarchy for artist and album grouping. It also reads embedded music-video tags, so check those tags if renaming a file does not change the displayed title. Local NFO values take precedence when present.
+Moirai uses this hierarchy for artist and album grouping. It also reads embedded music video tags, so check those tags if renaming a file does not change the displayed title. Local NFO values take precedence when present.
 
 The article's audio-only music examples describe broader media-center organization, not an audio library workflow in Moirai. For miscellaneous videos, choose clear, consistent titles and provide local metadata where useful rather than assuming a movie or episode naming rule fits everything.
 

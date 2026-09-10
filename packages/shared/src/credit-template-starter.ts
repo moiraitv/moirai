@@ -1,4 +1,4 @@
-/** Editable Liquid/ASS music-video credits with fixed opening and closing cues. */
+/** Editable Liquid/ASS music video credits with fixed opening and closing cues. */
 export const MUSIC_VIDEO_CREDIT_TEMPLATE = `[Script Info]
 ScriptType: v4.00+
 WrapStyle: 0
@@ -9,11 +9,11 @@ PlayResY: {{ resolution.height }}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Title,Neue Kabel Black,{{ resolution.height | divided_by: 10.0 | round }},&H00DDDDDD,&H00DDDDDD,&H00444444,&H00000000,0,0,0,0,100,100,0,0,1,1,3,1,10,10,10,1
-Style: Artist,Neue Kabel,{{ resolution.height | divided_by: 20.0 | round }},&H00FFFFFF,&H00FFFFFF,&H00444444,&H00000000,1,0,0,0,100,100,0,0,1,1,3,1,10,10,10,1
-Style: Album,Neue Kabel Book,{{ resolution.height | divided_by: 20.0 | round }},&H00DDDDDD,&H00DDDDDD,&H00444444,&H00000000,0,0,0,0,100,100,0,0,1,1,3,1,10,10,40,1
-Style: Studio,Courier Prime,{{ resolution.height | divided_by: 35.0 | round }},&H00A0A0A0,&H00A0A0A0,&H00444444,&H00000000,0,0,0,0,100,100,1,0,1,1,3,1,10,10,10,1
-Style: Director,Courier Prime,{{ resolution.height | divided_by: 35.0 | round }},&H00DDDDDD,&H00DDDDDD,&H00444444,&H00000000,0,0,0,0,100,100,1,0,1,1,3,1,10,10,10,1
+Style: Title,Noto Sans,{{ resolution.height | divided_by: 10.0 | round }},&H00DDDDDD,&H00DDDDDD,&H00444444,&H00000000,1,0,0,0,100,100,0,0,1,1,3,1,10,10,10,1
+Style: Artist,Noto Sans,{{ resolution.height | divided_by: 20.0 | round }},&H00FFFFFF,&H00FFFFFF,&H00444444,&H00000000,1,0,0,0,100,100,0,0,1,1,3,1,10,10,10,1
+Style: Album,Noto Sans,{{ resolution.height | divided_by: 20.0 | round }},&H00DDDDDD,&H00DDDDDD,&H00444444,&H00000000,0,0,0,0,100,100,0,0,1,1,3,1,10,10,40,1
+Style: Studio,Noto Mono,{{ resolution.height | divided_by: 35.0 | round }},&H00A0A0A0,&H00A0A0A0,&H00444444,&H00000000,0,0,0,0,100,100,1,0,1,1,3,1,10,10,10,1
+Style: Director,Noto Mono,{{ resolution.height | divided_by: 35.0 | round }},&H00DDDDDD,&H00DDDDDD,&H00444444,&H00000000,0,0,0,0,100,100,1,0,1,1,3,1,10,10,10,1
 
 [Events]
 {% assign margin_x = resolution.width | times: 0.03 | round %}
@@ -48,10 +48,10 @@ Dialogue: 0,{{ start | ass_time }},{{ finish | ass_time }},Director,,{{ margin_x
 {% endfor %}
 `;
 
-/** Stable identity and presentation for the protected music-video credit design. */
+/** Stable identity and presentation for the protected music video credit design. */
 export const BUILTIN_CREDIT_TEMPLATE = {
 	id: '20000000-0000-4000-8000-000000000001',
-	name: 'Music-video credits',
+	name: 'Music video credits',
 	description: 'Artist, song, and album credits at the beginning and end of music videos.',
 	source: MUSIC_VIDEO_CREDIT_TEMPLATE,
 };

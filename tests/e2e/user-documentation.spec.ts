@@ -38,12 +38,11 @@ test('captures libraries and scanning', async ({ page, documentationServer }) =>
 		await expect(page.getByText('Media source may be offline', { exact: true })).toBeVisible();
 		await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
 		await expect(page.locator('.source-outage-banner')).toBeInViewport();
-		await expect.poll(async () => {
-			const header = await page.locator('.library-page-header').boundingBox();
-			const warning = await page.locator('.source-outage-banner').boundingBox();
-			return Boolean(header && warning && warning.y >= header.y + header.height
-				&& warning.y + warning.height <= page.viewportSize()!.height);
-		}).toBe(true);
+		await expect.poll(() => page.evaluate(() => {
+			const header = document.querySelector('.library-page-header')!.getBoundingClientRect();
+			const warning = document.querySelector('.source-outage-banner')!.getBoundingClientRect();
+			return { belowHeader: warning.top >= header.bottom, withinViewport: warning.bottom <= window.innerHeight };
+		})).toEqual({ belowHeader: true, withinViewport: true });
 		await capture(page, 'library-offline.png');
 	}
 	finally {
@@ -96,6 +95,11 @@ test('captures Programs', async ({ page, documentationServer }) => {
 	await page.getByRole('combobox', { name: 'Library', exact: true }).selectOption(libraryId);
 	await expect(page.locator('.quick-query-carousel-item').first()).toBeVisible();
 	await capture(page, 'program-content-create.png');
+	const subtitles = page.locator('.program-subtitle-disclosure');
+	await subtitles.getByRole('button', { name: /Subtitles and music video credits/ }).click();
+	await expect(subtitles.getByRole('combobox', { name: 'Music video credits', exact: true })).toBeEnabled();
+	await captureSection(page, subtitles, 'program-subtitles.png');
+	await subtitles.getByRole('button', { name: /Subtitles and music video credits/ }).click();
 
 	await page.getByRole('radio', { name: /^Sequence/u }).check();
 	await expect(page.getByRole('dialog', { name: 'Create sequence rule' })).toBeVisible();
@@ -385,7 +389,7 @@ test('captures music-video credit templates and verifies draft actions', async (
 	await existing.getByLabel('Name', { exact: true }).fill('Changed credits');
 	await existing.getByRole('button', { name: 'Reset', exact: true }).click();
 	await existing.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
-	await expect(existing.getByLabel('Name', { exact: true })).toHaveValue('Music-video credits copy');
+	await expect(existing.getByLabel('Name', { exact: true })).toHaveValue('Music video credits copy');
 	await existing.getByRole('button', { name: 'Close credit template' }).click();
 });
 
@@ -522,7 +526,7 @@ test('protects program drafts when navigating to credit templates', async ({ pag
 	await page.goto(`/schedules/programs/${program.id}`);
 	const editor = page.getByRole('dialog', { name: 'Edit program', exact: true });
 	const name = editor.getByRole('textbox', { name: /^Name/u });
-	await editor.getByRole('button', { name: /Subtitles and music-video credits.*Optional/ }).click();
+	await editor.getByRole('button', { name: /Subtitles and music video credits.*Optional/ }).click();
 	await name.fill('Pending program name');
 	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
 	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
@@ -617,7 +621,7 @@ test('preserves subtitle settings across the additional-settings disclosure', as
 	const trigger = subtitles.getByRole('button', { name: /Additional subtitle settings/ });
 	await subtitles.getByRole('combobox', { name: 'Subtitle selection', exact: true }).selectOption('any');
 	await subtitles.getByRole('textbox', { name: /^Preferred language code/ }).fill('eng');
-	await subtitles.getByRole('combobox', { name: 'Music-video credits', exact: true }).selectOption({ label: 'Music-video credits' });
+	await subtitles.getByRole('combobox', { name: 'Music video credits', exact: true }).selectOption({ label: 'Music video credits' });
 	await subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true }).selectOption('convert');
 	await subtitles.getByLabel('Subtitle fonts folder', { exact: true }).fill('/fonts');
 	await trigger.click();

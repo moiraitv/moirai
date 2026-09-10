@@ -158,7 +158,7 @@ onBeforeRouteLeave(async () => {
 		<p v-if="error" class="notice error">{{ error }} <button type="button" class="button secondary" @click="load">Retry</button></p>
 		<LoadingState v-if="!loaded && !error" />
 		<div v-if="loaded" class="credit-template-list">
-			<p v-if="!templates.length">No credit templates yet. Create one from the included music-video design.</p>
+			<p v-if="!templates.length">No credit templates yet. Create one from the included music video design.</p>
 			<article v-for="template in templates" :key="template.id" class="panel credit-template-card">
 				<header><span class="credit-template-icon" aria-hidden="true"><FileCode :size="28" /></span><h2>{{ template.name }}</h2><span v-if="template.isBuiltin" class="credit-template-badge">Built-in</span></header>
 				<p class="credit-template-description">{{ template.description }}</p>

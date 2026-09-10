@@ -1155,7 +1155,7 @@ onBeforeUnmount(() => {
 								<div class="program-section-heading">
 									<span>{{ form.type === 'content' ? 3 : 2 }}</span>
 									<div class="program-section-heading-copy">
-										<strong>Subtitles and music-video credits · Optional</strong>
+										<strong>Subtitles and music video credits · Optional</strong>
 										<p class="program-section-description">Override inherited subtitle settings for this program.</p>
 									</div>
 								</div>
