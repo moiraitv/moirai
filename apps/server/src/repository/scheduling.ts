@@ -34,6 +34,9 @@ import {
 } from './catalog.js';
 import { SchedulingConfigurationRepository } from './scheduling-config.js';
 
+/** Bound multi-row timeline writes below SQLite statement parameter limits. */
+const TIMELINE_COMMIT_BATCH_SIZE = 500;
+
 /** Internal marker for a failed channel that has never committed a timeline. */
 const UNCOMMITTED_FAILURE_FINGERPRINT = 'uncommitted-failure';
 
@@ -150,7 +153,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		const aliases = scope.itemIds.length > 0
 			? await this.db.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
 				.from(mediaItemAliases)
-				.where(inArray(mediaItemAliases.aliasId, scope.itemIds))
+				.where(sql`${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(scope.itemIds)}))`)
 			: [];
 		const mediaAliases = Object.fromEntries(aliases.map((alias) => [alias.aliasId, alias.itemId]));
 		const scopedItemIds = scope.itemIds.map((id) => mediaAliases[id] ?? id);
@@ -636,10 +639,10 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				.run();
 
 			// Insert the newly generated concrete segments and their state deltas.
-			if (input.segments.length > 0) {
+			for (let offset = 0; offset < input.segments.length; offset += TIMELINE_COMMIT_BATCH_SIZE) {
 				tx.insert(materializedTimelineSegments)
 					.values(
-						input.segments.map(({ segment, mediaSnapshot, stateDelta, continuation }) => ({
+						input.segments.slice(offset, offset + TIMELINE_COMMIT_BATCH_SIZE).map(({ segment, mediaSnapshot, stateDelta, continuation }) => ({
 							id: segment.id,
 							channelId: segment.channelId,
 							scheduleLayerId: segment.scheduleLayerId,
@@ -668,9 +671,9 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 
 			// Replace the channel's persistent content cursors with the generated tail state.
 			tx.delete(selectionStates).where(eq(selectionStates.channelId, input.channelId)).run();
-			if (input.finalState.length > 0) {
+			for (let offset = 0; offset < input.finalState.length; offset += TIMELINE_COMMIT_BATCH_SIZE) {
 				tx.insert(selectionStates)
-					.values(input.finalState.map((record) => ({ ...record, channelId: input.channelId })))
+					.values(input.finalState.slice(offset, offset + TIMELINE_COMMIT_BATCH_SIZE).map((record) => ({ ...record, channelId: input.channelId })))
 					.run();
 			}
 

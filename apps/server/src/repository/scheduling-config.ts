@@ -2,7 +2,7 @@ import { templatePlaybackInput } from '../scheduling/template-playback.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 import { validateCreditReference } from './subtitle-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type {
 	ChannelSchedule,
 	ChannelScheduleConfig,
@@ -326,7 +326,7 @@ export class SchedulingConfigurationRepository {
 			const aliases = candidateIds.length > 0
 				? tx.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
 					.from(mediaItemAliases)
-					.where(inArray(mediaItemAliases.aliasId, candidateIds)).all()
+					.where(sql`${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(candidateIds)}))`).all()
 				: [];
 			const aliasMap = new Map(aliases.map((alias) => [alias.aliasId, alias.itemId]));
 			/** Resolve one stored or incoming compatibility identifier to its current item. */

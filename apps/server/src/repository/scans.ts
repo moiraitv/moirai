@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type {
 	Library,
 	LibraryReconciliation,
@@ -38,6 +38,9 @@ import type {
 } from './contracts.js';
 import type { MissingItemPresenceObservation } from '../scanner/contracts.js';
 import { preserveGroupIdentities } from './scan-identities.js';
+
+/** Keep variable-size scan inserts below SQLite statement parameter limits. */
+const SCAN_INSERT_BATCH_SIZE = 500;
 
 /**
  * Own persisted scan lifecycle, source-health, tombstone, and reconciliation state. This repository
@@ -79,7 +82,7 @@ export abstract class ScanRepository {
 				.run();
 			tx.update(libraries)
 				.set({ lastScanCompletedAt: completedAt, warningCount: 1, updatedAt: completedAt })
-				.where(inArray(libraries.id, libraryIds))
+				.where(sql`${libraries.id} IN (SELECT value FROM json_each(${JSON.stringify(libraryIds)}))`)
 				.run();
 		});
 		return libraryIds;
@@ -408,9 +411,9 @@ export abstract class ScanRepository {
 			// Replace source conflicts only after a complete traversal.
 			if (traversalComplete) {
 				tx.delete(catalogConflicts).where(eq(catalogConflicts.libraryId, run.libraryId)).run();
-				if (conflicts.length > 0) {
+				for (let offset = 0; offset < conflicts.length; offset += SCAN_INSERT_BATCH_SIZE) {
 					tx.insert(catalogConflicts)
-						.values(conflicts.map((conflict) => ({
+						.values(conflicts.slice(offset, offset + SCAN_INSERT_BATCH_SIZE).map((conflict) => ({
 							...conflict,
 							libraryId: run.libraryId,
 							observedAt: completedAt,
@@ -508,24 +511,26 @@ export abstract class ScanRepository {
 
 			// Replace absorbed physical rows with compatibility aliases to the logical item.
 			if (absorbedItemIds.size > 0) {
-				tx.delete(mediaItems).where(inArray(mediaItems.id, [...absorbedItemIds])).run();
+				tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify([...absorbedItemIds])}))`).run();
 				for (const item of items) {
 					if (item.aliasIds.length === 0) {
 						continue;
 					}
 
-					tx.insert(mediaItemAliases)
-						.values(item.aliasIds.map((aliasId) => ({
-							aliasId,
-							libraryId: run.libraryId,
-							itemId: item.id,
-							createdAt: completedAt,
-						})))
-						.onConflictDoUpdate({
-							target: mediaItemAliases.aliasId,
-							set: { itemId: item.id, libraryId: run.libraryId },
-						})
-						.run();
+					for (let offset = 0; offset < item.aliasIds.length; offset += SCAN_INSERT_BATCH_SIZE) {
+						tx.insert(mediaItemAliases)
+							.values(item.aliasIds.slice(offset, offset + SCAN_INSERT_BATCH_SIZE).map((aliasId) => ({
+								aliasId,
+								libraryId: run.libraryId,
+								itemId: item.id,
+								createdAt: completedAt,
+							})))
+							.onConflictDoUpdate({
+								target: mediaItemAliases.aliasId,
+								set: { itemId: item.id, libraryId: run.libraryId },
+							})
+							.run();
+					}
 				}
 			}
 
@@ -545,17 +550,14 @@ export abstract class ScanRepository {
 				tx.update(mediaItems)
 					.set({ availability: 'unconfirmed' })
 					.where(
-						inArray(
-							mediaItems.id,
-							missingItems.map((item) => item.id),
-						),
+						sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(missingItems.map((item) => item.id))}))`,
 					)
 					.run();
 			}
 
 			// Delete confirmed removals and prune groups that no longer contain media.
 			if (removableIds.length > 0) {
-				tx.delete(mediaItems).where(inArray(mediaItems.id, removableIds)).run();
+				tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(removableIds)}))`).run();
 				tx.run(sql`DELETE FROM media_groups
           WHERE library_id = ${run.libraryId}
           AND NOT EXISTS (
@@ -813,17 +815,17 @@ export abstract class ScanRepository {
 			if (healOnly && presentItemIds.length > 0) {
 				tx.update(mediaItems)
 					.set({ availability: 'available', lastObservedAt: timestamp, updatedAt: timestamp })
-					.where(inArray(mediaItems.id, presentItemIds))
+					.where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(presentItemIds)}))`)
 					.run();
 				tx.delete(mediaRemovalTombstones)
-					.where(inArray(mediaRemovalTombstones.itemId, presentItemIds))
+					.where(sql`${mediaRemovalTombstones.itemId} IN (SELECT value FROM json_each(${JSON.stringify(presentItemIds)}))`)
 					.run();
 				changed = true;
 			}
 
 			// Delete confirmed items and move the library to its next reconciliation revision.
 			if (removableIds.length > 0) {
-				tx.delete(mediaItems).where(inArray(mediaItems.id, removableIds)).run();
+				tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(removableIds)}))`).run();
 				tx.run(sql`DELETE FROM media_groups
           WHERE library_id = ${libraryId}
           AND NOT EXISTS (

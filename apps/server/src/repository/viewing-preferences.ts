@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type {
 	ViewingPreferenceScores,
 	ViewingPreferenceSummary,
@@ -120,12 +120,12 @@ export class ViewingPreferenceRepository {
 		const items = itemIds.length === 0 ? [] : this.db
 			.select({ id: mediaItems.id, title: mediaItems.title })
 			.from(mediaItems)
-			.where(inArray(mediaItems.id, itemIds))
+			.where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(itemIds)}))`)
 			.all();
 		const shows = showIds.length === 0 ? [] : this.db
 			.select({ id: mediaGroups.id, title: mediaGroups.title })
 			.from(mediaGroups)
-			.where(inArray(mediaGroups.id, showIds))
+			.where(sql`${mediaGroups.id} IN (SELECT value FROM json_each(${JSON.stringify(showIds)}))`)
 			.all();
 		const summaries: ViewingPreferenceSummary[] = [
 			...items.map((item) => ({

@@ -641,6 +641,11 @@ Configuration changes remain pending until the next local midnight by default. T
 can instead apply them after the currently playing item. Healthy catalog changes rebuild only unlocked
 future output. A failure retains the last good timeline and exposes a failed status rather than
 committing a partial replacement.
+Timeline segments and selection cursors are inserted in bounded batches within the same transaction,
+so dense schedules do not exceed SQLite's per-statement parameter limit.
+Large scheduling and reconciliation identifier sets use JSON membership queries to avoid per-ID
+SQL parameters. Scan conflict and multipart-alias inserts use bounded batches while retaining
+transactional rollback. Viewing-preference title lookups use the same membership-query approach.
 
 Preview endpoints return proposed state without committing it. Preview ranges are limited to 14 days
 and 50,000 segments per channel; combined guide responses are limited to 200,000 segments. An
