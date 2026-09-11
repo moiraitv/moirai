@@ -17,6 +17,12 @@ npm run etv:setup
 npm run etv:build
 ```
 
+The root npm overrides keep VitePress 1.6.4 on patched stable Vite and Vue plugin releases. These
+versions exceed VitePress's declared dependency ranges. Vite 7 retains the Rollup behavior needed
+for VitePress 1.6.4 to emit its initial-page chunks; Vite 8 does not. Dependency updates must verify guide
+builds, development HMR, navigation, search, and the review page. Remove the scoped overrides when
+a stable VitePress release declares patched dependencies that pass those checks.
+
 The management UI can run without the playback worker, but live playback will be unavailable and reported as degraded. `MOIRAI_ETV_CHANNEL_PATH` can point to an existing standalone worker instead. If you installed dependencies under a different Node version, run `npm rebuild better-sqlite3` after switching to Node 24.
 
 Optionally copy `.env.example` to `.env` if no local `.env` exists yet, and adjust it for this instance. Do not overwrite an existing configuration or commit secrets. `npm run dev` loads this ignored root file; explicitly exported environment variables take precedence.
