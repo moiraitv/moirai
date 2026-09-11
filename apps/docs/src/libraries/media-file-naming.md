@@ -127,7 +127,7 @@ Afterlight Station (2026) - part1.mkv
 Afterlight Station (2026) - part2.mkv
 ```
 
-The same pattern works for an episode, such as `Harbor Stories s01e05 Homecoming - part1.mkv`. Moirai also recognizes `disc`, `cd`, `dvd`, and `disk` suffixes. Prefer one style and keep all parts in the same folder.
+The same pattern works for an episode, such as `Harbor Stories s01e05 Homecoming - part1.mkv`. Moirai also recognizes `disc`, `cd`, `dvd`, and `disk` suffixes. Prefer one style and keep all parts in the same folder. A part suffix must follow a name: a file named `Disc 2.mp4` is a standalone video, not a part of another video.
 
 Moirai groups matching parts into one catalog item. Number them consecutively from 1, without gaps or duplicate numbers. Missing parts or ambiguous numbering cause scan warnings and prevent the item from having a usable scheduling duration. An alternate cut is not another part of the same movie.
 

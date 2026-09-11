@@ -63,7 +63,7 @@ function braceTags(value: string): {
 	return { value: cleaned, edition, externalIds };
 }
 
-/** Parse a terminal multipart suffix and return the shared logical stem. */
+/** Parse a terminal multipart suffix only when it follows a nonempty name prefix. */
 function multipart(value: string): {
 	logicalStem: string;
 	part: ParsedVideoFilename['part'];
@@ -74,9 +74,14 @@ function multipart(value: string): {
 		return { logicalStem: value, part: null };
 	}
 
+	// Transforms a captured stem such as "Movie Name - " to "Movie Name".
+	const logicalStem = match[1]!.replace(/[ ._-]+$/g, '');
+	if (!readable(logicalStem)) {
+		return { logicalStem: value, part: null };
+	}
+
 	return {
-		// Transforms a captured stem such as "Movie Name - " to "Movie Name".
-		logicalStem: match[1]!.replace(/[ ._-]+$/g, ''),
+		logicalStem,
 		part: {
 			kind: match[2]!.toLocaleLowerCase('en-US') as NonNullable<MediaPart['kind']>,
 			number: Number(match[3]),

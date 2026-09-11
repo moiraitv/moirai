@@ -37,6 +37,27 @@ describe('parseVideoFilename', () => {
 		});
 	});
 
+	it.each(['Disc 2', 'part1', 'CD_2', 'DVD-2', 'disk.2', ' - Disc 2', '._-part2', '\t-disc2'])(
+		'keeps %s standalone when the multipart marker has no name prefix',
+		(stem) => {
+			expect(parseVideoFilename(`Artist/Album/${stem}.mp4`, 'music-videos')).toMatchObject({
+				part: null,
+				logicalStem: stem,
+			});
+		},
+	);
+
+	it.each(['disc', 'part', 'cd', 'dvd', 'disk'])(
+		'retains named multipart files using the %s suffix',
+		(kind) => {
+			expect(parseVideoFilename(`Movie Name - ${kind}2.mp4`, 'movies')).toMatchObject({
+				title: 'Movie Name',
+				logicalStem: 'Movie Name',
+				part: { kind, number: 2 },
+			});
+		},
+	);
+
 	it.each([
 		['Movie Name - 1080p.mkv', '1080p'],
 		["Movie Name - Director's Cut.mkv", "Director's Cut"],

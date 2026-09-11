@@ -126,6 +126,22 @@ describe('discoverOnDisk', () => {
 		},
 	);
 
+	it('keeps bare disc filenames as separate standalone music videos', async () => {
+		const fixture = await library('music-videos');
+		await Promise.all(['Disc 1.mp4', 'Disc 2.mp4'].map((name) =>
+			writeFile(path.join(fixture.sourceConfig.scanRoot, name), 'video')));
+		const probeMedia = vi.fn(async () => ({
+			durationMilliseconds: 90_000, fileSizeBytes: 5, container: 'mp4', streams: [], resolution: null, tags: {},
+		}));
+
+		const result = await discoverOnDisk(fixture, { probeMedia });
+
+		expect(result.items).toHaveLength(2);
+		expect(result.items).toEqual(expect.arrayContaining(['Disc 1', 'Disc 2'].map((title) =>
+			expect.objectContaining({ title, durationMilliseconds: 90_000, multipartStatus: 'none' }))));
+		expect(result.issues.some((issue) => issue.code.includes('multipart'))).toBe(false);
+	});
+
 	it('assembles multipart durations only after failed parts finish retrying', async () => {
 		const fixture = await library();
 		await Promise.all(['Film-cd1.mkv', 'Film-cd2.mkv'].map((name) =>

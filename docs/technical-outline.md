@@ -254,7 +254,8 @@ Each scan fingerprints the final normalized item record as well as its source fi
 technical identity. A parser or normalization change that alters persisted metadata therefore
 refreshes the indexed item even when the source file sizes and modification times are unchanged.
 
-Multipart suffixes using `disc`, `part`, `cd`, `dvd`, or `disk` form one logical item. A valid
+Multipart suffixes using `disc`, `part`, `cd`, `dvd`, or `disk` form one logical item only when
+preceded by a nonempty name prefix. Bare names such as `Disc 2.mp4` remain standalone videos. A valid
 sequence starts at 1, is contiguous, contains at least two parts, has no duplicate part numbers, and
 is limited to 128 files. Valid parts contribute one aggregate scheduling duration, which must remain
 within the same 366-day bound, and play in number order. Incomplete, ambiguous, or overlong sequences

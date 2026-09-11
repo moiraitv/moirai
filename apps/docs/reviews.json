@@ -110,20 +110,20 @@
       }
     },
     "libraries.file-naming": {
-      "digest": "d3823975569be48c20dfb3de9c9ec49c256436c7bf350a2f248b51085e6609d0",
-      "reviewedAt": "2026-09-10T17:48:01.675Z",
+      "digest": "ece6678a7af9145bf8e448a80a1fe85d6cc5bc3ea549d579ce3a2dbd36c25a4d",
+      "reviewedAt": "2026-09-11T18:22:06.408Z",
       "components": {
         "text": {
-          "digest": "ab92ae728333a868989983e1c83490b4f2f54877ab7c185a3792d013e577495a",
-          "reviewedAt": "2026-09-10T17:48:01.675Z"
+          "digest": "956af6b86f6d3a25d2748d6002edbc685adce2292eaf41a65cf727de1916f954",
+          "reviewedAt": "2026-09-11T18:22:06.408Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-10T17:48:01.675Z"
+          "reviewedAt": "2026-09-11T18:22:06.408Z"
         },
         "icons": {
           "digest": "78fdcad21d6f7f331d720083adc3247feba65a4056a449a58bc4f0eea590fcb3",
-          "reviewedAt": "2026-09-10T17:48:01.675Z"
+          "reviewedAt": "2026-09-11T18:22:06.408Z"
         }
       }
     },
