@@ -1,5 +1,8 @@
 # Repository Guidelines
 
+If `AGENTS.local.md` exists in the repository root, read it for supplemental machine-specific
+guidance before running commands. It does not replace these repository guidelines.
+
 ## Working Practices
 
 - Keep changes focused on the requested behavior. Preserve unrelated behavior, public interfaces, configuration, and manually maintained documentation unless the task requires changing them.

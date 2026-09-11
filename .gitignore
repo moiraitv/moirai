@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .env
+/AGENTS.local.md
 .DS_Store
 .idea/
 assets-src/
