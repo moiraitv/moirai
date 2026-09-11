@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { activeHelpTopic } from '../../help';
+import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
 import FormDisclosure from '../FormDisclosure.vue';
 import AudioPreferencesEditor from '../AudioPreferencesEditor.vue';
@@ -893,6 +895,7 @@ onBeforeUnmount(() => {
 		<div
 			v-if="editorOpen"
 			class="moirai-dialog-backdrop"
+			:inert="Boolean(activeHelpTopic)"
 			:class="{ 'nested-modal-backdrop': embedded }"
 			@click.self="closeEditor"
 		>
@@ -904,21 +907,14 @@ onBeforeUnmount(() => {
 				:aria-labelledby="initialLoading ? undefined : 'program-editor-title'"
 				@submit.prevent="save()"
 			>
-				<template v-if="initialLoading">
-					<ResourceEditorHeader close-label="Close program editor" @close="closeEditor">
-						<p class="eyebrow">Program editor</p>
-						<h2>Loading Program</h2>
-					</ResourceEditorHeader>
-					<LoadingState label="Loading program editor…" />
-				</template>
-				<ResourceEditorHeader v-else close-label="Close program editor" :disabled="saving || deleting" @close="closeEditor">
+				<ResourceEditorHeader close-label="Close program editor" :disabled="saving || deleting" @close="closeEditor">
 					<p class="eyebrow">
-						{{ editingId ? `Edit ${form.type} rule` : 'New program' }}
+						{{ initialLoading ? 'Program editor' : editingId ? `Edit ${form.type} rule` : 'New program' }}
 					</p>
-					<h2 id="program-editor-title">
-						{{ editingId ? 'Edit program' : `Create ${form.type} rule` }}
-					</h2>
-					<p>
+					<div class="resource-editor-title-with-help"><h2 id="program-editor-title">
+						{{ initialLoading ? 'Loading Program' : editingId ? 'Edit program' : `Create ${form.type} rule` }}
+					</h2><PageHelpButton label="Programs" topic-id="scheduling.programs" /></div>
+					<p v-if="!initialLoading">
 						{{
 							form.type === 'content'
 								? 'Define what content can play and how it should be selected.'
@@ -926,6 +922,7 @@ onBeforeUnmount(() => {
 						}}
 					</p>
 				</ResourceEditorHeader>
+				<LoadingState v-if="initialLoading" label="Loading program editor…" />
 				<div v-if="!initialLoading" class="program-editor-scroll">
 					<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
 					<div class="program-editor-main">

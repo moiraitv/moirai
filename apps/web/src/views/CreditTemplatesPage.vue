@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Copy, Eye, FileCode, Info, Pencil, Plus } from '@lucide/vue';
@@ -167,7 +168,7 @@ onBeforeRouteLeave(async () => {
 		</div>
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
 			<form class="moirai-dialog resource-editor-modal credit-template-editor" role="dialog" aria-modal="true" aria-labelledby="credit-editor-title" @submit.prevent="save">
-				<ResourceEditorHeader close-label="Close credit template" :disabled="busy || previewBusy" @close="close"><div class="credit-template-title"><h2 id="credit-editor-title">{{ readonlyTemplate ? 'View' : id ? 'Edit' : 'New' }} credit template</h2><span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span></div></ResourceEditorHeader>
+				<ResourceEditorHeader close-label="Close credit template" :disabled="busy || previewBusy" @close="close"><div class="credit-template-title"><div class="resource-editor-title-with-help"><h2 id="credit-editor-title">{{ readonlyTemplate ? 'View' : id ? 'Edit' : 'New' }} credit template</h2><PageHelpButton label="Credit templates" topic-id="playback.credit-templates" /></div><span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span></div></ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="credit-template-metadata"><label><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyTemplate" required maxlength="120" /></label><label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyTemplate" maxlength="500" placeholder="Describe when to use this template" /></label></div>
 					<p v-if="readonlyTemplate" class="credit-template-info"><Info :size="22" aria-hidden="true" /><span>Built-in templates are read-only. Duplicate this template to customize its credits.</span></p>

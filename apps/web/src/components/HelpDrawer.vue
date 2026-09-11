@@ -50,13 +50,12 @@ async function loadTopic(): Promise<void> {
 	}
 	finally {
 		loading.value = false;
-		await nextTick();
-		dialog.value?.focus();
 	}
 }
 
 /** Keep keyboard focus inside the modal help drawer and dismiss it with Escape. */
 function handleKeydown(event: KeyboardEvent): void {
+	event.stopPropagation();
 	if (event.key === 'Escape') {
 		event.preventDefault();
 		emit('close');
@@ -71,24 +70,27 @@ function handleKeydown(event: KeyboardEvent): void {
 	) ?? [])];
 	const first = focusable[0] ?? dialog.value;
 	const last = focusable.at(-1) ?? dialog.value;
-	if (event.shiftKey && document.activeElement === first) {
+	if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) {
 		event.preventDefault();
 		last?.focus();
 	}
-	else if (!event.shiftKey && document.activeElement === last) {
+	else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.value)) {
 		event.preventDefault();
 		first?.focus();
 	}
 }
 
 watch(() => props.topicId, () => void loadTopic());
-onMounted(() => void loadTopic());
-onUnmounted(() => opener?.focus());
+onMounted(() => {
+	dialog.value?.focus();
+	void loadTopic();
+});
+onUnmounted(() => void nextTick(() => opener?.isConnected && opener.focus()));
 </script>
 
 <template>
 	<Teleport to="body">
-		<div class="help-drawer-backdrop" @mousedown.self="emit('close')">
+		<div class="help-drawer-backdrop" @click.self="emit('close')">
 			<aside
 				ref="dialog"
 				class="help-drawer"

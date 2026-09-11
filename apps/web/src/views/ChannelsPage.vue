@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
 import EncodingProfileSelector from '../components/EncodingProfileSelector.vue';
 import FormDisclosure from '../components/FormDisclosure.vue';
@@ -927,7 +928,7 @@ onBeforeUnmount(() => {
 			>
 				<ResourceEditorHeader close-label="Close channel editor" :disabled="saving || deleting" @close="closeForm">
 					<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>
-					<h2 id="channel-editor-title">Broadcast profile</h2>
+					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">Broadcast profile</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
 				</ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="channel-identity-fields">

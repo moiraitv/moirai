@@ -944,6 +944,11 @@ Markdown in an accessible modal drawer. The public `/help/contextual-help.json` 
 matching full-page path and review state. Vite development serves the generated manifest and source
 screenshots directly from the docs workspace.
 
+Resource editor titles expose help with explicit topic IDs, including nested editors whose route
+belongs to another resource. Help immediately receives focus and makes the underlying editor inert;
+Tab stays inside the drawer and Escape dismisses only help. Closing help restores its opener without
+navigating, saving, or discarding the editor draft.
+
 Each authored page is hashed from normalized Markdown and every referenced local screenshot. A
 versioned registry records explicitly approved digests and timestamps; prose, link, or screenshot
 changes therefore return the page to `needs-review`. Drafts remain visible in normal builds with a

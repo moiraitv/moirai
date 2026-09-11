@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHelpButton from '../components/PageHelpButton.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Copy, Eye, Info, Monitor, Pencil, Plus, Settings } from '@lucide/vue';
 import { onBeforeRouteLeave } from 'vue-router';
@@ -202,7 +203,7 @@ onBeforeRouteLeave(async () => {
 		</div>
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
 			<form class="moirai-dialog resource-editor-modal encoding-profile-editor" role="dialog" aria-modal="true" aria-labelledby="encoding-editor-title" @submit.prevent="save">
-				<ResourceEditorHeader close-label="Close encoding profile" :disabled="busy" @close="close"><div class="encoding-editor-title"><h2 id="encoding-editor-title">{{ readonlyPreset ? 'View' : id ? 'Edit' : 'New' }} encoding profile</h2><span v-if="readonlyPreset" class="encoding-profile-badge builtin-badge">Built-in</span></div></ResourceEditorHeader>
+				<ResourceEditorHeader close-label="Close encoding profile" :disabled="busy" @close="close"><div class="encoding-editor-title"><div class="resource-editor-title-with-help"><h2 id="encoding-editor-title">{{ readonlyPreset ? 'View' : id ? 'Edit' : 'New' }} encoding profile</h2><PageHelpButton label="Encoding profiles" topic-id="playback.encoding-profiles" /></div><span v-if="readonlyPreset" class="encoding-profile-badge builtin-badge">Built-in</span></div></ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="encoding-profile-metadata"><label><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="readonlyPreset" required maxlength="120" /></label>
 						<label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyPreset" maxlength="500" placeholder="Describe when to use this profile" /></label></div>

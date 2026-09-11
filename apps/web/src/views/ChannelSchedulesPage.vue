@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { activeHelpTopic } from '../help';
+import PageHelpButton from '../components/PageHelpButton.vue';
 import ResolvedGuideTrack from '../components/templates/ResolvedGuideTrack.vue';
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -743,6 +745,7 @@ onBeforeUnmount(() => {
 			<div
 				v-if="editing && !initialLoading"
 				class="moirai-dialog-backdrop"
+				:inert="Boolean(activeHelpTopic)"
 				@click.self="closeScheduleEditor"
 			>
 				<div
@@ -753,7 +756,7 @@ onBeforeUnmount(() => {
 				>
 					<ResourceEditorHeader close-label="Close channel schedule editor" :disabled="saving || deleting" @close="closeScheduleEditor">
 						<p class="eyebrow">Layered channel programming</p>
-						<h2>{{ channel?.name ?? 'Channel schedule' }}</h2>
+						<div class="resource-editor-title-with-help"><h2>{{ channel?.name ?? 'Channel schedule' }}</h2><PageHelpButton label="Channel schedules" topic-id="scheduling.channel-schedules" /></div>
 						<p>Stack conditional templates above an always-available base template.</p>
 					</ResourceEditorHeader>
 

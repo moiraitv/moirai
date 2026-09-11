@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHelpButton from '../components/PageHelpButton.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -431,7 +432,7 @@ onBeforeUnmount(() => {
 			<section ref="modal" class="moirai-dialog quick-setup-modal" :class="{ 'quick-setup-complete': compactSuccess }" role="dialog" aria-modal="true" aria-labelledby="quick-setup-title" tabindex="-1">
 				<ResourceEditorHeader close-label="Close Quick Setup" :disabled="libraryBusy || setupBusy" @close="closeSetup">
 					<p class="eyebrow">Fast start</p>
-					<h2 id="quick-setup-title">Quick Setup</h2>
+					<div class="resource-editor-title-with-help"><h2 id="quick-setup-title">Quick Setup</h2><PageHelpButton label="Quick Setup" topic-id="getting-started.first-channel" /></div>
 				</ResourceEditorHeader>
 				<div class="quick-setup-scroll">
 					<div class="quick-setup-shell">

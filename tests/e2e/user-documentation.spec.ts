@@ -874,3 +874,115 @@ test('saves channel and inherited program audio preferences', async ({ page, doc
 		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.audioPreferences).toEqual({});
 	}
 });
+
+for (const nested of [false, true]) {
+	test(`preserves ${nested ? 'nested' : 'standalone'} program drafts beneath help`, async ({ page, documentationServer }) => {
+		const { program, template } = await seedSchedule(page, documentationServer.directory);
+		if (nested) {
+			await page.goto(`/schedules/templates/${template.id}`);
+			await page.locator('.template-slot-fields').getByRole('button', { name: /^Edit / }).first().click();
+		}
+		else {
+			await page.goto(`/schedules/programs/${program.id}`);
+		}
+		const editor = page.locator('.schedule-editor-modal');
+		const name = editor.getByRole('textbox', { name: /^Name/ });
+		await name.fill('Keep this draft');
+		const help = editor.getByRole('button', { name: 'Help with Programs', exact: true });
+		const originalUrl = page.url();
+		let release!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		await page.route('/help/contextual-help.json', async (route) => {
+			await pending;
+			await route.fulfill({ status: 503 });
+		});
+		await help.click();
+		const drawer = page.locator('.help-drawer');
+		await expect(drawer).toBeFocused();
+		expect(await editor.evaluate((element) => Boolean(element.closest('[inert]')))).toBe(true);
+		await page.keyboard.press('Shift+Tab');
+		await expect(drawer.getByRole('button', { name: 'Close help' })).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(drawer.getByRole('button', { name: 'Close help' })).toBeFocused();
+		await page.keyboard.press('Escape');
+		release();
+		await expect(drawer).toBeHidden();
+		await expect(help).toBeFocused();
+		await expect(name).toHaveValue('Keep this draft');
+		await expect(page.getByRole('alertdialog')).toHaveCount(0);
+		expect(page.url()).toBe(originalUrl);
+		await help.click();
+		await expect(drawer.getByRole('alert')).toContainText('Help returned 503');
+		await drawer.getByRole('button', { name: 'Close help' }).click();
+		await expect(help).toBeFocused();
+		await page.unroute('/help/contextual-help.json');
+		await help.click();
+		await expect(drawer.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
+		await expect(drawer.getByRole('link', { name: 'Open full guide' })).toHaveAttribute('href', '/help/scheduling/programs.html');
+		await page.locator('.help-drawer-backdrop').click({ position: { x: 2, y: 2 } });
+		await expect(help).toBeFocused();
+		await expect(name).toHaveValue('Keep this draft');
+		await page.setViewportSize({ width: 390, height: 844 });
+		await expect(help).toBeInViewport();
+		expect(await editor.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+		await editor.getByRole('button', { name: 'Close program editor' }).click();
+		await expect(page.getByRole('alertdialog', { name: 'Save Changes?' })).toBeVisible();
+	});
+}
+
+
+test('opens the matching guide from each resource editor title', async ({ page, documentationServer }) => {
+	const { libraryId, channel, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const response = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, { headers: requestHeaders, data: { defaultTemplateId: template.id } });
+	expect(response.ok()).toBe(true);
+	const cases = [
+		{ path: '/schedules/programs/new', label: 'Programs', topic: '/help/scheduling/programs.html' },
+		{ path: '/schedules/templates/new', label: 'Templates', topic: '/help/scheduling/templates.html' },
+		{ path: `/schedules/channels/${channel.id}`, label: 'Channel schedules', topic: '/help/scheduling/channel-schedules.html' },
+		{ path: '/channels', label: 'Channels', topic: '/help/scheduling/channels.html', open: 'Edit Moonrise Classics' },
+		{ path: `/libraries/${libraryId}`, label: 'Libraries', topic: '/help/libraries/managing-libraries.html', open: 'Library settings' },
+		{ path: '/quick', label: 'Quick Setup', topic: '/help/getting-started/first-channel.html', open: 'Movie Channel' },
+		{ path: '/playback/encoding-profiles', label: 'Encoding profiles', topic: '/help/playback/encoding-profiles.html', open: 'View' },
+		{ path: '/playback/credit-templates', label: 'Credit templates', topic: '/help/playback/credit-templates.html', open: 'View' },
+	];
+	for (const entry of cases) {
+		await page.goto(entry.path);
+		if (entry.open) {
+			await page.getByRole('button', { name: entry.open }).first().click();
+		}
+		const help = page.locator('.resource-editor-header').getByRole('button', { name: `Help with ${entry.label}`, exact: true });
+		await help.click();
+		const drawer = page.locator('.help-drawer');
+		await expect(drawer.getByRole('link', { name: 'Open full guide' })).toHaveAttribute('href', entry.topic);
+		await page.keyboard.press('Escape');
+		await expect(help).toBeFocused();
+	}
+});
+
+for (const kind of ['programs', 'templates'] as const) {
+	test(`returns focus after the ${kind} editor finishes loading beneath help`, async ({ page, documentationServer }) => {
+		const { program, template } = await seedSchedule(page, documentationServer.directory);
+		let release!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		await page.route('/api/v1/programs', async (route) => {
+			await pending;
+			await route.continue();
+		});
+		await page.goto(`/schedules/${kind}/${kind === 'programs' ? program.id : template.id}`);
+		const header = page.locator('.resource-editor-header');
+		await expect(header.locator('h2')).toContainText('Loading');
+		const help = header.getByRole('button', { name: /^Help with/ });
+		await help.click();
+		const drawer = page.locator('.help-drawer');
+		await expect(drawer).toBeFocused();
+		release();
+		await expect(header.locator('h2')).not.toContainText('Loading');
+		await expect(drawer).toBeFocused();
+		await page.keyboard.press('Escape');
+		await expect(help).toBeFocused();
+	});
+}

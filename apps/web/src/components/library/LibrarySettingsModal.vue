@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { activeHelpTopic } from '../../help';
+import PageHelpButton from '../PageHelpButton.vue';
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
 import { libraryUpdateSchema, type Library, type LibraryUpdate } from '@moirai/shared';
 import { api } from '../../api';
@@ -118,7 +120,7 @@ onMounted(() => nameInput.value?.focus());
 <template>
 	<Teleport to="body">
 		<Transition name="moirai-overlay" appear @after-leave="finishClose">
-			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
+			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible || Boolean(activeHelpTopic)" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
 				<form
 					class="moirai-dialog resource-editor-modal library-settings-modal"
 					role="dialog"
@@ -128,7 +130,7 @@ onMounted(() => nameInput.value?.focus());
 				>
 					<ResourceEditorHeader close-label="Close library editor" :disabled="saving || deleting" @close="closeEditor">
 						<p class="eyebrow">Library settings</p>
-						<h2 id="library-settings-title">Library settings for {{ library.name }}</h2>
+						<div class="resource-editor-title-with-help"><h2 id="library-settings-title">Library settings for {{ library.name }}</h2><PageHelpButton label="Libraries" topic-id="libraries.manage" /></div>
 					</ResourceEditorHeader>
 
 					<div class="resource-editor-scroll library-settings-scroll">

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { activeHelpTopic } from '../../help';
+import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -962,22 +964,17 @@ onBeforeUnmount(() => {
 		<div
 			v-if="editing"
 			class="moirai-dialog-backdrop"
+			:inert="Boolean(activeHelpTopic)"
 			:class="{ 'nested-modal-backdrop': embedded }"
 			@click.self="closeEditor"
 		>
 			<div class="moirai-dialog scheduling-workspace-modal template-workspace" role="dialog" aria-modal="true" aria-label="Template editor">
-				<template v-if="!draft">
-					<ResourceEditorHeader close-label="Close template editor" @close="closeEditor">
-						<p class="eyebrow">Template editor</p>
-						<h2>Loading Template</h2>
-					</ResourceEditorHeader>
-					<LoadingState label="Loading template editor…" />
-				</template>
+				<ResourceEditorHeader close-label="Close template editor" :disabled="saving || deleting" @close="closeEditor">
+					<p class="eyebrow">{{ !draft ? 'Template editor' : editingId ? 'Edit template' : 'New template' }}</p>
+					<div class="resource-editor-title-with-help"><h2>{{ !draft ? 'Loading Template' : editingId ? draft.name : 'Create Template' }}</h2><PageHelpButton label="Templates" topic-id="scheduling.templates" /></div>
+				</ResourceEditorHeader>
+				<LoadingState v-if="!draft" label="Loading template editor…" />
 				<template v-else>
-					<ResourceEditorHeader close-label="Close template editor" :disabled="saving || deleting" @close="closeEditor">
-						<p class="eyebrow">{{ editingId ? 'Edit template' : 'New template' }}</p>
-						<h2>{{ editingId ? draft.name : 'Create Template' }}</h2>
-					</ResourceEditorHeader>
 					<div class="scheduling-workspace-content">
 						<section class="template-toolbar editor-surface">
 							<label>
