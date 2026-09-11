@@ -1,3 +1,4 @@
+import { prepareAudio, type PreparedAudio } from './audio-selection.js';
 import { SubtitleAssets, type PreparedSubtitles } from './subtitle-assets.js';
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
@@ -292,11 +293,13 @@ export class PlayoutSynchronizer {
 		if (!resolvedFolder.startsWith(`${resolvedRoot}${path.sep}`)) {
 			throw new Error('Playback output directory is outside its configured root');
 		}
-		const selections = await this.subtitles.prepare(channel, guide);
+		const programs = this.repository.listPrograms();
+		const selections = await this.subtitles.prepare(channel, guide, programs);
+		const audio = await programs.then((items) => prepareAudio(this.repository, channel, guide, items)).catch(() => new Map());
 		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
 		return this.withChannelConfiguration(channelId, async () => {
 			await this.beforeSubtitleModeChange(channelId, subtitleMode);
-			const generated = this.channelFiles(channel, guide, fallback, selections);
+			const generated = this.channelFiles(channel, guide, fallback, selections, audio);
 
 			for (const [filename, content] of generated) {
 				const destination = path.join(resolvedFolder, filename);
@@ -357,6 +360,7 @@ export class PlayoutSynchronizer {
 		guide: Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>,
 		fallback: Awaited<ReturnType<FallbackFillerStore['resolve']>>,
 		subtitles?: PreparedSubtitles,
+		audio?: PreparedAudio,
 	): Map<string, string> {
 		const files = new Map<string, string>();
 		for (const [relativePath, content] of buildEtvPlayoutFiles(
@@ -364,6 +368,7 @@ export class PlayoutSynchronizer {
 			guide,
 			new Map([[channel.id, fallback]]),
 			subtitles,
+			audio,
 		)) {
 			const filename = path.posix.basename(relativePath);
 			if (!PLAYOUT_FILENAME.test(filename)) {

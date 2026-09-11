@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, opendir, readdir, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -703,4 +704,23 @@ describe('discoverOnDisk', () => {
 		});
 		expect(result.issues.map((issue) => issue.code)).toContain('nfo_missing');
 	});
+});
+
+it('refreshes pre-audio-channel-count probe caches during a normal scan', async () => {
+	const fixture = await library();
+	const file = path.join(fixture.sourceConfig.scanRoot, 'Audio.mp4');
+	await writeFile(file, 'video');
+	const info = await stat(file, { bigint: true });
+	const oldFingerprint = createHash('sha256').update([3, info.dev, info.ino, info.size, info.mtimeMs].map(String).join(':')).digest('hex');
+	const probeMedia = vi.fn(async () => ({ durationMilliseconds: 60_000, fileSizeBytes: 5, container: 'mp4', streams: [{
+		index: 1, type: 'audio' as const, codec: 'aac', durationMilliseconds: null, width: null, height: null,
+		language: 'eng', title: null, isDefault: true, isForced: false, isHearingImpaired: false, isCommentary: false, channels: 6,
+	}], resolution: null, tags: {} }));
+	const result = await discoverOnDisk(fixture, { probeMedia, probeCache: new Map([['Audio.mp4', {
+		relativePath: 'Audio.mp4', probeFingerprint: oldFingerprint, durationMilliseconds: 60_000, probeStatus: 'complete',
+		probeUpdatedAt: '2026-01-01T00:00:00Z', probeErrorCode: null, technicalMetadata: { streams: [] },
+	}]]) });
+	expect(probeMedia).toHaveBeenCalledOnce();
+	expect(result.items[0]!.technicalMetadata.streams).toEqual([expect.objectContaining({ channels: 6 })]);
+	expect(result.items[0]!.probeFingerprint).not.toBe(oldFingerprint);
 });

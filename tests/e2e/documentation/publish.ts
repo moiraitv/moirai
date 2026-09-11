@@ -7,6 +7,7 @@ export const screenshotNames = [
 	'account.png',
 	'administrator-setup.png',
 	'channel-editor-audio.png',
+	'channel-editor-audio-selection.png',
 	'channel-editor-fallback.png',
 	'channel-editor-logo.png',
 	'channel-editor-video.png',

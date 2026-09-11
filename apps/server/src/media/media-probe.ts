@@ -6,7 +6,7 @@ import { resourceErrorCode, type ResourcePressureCoordinator } from '../operatio
 import { openSourceFile } from './source-file.js';
 
 /** Probe contract version included in cache identities. */
-export const MEDIA_PROBE_VERSION = 3;
+export const MEDIA_PROBE_VERSION = 4;
 /** Maximum ffprobe JSON accepted from one media file. */
 const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 /** Maximum stream records retained from an untrusted container. */
@@ -56,6 +56,7 @@ export interface ProbedMediaStream {
 	durationMilliseconds: number | null;
 	width: number | null;
 	height: number | null;
+	channels?: number | null;
 	language: string | null;
 	title: string | null;
 	isDefault: boolean;
@@ -101,6 +102,7 @@ interface ProbeDocument {
 		codec_name?: string;
 		width?: number;
 		height?: number;
+		channels?: number;
 		duration?: string | number;
 		tags?: Record<string, unknown>;
 		disposition?: Record<string, unknown>;
@@ -208,6 +210,7 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 			durationMilliseconds: streamDurationMilliseconds(stream),
 			width: stream.codec_type === 'video' ? dimension(stream.width) : null,
 			height: stream.codec_type === 'video' ? dimension(stream.height) : null,
+			channels: stream.codec_type === 'audio' ? dimension(stream.channels) : null,
 			language: tagged(stream.tags, 'language')?.toLocaleLowerCase('en-US') ?? null,
 			title: tagged(stream.tags, 'title'),
 			isDefault: disposition(stream.disposition?.default),

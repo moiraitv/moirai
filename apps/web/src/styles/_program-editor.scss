@@ -1055,7 +1055,13 @@
 		margin: 0;
 	}
 
-	.subtitle-preferences {
+	.subtitle-preferences,
+	.audio-preferences {
 		margin: 1rem;
+	}
+
+	.audio-preferences + .subtitle-preferences {
+		border-top: 1px solid var(--line);
+		padding-top: 1rem;
 	}
 }

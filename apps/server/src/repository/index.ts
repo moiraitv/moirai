@@ -1,3 +1,4 @@
+import { audioMetadata } from './audio-metadata.js';
 import { EncodingProfileRepository } from './encoding-profiles.js';
 import { sql } from 'drizzle-orm';
 import { CreditTemplateRepository } from './credit-templates.js';
@@ -78,6 +79,11 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Read indexed audio streams for referenced physical files in bounded batches. */
+	audioMetadata(ids: string[]): Promise<Map<string, unknown>> {
+		return audioMetadata(this.database, ids);
+	}
+
 	/** Reusable audio/video profiles and linked channel settings. */
 	readonly encodingProfiles: EncodingProfileRepository;
 	/** Reusable credit templates and subtitle playback metadata. */

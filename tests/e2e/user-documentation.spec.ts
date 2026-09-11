@@ -97,10 +97,10 @@ test('captures Programs', async ({ page, documentationServer }) => {
 	await expect(page.locator('.quick-query-carousel-item').first()).toBeVisible();
 	await capture(page, 'program-content-create.png');
 	const subtitles = page.locator('.program-subtitle-disclosure');
-	await subtitles.getByRole('button', { name: /Subtitles and music video credits/ }).click();
+	await subtitles.getByRole('button', { name: /Audio and subtitles/ }).click();
 	await expect(subtitles.getByRole('combobox', { name: 'Music video credits', exact: true })).toBeEnabled();
 	await captureSection(page, subtitles, 'program-subtitles.png');
-	await subtitles.getByRole('button', { name: /Subtitles and music video credits/ }).click();
+	await subtitles.getByRole('button', { name: /Audio and subtitles/ }).click();
 
 	await page.getByRole('radio', { name: /^Sequence/u }).check();
 	await expect(page.getByRole('dialog', { name: 'Create sequence rule' })).toBeVisible();
@@ -285,6 +285,7 @@ test('captures channel settings and operations', async ({ page, documentationSer
 	await page.setViewportSize({ width: 1440, height: 1200 });
 	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Video', exact: true }), 'channel-editor-video.png');
 	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Audio', exact: true }), 'channel-editor-audio.png');
+	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Audio selection', exact: true }), 'channel-editor-audio-selection.png');
 	await captureSection(page, broadcastEditor.getByRole('group', { name: 'Subtitles', exact: true }), 'channel-editor-subtitles.png');
 	await page.setViewportSize({ width: 390, height: 844 });
 	await broadcastEditor.locator('.channel-encoding-disclosure .form-disclosure-trigger').scrollIntoViewIfNeeded();
@@ -394,6 +395,59 @@ test('renders term badge structure without depending on HTML serialization', asy
 	await expect(page.getByRole('link')).toHaveAttribute('href', '/libraries/managing-libraries');
 	await expect(page.getByRole('link').locator('.docs-term-badge')).toHaveText('Libraries');
 	await expect(page.locator('p')).toHaveText('A Library holds media. Libraries and scanning');
+});
+
+test('marks pending guide menu items using the generated review state', async ({ page }) => {
+	const response = await page.request.get('/help/contextual-help.json');
+	expect(response.ok()).toBe(true);
+	const manifest = await response.json() as { pages: Array<{ path: string; reviewStatus: string }> };
+	await page.goto('/help/glossary.html');
+	await expect(page.locator('.VPSidebar')).toBeVisible();
+	for (const entry of manifest.pages) {
+		const link = page.locator(`.VPSidebar a[href="${entry.path}"]`);
+		if (await link.count()) {
+			await expect(link.locator('.docs-menu-review-badge')).toHaveCount(entry.reviewStatus === 'needs-review' ? 1 : 0);
+		}
+	}
+});
+
+test('keeps guide title icons inline after production asset processing', async ({ page }) => {
+	await page.goto('/help/scheduling/programs.html');
+	const heading = page.locator('.vp-doc h1');
+	await expect(heading.locator('img')).toBeVisible();
+	const iconScale = await heading.evaluate((element) => element.querySelector('img')!.getBoundingClientRect().width / parseFloat(getComputedStyle(element).fontSize));
+	expect(iconScale).toBeCloseTo(1.2, 1);
+	const positions = await heading.evaluate((element) => {
+		const icon = element.querySelector('img')!.getBoundingClientRect();
+		const text = [...element.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())!;
+		const range = document.createRange();
+		range.selectNodeContents(text);
+		const label = range.getBoundingClientRect();
+		return { iconRight: icon.right, iconTop: icon.top, iconBottom: icon.bottom, textLeft: label.left, textTop: label.top, textBottom: label.bottom };
+	});
+	expect(positions.iconRight).toBeLessThanOrEqual(positions.textLeft);
+	expect(positions.iconTop).toBeLessThan(positions.textBottom);
+	expect(positions.iconBottom).toBeGreaterThan(positions.textTop);
+});
+
+test('keeps guide badge icons compact after production asset processing', async ({ page }) => {
+	await page.goto('/help/glossary.html');
+	const badges = page.locator('.vp-doc .docs-term-badge');
+	await expect(badges.first()).toBeVisible();
+	const dimensions = await badges.evaluateAll((elements) => elements.map((badge) => {
+		const icon = badge.querySelector('img')!;
+		const fontSize = parseFloat(getComputedStyle(badge).fontSize);
+		return {
+			iconWidth: icon.getBoundingClientRect().width / fontSize,
+			iconHeight: icon.getBoundingClientRect().height / fontSize,
+			badgeHeight: badge.getBoundingClientRect().height / fontSize,
+		};
+	}));
+	for (const dimensionsForBadge of dimensions) {
+		expect(dimensionsForBadge.iconWidth).toBeCloseTo(1.4, 1);
+		expect(dimensionsForBadge.iconHeight).toBeCloseTo(1.4, 1);
+		expect(dimensionsForBadge.badgeHeight).toBeLessThan(2);
+	}
 });
 
 test('captures music-video credit templates and verifies draft actions', async ({ page }) => {
@@ -556,7 +610,7 @@ test('protects program drafts when navigating to credit templates', async ({ pag
 	await page.goto(`/schedules/programs/${program.id}`);
 	const editor = page.getByRole('dialog', { name: 'Edit program', exact: true });
 	const name = editor.getByRole('textbox', { name: /^Name/u });
-	await editor.getByRole('button', { name: /Subtitles and music video credits.*Optional/ }).click();
+	await editor.getByRole('button', { name: /Audio and subtitles.*optional/ }).click();
 	await name.fill('Pending program name');
 	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
 	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
@@ -770,4 +824,53 @@ test('renders an empty comparison queue without image controls', async ({ page }
 	await expect(page.locator('.review-topic')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Before', exact: true })).toHaveCount(0);
 	await expect(page.locator('.review-text-diff')).toHaveCount(0);
+});
+
+test('saves channel and inherited program audio preferences', async ({ page, documentationServer }) => {
+	const { channel, program, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const sequenceResponse = await page.request.post('/api/v1/programs', { headers: requestHeaders, data: {
+		name: 'Audio sequence', config: { type: 'sequence', repeat: true, entries: [{ id: randomUUID(), programId: program.id, count: 1 }] },
+	} });
+	expect(sequenceResponse.ok()).toBe(true);
+	const sequence = await sequenceResponse.json() as { id: string };
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	let audio = page.getByRole('group', { name: 'Audio selection', exact: true });
+	await audio.getByRole('textbox', { name: /^Preferred language code/ }).fill('EN');
+	await audio.getByRole('textbox', { name: /^Preferred audio title/ }).pressSequentially('Original Surround');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'Broadcast profile' })).toBeHidden();
+	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).audioPreferences).toEqual({ language: 'en', title: 'Original Surround' });
+	await page.reload();
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	await expect(audio.getByRole('textbox', { name: /^Preferred audio title/ })).toHaveValue('Original Surround');
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
+
+	for (const id of [program.id, sequence.id]) {
+		await page.goto(`/schedules/programs/${id}`);
+		const disclosure = page.locator('.program-subtitle-disclosure');
+		const trigger = disclosure.getByRole('button', { name: /Audio and subtitles/ });
+		if (await trigger.getAttribute('aria-expanded') !== 'true') {
+			await trigger.click();
+		}
+		audio = disclosure.locator('.audio-preferences');
+		const language = audio.getByRole('textbox', { name: /^Preferred language code/ });
+		await expect(language).toHaveValue('');
+		await language.fill('123');
+		expect(await language.evaluate((input) => (input as HTMLInputElement).checkValidity())).toBe(false);
+		await language.fill('*');
+		await audio.getByRole('textbox', { name: /^Preferred audio title/ }).fill('Commentary');
+		const save = page.getByRole('button', { name: 'Save', exact: true });
+		await save.click();
+		await expect(save).toBeHidden();
+		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.audioPreferences).toEqual({ language: null, title: 'Commentary' });
+		await page.goto(`/schedules/programs/${id}`);
+		await expect(audio).toBeVisible();
+		await expect(language).toHaveValue('*');
+		await language.fill('');
+		await audio.getByRole('textbox', { name: /^Preferred audio title/ }).fill('');
+		await save.click();
+		await expect(save).toBeHidden();
+		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.audioPreferences).toEqual({});
+	}
 });

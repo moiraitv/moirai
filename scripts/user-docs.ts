@@ -6,6 +6,7 @@ import matter from 'gray-matter';
 import MarkdownIt from 'markdown-it';
 import { buildReviewChanges, reviewChangesFrontmatter } from './user-docs-review.js';
 import { userDocsTermBadges } from './user-docs-term-badges.js';
+import { reviewHighlights } from './user-docs-highlights.js';
 import { helpTopicIds } from '../apps/web/src/help.js';
 import { helpReviewLabel, type HelpReviewReason } from '../apps/web/src/help-review.js';
 
@@ -294,10 +295,13 @@ function contextualHtml(body: string): string {
 export async function writeUserDocsManifest(paths = defaultUserDocsPaths): Promise<void> {
 	const pages = await loadUserDocPages(paths);
 	const packageJson = JSON.parse(await readFile(path.join(paths.projectRoot, 'package.json'), 'utf8')) as { version: string };
+	const outstanding = pages.filter((page) => page.reviewStatus === 'needs-review');
+	const changes = await buildReviewChanges(paths, outstanding, (await loadReviewRegistry(paths.reviewPath)).reviews);
+	const highlights = new Map(changes.map((change) => [change.id, reviewHighlights(pages.find((page) => page.id === change.id)!.source, change)]));
 	const manifest = {
 		version: 1,
 		guideVersion: packageJson.version,
-		pages: pages.map(({ id, title, fullPath, reviewStatus, reviewReasons }) => ({ id, title, path: fullPath, reviewStatus, reviewReasons })),
+		pages: pages.map(({ id, title, fullPath, reviewStatus, reviewReasons }) => ({ id, title, path: fullPath, reviewStatus, reviewReasons, reviewHighlights: highlights.get(id) })),
 		topics: Object.fromEntries(pages.filter((page) => page.contextual).map((page) => [page.id, {
 			id: page.id,
 			title: page.title,
@@ -308,11 +312,9 @@ export async function writeUserDocsManifest(paths = defaultUserDocsPaths): Promi
 			reviewReasons: page.reviewReasons,
 		}])),
 	};
-	const outstanding = pages.filter((page) => page.reviewStatus === 'needs-review');
 	const reviewLines = outstanding.length
 		? outstanding.map((page) => `- [${page.title}](#review-${page.id}) — \`${page.id}\` — ${helpReviewLabel(page.reviewReasons)}`)
 		: ['All user-guide pages have been reviewed.'];
-	const changes = await buildReviewChanges(paths, outstanding, (await loadReviewRegistry(paths.reviewPath)).reviews);
 	const reviewPage = `---\nreviewChanges: ${reviewChangesFrontmatter(changes)}\ntitle: Documentation review status\ndescription: Pages awaiting human review before production packaging.\nsidebar: false\n---\n\n# Documentation review status\n\n**${outstanding.length} of ${pages.length} pages need review.**\n\n${reviewLines.join('\n')}\n\n<ReviewChanges />\n`;
 
 	await mkdir(paths.publicRoot, { recursive: true });

@@ -1,5 +1,5 @@
 // Shared resource badges for the bundled guide and restricted contextual Markdown.
-:is(.vp-doc, .help-markdown) .docs-term-badge {
+:is(.vp-doc, .help-markdown) span.docs-term-badge {
 	display: inline-flex;
 	align-items: baseline;
 	gap: 0.25em;
@@ -20,7 +20,7 @@
 		color: var(--blue);
 	}
 
-	> img[src*='/icons/'] {
+	> img {
 		// Keep the icon out of baseline alignment so the label defines the inline baseline.
 		align-self: center;
 		width: 1.4em;

@@ -90,3 +90,18 @@ it('preserves subtitle source timing and simultaneous silent audio overrides', (
 		inPointMs: 10_000, outPointMs: 70_000, silentAudio: true, subtitle: { path: '/credits.ass', offsetMs: 90_000 } }]);
 	expect(document).toMatchObject({ items: [{ tracks: { audio: { source: { source_type: 'lavfi' } }, subtitle: { source: { source_type: 'local', path: '/credits.ass', in_point_ms: 100_000, out_point_ms: 160_000 } } } }] });
 });
+
+it('selects audio alongside subtitles while keeping generated silence authoritative', () => {
+	const item = { type: 'local' as const, id: 'audio', start: '2026-01-01T00:00:00Z', finish: '2026-01-01T00:01:00Z', path: '/video.mkv',
+		inPointMs: 10_000, outPointMs: 70_000, audioStreamIndex: 3, subtitle: { streamIndex: 4 } };
+	expect(toEtvPlayout([item])).toMatchObject({ items: [{ source: { in_point_ms: 10_000, out_point_ms: 70_000 }, tracks: { audio: { stream_index: 3 }, subtitle: { stream_index: 4 } } }] });
+	const silent = toEtvPlayout([{ ...item, silentAudio: true }]) as { items: Array<{ tracks: { audio: Record<string, unknown> } }> };
+	expect(silent.items[0]!.tracks.audio).toHaveProperty('source');
+	expect(silent.items[0]!.tracks.audio).not.toHaveProperty('stream_index');
+});
+
+it('keeps worker channel configuration unchanged by audio selection preferences', () => {
+	const configured = channel();
+	expect(toEtvChannelConfig({ ...configured, audioPreferences: { language: 'fr', title: 'Original' } }))
+		.toEqual(toEtvChannelConfig(configured));
+});

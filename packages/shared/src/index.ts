@@ -1,3 +1,5 @@
+export * from './audio.js';
+import { audioPreferencesSchema } from './audio.js';
 import { audioNormalizationSchema, videoNormalizationSchema, type ConcreteHardwareAcceleration } from './encoding.js';
 export * from './encoding.js';
 import { z } from 'zod';
@@ -453,6 +455,7 @@ export const channelCreateSchema = z.object({
 	}),
 	subtitleMode: z.enum(['burn', 'convert']).default('burn'),
 	subtitlePreferences: subtitlePreferencesSchema.optional(),
+	audioPreferences: audioPreferencesSchema.optional(),
 	subtitleFontsFolder: z.string().trim().min(1).nullable().optional(),
 	ffmpegPath: z.string().trim().nullable().default(null),
 	ffprobePath: z.string().trim().nullable().default(null),

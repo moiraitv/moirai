@@ -85,6 +85,21 @@ These settings are available either by using `Custom` for the channel or with a 
 - **Buffer kbps:** sets the audio encoder’s rate-control buffer.
 - **Normalize loudness:** enables loudness normalization to reduce volume differences between source items. Set the integrated loudness target (LUFS), loudness range (LU), and true peak limit (dBTP) when enabled.
 
+## Audio selection
+
+![Channel audio selection with optional language and track-title preferences](/screenshots/channel-editor-audio-selection.png)
+
+Use **Audio selection** to prefer an audio language or track title. Both fields are optional; leave them blank to keep automatic audio selection.
+
+- **Preferred language code:** enter two or three letters, such as `en` or `eng`. Equivalent language codes match the same language.
+- **Preferred audio title:** enter part of the audio track's title, such as `Original` or `Commentary`. Matching ignores case and does not use regular expressions.
+
+Moirai first prefers the requested language, then a matching title within those tracks. If either preference has no matches, it keeps the remaining available tracks. It then prefers a track marked default, followed by the track with the most audio channels, and finally the lowest stream index. These are preferences: an unavailable language does not silence the video. With neither preference set, the playback engine keeps its normal selection.
+
+[Programs](/scheduling/programs) can override either field, including within nested sequences. Audio settings apply separately to each file of a multipart video. Channel fallback override files keep their existing audio behavior. Changes take effect as the playback engine consumes updated scheduled items; the current item is not restarted.
+
+Channel counts are collected during library scans. Missing or unusable stream metadata leaves selection to the playback engine.
+
 ## Subtitles
 
 ![Subtitle selection and additional subtitle settings](/screenshots/channel-editor-subtitles.png)

@@ -1,3 +1,4 @@
+import type { SchedulingProgram } from '@moirai/shared';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -37,9 +38,9 @@ export class SubtitleAssets {
 	}
 
 	/** Prepare all referenced selections in bounded metadata batches, isolating per-item failures. */
-	async prepare(channel: Channel, guide: ScheduleGuide): Promise<PreparedSubtitles> {
+	async prepare(channel: Channel, guide: ScheduleGuide, programs?: Promise<SchedulingProgram[]>): Promise<PreparedSubtitles> {
 		try {
-			return await this.prepareSelections(channel, guide);
+			return await this.prepareSelections(channel, guide, programs);
 		}
 		catch {
 			this.issues.set(channel.id, ['Unable to prepare optional subtitles; playback will continue without them']);
@@ -48,9 +49,9 @@ export class SubtitleAssets {
 	}
 
 	/** Resolve metadata and prepare selections, omitting individual failed subtitles. */
-	private async prepareSelections(channel: Channel, guide: ScheduleGuide): Promise<PreparedSubtitles> {
+	private async prepareSelections(channel: Channel, guide: ScheduleGuide, suppliedPrograms?: Promise<SchedulingProgram[]>): Promise<PreparedSubtitles> {
 		const result: PreparedSubtitles = new Map();
-		const programs = new Map((await this.repository.listPrograms()).map((program) => [program.id, program.config.subtitlePreferences ?? {}]));
+		const programs = new Map((await (suppliedPrograms ?? this.repository.listPrograms())).map((program) => [program.id, program.config.subtitlePreferences ?? {}]));
 		const segments = guide.channels.flatMap((entry) => entry.preview.segments)
 			.filter((segment) => segment.channelId === channel.id && segment.mediaItemId);
 		const selected = segments.filter((segment) => {

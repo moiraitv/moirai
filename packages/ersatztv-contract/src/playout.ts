@@ -35,6 +35,7 @@ export interface EtvLocalPlayoutItem {
 	inPointMs: number | null;
 	outPointMs: number | null;
 	silentAudio?: boolean;
+	audioStreamIndex?: number | null;
 	subtitle?: EtvSubtitleSelection | null;
 }
 
@@ -64,10 +65,11 @@ function toEtvPlayoutItem(item: EtvPlayoutItem): Record<string, unknown> {
 				...(item.inPointMs === null ? {} : { in_point_ms: item.inPointMs }),
 				...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs }),
 			},
-			...(item.silentAudio || item.subtitle
+			...(item.silentAudio || item.subtitle || item.audioStreamIndex != null
 				? {
 					tracks: {
 						...(item.subtitle ? { subtitle: subtitleTrack(item) } : {}),
+						...(item.audioStreamIndex != null && !item.silentAudio ? { audio: { stream_index: item.audioStreamIndex } } : {}),
 						...(item.silentAudio ? { audio: {
 							source: {
 								source_type: 'lavfi',

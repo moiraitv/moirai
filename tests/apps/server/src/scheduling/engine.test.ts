@@ -2222,3 +2222,26 @@ it.each([1, 2])('preserves sequence progress after subtitle edits with entry cou
 	}
 	expect(primaryTitles(result)).toEqual([]);
 });
+
+it.each([1, 2])('preserves sequence progress after audio edits with entry count %i', (count) => {
+	const a = contentProgram(10, 1);
+	const b = contentProgram(11, 2);
+	const sequence = program(12, { type: 'sequence', repeat: false, entries: [
+		{ id: uuid(401), programId: a.id, count },
+		{ id: uuid(402), programId: b.id, count: 1 },
+	] });
+	const daily = template([{ programId: sequence.id, startSeconds: 0 }]);
+	const fixture = input([a, b, sequence], [media(1, SECONDS_PER_SCHEDULING_DAY), media(2, SECONDS_PER_SCHEDULING_DAY)], daily);
+	let result = generateTimeline(fixture);
+	expect(primaryTitles(result)).toEqual(['Item 1']);
+	for (let day = 1; day <= count + 1; day += 1) {
+		const continued = { ...fixture, startDate: `2026-01-${String(5 + day).padStart(2, '0')}`, state: result.proposedState };
+		const baseline = generateTimeline(continued);
+		sequence.config.audioPreferences = { language: day % 2 ? 'en' : 'fr', title: 'Original' };
+		a.config.audioPreferences = { title: 'Surround' };
+		result = generateTimeline(continued);
+		expect(primaryTitles(result)).toEqual(primaryTitles(baseline));
+		expect(result.proposedState).toEqual(baseline.proposedState);
+	}
+	expect(primaryTitles(result)).toEqual([]);
+});

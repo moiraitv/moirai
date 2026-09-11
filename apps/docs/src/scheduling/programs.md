@@ -58,11 +58,27 @@ The editor preview is safe to explore. Save only when the draft is valid and mat
 
 Leaving an edited program, including through **Manage credit templates**, asks whether to save or discard your changes. Choose **Cancel** to keep editing. If saving fails, the draft stays open so you can retry.
 
-## Subtitles and music video credits
+## Audio and subtitles
 
-![Expanded Program subtitle settings showing inherited selection, language, and music video credits](/screenshots/program-subtitles.png)
+Programs can have their own audio and subtitle preferences, independently of the Channel they appear on. Set an override to use the Program's preference wherever it plays, or leave a field set to inherit so it follows the enclosing Sequence Program or Channel.
 
-Open the optional **Subtitles and music video credits** section below the main configuration steps.
+![Expanded Program audio and subtitle settings showing inherited preferences and music video credits](/screenshots/program-subtitles.png)
+
+Open the optional **Audio and subtitles** section below the main configuration steps.
+
+### Audio selection
+
+Use **Preferred language code** (such as `en` or `eng`) and **Preferred audio title** to override the [Channel's audio preferences](/scheduling/channels). A title matches part of an audio track's name, ignoring case; it is not a regular expression.
+
+Each field inherits independently from the Channel through enclosing Sequence Programs to the Content Program. Leave a field blank to inherit, or enter `*` to remove the inherited preference for that field. For example, a Sequence can prefer French while a Content Program clears the inherited title preference and keeps French.
+
+Selection prefers matching language, then matching title, then default-flagged tracks, more audio channels, and the lowest stream index. A missing match falls back to other available audio; it does not silence the video. With both effective preferences cleared, the playback engine selects audio normally.
+
+Scheduled filler follows its own captured program ancestry, and multipart videos select each physical file separately. Saving preferences preserves program selection progress and does not restart the current item.
+
+### Subtitles and music video credits
+
+The subtitle controls follow Audio selection in the same optional section.
 
 Subtitles and music video credits serve different purposes. Ordinary subtitles come from embedded tracks or sidecar files discovered during library scanning; see [subtitle sidecar naming](/libraries/media-file-naming) if matching files are not appearing in the media details. Music video credits use catalog metadata, such as the artist and song title, to generate a credit overlay. The chosen template controls its appearance and timing.
 

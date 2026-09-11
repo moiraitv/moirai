@@ -1,3 +1,4 @@
+import { audioPreferencesSchema } from './audio.js';
 import { z } from 'zod';
 import { slotGuideSchema, type GuideEntry } from './guide.js';
 import { subtitlePreferencesSchema } from './subtitles.js';
@@ -296,12 +297,14 @@ export const programConfigSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('content'),
 		subtitlePreferences: subtitlePreferencesSchema.optional(),
+		audioPreferences: audioPreferencesSchema.optional(),
 		source: contentSourceSchema,
 		strategy: selectionStrategySchema,
 	}),
 	z.object({
 		type: z.literal('sequence'),
 		subtitlePreferences: subtitlePreferencesSchema.optional(),
+		audioPreferences: audioPreferencesSchema.optional(),
 		entries: z
 			.array(sequenceEntrySchema)
 			.min(1)

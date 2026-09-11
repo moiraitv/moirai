@@ -163,7 +163,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	const configured = { ...channelCreateSchema.parse({ number: '1', name: 'Music', subtitleMode: 'convert' }), id: channelId, createdAt: '', updatedAt: '' };
 	const warn = vi.fn();
 	const synchronizer = new PlayoutSynchronizer(
-		{ getChannel: async () => configured } as unknown as Repository,
+		{ getChannel: async () => configured, listPrograms: async () => [] } as unknown as Repository,
 		linked,
 		'UTC',
 		60,

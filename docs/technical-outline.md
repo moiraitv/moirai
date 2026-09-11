@@ -815,6 +815,22 @@ decayed preferences, disable both collection and application, or permanently cle
 Settings. Preference changes affect only timeline days subsequently appended to the committed
 14-day window.
 
+### Audio stream preferences
+
+Channel and content/sequence program configuration can carry independent optional audio language
+and title preferences. Absent fields inherit through captured program ancestry; null clears an
+inherited preference. No preferences preserves worker defaults. Otherwise selection ranks matching
+language aliases, case-insensitive title substrings, default disposition, descending channel count,
+and stream index, retaining candidates when a preference has no matches. Indexed technical metadata
+is fetched in bounded batches only for relevant media; multipart files select independently.
+The playout adapter supplies `tracks.audio.stream_index` alongside existing subtitle selections,
+without changing the worker or overriding generated silence. Missing metadata falls back to worker
+selection. Channel fallback override files retain their existing behavior. Selection cursor identity
+excludes audio preferences, and changes flow through normal playout reconciliation without restarting
+the active item. Probe cache version 4 collects channel counts on the next normal scan; old metadata
+remains usable with unknown counts ranked below known counts. No automatic rescan or database
+migration is required.
+
 ### Development and production engine builds
 
 Native development resolves the channel engine in this order:
@@ -932,7 +948,11 @@ Each authored page is hashed from normalized Markdown and every referenced local
 versioned registry records explicitly approved digests and timestamps; prose, link, or screenshot
 changes therefore return the page to `needs-review`. Drafts remain visible in normal builds with a
 warning, while `build:production` and Docker builds reject any outstanding review. The generated
-`/help/review.html` dashboard and `docs:user:review:list` command expose the review queue. The
+`/help/review.html` dashboard and `docs:user:review:list` command expose the review queue. Guide
+sidebar links show review badges from the same generated manifest, refreshed when the guide builds. The
+guide outlines added or changed Markdown blocks and changed images using verified approval diffs.
+Initial pages are outlined throughout; unavailable baselines do not produce guessed text highlights.
+Removed content remains available in the comparison dashboard. The
 dashboard includes in-place Before/After image comparisons, initially showing After, and unified
 Markdown text diffs. Build-time Git history lookup verifies each baseline against its approval digest
 within the last 100 guide commits; unavailable history is labeled explicitly. Generated comparison

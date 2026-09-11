@@ -1,6 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitepress';
 import { userDocsTermBadges } from '../../../scripts/user-docs-term-badges';
+import { reviewSidebar } from '../../../scripts/user-docs-sidebar';
+import reviewManifest from '../src/public/contextual-help.json';
+import { userDocsHighlights } from '../../../scripts/user-docs-highlights';
 
 export default defineConfig({
 	title: 'Moirai User Guide',
@@ -11,7 +14,7 @@ export default defineConfig({
 	appearance: 'dark',
 	lastUpdated: true,
 	markdown: {
-		config: (markdown) => markdown.use(userDocsTermBadges),
+		config: (markdown) => markdown.use(userDocsTermBadges).use(userDocsHighlights, reviewManifest.pages),
 	},
 	ignoreDeadLinks: false,
 	head: [
@@ -31,7 +34,7 @@ export default defineConfig({
 			{ text: 'Guide', link: '/' },
 			{ text: 'Review status', link: '/review' },
 		],
-		sidebar: [
+		sidebar: reviewSidebar([
 			{
 				text: 'Start here',
 				items: [
@@ -78,7 +81,7 @@ export default defineConfig({
 					{ text: 'Configuration reference', link: '/operations/configuration' },
 				],
 			},
-		],
+		], reviewManifest.pages),
 		search: { provider: 'local' },
 		footer: {
 			message: 'Bundled with this version of Moirai.',

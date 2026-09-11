@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx ../../scripts/user-docs.ts manifest && vitepress dev",
 		"build": "tsx ../../scripts/user-docs.ts manifest && vitepress build && tsx ../../scripts/user-docs.ts bundle",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "tsx ../../scripts/user-docs.ts manifest && vue-tsc --noEmit"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

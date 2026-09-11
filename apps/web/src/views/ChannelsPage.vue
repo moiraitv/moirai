@@ -3,6 +3,7 @@ import { useDisclosureState } from '../disclosure-state';
 import EncodingProfileSelector from '../components/EncodingProfileSelector.vue';
 import FormDisclosure from '../components/FormDisclosure.vue';
 import ChannelEncodingSettings from '../components/ChannelEncodingSettings.vue';
+import AudioPreferencesEditor from '../components/AudioPreferencesEditor.vue';
 import SubtitlePreferencesEditor from '../components/SubtitlePreferencesEditor.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -147,6 +148,7 @@ const defaults = (): ChannelCreate => ({
 	},
 	subtitleMode: 'burn',
 	subtitlePreferences: {},
+	audioPreferences: {},
 	subtitleFontsFolder: null,
 	ffmpegPath: null,
 	ffprobePath: null,
@@ -1047,6 +1049,7 @@ onBeforeUnmount(() => {
 					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
 						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" />
 					</EncodingProfileSelector>
+					<AudioPreferencesEditor v-model="form.audioPreferences" />
 					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">
 						<label><span>Subtitle mode</span><select v-model="form.subtitleMode"><option value="burn">Burn</option><option value="convert">Convert</option></select></label>
 						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>

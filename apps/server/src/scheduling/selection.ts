@@ -509,8 +509,9 @@ function legacySetSelectionStateConfig(config: ProgramConfig): unknown | null {
 
 /** Exclude presentation preferences and normalize legacy defaults and collection strategy identity. */
 function selectionStateConfig(input: ProgramConfig): unknown {
-	const { subtitlePreferences: _preferences, ...config } = input;
+	const { subtitlePreferences: _preferences, audioPreferences: _audio, ...config } = input;
 	void _preferences;
+	void _audio;
 	if (config.type === 'content' && config.source.type === 'library-query') {
 		return { ...config, source: libraryQueryStateSource(config.source) };
 	}

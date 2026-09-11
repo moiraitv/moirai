@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useDisclosureState } from '../../disclosure-state';
 import FormDisclosure from '../FormDisclosure.vue';
+import AudioPreferencesEditor from '../AudioPreferencesEditor.vue';
 import SubtitlePreferencesEditor from '../SubtitlePreferencesEditor.vue';
-import type { SubtitlePreferences } from '@moirai/shared';
+import type { AudioPreferences, SubtitlePreferences } from '@moirai/shared';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Asterisk, ChevronDown } from '@lucide/vue';
 import {
@@ -189,6 +190,7 @@ const libraryQueryKinds = computed(() => {
 });
 const form = reactive({
 	subtitlePreferences: {} as SubtitlePreferences,
+	audioPreferences: {} as AudioPreferences,
 	name: '',
 	type: 'content' as 'content' | 'sequence',
 	sourceType: 'library-query' as
@@ -221,6 +223,7 @@ function resetForm(program?: SchedulingProgram): void {
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.name = program?.name ?? '';
+	form.audioPreferences = cloneContractValue(program?.config.audioPreferences ?? {});
 	form.subtitlePreferences = cloneContractValue(program?.config.subtitlePreferences ?? {});
 	form.type = program?.config.type ?? 'content';
 	form.sourceType = 'library-query';
@@ -689,7 +692,7 @@ function payload(): ProgramCreate {
 	if (form.type === 'sequence') {
 		return {
 			name: form.name,
-			config: { type: 'sequence', entries: form.entries, repeat: form.repeat, subtitlePreferences: form.subtitlePreferences },
+			config: { type: 'sequence', entries: form.entries, repeat: form.repeat, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences },
 		};
 	}
 
@@ -735,7 +738,7 @@ function payload(): ProgramCreate {
 							sort: form.querySort,
 							itemLimit: form.queryItemLimit,
 						} as const);
-	return { name: form.name, config: { type: 'content', source, strategy, subtitlePreferences: form.subtitlePreferences } };
+	return { name: form.name, config: { type: 'content', source, strategy, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
 }
 const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	program: () => programs.value.find((candidate) => candidate.id === editingId.value),
@@ -1151,12 +1154,13 @@ onBeforeUnmount(() => {
 								<div class="program-section-heading">
 									<span>{{ form.type === 'content' ? 3 : 2 }}</span>
 									<div class="program-section-heading-copy">
-										<strong>Subtitles and music video credits · Optional</strong>
-										<p class="program-section-description">Override inherited subtitle settings for this program.</p>
+										<strong>Audio and subtitles — optional</strong>
+										<p class="program-section-description">Override inherited audio and subtitle settings for this program.</p>
 									</div>
 								</div>
 								<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
 							</template>
+							<AudioPreferencesEditor v-model="form.audioPreferences" inherit unframed />
 							<SubtitlePreferencesEditor v-model="form.subtitlePreferences" inherit unframed />
 						</FormDisclosure>
 					</div>
