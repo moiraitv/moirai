@@ -43,6 +43,7 @@ export const screenshotNames = [
 	'template-slot-boundary.png',
 	'template-slot-filler.png',
 	'template-slot-playback.png',
+	'template-slot-guide.png',
 	'templates.png',
 ] as const;
 

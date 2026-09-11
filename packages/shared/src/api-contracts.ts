@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { guideEntrySchema } from './guide.js';
 import {
 	mediaAvailabilitySchema,
 	reconciliationStatusSchema,
@@ -397,6 +398,8 @@ export const selectionStateRecordSchema = z.object({
 
 /** Duration-aware timeline returned for draft or persisted schedule previews. */
 export const timelinePreviewSchema = z.object({
+	programNames: z.record(z.string(), z.string()).optional(),
+	entries: z.array(guideEntrySchema).optional(),
 	channelId: idSchema,
 	timeZone: z.string(),
 	startDate: z.iso.date(),
@@ -430,7 +433,7 @@ export const scheduleGuideSchema = z.object({
 	committedStartDate: z.iso.date().optional(),
 	committedEndDate: z.iso.date().optional(),
 	committedAt: isoDateSchema.optional(),
-	channels: z.array(z.object({ channelId: idSchema, preview: timelinePreviewSchema })),
+	channels: z.array(z.object({ channelId: idSchema, preview: timelinePreviewSchema, entries: z.array(guideEntrySchema).optional() })),
 });
 
 /** Materialized timeline health for one channel. */

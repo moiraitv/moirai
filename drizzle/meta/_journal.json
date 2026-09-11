@@ -183,6 +183,13 @@
       "when": 1789102800000,
       "tag": "0025_credit_template_noto_fonts",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1789106400000,
+      "tag": "0026_slot_guide",
+      "breakpoints": true
     }
   ]
 }

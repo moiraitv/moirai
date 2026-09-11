@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { slotGuideSchema, type GuideEntry } from './guide.js';
 import { subtitlePreferencesSchema } from './subtitles.js';
 import type { MediaAvailability, SourceAvailability } from './index.js';
 import {
@@ -57,7 +58,7 @@ export const MAX_LIBRARY_QUERY_ITEMS = 100_000;
 /** Preserve extensive cast and contributor credits without unbounded metadata arrays. */
 export const MAX_METADATA_PEOPLE_ITEMS = 512;
 /** Bound shared scheduling contracts resource use for xmltv description length. */
-export const MAX_XMLTV_DESCRIPTION_LENGTH = 4 * 1024;
+export { MAX_XMLTV_DESCRIPTION_LENGTH } from './guide.js';
 
 /** Validate the selection strategy contract at runtime. */
 export const selectionStrategySchema = z.discriminatedUnion('type', [
@@ -494,6 +495,7 @@ export const scheduleSlotSchema = z
 			.max(SECONDS_PER_SCHEDULING_DAY - 1),
 		programId: z.uuid().nullable(),
 		stateScope: z.enum(['persistent', 'occurrence']).default('persistent'),
+		guide: slotGuideSchema.optional(),
 		startEligibility: startEligibilitySchema.default({ type: 'require-fit' }),
 		filler: slotFillerSchema.default({ mode: 'inherit' }),
 	})
@@ -575,6 +577,8 @@ export interface ScheduleTemplateUpdate extends Omit<
 
 /** Shared wire contract for schedule template. */
 export interface ScheduleTemplate extends ScheduleTemplateCreate {
+	/** Internal scheduling revision timestamp, excluding guide-only edits. */
+	schedulingUpdatedAt?: string;
 	id: string;
 	createdAt: string;
 	updatedAt: string;
@@ -997,6 +1001,10 @@ export interface TimelineIssue {
 
 /** Shared wire contract for timeline preview. */
 export interface TimelinePreview {
+	/** Current names of source programs referenced by the preview. */
+	programNames?: Record<string, string> | undefined;
+	/** Guide presentation intervals; segments retain actual playback and diagnostic timing. */
+	entries?: GuideEntry[] | undefined;
 	channelId: string;
 	timeZone: string;
 	startDate: string;
@@ -1018,7 +1026,7 @@ export interface ScheduleGuide {
 	/** Exclusive local-date boundary of the durable guide window. */
 	committedEndDate?: string;
 	committedAt?: string;
-	channels: Array<{ channelId: string; preview: TimelinePreview }>;
+	channels: Array<{ channelId: string; preview: TimelinePreview; entries?: GuideEntry[] }>;
 }
 
 /** Bounded media metadata shown when a committed guide segment is selected. */

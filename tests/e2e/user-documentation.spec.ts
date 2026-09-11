@@ -140,6 +140,11 @@ test('captures Templates', async ({ page, documentationServer }) => {
 		return JSON.stringify(colors('.template-slot')) === JSON.stringify(colors('.resolved-segment.role-primary'));
 	})).toBe(true);
 	await capture(page, 'template-editor.png');
+	await templateEditor.getByRole('combobox', { name: 'Show in guide' }).selectOption('block');
+	await templateEditor.getByRole('textbox', { name: 'Guide title', exact: true }).fill('Evening Cinema');
+	await templateEditor.getByRole('textbox', { name: 'Guide description (optional)' }).fill('A selection of films for the evening.');
+	await captureSection(page, templateEditor.getByRole('group', { name: 'Guide output', exact: true }), 'template-slot-guide.png');
+	await templateEditor.getByRole('combobox', { name: 'Show in guide' }).selectOption('items');
 	await assertProgramColors(page, sequenceProgramIds);
 	await captureSection(page, templateEditor.locator('.resolved-preview'), 'template-preview.png');
 

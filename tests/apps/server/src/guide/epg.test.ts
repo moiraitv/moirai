@@ -139,3 +139,21 @@ describe('XMLTV EPG', () => {
 		expect(xml).toContain('<title>No programming</title>');
 	});
 });
+
+it('publishes custom block metadata without leaking individual episode metadata', () => {
+	const channel = { ...channelCreateSchema.parse({ number: '8', name: 'Music' }),
+		id: randomUUID(), createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' };
+	const source = catalog();
+	const output = guide(channel.id, source.media[0]!.id);
+	output.channels[0]!.entries = [{
+		id: 'block', kind: 'block', channelId: channel.id, start: '2026-11-01T08:00:00Z', finish: '2026-11-01T09:00:00Z',
+		title: 'Rock & Roll', description: 'Music <all> hour', programId: null, segmentId: null, occurrenceId: 'occurrence',
+		role: 'primary', truncated: false,
+	}];
+	const xml = buildXmltv([channel], output, source, 'https://moirai.example.test');
+	const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+	expect(parsed.tv.programme).toEqual({
+		title: 'Rock & Roll', desc: 'Music <all> hour', '@_channel': effectiveTvgId(channel),
+		'@_start': '20261101010000 -0700', '@_stop': '20261101010000 -0800',
+	});
+});

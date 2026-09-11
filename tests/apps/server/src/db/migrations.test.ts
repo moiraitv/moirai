@@ -711,3 +711,30 @@ it('updates built-in credit fonts while preserving user copies', async () => {
 		expect(sqlite.prepare("SELECT source FROM credit_templates WHERE id='custom-fonts'").get()).toEqual({ source: previousSource });
 	});
 });
+
+it('upgrades slot guide defaults without changing committed state or the scheduling timestamp', async () => {
+	await upgradeFrom('0025_credit_template_noto_fonts', (sqlite) => {
+		insertScheduleFoundation(sqlite);
+		sqlite.prepare('UPDATE schedule_templates SET updated_at = \'2026-09-01T00:00:00Z\' WHERE id = \'template\'').run();
+		sqlite.prepare(`INSERT INTO schedule_slots
+			(id, template_id, position, start_seconds, program_id, state_scope, start_eligibility, filler)
+			VALUES ('slot', 'template', 0, 0, 'program', 'persistent', '{"type":"require-fit"}', '{"mode":"inherit"}')`).run();
+		sqlite.prepare(`INSERT INTO timeline_materializations
+			(channel_id, status, window_start, window_end, continuation_at, input_fingerprint, base_state, issues, committed_at)
+			VALUES ('channel', 'ready', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z',
+			'original-fingerprint', '[{"cursor":"preserved"}]', '[]', '2026-09-01T00:00:00Z')`).run();
+		sqlite.prepare(`INSERT INTO materialized_timeline_segments
+			(id, channel_id, template_id, slot_id, role, title, starts_at, finishes_at, source_start_seconds, truncated, state_delta)
+			VALUES ('segment', 'channel', 'template', 'slot', 'dead-air', 'Dead air',
+			'2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z', 0, 0, '[]')`).run();
+	}, (sqlite) => {
+		expect(sqlite.prepare('SELECT guide, start_seconds, state_scope FROM schedule_slots').get())
+			.toEqual({ guide: '{"mode":"items"}', start_seconds: 0, state_scope: 'persistent' });
+		expect(sqlite.prepare('SELECT updated_at, scheduling_updated_at FROM schedule_templates').get())
+			.toEqual({ updated_at: '2026-09-01T00:00:00Z', scheduling_updated_at: '2026-09-01T00:00:00Z' });
+		expect(sqlite.prepare('SELECT input_fingerprint, base_state, guide_occurrences FROM timeline_materializations').get())
+			.toEqual({ input_fingerprint: 'original-fingerprint', base_state: '[{"cursor":"preserved"}]', guide_occurrences: '[]' });
+		expect(sqlite.prepare('SELECT id, starts_at, finishes_at, state_delta FROM materialized_timeline_segments').get())
+			.toEqual({ id: 'segment', starts_at: '2026-09-01T00:00:00Z', finishes_at: '2026-09-02T00:00:00Z', state_delta: '[]' });
+	});
+});

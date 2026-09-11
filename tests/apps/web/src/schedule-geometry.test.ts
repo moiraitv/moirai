@@ -107,3 +107,15 @@ describe('schedule geometry', () => {
 		});
 	});
 });
+
+it('copies guide settings independently when dividing a slot', () => {
+	const template = reactive(initial());
+	template.slots[0]!.guide = { mode: 'block', title: 'Music', description: '', boundary: 'scheduled' };
+	const result = splitScheduleSlot(template, 'slot-a', SECONDS_PER_SCHEDULING_DAY / 2);
+	const right = result.slots[1]!.guide;
+	expect(right).toEqual(template.slots[0]!.guide);
+	if (right?.mode === 'block') {
+		right.title = 'Rock Music';
+	}
+	expect(template.slots[0]!.guide.title).toBe('Music');
+});

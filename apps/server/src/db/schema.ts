@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
+	GuideOccurrence,
 	ChannelCreate,
 	EncodingProfileCreate,
 	ChannelScheduleLayer,
@@ -406,6 +407,7 @@ export const scheduleTemplates = sqliteTable('schedule_templates', {
 	name: text('name').notNull(),
 	nameKey: text('name_key'),
 	period: text('period').$type<'day'>().notNull().default('day'),
+	schedulingUpdatedAt: text('scheduling_updated_at'),
 	defaultFiller: text('default_filler', { mode: 'json' }).$type<FillerConfig | null>(),
 	...timestamps,
 }, (table) => [uniqueIndex('schedule_templates_name_key_unique').on(table.nameKey)]);
@@ -430,6 +432,7 @@ export const scheduleSlots = sqliteTable(
 		startEligibility: text('start_eligibility', { mode: 'json' })
 			.$type<ScheduleSlot['startEligibility']>()
 			.notNull(),
+		guide: text('guide', { mode: 'json' }).$type<ScheduleSlot['guide']>().notNull().default({ mode: 'items' }),
 		filler: text('filler', { mode: 'json' }).$type<ScheduleSlot['filler']>().notNull(),
 	},
 	(table) => [
@@ -554,6 +557,7 @@ export const timelineMaterializations = sqliteTable('timeline_materializations',
 	windowEnd: text('window_end').notNull(),
 	continuationAt: text('continuation_at').notNull(),
 	inputFingerprint: text('input_fingerprint').notNull(),
+	guideOccurrences: text('guide_occurrences', { mode: 'json' }).$type<GuideOccurrence[]>().notNull().default([]),
 	baseState: text('base_state', { mode: 'json' }).$type<SelectionStateRecord[]>().notNull(),
 	issues: text('issues', { mode: 'json' }).$type<RecordedTimelineIssue[]>().notNull(),
 	committedAt: text('committed_at').notNull(),

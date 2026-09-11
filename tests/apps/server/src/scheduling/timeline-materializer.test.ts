@@ -846,3 +846,52 @@ describe('durable timeline materializer', () => {
 		).toBe(false);
 	});
 });
+
+
+it('keeps committed playback and selection state unchanged after a guide-only edit', async () => {
+	vi.useFakeTimers();
+	vi.setSystemTime(new Date('2026-08-23T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	const before = await test.repository.listMaterializedTimelineSegments('2026-08-23T00:00:00Z', '2026-09-06T00:00:00Z');
+	const state = await test.repository.getSelectionState(test.channelId);
+	test.template.schedulingUpdatedAt = test.template.updatedAt;
+	test.template.updatedAt = '2026-08-23T12:01:00Z';
+	test.template.slots[0]!.guide = { mode: 'block', title: 'Rock Music', description: '', boundary: 'scheduled' };
+	materializer.handleEvent({ protocolVersion: 1, eventId: randomUUID(), occurredAt: '2026-08-23T12:01:00Z',
+		type: 'scheduling.changed', data: { entity: 'template', change: 'updated', id: test.template.id } });
+	await materializer.runNow();
+	expect(test.repository.commitMaterializedTimeline).toHaveBeenCalledOnce();
+	expect(test.repository.markTimelinePending).not.toHaveBeenCalled();
+	expect(await test.repository.listMaterializedTimelineSegments('2026-08-23T00:00:00Z', '2026-09-06T00:00:00Z')).toEqual(before);
+	expect(await test.repository.getSelectionState(test.channelId)).toEqual(state);
+});
+
+it('records nominal slots displaced by an overrun without changing realized playback', () => {
+	const test = fixture();
+	for (const media of test.catalog.media) {
+		media.durationSeconds = 7200;
+	}
+	const initial = test.template.slots[0]!;
+	initial.startEligibility = { type: 'allow-overrun' };
+	test.template.slots = [initial, { ...initial, id: randomUUID(), startSeconds: 3600 },
+		{ ...initial, id: randomUUID(), startSeconds: 7200 }];
+	test.template.boundaries = test.template.slots.map((slot, index, slots) => ({
+		id: randomUUID(), leftSlotId: slot.id, rightSlotId: slots[(index + 1) % slots.length]!.id,
+		targetSeconds: slots[index + 1]?.startSeconds ?? SECONDS_PER_SCHEDULING_DAY,
+		policy: 'finish-left', maxDriftSeconds: 7200, fallback: 'favor-right', earlyStartMaxDriftSeconds: 0,
+	}));
+	const generated = generateTimelineDetailed({
+		channelId: test.channelId, schedule: test.schedule, template: test.template,
+		programs: test.programs, catalog: test.catalog, state: [], timeZone: 'UTC', startDate: '2026-08-23', days: 1,
+	});
+	expect(generated.guideOccurrences[0]).toMatchObject({
+		start: '2026-08-23T00:00:00Z', finish: '2026-08-23T01:00:00Z',
+		actualStart: '2026-08-23T00:00:00Z', actualFinish: '2026-08-23T02:00:00Z',
+	});
+	expect(generated.guideOccurrences[1]).toMatchObject({
+		start: '2026-08-23T01:00:00Z', finish: '2026-08-23T02:00:00Z', actualStart: null, actualFinish: null,
+	});
+	expect(generated.segments[0]?.finish).toBe('2026-08-23T02:00:00Z');
+});

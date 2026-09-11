@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import type {
 	ChannelSchedule,
-	ChannelScheduleLayer,
 	FillerConfig,
 	ScheduleBoundary,
 	ScheduleSlot,
@@ -14,8 +13,10 @@ import type {
 	TimelineSegment,
 	ViewingPreferenceScores,
 } from '@moirai/shared';
-import { countLabel, MAX_TIMELINE_SEGMENTS, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
-import { predicateTimeBoundaries, schedulePredicateMatches } from './predicate.js';
+import { countLabel, MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
+import { instantFor, resolveScheduleDay, type ResolvedScheduleSlot } from './schedule-day.js';
+import { guideOccurrence } from '../guide/occurrences.js';
+import type { GuideOccurrence } from '@moirai/shared';
 import { publicTimelineIssue, type RecordedTimelineIssue } from './timeline-issues.js';
 import type { BoundaryRejection, TimelineContinuation } from './continuation.js';
 import {
@@ -67,18 +68,11 @@ export interface TimelineStateTransition {
 
 /** Concrete timeline plus issues and proposed state changes from generation. */
 export interface TimelineGeneration extends TimelinePreview {
+	guideOccurrences: GuideOccurrence[];
 	issues: RecordedTimelineIssue[];
 	continuationAt: string;
 	continuation: TimelineContinuation | null;
 	stateTransitions: TimelineStateTransition[];
-}
-
-/** Convert a local template date and offset into an absolute instant. */
-function instantFor(date: Temporal.PlainDate, seconds: number, timeZone: string): Temporal.Instant {
-	const targetDate = seconds === SECONDS_PER_SCHEDULING_DAY ? date.add({ days: 1 }) : date;
-	const secondsInDate = seconds === SECONDS_PER_SCHEDULING_DAY ? 0 : seconds;
-	const dateTime = targetDate.toPlainDateTime('00:00').add({ seconds: secondsInDate });
-	return dateTime.toZonedDateTime(timeZone, { disambiguation: 'compatible' }).toInstant();
 }
 
 /** Return exact millisecond-backed elapsed seconds between two absolute instants. */
@@ -154,48 +148,6 @@ function fillerFor(
 	return template.defaultFiller ?? schedule.defaultFiller;
 }
 
-/** Effective slot after calendar predicates and template layering are resolved. */
-interface ResolvedScheduleSlot {
-	template: ScheduleTemplate;
-	layerId: string | null;
-	layerIndex: number;
-	slot: ScheduleSlot;
-	startSeconds: number;
-	endSeconds: number;
-	boundary: ScheduleBoundary;
-	boundaryOrigin: 'template' | 'layer-entry' | 'layer-exit';
-	boundaryLayerId: string | null;
-}
-
-/** Return the nominal template slot active at a wall-clock offset. */
-function slotAt(template: ScheduleTemplate, seconds: number): ScheduleSlot {
-	const slots = [...template.slots].sort((left, right) => left.startSeconds - right.startSeconds);
-	return [...slots].reverse().find((slot) => slot.startSeconds <= seconds) ?? slots[0]!;
-}
-
-/** Resolve the authored boundary after a template slot. */
-function templateBoundary(template: ScheduleTemplate, slot: ScheduleSlot): ScheduleBoundary {
-	return boundaryFor(template, slot);
-}
-
-/** Translate a conditional layer entry or exit rule into a slot boundary. */
-function layerBoundary(
-	layer: ChannelScheduleLayer,
-	side: 'entry' | 'exit',
-	leftSlotId: string,
-	rightSlotId: string,
-	targetSeconds: number,
-): ScheduleBoundary {
-	const config = side === 'entry' ? layer.entryBoundary : layer.exitBoundary;
-	return {
-		id: `${layer.id}-${side}-${targetSeconds}`,
-		leftSlotId,
-		rightSlotId,
-		targetSeconds,
-		...config,
-	};
-}
-
 /** Returns whether an overrun satisfies a finite boundary or an explicit unlimited finish. */
 function isWithinBoundaryDrift(boundary: ScheduleBoundary, overrunSeconds: number): boolean {
 	return boundary.maxDriftSeconds === null || overrunSeconds <= boundary.maxDriftSeconds;
@@ -237,129 +189,6 @@ function primaryFitSeconds(
 	return availableSeconds + Math.min(slotDrift, boundary.maxDriftSeconds);
 }
 
-/** Resolve the applicable layered slots for one local scheduling day. */
-function resolveScheduleDay(
-	input: GenerateTimelineInput,
-	date: Temporal.PlainDate,
-): ResolvedScheduleSlot[] {
-	// Collect every template and predicate transition that can divide the local day.
-	const templateMap = new Map(
-		[input.template, ...(input.templates ?? [])].map((template) => [template.id, template]),
-	);
-	const boundaries = new Set<number>([0, SECONDS_PER_SCHEDULING_DAY]);
-	for (const template of templateMap.values()) {
-		for (const slot of template.slots) {
-			boundaries.add(slot.startSeconds);
-		}
-	}
-	for (const layer of input.schedule.layers) {
-		for (const seconds of predicateTimeBoundaries(layer.predicate)) {
-			boundaries.add(seconds);
-		}
-	}
-	const points = [...boundaries].sort((left, right) => left - right);
-
-	// Select the highest matching layer with programming, falling through no-program slots.
-	const selectionAt = (
-		selectionDate: Temporal.PlainDate,
-		startSeconds: number,
-	): Omit<
-		ResolvedScheduleSlot,
-		'startSeconds' | 'endSeconds' | 'boundary' | 'boundaryOrigin' | 'boundaryLayerId'
-	> => {
-		const instant = instantFor(selectionDate, startSeconds, input.timeZone);
-		for (const [layerIndex, layer] of input.schedule.layers.entries()) {
-			const template = templateMap.get(layer.templateId);
-			if (!template || !schedulePredicateMatches(layer.predicate, instant, input.timeZone)) {
-				continue;
-			}
-
-			const slot = slotAt(template, startSeconds);
-			if (slot.programId !== null) {
-				return { template, layerId: layer.id, layerIndex, slot };
-			}
-		}
-		return {
-			template: input.template,
-			layerId: null,
-			layerIndex: Number.MAX_SAFE_INTEGER,
-			slot: slotAt(input.template, startSeconds),
-		};
-	};
-
-	// Resolve each interval and merge adjacent intervals with the same effective slot.
-	const preliminary: Omit<
-		ResolvedScheduleSlot,
-		'boundary' | 'boundaryOrigin' | 'boundaryLayerId'
-	>[] = [];
-	for (let index = 0; index < points.length - 1; index += 1) {
-		const startSeconds = points[index]!;
-		const endSeconds = points[index + 1]!;
-		const selected = selectionAt(date, startSeconds);
-		const previous = preliminary.at(-1);
-		if (
-			previous
-			&& previous.template.id === selected.template.id
-			&& previous.layerId === selected.layerId
-			&& previous.slot.id === selected.slot.id
-		) {
-			previous.endSeconds = endSeconds;
-		}
-		else {
-			preliminary.push({ ...selected, startSeconds, endSeconds });
-		}
-	}
-
-	// Replace template boundaries with entry or exit policies at layer transitions.
-	return preliminary.map((current, index) => {
-		const next = preliminary[index + 1] ?? selectionAt(date.add({ days: 1 }), 0);
-		let boundary = templateBoundary(current.template, current.slot);
-		let boundaryOrigin: ResolvedScheduleSlot['boundaryOrigin'] = 'template';
-		let boundaryLayerId = current.layerId;
-		if (current.layerId !== next.layerId) {
-			if (next.layerId && next.layerIndex < current.layerIndex) {
-				const entering = input.schedule.layers.find((layer) => layer.id === next.layerId)!;
-				boundary = layerBoundary(
-					entering,
-					'entry',
-					current.slot.id,
-					next.slot.id,
-					current.endSeconds,
-				);
-				boundaryOrigin = 'layer-entry';
-				boundaryLayerId = next.layerId;
-			}
-			else if (current.layerId) {
-				const exiting = input.schedule.layers.find((layer) => layer.id === current.layerId)!;
-				boundary = layerBoundary(
-					exiting,
-					'exit',
-					current.slot.id,
-					next.slot.id,
-					current.endSeconds,
-				);
-				boundaryOrigin = 'layer-exit';
-			}
-		}
-		return {
-			...current,
-			boundary: { ...boundary, targetSeconds: current.endSeconds },
-			boundaryOrigin,
-			boundaryLayerId,
-		};
-	});
-}
-
-/** Return the explicit outgoing boundary for a resolved slot. */
-function boundaryFor(template: ScheduleTemplate, slot: ScheduleSlot): ScheduleBoundary {
-	const boundary = template.boundaries.find((candidate) => candidate.leftSlotId === slot.id);
-	if (!boundary) {
-		throw new Error(`Template ${template.id} has no boundary for slot ${slot.id}`);
-	}
-
-	return boundary;
-}
-
 /** Materialize a timeline plus the continuation data required for an atomic durable commit. */
 export function generateTimelineDetailed(input: GenerateTimelineInput): TimelineGeneration {
 	// Initialize reusable indexes, selection state, issue tracking, and output limits.
@@ -371,6 +200,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 	const candidateCache: SelectionContext['candidateCache'] = new Map();
 	const blockedPrograms = new Set<string>();
 	const segments: TimelineSegment[] = [];
+	const guideOccurrences: GuideOccurrence[] = [];
+	let activeOccurrence: GuideOccurrence | null = null;
 	const stateTransitions: TimelineStateTransition[] = [];
 	let activeContinuation: TimelineContinuation | null = null;
 	let continuation: TimelineContinuation | null = null;
@@ -380,6 +211,10 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 		}
 
 		segments.push(entry);
+		if (activeOccurrence) {
+			activeOccurrence.actualStart ??= entry.start;
+			activeOccurrence.actualFinish = entry.finish;
+		}
 		if (activeContinuation && entry.role === 'primary') {
 			activeContinuation.hadPrimary = true;
 		}
@@ -425,6 +260,12 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			const { slot, template, layerId, boundary, boundaryOrigin, boundaryLayerId } = resolved;
 			const nominalStart = instantFor(date, resolved.startSeconds, input.timeZone);
 			const nominalEnd = instantFor(date, resolved.endSeconds, input.timeZone);
+			activeOccurrence = Temporal.Instant.compare(nominalStart, windowEnd) < 0
+				|| (carriedStart !== null && Temporal.Instant.compare(carriedStart, windowEnd) < 0)
+				? guideOccurrence(input.channelId, resolved, date, input.timeZone) : null;
+			if (activeOccurrence) {
+				guideOccurrences.push(activeOccurrence);
+			}
 			if (resume && Temporal.Instant.compare(nominalStart, resume.intervalStart) < 0) {
 				continue;
 			}
@@ -761,6 +602,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			carriedStart ?? instantFor(firstDate.add({ days: input.days }), 0, input.timeZone)
 		).toString(),
 		stateTransitions,
+		guideOccurrences,
 		continuation,
 	};
 }

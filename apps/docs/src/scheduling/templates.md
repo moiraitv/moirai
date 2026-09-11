@@ -29,6 +29,21 @@ This example has three slots and preview warnings where the selected movies leav
 
 To remove a slot, select it and activate **Delete selected slot** twice to confirm the draft change. You cannot remove the final remaining slot. **Reset** discards pending edits after confirmation; **Save** stores the valid draft.
 
+## Choose how a slot appears in the guide
+
+![Slot guide title, description, and timing controls](/screenshots/template-slot-guide.png)
+
+In the selected slot, use **Guide output → Single block** to show one listing such as “Rock Music” instead of each video. Leave **Guide title** empty to use the slot’s program name, or enter a custom title such as “Rock Music”. Optionally add a description, and choose **Guide timing**:
+
+- **Scheduled boundaries** uses the slot’s scheduled start and end. A slot scheduled for 8–9 stays at 8–9 in the guide even if its content runs 8:02–9:04, or none of its content plays.
+- **Include drift** follows the slot’s actual start and finish, including filler and gaps. In that example, the listing runs 8:02–9:04. A completely displaced slot has no listing in this mode.
+
+The resolved schedule preview shows the same guide blocks and timing as the Guide page, including unsaved changes. Hover, focus, or tap a block to see the actual items within it.
+
+Saving these settings immediately updates the Guide page and XMLTV output without changing playback or content selection. **Individual items** restores the usual listings. Higher-priority schedule layers split the lower slot’s listing; fall-through slots use the lower layer’s settings. Scheduled boundaries take priority over overlapping listings, which are shortened in the guide only.
+
+Hover over a guide block to see a 30-minute zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. The crop keeps the Guide’s item colors and clips items at the displayed time boundaries. Item labels show the source program name, or **Filler** or **Gap** when appropriate.
+
 ## Configure what a slot plays
 
 The **Program** choice supplies the content-selection rules for the slot. The adjacent **Edit** button opens that reusable ![](/icons/list-video.svg) Program, so changes can affect other places that use it too.

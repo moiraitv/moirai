@@ -206,7 +206,7 @@ export async function buildApp(
 	const unsubscribeMaterializer = events.subscribe((event) =>
 		timelineMaterializer.handleEvent(event));
 	const unsubscribeEpg = events.subscribe((event) => {
-		if (event.type === 'timeline.changed' || event.type === 'channel.changed') {
+		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed') {
 			epg.invalidate();
 		}
 	});

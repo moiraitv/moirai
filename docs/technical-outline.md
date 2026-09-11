@@ -671,6 +671,35 @@ Guide timeline and compact schedule-preview geometry use elapsed instants across
 local date. Daylight-saving transitions therefore render 23-hour and 25-hour days at their actual
 width instead of assuming every local day lasts 24 hours.
 
+### Slot guide presentation
+
+Template slots optionally replace individual listings with an authored title and description.
+Draft template and layered previews use the same guide projection and expose actual items within blocks.
+Block hover and tap reveal a 30-minute timeline crop centered on pointer time, clamped to the block;
+keyboard focus uses its midpoint. The floating preview centers on pointer or tap position within
+viewport bounds and tracks glowing position and range-boundary markers. Hover previews omit the close button;
+keyboard and click/tap presentations retain it. Preview responses include current source-program
+names for guide labels; filler and gap labels remain role-based. Crops reuse Guide item styling and preserve actual item identities.
+Their playback segments and diagnostics remain unchanged.
+An empty title override uses the slot’s current program name, or “No programming” for an empty slot.
+A shared presentation projection serves XMLTV and Guide-page entries while retaining original
+playback segments and detail targets. Scheduled blocks use effective nominal intervals and take
+precedence over intersecting listings; drift blocks follow realized start and finish, including
+filler and dead air. Layer overrides split effective occurrences. Displaced scheduled blocks remain
+visible; displaced drift blocks are omitted. Guide hover, focus, and tap expose actual intersecting
+items with their original airtimes, mounting only items that intersect the magnified time window.
+
+Occurrence metadata shares the committed timeline's atomic persistence and rolling retention.
+Legacy windows recover associations without replaying selection; ambiguous or structurally pending
+legacy occurrences retain individual listings until normal materialization provides metadata.
+Guide-only saves invalidate guide output immediately while preserving scheduling fingerprints,
+committed media, and selection state. Existing slots default to individual listings. Additive guide
+entries preserve the existing schedule-guide segment contract; metadata is read in bounded batches.
+DST-converted scheduled blocks are clipped at the next block’s start to prevent overlapping listings.
+Projected entries retain the shared guide entry limit, shortening to complete local days when needed,
+and occurrence recording is restricted to
+the requested window, including early-started content crossing its final boundary.
+
 ### XMLTV
 
 The XMLTV document comes only from the committed rolling timeline. It includes every configured

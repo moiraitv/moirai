@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Temporal } from '@js-temporal/polyfill';
-import type { ChannelSchedule, TimelineIssue, TimelineSegment } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, scheduleTemplateCreateSchema, type ChannelSchedule, type TimelineIssue, type TimelineSegment } from '@moirai/shared';
 import type { Repository } from '@server/repository/index.js';
 import { recordTimelineIssue, type RecordedTimelineIssue } from '@server/scheduling/timeline-issues.js';
 import {
@@ -74,6 +74,8 @@ function repositoryFixture(
 			groupTitles: {},
 			libraryNames: {},
 		}),
+		listPrograms: vi.fn().mockResolvedValue([]),
+		listScheduleTemplates: vi.fn().mockResolvedValue([]),
 		listTimelineMaterializations: vi.fn().mockResolvedValue(
 			statuses.map((status) => ({
 				...status,
@@ -92,6 +94,17 @@ function repositoryFixture(
 }
 
 describe('readCommittedScheduleGuide', () => {
+	it('includes current source names for committed items without changing their playback data', async () => {
+		const channel = schedule();
+		const item = { ...segment(channel.channelId), role: 'primary' as const, programId: randomUUID() };
+		const repository = repositoryFixture([channel], [item], [{ channelId: channel.channelId, health: 'ready', committedAt: RANGE_START }]);
+		vi.mocked(repository.listPrograms).mockResolvedValue([{ id: item.programId, name: 'Rock Collection' }] as Awaited<ReturnType<Repository['listPrograms']>>);
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+		expect(result.guide.channels[0]!.preview.programNames).toEqual({ [item.programId]: 'Rock Collection' });
+		expect(result.guide.channels[0]!.preview.segments).toEqual([item]);
+		expect(repository.listPrograms).toHaveBeenCalledTimes(1);
+	});
+
 	beforeEach(() => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2026-08-23T12:00:00Z'));
@@ -99,6 +112,39 @@ describe('readCommittedScheduleGuide', () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it('resolves blank guide titles from programs only when needed', async () => {
+		const configured = schedule();
+		const item = segment(configured.channelId);
+		const programId = randomUUID();
+		const repository = repositoryFixture([configured], [item], [
+			{ channelId: configured.channelId, health: 'ready', committedAt: RANGE_START },
+		]);
+		const template = {
+			...scheduleTemplateCreateSchema.parse({ name: 'Music', slots: [{
+				id: item.slotId, startSeconds: 0, programId,
+				guide: { mode: 'block', title: '' },
+			}], boundaries: [{ id: randomUUID(), leftSlotId: item.slotId, rightSlotId: item.slotId,
+				targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard' }] }),
+			id: configured.defaultTemplateId, createdAt: RANGE_START, updatedAt: RANGE_START,
+		};
+		vi.mocked(repository.listScheduleTemplates).mockResolvedValue([template]);
+		vi.mocked(repository.listPrograms).mockResolvedValue([{ id: programId, name: 'Music Videos' }] as Awaited<ReturnType<Repository['listPrograms']>>);
+		const statuses = await repository.listTimelineMaterializations();
+		statuses[0]!.guideOccurrences = [{
+			id: 'music', templateId: template.id, slotId: item.slotId!, scheduleLayerId: null, programId,
+			start: RANGE_START, finish: RANGE_END, actualStart: RANGE_START, actualFinish: RANGE_END,
+		}];
+		vi.mocked(repository.listTimelineMaterializations).mockResolvedValue(statuses);
+
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+		expect(result.guide.channels[0]?.entries).toMatchObject([{ kind: 'block', title: 'Music Videos' }]);
+		expect(repository.listPrograms).toHaveBeenCalledTimes(1);
+		template.slots[0]!.guide = { mode: 'block', title: 'Rock Music', description: '', boundary: 'scheduled' };
+		const overridden = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+		expect(overridden.guide.channels[0]?.entries).toMatchObject([{ kind: 'block', title: 'Rock Music' }]);
+		expect(repository.listPrograms).toHaveBeenCalledTimes(1);
 	});
 
 	it('accepts complete pending timelines and reports the oldest channel commit', async () => {

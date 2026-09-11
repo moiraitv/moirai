@@ -1,9 +1,11 @@
+import { itemGuideEntry } from './projection.js';
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import {
 	XMLTV_EPG_DAYS,
 	MAX_XMLTV_DESCRIPTION_LENGTH,
 	effectiveChannelTvgId,
+	type GuideEntry,
 	type Channel,
 	type ScheduleGuide,
 	type SchedulableMedia,
@@ -185,6 +187,16 @@ function programmeXml(
 	return lines;
 }
 
+/** Publish authored block metadata without borrowing a selected video's metadata. */
+function blockProgrammeXml(entry: GuideEntry, channelId: string, timeZone: string): string[] {
+	return [
+		`  <programme start="${xmltvTimestamp(entry.start, timeZone)}" stop="${xmltvTimestamp(entry.finish, timeZone)}" channel="${xmlText(channelId)}">`,
+		element('title', entry.title),
+		...(entry.description ? [element('desc', entry.description)] : []),
+		'  </programme>',
+	];
+}
+
 /** Serialize committed channel timelines as an XMLTV document. */
 export function buildXmltv(
 	channels: Channel[],
@@ -215,18 +227,28 @@ export function buildXmltv(
 	}
 
 	const guideByChannel = new Map(
-		guide.channels.map((entry) => [entry.channelId, entry.preview.segments]),
+		guide.channels.map((entry) => [entry.channelId, entry]),
 	);
 	const mediaById = new Map(catalog.media.map((media) => [media.id, media]));
 	for (const channel of sortedChannels) {
 		const id = effectiveTvgId(channel);
-		const configuredSegments = guideByChannel.get(channel.id);
+		const channelGuide = guideByChannel.get(channel.id);
+		const configuredSegments = channelGuide?.preview.segments;
 		const segments = configuredSegments?.length
 			? [...configuredSegments]
 			: [noProgrammingSegment(channel.id, guide.startDate, guide.days, guide.timeZone)];
 		segments.sort((left, right) => left.start.localeCompare(right.start));
-		for (const segment of segments) {
-			lines.push(...programmeXml(segment, id, mediaById, catalog, publicUrl, guide.timeZone));
+		const byId = new Map(segments.map((segment) => [segment.id, segment]));
+		for (const entry of channelGuide?.entries ?? segments.map(itemGuideEntry)) {
+			if (entry.kind === 'block') {
+				lines.push(...blockProgrammeXml(entry, id, guide.timeZone));
+			}
+			else {
+				const segment = byId.get(entry.segmentId!);
+				if (segment) {
+					lines.push(...programmeXml({ ...segment, start: entry.start, finish: entry.finish }, id, mediaById, catalog, publicUrl, guide.timeZone));
+				}
+			}
 		}
 	}
 	lines.push('</tv>', '');

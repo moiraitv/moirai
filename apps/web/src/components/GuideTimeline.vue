@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { TvMinimal } from '@lucide/vue';
-import type { Channel, GuideSegmentDetail, ScheduleGuide, TimelineSegment } from '@moirai/shared';
+import type { Channel, GuideEntry, GuideSegmentDetail, ScheduleGuide, TimelineSegment } from '@moirai/shared';
 import { api } from '../api';
 import { channelLogoUrl } from '../channel-logo';
 import { dateKey, formatDateKey } from '../date-key';
@@ -12,9 +12,11 @@ import {
 	guideSegmentWidth,
 } from '../guide-geometry';
 import { channelGuideRows } from '../channel-groups';
+import { guideSourceLabel } from '../guide-source';
 import { programColorStyle } from '../program-colors';
 import GuideSegmentPreviewModal from './GuideSegmentPreviewModal.vue';
 import ScheduleWarningBadge from './ScheduleWarningBadge.vue';
+import GuideBlockPopover from './GuideBlockPopover.vue';
 
 const props = withDefaults(
 	defineProps<{
@@ -38,6 +40,11 @@ defineSlots<{
 }>();
 
 const guideScroll = ref<HTMLElement>();
+const blockPopover = ref<InstanceType<typeof GuideBlockPopover>>();
+const programNames = computed(() => Object.assign({}, ...(props.guide?.channels.map(channel => channel.preview.programNames ?? {}) ?? [])) as Record<string, string>);
+const actualSegments = computed(() => props.guide?.channels.flatMap((channel) => channel.preview.segments) ?? []);
+const displayedByChannel = computed(() => new Map((props.guide?.channels ?? []).map((channel) =>
+	[channel.channelId, channel.entries ?? channel.preview.segments])));
 const selectedDetail = ref<GuideSegmentDetail | null>(null);
 const selectedLoading = ref(false);
 const selectedError = ref('');
@@ -96,12 +103,31 @@ function localTimelinePosition(value: string): number {
 }
 
 /** Position and color a guide segment from its absolute playback interval and program identity. */
-function segmentStyle(segment: TimelineSegment): Record<string, string> {
+function segmentStyle(segment: Pick<TimelineSegment, 'start' | 'finish' | 'programId'>): Record<string, string> {
 	return {
 		left: `${localTimelinePosition(segment.start)}px`,
 		width: `${guideSegmentWidth(segment.start, segment.finish, HOUR_WIDTH)}px`,
 		...programColorStyle(segment.programId),
 	};
+}
+
+/** Open grouped listings without sending their presentation IDs to the media endpoint. */
+function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): void {
+	if ('kind' in entry && entry.kind === 'block') {
+		void blockPopover.value?.show(
+			entry,
+			event.currentTarget as HTMLElement,
+			focus,
+			event instanceof MouseEvent && (event.type.startsWith('pointer') || event.detail > 0) ? event.clientX : undefined,
+		);
+	}
+	else if (event.type === 'click') {
+		const segment = 'segmentId' in entry
+			? actualSegments.value.find((item) => item.id === entry.segmentId) : entry;
+		if (segment) {
+			void openSegment(segment);
+		}
+	}
 }
 
 /** Load and display safe metadata for one committed guide segment. */
@@ -162,6 +188,7 @@ watch(
 	async () => {
 		detailCache.clear();
 		closeSegment();
+		blockPopover.value?.close();
 		await nextTick();
 		scrollToCurrentTime();
 	},
@@ -243,25 +270,35 @@ onMounted(() => scrollToCurrentTime());
 									class="guide-day-boundary"
 									:style="{ left: `${day.left}px` }"
 								></span>
-								<button
-									v-for="segment in guideByChannel.get(channel.id)?.segments ?? []"
+								<component
+									:is="'kind' in segment && segment.kind === 'block' ? 'div' : 'button'"
+									v-for="segment in displayedByChannel.get(channel.id) ?? []"
 									:key="segment.id"
 									type="button"
 									class="guide-programme"
 									:data-program-id="segment.programId"
-									:class="[`role-${segment.role}`, { truncated: segment.truncated }]"
+									:class="[`role-${segment.role}`, { truncated: segment.truncated, 'guide-block': 'kind' in segment && segment.kind === 'block' }]"
 									:style="segmentStyle(segment)"
-									:title="`${segment.title}\n${segment.start} – ${segment.finish}`"
-									@click="openSegment(segment)"
+									:title="'kind' in segment && segment.kind === 'block' ? undefined : `${segment.title}\n${segment.start} – ${segment.finish}`"
+									@click="openEntry(segment, $event, true)"
+									@pointerenter="openEntry(segment, $event)"
+									@pointermove="'kind' in segment && segment.kind === 'block' && blockPopover?.move($event, segment)"
+									@focusin="openEntry(segment, $event)"
+									@pointerleave="blockPopover?.leave()"
+									@focusout="blockPopover?.leave()"
 								>
-									<strong>{{
-										segment.role === 'dead-air' ? 'No programming' : segment.title
-									}}</strong>
-									<small
-									>{{ segment.role
-									}}<template v-if="segment.truncated"> · truncated</template></small
-									>
-								</button>
+									<component
+										:is="'kind' in segment && segment.kind === 'block' ? 'button' : 'span'"
+										:class="{ 'guide-block-copy': 'kind' in segment && segment.kind === 'block' }">
+										<strong>{{
+											segment.role === 'dead-air' ? 'No programming' : segment.title
+										}}</strong>
+										<small
+										>{{ 'kind' in segment && segment.kind === 'block' ? 'Slot' : guideSourceLabel(segment, programNames)
+										}}<template v-if="segment.truncated"> · truncated</template></small
+										>
+									</component>
+								</component>
 								<div
 									v-if="!guideByChannel.get(channel.id)"
 									class="guide-empty-day"
@@ -281,6 +318,7 @@ onMounted(() => scrollToCurrentTime());
 			</div>
 		</div>
 	</div>
+	<GuideBlockPopover ref="blockPopover" :segments="actualSegments" :program-names="programNames" :time-zone="timeZone" @select="openSegment" />
 	<GuideSegmentPreviewModal
 		v-if="selectedLoading || selectedDetail || selectedError"
 		:detail="selectedDetail"

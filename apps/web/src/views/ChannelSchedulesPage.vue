@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResolvedGuideTrack from '../components/templates/ResolvedGuideTrack.vue';
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -54,7 +55,7 @@ import {
 } from '../channel-schedule-display';
 import { dateKey } from '../date-key';
 import { useUpcomingScheduleGuide } from '../upcoming-schedule-guide';
-import { guideSegmentPercent, guideWindowMilliseconds } from '../guide-geometry';
+import { guideWindowMilliseconds } from '../guide-geometry';
 import { programColorStyle } from '../program-colors';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
@@ -160,15 +161,6 @@ function showLayeredGuide(): void {
 			block: 'nearest',
 		});
 	});
-}
-
-/** Format an absolute preview timestamp in the configured time zone. */
-function previewTime(value: string): string {
-	return new Intl.DateTimeFormat([], {
-		timeZone: preview.value?.timeZone,
-		hour: 'numeric',
-		minute: '2-digit',
-	}).format(new Date(value));
 }
 
 /** Format an exact dead-air timestamp so sub-minute gaps remain understandable. */
@@ -1150,27 +1142,7 @@ onBeforeUnmount(() => {
 									<span v-for="mark in previewRuler" :key="mark.seconds">{{ mark.label }}</span>
 								</div>
 								<div v-if="preview" class="resolved-track-shell">
-									<div class="resolved-track">
-										<div
-											v-for="segment in preview.segments"
-											:key="segment.id"
-											class="resolved-segment"
-											:data-program-id="segment.programId"
-											:class="`role-${segment.role}`"
-											:style="{
-												...programColorStyle(segment.programId),
-												width: `${guideSegmentPercent(
-													segment.start,
-													segment.finish,
-													previewWindowMilliseconds,
-												)}%`,
-											}"
-											:title="`${segment.title}\n${segment.start}–${segment.finish}`"
-										>
-											<strong>{{ segment.title }}</strong
-											><small>{{ previewTime(segment.start) }}–{{ previewTime(segment.finish) }}</small>
-										</div>
-									</div>
+									<ResolvedGuideTrack :preview="preview" />
 									<button
 										v-for="diagnostic in previewDeadAir"
 										:key="`marker-${diagnostic.segment.id}`"

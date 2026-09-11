@@ -437,3 +437,111 @@
 	font-size: 0.72rem;
 	font-weight: 750;
 }
+
+.guide-block-popover {
+	position: fixed;
+	z-index: 1000;
+	width: min(640px, calc(100vw - 16px));
+	max-height: min(320px, calc(100vh - 16px));
+	overflow: auto;
+	padding: 16px;
+	border: 1px solid var(--line-bright);
+	border-radius: 12px;
+	background: #101e2c;
+	box-shadow: 0 8px 30px rgb(0 0 0 / 25%);
+
+	header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	p {
+		font-size: 0.8rem;
+	}
+}
+
+.guide-programme.guide-block {
+	overflow: clip;
+}
+
+.guide-block-copy {
+	position: sticky;
+	left: calc(var(--guide-channel-width) + 9px);
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	color: inherit;
+	background: transparent;
+	text-align: left;
+	cursor: pointer;
+}
+
+.guide-programme.guide-block:hover {
+	z-index: 1;
+}
+
+.guide-channel-track:has(> .guide-block) {
+	overflow: clip;
+}
+
+.guide-crop-ruler {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	font-size: 0.65rem;
+	color: var(--muted);
+}
+
+.guide-crop-track {
+	position: relative;
+	height: 100px;
+	overflow: hidden;
+}
+
+.guide-crop-marker {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	background: #fff;
+	opacity: 0.55;
+	z-index: 4;
+	pointer-events: none;
+}
+
+.guide-position-marker,
+.guide-range-marker {
+	position: fixed;
+	z-index: 999;
+	width: 2px;
+	pointer-events: none;
+	background: #effffb;
+	box-shadow: 0 0 0 1px rgb(5 41 33 / 72%), 0 0 13px #36efc1;
+}
+
+.guide-range-marker,
+.guide-crop-range-marker {
+	background: #6c9d99;
+	box-shadow: 0 0 0 1px rgb(5 41 33 / 45%);
+}
+
+.guide-crop-range-marker {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	z-index: 4;
+	pointer-events: none;
+
+	&.range-start {
+		left: 0;
+	}
+
+	&.range-end {
+		right: 0;
+	}
+}

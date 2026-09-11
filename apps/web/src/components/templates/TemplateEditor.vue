@@ -47,6 +47,7 @@ import { closeUnsavedEditor } from '../../unsaved-editor';
 import ResolvedSchedulePreview from './ResolvedSchedulePreview.vue';
 import TemplateAssignments from './TemplateAssignments.vue';
 import TemplateTimelineEditor from './TemplateTimelineEditor.vue';
+import SlotGuideFields from './SlotGuideFields.vue';
 
 const PREVIEW_UPDATE_DELAY_MS = 450;
 
@@ -1077,6 +1078,7 @@ onBeforeUnmount(() => {
 										</label>
 									</div>
 								</div>
+								<SlotGuideFields :model-value="selectedSlot" :program-name="selectedSlot.programId ? programName(selectedSlot.programId) : 'No programming'" @change="markChanged" />
 								<AnimatedDisclosure
 									v-if="selectedSlot.programId !== null"
 									v-model="advancedOpen"

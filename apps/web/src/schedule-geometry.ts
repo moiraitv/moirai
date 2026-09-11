@@ -134,6 +134,7 @@ export function splitScheduleSlot(
 		...slot,
 		id: createId(),
 		startSeconds: splitSeconds,
+		...(slot.guide ? { guide: { ...slot.guide } } : {}),
 		startEligibility: { ...slot.startEligibility },
 		filler: slot.filler.mode === 'configured'
 			? { mode: 'configured', config: { ...slot.filler.config } }

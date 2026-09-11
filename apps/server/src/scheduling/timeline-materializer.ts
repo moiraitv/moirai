@@ -20,6 +20,8 @@ import { generateTimelineDetailed } from './engine.js';
 import { mergeTimelineIssues } from './timeline-issues.js';
 import type { SchedulingWorkerPool } from './worker-pool.js';
 import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
+import { mergeGuideOccurrences, recoverGuideOccurrences } from '../guide/occurrences.js';
+import { templatePlaybackInput } from './template-playback.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 import { currentTimestamp } from '../time.js';
 
@@ -173,7 +175,7 @@ function inputFingerprint(
 	// Hash stable authored inputs and catalog eligibility data together.
 	return stableJsonFingerprint({
 		schedule,
-		templates: selectedTemplates,
+		templates: selectedTemplates.map(templatePlaybackInput),
 		programs: selectedPrograms,
 		catalog: {
 			media: selectedMedia,
@@ -277,7 +279,7 @@ function canRecoverEmptyTimeline(
 	]);
 	const authored = [
 		schedule,
-		...templates.filter((template) => templateIds.has(template.id)),
+		...templates.filter((template) => templateIds.has(template.id)).map(templatePlaybackInput),
 		...referencedPrograms(
 			templateIds,
 			templates,
@@ -720,6 +722,21 @@ export class TimelineMaterializer {
 			inputFingerprint: currentFingerprint,
 			baseState,
 			finalState: persistentState(generated.proposedState),
+			guideOccurrences: mergeGuideOccurrences(
+				current?.guideOccurrences?.length ? current.guideOccurrences
+					: current && current.inputFingerprint === currentFingerprint ? recoverGuideOccurrences(
+						schedule,
+						templates,
+						existing,
+						localDate(current.windowStart, this.timeZone).toString(),
+						XMLTV_EPG_DAYS,
+						this.timeZone,
+					) : [],
+				generated.guideOccurrences,
+				desiredStart,
+				desiredEnd,
+				replaceFrom,
+			),
 			segments,
 			issues,
 			committedAt,

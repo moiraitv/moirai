@@ -1,3 +1,5 @@
+import { templatePlaybackInput } from '../scheduling/template-playback.js';
+import { stableJsonFingerprint } from '../stable-json.js';
 import { validateCreditReference } from './subtitle-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { asc, eq, inArray } from 'drizzle-orm';
@@ -504,6 +506,7 @@ export class SchedulingConfigurationRepository {
 			period: template.period,
 			createdAt: template.createdAt,
 			updatedAt: template.updatedAt,
+			schedulingUpdatedAt: template.schedulingUpdatedAt ?? template.updatedAt,
 			defaultFiller: template.defaultFiller ?? null,
 			slots: slots
 				.filter((slot) => slot.templateId === template.id)
@@ -514,6 +517,7 @@ export class SchedulingConfigurationRepository {
 					stateScope: slot.stateScope,
 					startEligibility: slot.startEligibility,
 					filler: slot.filler,
+					guide: slot.guide,
 				})),
 			boundaries: boundaries
 				.filter((boundary) => boundary.templateId === template.id)
@@ -558,6 +562,7 @@ export class SchedulingConfigurationRepository {
 			period: template.period,
 			createdAt: template.createdAt,
 			updatedAt: template.updatedAt,
+			schedulingUpdatedAt: template.schedulingUpdatedAt ?? template.updatedAt,
 			defaultFiller: template.defaultFiller ?? null,
 			slots: slots.map((slot) => ({
 				id: slot.id,
@@ -566,6 +571,7 @@ export class SchedulingConfigurationRepository {
 				stateScope: slot.stateScope,
 				startEligibility: slot.startEligibility,
 				filler: slot.filler,
+				guide: slot.guide,
 			})),
 			boundaries: boundaries.map((boundary) => ({
 				id: boundary.id,
@@ -657,11 +663,14 @@ export class SchedulingConfigurationRepository {
 		}
 
 		const updatedAt = currentTimestamp();
+		const guideOnly = stableJsonFingerprint(templatePlaybackInput(currentInput))
+			=== stableJsonFingerprint(templatePlaybackInput(updated));
 		this.db.transaction((tx) => {
 			tx.update(scheduleTemplates)
 				.set({
 					name: updated.name,
 					nameKey,
+					schedulingUpdatedAt: guideOnly ? current.schedulingUpdatedAt ?? current.updatedAt : updatedAt,
 					period: updated.period,
 					defaultFiller: updated.defaultFiller,
 					updatedAt,

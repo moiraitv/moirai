@@ -7,7 +7,7 @@ contextual: true
 
 # ![](/icons/calendar-days.svg) Guide and IPTV clients
 
-The **![](/icons/calendar-days.svg) Guide** page shows the committed rolling lineup and the addresses an IPTV client needs.
+The **![](/icons/calendar-days.svg) Guide** page shows the committed rolling lineup and the addresses an IPTV client needs. Item labels show the source program name, or **Filler** or **Gap** when appropriate.
 
 ![The electronic program guide and connection addresses](/screenshots/guide.png)
 
@@ -16,3 +16,11 @@ Use the M3U playlist address for channels and the XMLTV address for program list
 The addresses use `MOIRAI_PUBLIC_URL`. If they contain `127.0.0.1` or `localhost`, a client on another device will try to connect to itself. Set the public URL to the reachable HTTP or HTTPS origin, restart Moirai, and copy the new addresses.
 
 The guide contains committed programming rather than unsaved editor previews. A warning or incomplete range means one or more channel timelines could not be generated fully. Open the relevant channel schedule to inspect its preview and issues.
+
+## Single-block listings
+
+A template slot can show one guide listing, such as “Rock Music,” in place of its individual videos. Configure its title, description, and scheduled or drift-inclusive timing in [Templates](/scheduling/templates). These changes affect the Guide page and XMLTV only; playback continues unchanged.
+
+![A single-block listing with its actual items in a 30-minute hover preview and matching range markers](/screenshots/guide-single-block.png)
+
+Hover over a guide block to see a 30-minute zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. The preview follows the pointer while staying within the screen. Keyboard focus centers the crop on the block’s midpoint; tapping uses the tapped time.
