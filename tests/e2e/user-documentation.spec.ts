@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { rename } from 'node:fs/promises';
 import { expect } from '@playwright/test';
-import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplate } from '@moirai/shared';
 import { authenticateAdministrator, E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD } from './authentication';
 import { test } from './documentation/fixture';
 import { serveReviewFixture } from './documentation/review-fixture';
@@ -183,6 +183,30 @@ test('captures Channel Schedules and Guide', async ({ page, documentationServer 
 	await expect(page.getByRole('heading', { name: 'Guide', exact: true })).toBeVisible();
 	await expect(page.locator('.guide-programme.role-primary').first()).toBeVisible({ timeout: 30_000 });
 	await capture(page, 'guide.png');
+	// Show a grouped listing with real committed media and the matching hover-range markers.
+	const originalTemplate = await (await page.request.get(`/api/v1/schedule-templates/${template.id}`)).json() as ScheduleTemplate;
+	const grouped = await page.request.patch(`/api/v1/schedule-templates/${template.id}`, {
+		headers: requestHeaders,
+		data: { ...originalTemplate, slots: originalTemplate.slots.map(slot => ({
+			...slot, guide: { mode: 'block', title: 'Evening Cinema', description: 'Classic films and new discoveries, all day.', boundary: 'scheduled' },
+		})) },
+	});
+	expect(grouped.ok(), await grouped.text()).toBe(true);
+	const guideBlock = page.locator('.guide-block').first();
+	await expect(guideBlock).toBeVisible({ timeout: 30_000 });
+	const trackBounds = (await page.locator('.guide-scroll').boundingBox())!;
+	const labelBounds = (await guideBlock.locator('.guide-block-copy').boundingBox())!;
+	const blockBounds = (await guideBlock.boundingBox())!;
+	await page.mouse.move(Math.min(trackBounds.x + trackBounds.width - 100, labelBounds.x + 320), blockBounds.y + blockBounds.height / 2);
+	const guideHover = page.getByRole('dialog', { name: 'Actual guide items' });
+	await expect(guideHover).toBeVisible();
+	await expect(guideHover.locator('.guide-programme').first()).toBeVisible();
+	await expect(page.locator('.guide-range-marker')).toHaveCount(2);
+	await capture(page, 'guide-single-block.png');
+	await page.keyboard.press('Escape');
+	const restored = await page.request.patch(`/api/v1/schedule-templates/${template.id}`, { headers: requestHeaders, data: originalTemplate });
+	expect(restored.ok(), await restored.text()).toBe(true);
+
 	// Illustrate a weekend evening override and the controls governing its handoffs.
 	const conditionalSlotId = randomUUID();
 	const conditionalTemplateResponse = await page.request.post('/api/v1/schedule-templates', {

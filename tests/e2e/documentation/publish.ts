@@ -26,6 +26,7 @@ export const screenshotNames = [
 	'encoding-presets.png',
 	'dashboard.png',
 	'guide.png',
+	'guide-single-block.png',
 	'libraries.png',
 	'library-catalog.png',
 	'library-filters.png',
