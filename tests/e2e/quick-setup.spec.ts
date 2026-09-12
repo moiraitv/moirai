@@ -396,7 +396,11 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
 		await expect(page.getByLabel('Channel number')).toBeFocused();
 		await page.getByRole('button', { name: 'Review Setup', exact: true }).focus();
 		await page.keyboard.press('Tab');
+		await expect(dialog.getByRole('button', { name: 'Help with Quick Setup', exact: true })).toBeFocused();
+		await page.keyboard.press('Tab');
 		await expect(page.getByRole('button', { name: 'Close Quick Setup' })).toBeFocused();
+		await page.keyboard.press('Shift+Tab');
+		await expect(dialog.getByRole('button', { name: 'Help with Quick Setup', exact: true })).toBeFocused();
 		await page.keyboard.press('Shift+Tab');
 		await expect(page.getByRole('button', { name: 'Review Setup', exact: true })).toBeFocused();
 		await actions.getByRole('button', { name: 'Back', exact: true }).press('Enter');

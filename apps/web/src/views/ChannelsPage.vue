@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
 import EncodingProfileSelector from '../components/EncodingProfileSelector.vue';
@@ -355,13 +356,6 @@ onBeforeRouteLeave(async () => {
 	}
 });
 
-/** Close the channel editor with Escape when no confirmation owns the event. */
-function handleEditorKeydown(event: KeyboardEvent): void {
-	if (!event.defaultPrevented && showForm.value && event.key === 'Escape') {
-		event.preventDefault();
-		void closeForm();
-	}
-}
 
 /** Debounce a server-side prediction and discard responses for superseded form values. */
 function scheduleAccelerationPrediction(): void {
@@ -828,12 +822,10 @@ watch(
 );
 
 onMounted(() => {
-	document.addEventListener('keydown', handleEditorKeydown);
 	void loadInitial();
 });
 onBeforeUnmount(() => {
 	unsubscribe();
-	document.removeEventListener('keydown', handleEditorKeydown);
 	accelerationPredictionSequence += 1;
 	if (accelerationPredictionTimer) {
 		clearTimeout(accelerationPredictionTimer);
@@ -842,6 +834,7 @@ onBeforeUnmount(() => {
 		clearTimeout(liveRefreshTimer);
 	}
 });
+useDraftProtection(() => showForm.value && channelFormDirty.value);
 </script>
 <template>
 	<section>
@@ -920,8 +913,8 @@ onBeforeUnmount(() => {
 		</div>
 		<div v-if="showForm" class="moirai-dialog-backdrop" @click.self="closeForm">
 			<form
-				class="moirai-dialog resource-editor-modal channel-editor-modal"
-				role="dialog"
+				v-modal-focus="{ escape: closeForm }"
+				class="moirai-dialog resource-editor-modal channel-editor-modal" role="dialog"
 				aria-modal="true"
 				aria-labelledby="channel-editor-title"
 				@submit.prevent="save"

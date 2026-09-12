@@ -6,6 +6,7 @@ export interface ConfirmationOptions {
 	title: string;
 	message: string;
 	confirmLabel?: string;
+	cancelLabel?: string;
 	destructive?: boolean;
 	requiredText?: string;
 	requiredTextLabel?: string;

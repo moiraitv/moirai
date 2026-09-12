@@ -680,6 +680,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
 	await page.getByRole('button', { name: 'Done' }).click();
+	await expect(page.locator('.selection-drawer-backdrop')).toHaveCount(0);
 	await page.getByRole('searchbox', { name: 'Search source media' }).fill('Nova');
 	await page.getByRole('button', { name: 'Search', exact: true }).click();
 	await expect(page.locator('.source-picker-list')).toContainText('Matched Actor · Nova Performer');

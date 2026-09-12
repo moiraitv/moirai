@@ -95,7 +95,7 @@ for (const todayHasGap of [false, true]) {
 			await page.keyboard.press('Tab');
 			const nextControl = path === '/channels'
 				? row.getByRole('button', { name: `Edit ${channelName}`, exact: true })
-				: page.getByRole('button', { name: 'First-day programming primary', exact: true });
+				: page.getByRole('button', { name: 'First-day programming Scheduled content', exact: true });
 			await expect(nextControl).toBeFocused();
 			await expect(panel).toBeHidden();
 

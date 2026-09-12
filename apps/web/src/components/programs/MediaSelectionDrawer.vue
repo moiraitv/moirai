@@ -77,9 +77,9 @@ onMounted(async () => {
 			<div v-show="visible" class="selection-drawer-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="close">
 				<aside
 					ref="drawer"
+					v-modal-focus="{ escape: close }"
 					class="selection-drawer"
-					:class="{ 'media-selection-drawer': !selectingGroups }"
-					role="dialog"
+					:class="{ 'media-selection-drawer': !selectingGroups }" role="dialog"
 					aria-modal="true"
 					aria-labelledby="selection-drawer-title"
 					tabindex="-1"

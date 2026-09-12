@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Copy, Eye, Info, Monitor, Pencil, Plus, Settings } from '@lucide/vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { encodingProfileCreateSchema, audioNormalizationSchema, videoNormalizationSchema, type EncodingProfile } from '@moirai/shared';
@@ -157,24 +158,16 @@ async function setDefault(event: Event): Promise<void> {
 	}
 }
 
-/** Let styled confirmation dialogs consume Escape before dismissing the editor. */
-function keydown(event: KeyboardEvent): void {
-	if (open.value && event.key === 'Escape' && !event.defaultPrevented) {
-		event.preventDefault();
-		void close();
-	}
-}
 onMounted(() => {
 	void load();
-	window.addEventListener('keydown', keydown); 
 });
-onBeforeUnmount(() => window.removeEventListener('keydown', keydown));
 onBeforeRouteLeave(async () => {
 	if (open.value) {
 		await close(); 
 	}
 	return !open.value; 
 });
+useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 </script>
 
 <template>
@@ -202,7 +195,7 @@ onBeforeRouteLeave(async () => {
 			</article>
 		</div>
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
-			<form class="moirai-dialog resource-editor-modal encoding-profile-editor" role="dialog" aria-modal="true" aria-labelledby="encoding-editor-title" @submit.prevent="save">
+			<form v-modal-focus="{ escape: close }" class="moirai-dialog resource-editor-modal encoding-profile-editor" role="dialog" aria-modal="true" aria-labelledby="encoding-editor-title" @submit.prevent="save">
 				<ResourceEditorHeader close-label="Close encoding profile" :disabled="busy" @close="close"><div class="encoding-editor-title"><div class="resource-editor-title-with-help"><h2 id="encoding-editor-title">{{ readonlyPreset ? 'View' : id ? 'Edit' : 'New' }} encoding profile</h2><PageHelpButton label="Encoding profiles" topic-id="playback.encoding-profiles" /></div><span v-if="readonlyPreset" class="encoding-profile-badge builtin-badge">Built-in</span></div></ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="encoding-profile-metadata"><label><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="readonlyPreset" required maxlength="120" /></label>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useDisclosureState } from './disclosure-state';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import {
@@ -30,6 +30,7 @@ import ConfirmationModal from './components/ConfirmationModal.vue';
 import HelpDrawer from './components/HelpDrawer.vue';
 import { activeConfirmation, cancelConfirmations, settleConfirmation } from './confirmation';
 import { activeHelpTopic, closeHelp } from './help';
+import { confirmSignOut } from './draft-protection';
 import { liveEvents } from './live-events';
 import { clearMediaCardPreviewCache } from './media-card-preview';
 import { useLibrariesStore } from './stores/libraries';
@@ -44,6 +45,17 @@ const authentication = useAuthenticationStore();
 const { libraries, loaded } = storeToRefs(libraryStore);
 const { publicUrlStatus } = storeToRefs(channelsStore);
 const drawerOpen = ref(false);
+const mobileViewport = window.matchMedia('(max-width: 900px)');
+const isMobile = ref(mobileViewport.matches);
+
+/** Release mobile navigation ownership when crossing the desktop breakpoint. */
+function updateViewport(): void {
+	isMobile.value = mobileViewport.matches;
+	drawerOpen.value = false;
+	if (isMobile.value && document.activeElement?.closest('.sidebar')) {
+		void nextTick(() => document.querySelector<HTMLButtonElement>('.mobile-menu-button')?.focus());
+	}
+}
 const libraryNavOpen = useDisclosureState('navigation-libraries', true);
 const scheduleNavOpen = useDisclosureState('navigation-scheduling', true);
 const playbackNavOpen = useDisclosureState('navigation-playback', true);
@@ -90,6 +102,9 @@ function loadAdministrativeState(): void {
 
 /** Revoke the current local session and continue through provider logout when available. */
 async function logout(): Promise<void> {
+	if (!await confirmSignOut()) {
+		return;
+	}
 	const redirectUrl = await authentication.logout();
 	if (redirectUrl) {
 		window.location.assign(redirectUrl);
@@ -101,7 +116,7 @@ async function logout(): Promise<void> {
 
 /** Close the mobile navigation drawer when Escape is pressed. */
 function handleKeydown(event: KeyboardEvent): void {
-	if (event.key === 'Escape') {
+	if (event.key === 'Escape' && !event.defaultPrevented) {
 		closeDrawer();
 	}
 }
@@ -132,6 +147,7 @@ watch(
 );
 onMounted(() => {
 	window.addEventListener('keydown', handleKeydown);
+	mobileViewport.addEventListener('change', updateViewport);
 	if (authentication.authenticated) {
 		loadAdministrativeState();
 	}
@@ -149,13 +165,14 @@ watch(
 );
 onUnmounted(() => {
 	window.removeEventListener('keydown', handleKeydown);
+	mobileViewport.removeEventListener('change', updateViewport);
 	unsubscribe();
 });
 </script>
 
 <template>
 	<RouterView v-if="!authentication.authenticated" />
-	<div v-else class="app-shell" :inert="Boolean(activeConfirmation) || Boolean(activeHelpTopic)">
+	<div v-else class="app-shell">
 		<header class="mobile-header">
 			<RouterLink class="mobile-brand" to="/" aria-label="Moirai home">
 				<img :src="logoUrl" alt="" />
@@ -180,7 +197,7 @@ onUnmounted(() => {
 				@click="closeDrawer"
 			></button>
 		</Transition>
-		<aside id="primary-sidebar" class="sidebar" :class="{ 'sidebar-open': drawerOpen }">
+		<aside id="primary-sidebar" v-modal-focus="{ active: isMobile && drawerOpen, navigation: true, escape: closeDrawer }" :inert="isMobile && !drawerOpen" class="sidebar" :class="{ 'sidebar-open': drawerOpen }">
 			<div class="sidebar-heading">
 				<RouterLink class="brand" to="/">
 					<img :src="logoUrl" alt="" />
@@ -320,6 +337,7 @@ onUnmounted(() => {
 		:title="activeConfirmation.title"
 		:message="activeConfirmation.message"
 		:confirm-label="activeConfirmation.confirmLabel"
+		:cancel-label="activeConfirmation.cancelLabel ?? 'Cancel'"
 		:destructive="activeConfirmation.destructive"
 		:required-text="activeConfirmation.requiredText"
 		:required-text-label="activeConfirmation.requiredTextLabel"

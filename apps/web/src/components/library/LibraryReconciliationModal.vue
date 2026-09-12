@@ -13,7 +13,7 @@ const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('
 <template>
 	<Transition name="moirai-overlay" appear @after-leave="finishClose">
 		<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose">
-			<section class="moirai-dialog reconciliation-modal">
+			<section v-modal-focus="{ escape: requestClose }" class="moirai-dialog reconciliation-modal" role="dialog" aria-modal="true" aria-label="Review index reconciliation">
 				<header class="modal-heading"><div><p class="eyebrow">Library safety</p><h2>Review index reconciliation</h2></div><button type="button" class="icon-button" aria-label="Close reconciliation review" @click="requestClose"><X :size="20" /></button></header>
 				<div v-if="reconciliation.candidateSummary" class="candidate-summary"><div><span>Candidate media</span><strong>{{ reconciliation.candidateSummary.discoveredCount }}</strong></div><div><span>New paths</span><strong>{{ reconciliation.candidateSummary.addedCount }}</strong></div><div><span>Missing paths</span><strong>{{ reconciliation.candidateSummary.missingCount }}</strong></div></div>
 				<p v-if="reconciliation.candidateSourceConfig" class="candidate-path">Candidate root <strong>{{ reconciliation.candidateSourceConfig.scanRoot }}</strong></p>

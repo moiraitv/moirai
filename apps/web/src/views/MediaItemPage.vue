@@ -404,12 +404,11 @@ onUnmounted(closePlayer);
 		>
 			<section
 				ref="playerDialog"
-				class="media-preview-modal"
-				role="dialog"
+				v-modal-focus="{ escape: closePlayer }"
+				class="media-preview-modal" role="dialog"
 				aria-modal="true"
 				:aria-label="`Preview ${item.title}`"
 				tabindex="-1"
-				@keydown.esc="closePlayer"
 			>
 				<header>
 					<div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { activeHelpTopic } from '../../help';
+import { onBeforeRouteLeave } from 'vue-router';
+import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
 import { libraryUpdateSchema, type Library, type LibraryUpdate } from '@moirai/shared';
@@ -22,6 +23,7 @@ const nameInput = useTemplateRef<HTMLInputElement>('nameInput');
 const saving = ref(false);
 const deleting = ref(false);
 const error = ref('');
+let allowRouteLeave = false;
 const baseline: LibraryUpdate = {
 	name: props.library.name,
 	typeKey: props.library.typeKey,
@@ -104,6 +106,7 @@ async function remove(): Promise<void> {
 	error.value = '';
 	try {
 		await api.deleteLibrary(props.library.id);
+		allowRouteLeave = true;
 		emit('deleted');
 	}
 	catch (cause) {
@@ -115,15 +118,24 @@ async function remove(): Promise<void> {
 }
 
 onMounted(() => nameInput.value?.focus());
+onBeforeRouteLeave(async () => allowRouteLeave || !visible.value || (!saving.value && !deleting.value && (!isDirty.value || await requestConfirmation({
+	key: `discard-library:${props.library.id}`,
+	title: 'Discard Unsaved Changes?',
+	message: 'Leave without saving these library settings?',
+	confirmLabel: 'Discard Changes',
+	cancelLabel: 'Keep Editing',
+	destructive: true,
+}))));
+useDraftProtection(() => visible.value && isDirty.value);
 </script>
 
 <template>
 	<Teleport to="body">
 		<Transition name="moirai-overlay" appear @after-leave="finishClose">
-			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible || Boolean(activeHelpTopic)" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
+			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
 				<form
-					class="moirai-dialog resource-editor-modal library-settings-modal"
-					role="dialog"
+					v-modal-focus="{ escape: closeEditor }"
+					class="moirai-dialog resource-editor-modal library-settings-modal" role="dialog"
 					aria-modal="true"
 					aria-labelledby="library-settings-title"
 					@submit.prevent="save"

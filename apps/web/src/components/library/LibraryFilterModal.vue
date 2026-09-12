@@ -170,8 +170,8 @@ onUnmounted(() => genreCountsController?.abort());
 	<Transition name="moirai-overlay" appear @after-leave="finishClose">
 		<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose" @keydown.esc.stop.prevent="requestClose">
 			<form
-				class="moirai-dialog filter-modal"
-				role="dialog"
+				v-modal-focus="{ escape: requestClose }"
+				class="moirai-dialog filter-modal" role="dialog"
 				aria-modal="true"
 				aria-labelledby="library-filter-title"
 				aria-describedby="library-filter-description"

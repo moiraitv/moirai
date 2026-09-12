@@ -77,12 +77,11 @@ const roleLabel = computed(() => {
 		>
 			<section
 				ref="dialog"
-				class="moirai-dialog guide-preview-modal"
-				role="dialog"
+				v-modal-focus="{ escape: requestClose }"
+				class="moirai-dialog guide-preview-modal" role="dialog"
 				aria-modal="true"
 				aria-labelledby="guide-preview-title"
 				tabindex="-1"
-				@keydown.esc="requestClose"
 			>
 				<div class="modal-heading">
 					<div>

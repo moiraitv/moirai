@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onBeforeRouteLeave } from 'vue-router';
+import { useDraftProtection } from '../draft-protection';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Copy, RefreshCw, Save, Trash2 } from '@lucide/vue';
 import type {
@@ -287,6 +289,20 @@ onUnmounted(() => {
 		clearInterval(statusRefreshTimer);
 	}
 });
+const unsavedSections = computed(() => [
+	playbackSettingsDirty.value ? 'playback capacity' : '',
+	viewingPreferenceSettingsDirty.value ? 'viewing preferences' : '',
+	fallbackDirty.value ? 'fallback filler' : '',
+].filter(Boolean));
+useDraftProtection(() => unsavedSections.value.length > 0);
+onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && (!unsavedSections.value.length || await requestConfirmation({
+	key: 'discard-settings',
+	title: 'Discard Unsaved Changes?',
+	message: `Leave without saving changes to ${unsavedSections.value.join(', ')}?`,
+	confirmLabel: 'Discard Changes',
+	cancelLabel: 'Keep Editing',
+	destructive: true,
+})));
 </script>
 
 <template>

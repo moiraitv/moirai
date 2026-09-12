@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { activeHelpTopic } from '../../help';
+import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
 import FormDisclosure from '../FormDisclosure.vue';
@@ -582,19 +582,6 @@ function clearSelectedItems(): void {
 	selectedItemSearch.value = '';
 }
 
-/** Close the innermost open program surface when Escape is pressed. */
-function handleSelectionDrawerKeydown(event: KeyboardEvent): void {
-	if (selectionDrawerOpen.value && event.key === 'Escape') {
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		void closeSelectionDrawer();
-	}
-	else if (editorOpen.value && event.key === 'Escape') {
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		closeEditor();
-	}
-}
 
 /** Clear selections and filters that cannot carry across a source-library change. */
 function changeSourceLibrary(): void {
@@ -852,7 +839,6 @@ watch(
 );
 watch(() => form.libraryId, () => void loadSourceOptions());
 onMounted(async () => {
-	document.addEventListener('keydown', handleSelectionDrawerKeydown);
 	unsubscribeLiveEvents = subscribeToSelectedMediaRefresh(
 		() => form.libraryId,
 		() => form.sourceType === 'collection' || form.sourceType === 'library-query',
@@ -885,9 +871,9 @@ onMounted(async () => {
 	}
 });
 onBeforeUnmount(() => {
-	document.removeEventListener('keydown', handleSelectionDrawerKeydown);
 	unsubscribeLiveEvents?.();
 });
+useDraftProtection(() => editorOpen.value && isDirty.value);
 </script>
 
 <template>
@@ -895,13 +881,13 @@ onBeforeUnmount(() => {
 		<div
 			v-if="editorOpen"
 			class="moirai-dialog-backdrop"
-			:inert="Boolean(activeHelpTopic)"
+
 			:class="{ 'nested-modal-backdrop': embedded }"
 			@click.self="closeEditor"
 		>
 			<form
-				class="moirai-dialog schedule-editor-modal"
-				role="dialog"
+				v-modal-focus="{ escape: closeEditor }"
+				class="moirai-dialog schedule-editor-modal" role="dialog"
 				aria-modal="true"
 				:aria-label="initialLoading ? 'Program editor' : undefined"
 				:aria-labelledby="initialLoading ? undefined : 'program-editor-title'"

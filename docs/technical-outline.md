@@ -911,6 +911,16 @@ Status conflicts link directly to the affected program or template, with catalog
 no resource ID is available. Account credential updates use the shared dismissible success toast;
 credential errors remain beside the form.
 
+Modal editors, Help, confirmations, and mobile navigation share a focus-trap stack. Only the
+active layer owns keyboard focus; surrounding content is inert, and dismissal restores the opener
+or a surviving destination. Closed mobile navigation is inert below the existing breakpoint.
+Editor guide popovers render in their owning backdrop to remain within its focus boundary while
+avoiding clipping by scrolling editor content; standalone guide popovers render at the page root.
+
+Saveable resource drafts register native unload protection only while dirty. Library creation and
+Settings also confirm route departure without implicitly saving independent sections. Explicit
+sign-out checks active drafts before revoking authentication. Cancelled unloads preserve live events.
+
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
 returns to a page; initial empty collections have explicit loading states.

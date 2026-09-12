@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+import { nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
 
 const props = withDefaults(defineProps<{
 	title: string;
 	message: string;
 	confirmLabel?: string;
+	cancelLabel?: string;
 	destructive?: boolean;
 	requiredText?: string | null;
 	requiredTextLabel?: string | null;
@@ -12,6 +13,7 @@ const props = withDefaults(defineProps<{
 	alternateDestructive?: boolean;
 }>(), {
 	confirmLabel: 'Confirm',
+	cancelLabel: 'Cancel',
 	destructive: false,
 	requiredText: null,
 	requiredTextLabel: null,
@@ -28,9 +30,7 @@ const cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton');
 const visible = ref(true);
 const confirmationText = ref('');
 const result = ref<'confirm' | 'alternate' | 'cancel' | null>(null);
-const previouslyFocused = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
-	? document.activeElement
-	: null;
+
 
 /** Put keyboard focus on the least destructive action after the dialog renders or changes. */
 async function focusSafestAction(): Promise<void> {
@@ -46,30 +46,7 @@ function handleKeydown(event: KeyboardEvent): void {
 		requestClose('cancel');
 		return;
 	}
-	if (event.key !== 'Tab') {
-		return;
-	}
 
-	const focusable = [...(dialog.value?.querySelectorAll<HTMLElement>(
-		'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), '
-		+ 'textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
-	) ?? [])].filter((element) => element.getClientRects().length > 0);
-	if (focusable.length === 0) {
-		event.preventDefault();
-		return;
-	}
-
-	const first = focusable[0]!;
-	const last = focusable.at(-1)!;
-	const activeElement = document.activeElement;
-	if (event.shiftKey && (activeElement === first || !dialog.value?.contains(activeElement))) {
-		event.preventDefault();
-		last.focus();
-	}
-	else if (!event.shiftKey && (activeElement === last || !dialog.value?.contains(activeElement))) {
-		event.preventDefault();
-		first.focus();
-	}
 }
 
 /** Begin dismissal and remember which confirmation result to emit after the exit transition. */
@@ -103,11 +80,7 @@ watch(
 		void focusSafestAction();
 	},
 );
-onUnmounted(() => {
-	if (previouslyFocused?.isConnected) {
-		previouslyFocused.focus();
-	}
-});
+
 </script>
 
 <template>
@@ -116,8 +89,8 @@ onUnmounted(() => {
 			<div v-show="visible" class="moirai-dialog-backdrop confirmation-modal-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="requestClose('cancel')">
 				<section
 					ref="dialog"
-					class="moirai-dialog confirmation-modal"
-					role="alertdialog"
+					v-modal-focus="{ escape: () => requestClose('cancel') }"
+					class="moirai-dialog confirmation-modal" role="alertdialog"
 					aria-modal="true"
 					aria-labelledby="confirmation-modal-title"
 					aria-describedby="confirmation-modal-message"
@@ -136,7 +109,7 @@ onUnmounted(() => {
 					</div>
 					<footer>
 						<button ref="cancelButton" type="button" class="button secondary" @click="requestClose('cancel')">
-							Cancel
+							{{ cancelLabel }}
 						</button>
 						<button
 							v-if="alternateLabel"

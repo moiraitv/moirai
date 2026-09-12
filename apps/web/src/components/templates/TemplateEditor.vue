@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { activeHelpTopic } from '../../help';
+import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -881,28 +881,7 @@ function finishProgramEdit(): void {
 	requestPreview(0);
 }
 
-/** Warn before navigation when the current editor contains unsaved changes. */
-function beforeUnload(event: BeforeUnloadEvent): void {
-	if (hasPendingSave.value) {
-		event.preventDefault();
-	}
-}
 
-/** Close the active template editor with Escape when no nested editor owns the event. */
-function handleEditorKeydown(event: KeyboardEvent): void {
-	if (
-		!event.defaultPrevented
-		&& editing.value
-		&& !quickEditingProgramId.value
-		&& event.key === 'Escape'
-	) {
-		event.preventDefault();
-		if (props.embedded) {
-			event.stopImmediatePropagation();
-		}
-		void closeEditor();
-	}
-}
 
 onBeforeRouteLeave(async () => {
 	if (props.embedded) {
@@ -932,8 +911,6 @@ watch(previewDraftFingerprint, () => requestPreview(), {
 	flush: 'sync',
 });
 onMounted(async () => {
-	window.addEventListener('beforeunload', beforeUnload);
-	document.addEventListener('keydown', handleEditorKeydown);
 
 	try {
 		await Promise.all([
@@ -952,11 +929,10 @@ onMounted(async () => {
 	}
 });
 onBeforeUnmount(() => {
-	window.removeEventListener('beforeunload', beforeUnload);
-	document.removeEventListener('keydown', handleEditorKeydown);
 	previewRevision += 1;
 	clearPreviewTimer();
 });
+useDraftProtection(() => editing.value && hasPendingSave.value);
 </script>
 
 <template>
@@ -964,11 +940,11 @@ onBeforeUnmount(() => {
 		<div
 			v-if="editing"
 			class="moirai-dialog-backdrop"
-			:inert="Boolean(activeHelpTopic)"
+
 			:class="{ 'nested-modal-backdrop': embedded }"
 			@click.self="closeEditor"
 		>
-			<div class="moirai-dialog scheduling-workspace-modal template-workspace" role="dialog" aria-modal="true" aria-label="Template editor">
+			<div v-modal-focus="{ escape: closeEditor }" class="moirai-dialog scheduling-workspace-modal template-workspace" role="dialog" aria-modal="true" aria-label="Template editor">
 				<ResourceEditorHeader close-label="Close template editor" :disabled="saving || deleting" @close="closeEditor">
 					<p class="eyebrow">{{ !draft ? 'Template editor' : editingId ? 'Edit template' : 'New template' }}</p>
 					<div class="resource-editor-title-with-help"><h2>{{ !draft ? 'Loading Template' : editingId ? draft.name : 'Create Template' }}</h2><PageHelpButton label="Templates" topic-id="scheduling.templates" /></div>

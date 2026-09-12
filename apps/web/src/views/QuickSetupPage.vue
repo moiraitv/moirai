@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
@@ -330,33 +331,12 @@ function handleEscape(event: KeyboardEvent): void {
 	if (event.defaultPrevented || !modalOpen.value) {
 		return;
 	}
-	if (event.key === 'Tab' && modal.value) {
-		const controls = [...modal.value.querySelectorAll<HTMLElement>(
-			'button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]',
-		)].filter((element) => element.getClientRects().length > 0);
-		const first = controls[0];
-		const last = controls.at(-1);
-		if (event.shiftKey && (document.activeElement === first || document.activeElement === modal.value)) {
-			event.preventDefault();
-			last?.focus();
-		}
-		else if (!event.shiftKey && document.activeElement === last) {
-			event.preventDefault();
-			first?.focus();
-		}
-	}
 	if (event.key === 'Escape' && !event.defaultPrevented && modalOpen.value) {
 		event.preventDefault();
 		void closeSetup();
 	}
 }
 
-/** Warn the browser before unloading an unfinished draft. */
-function handleBeforeUnload(event: BeforeUnloadEvent): void {
-	if (dirty.value) {
-		event.preventDefault();
-	}
-}
 
 /** Load every shared collection required to initialize a wizard safely. */
 async function loadInitial(): Promise<void> {
@@ -404,21 +384,20 @@ watch(compatibleLibraries, (available) => {
 	}
 });
 onMounted(async () => {
-	window.addEventListener('beforeunload', handleBeforeUnload);
 	await loadInitial();
 });
 onBeforeUnmount(() => {
-	window.removeEventListener('beforeunload', handleBeforeUnload);
 	unsubscribe();
 	if (logo.value) {
 		URL.revokeObjectURL(logo.value.previewUrl);
 	}
 });
+useDraftProtection(() => modalOpen.value && dirty.value);
 </script>
 
 <template>
 	<section>
-		<div :inert="modalOpen" :aria-hidden="modalOpen">
+		<div>
 			<PageHeader eyebrow="Fast start" title="Quick Setup" description="Turn a media folder into a working IPTV channel in a few simple steps." />
 			<LoadingState v-if="loading" label="Loading setup options…" />
 			<div v-else-if="initialError" class="empty-state panel">
@@ -429,7 +408,7 @@ onBeforeUnmount(() => {
 			<QuickScenarioStep v-else @choose="configureScenario" />
 		</div>
 		<div v-if="modalOpen" class="moirai-dialog-backdrop" @click.self="closeSetup" @keydown="handleEscape">
-			<section ref="modal" class="moirai-dialog quick-setup-modal" :class="{ 'quick-setup-complete': compactSuccess }" role="dialog" aria-modal="true" aria-labelledby="quick-setup-title" tabindex="-1">
+			<section ref="modal" v-modal-focus="{ escape: closeSetup }" class="moirai-dialog quick-setup-modal" :class="{ 'quick-setup-complete': compactSuccess }" role="dialog" aria-modal="true" aria-labelledby="quick-setup-title" tabindex="-1">
 				<ResourceEditorHeader close-label="Close Quick Setup" :disabled="libraryBusy || setupBusy" @close="closeSetup">
 					<p class="eyebrow">Fast start</p>
 					<div class="resource-editor-title-with-help"><h2 id="quick-setup-title">Quick Setup</h2><PageHelpButton label="Quick Setup" topic-id="getting-started.first-channel" /></div>

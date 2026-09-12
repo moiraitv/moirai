@@ -1,6 +1,7 @@
 import { createPinia } from 'pinia';
 import { createApp, watch } from 'vue';
 import App from './App.vue';
+import { modalFocus } from './modal-focus';
 import { api, onApiUnauthorized } from './api';
 import { authenticationNavigationRedirect } from './authentication-navigation';
 import { liveEvents } from './live-events';
@@ -10,6 +11,7 @@ import './styles/main.scss';
 
 const pinia = createPinia();
 const application = createApp(App).use(pinia).use(router);
+application.directive('modal-focus', modalFocus);
 const authentication = useAuthenticationStore(pinia);
 
 /** Leave the protected shell when HTTP or live-event traffic reveals an invalid session. */
@@ -50,4 +52,9 @@ watch(
 );
 
 application.mount('#app');
-window.addEventListener('beforeunload', () => liveEvents.stop(), { once: true });
+window.addEventListener('pagehide', () => liveEvents.stop());
+window.addEventListener('pageshow', (event) => {
+	if (event.persisted && authentication.authenticated) {
+		liveEvents.start();
+	}
+});

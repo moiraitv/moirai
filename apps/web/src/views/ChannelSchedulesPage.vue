@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { activeHelpTopic } from '../help';
+import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import ResolvedGuideTrack from '../components/templates/ResolvedGuideTrack.vue';
 import { useDisclosureState } from '../disclosure-state';
@@ -619,26 +619,7 @@ function schedulePreview(delay = PREVIEW_DELAY_MS): void {
 	}, delay);
 }
 
-/** Warn before navigation when the current editor contains unsaved changes. */
-function beforeUnload(event: BeforeUnloadEvent): void {
-	if (scheduleNeedsSave.value) {
-		event.preventDefault();
-	}
-}
 
-/** Leave the schedule editor with Escape when no nested template editor owns the event. */
-function handleEditorKeydown(event: KeyboardEvent): void {
-	if (
-		!event.defaultPrevented
-		&& editing.value
-		&& !quickEditingTemplateId.value
-		&& !quickEditingProgramId.value
-		&& event.key === 'Escape'
-	) {
-		event.preventDefault();
-		void closeScheduleEditor();
-	}
-}
 
 onBeforeRouteLeave(async () => allowRouteLeave || !scheduleNeedsSave.value || requestConfirmation({
 	key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
@@ -656,8 +637,6 @@ watch(
 );
 watch([draft, previewDate], () => schedulePreview(), { deep: true });
 onMounted(async () => {
-	window.addEventListener('beforeunload', beforeUnload);
-	document.addEventListener('keydown', handleEditorKeydown);
 	try {
 		await Promise.all([
 			channelsStore.loadChannels(),
@@ -697,13 +676,12 @@ const unsubscribeTimeline = liveEvents.subscribe((event) => {
 });
 onBeforeUnmount(() => {
 	unsubscribeTimeline();
-	window.removeEventListener('beforeunload', beforeUnload);
-	document.removeEventListener('keydown', handleEditorKeydown);
 	previewRevision += 1;
 	if (previewTimer !== undefined) {
 		clearTimeout(previewTimer);
 	}
 });
+useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 </script>
 
 <template>
@@ -745,12 +723,12 @@ onBeforeUnmount(() => {
 			<div
 				v-if="editing && !initialLoading"
 				class="moirai-dialog-backdrop"
-				:inert="Boolean(activeHelpTopic)"
+
 				@click.self="closeScheduleEditor"
 			>
 				<div
-					class="moirai-dialog scheduling-workspace-modal channel-schedule-modal"
-					role="dialog"
+					v-modal-focus="{ escape: closeScheduleEditor }"
+					class="moirai-dialog scheduling-workspace-modal channel-schedule-modal" role="dialog"
 					aria-modal="true"
 					aria-label="Channel schedule editor"
 				>

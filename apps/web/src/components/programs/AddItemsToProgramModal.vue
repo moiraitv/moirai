@@ -268,14 +268,13 @@ onMounted(async () => {
 	<div class="moirai-dialog-backdrop program-item-modal-backdrop" @click.self="close">
 		<section
 			ref="dialog"
-			class="moirai-dialog program-item-modal"
-			role="dialog"
+			v-modal-focus="{ escape: close }"
+			class="moirai-dialog program-item-modal" role="dialog"
 			aria-modal="true"
 			aria-labelledby="program-item-modal-title"
-			:aria-hidden="pendingConfirmation ? 'true' : undefined"
-			:inert="pendingConfirmation !== null"
+
+
 			tabindex="-1"
-			@keydown.esc="close"
 		>
 			<header class="program-item-modal-header">
 				<div>

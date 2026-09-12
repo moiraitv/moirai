@@ -53,8 +53,8 @@ onMounted(async () => {
 		<div class="moirai-dialog-backdrop program-addition-confirmation-backdrop" @click.self="cancel">
 			<section
 				ref="dialog"
-				class="moirai-dialog program-addition-confirmation-modal"
-				role="alertdialog"
+				v-modal-focus="{ escape: cancel }"
+				class="moirai-dialog program-addition-confirmation-modal" role="alertdialog"
 				aria-modal="true"
 				aria-labelledby="program-addition-confirmation-title"
 				aria-describedby="program-addition-confirmation-description"

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Copy, Eye, FileCode, Info, Pencil, Plus } from '@lucide/vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { creditTemplateCreateSchema, MAX_CREDIT_TEMPLATE_LENGTH, MUSIC_VIDEO_CREDIT_TEMPLATE, type CreditTemplate } from '@moirai/shared';
@@ -133,24 +134,16 @@ async function remove(): Promise<void> {
 	}
 }
 
-/** Let styled confirmation dialogs consume Escape before dismissing the editor. */
-function keydown(event: KeyboardEvent): void {
-	if (open.value && event.key === 'Escape' && !event.defaultPrevented) {
-		event.preventDefault();
-		void close();
-	}
-}
 onMounted(() => {
 	void load();
-	window.addEventListener('keydown', keydown); 
 });
-onBeforeUnmount(() => window.removeEventListener('keydown', keydown));
 onBeforeRouteLeave(async () => {
 	if (open.value) {
 		await close(); 
 	}
 	return !open.value; 
 });
+useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 </script>
 
 <template>
@@ -167,7 +160,7 @@ onBeforeRouteLeave(async () => {
 			</article>
 		</div>
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
-			<form class="moirai-dialog resource-editor-modal credit-template-editor" role="dialog" aria-modal="true" aria-labelledby="credit-editor-title" @submit.prevent="save">
+			<form v-modal-focus="{ escape: close }" class="moirai-dialog resource-editor-modal credit-template-editor" role="dialog" aria-modal="true" aria-labelledby="credit-editor-title" @submit.prevent="save">
 				<ResourceEditorHeader close-label="Close credit template" :disabled="busy || previewBusy" @close="close"><div class="credit-template-title"><div class="resource-editor-title-with-help"><h2 id="credit-editor-title">{{ readonlyTemplate ? 'View' : id ? 'Edit' : 'New' }} credit template</h2><PageHelpButton label="Credit templates" topic-id="playback.credit-templates" /></div><span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span></div></ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="credit-template-metadata"><label><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyTemplate" required maxlength="120" /></label><label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyTemplate" maxlength="500" placeholder="Describe when to use this template" /></label></div>

@@ -86,8 +86,8 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 			<div v-show="visible" class="moirai-dialog-backdrop log-detail-backdrop" :inert="!visible" :aria-hidden="!visible" role="presentation" @mousedown.self="requestClose">
 				<section
 					ref="dialog"
-					class="moirai-dialog log-detail-modal"
-					role="dialog"
+					v-modal-focus="{ escape: requestClose }"
+					class="moirai-dialog log-detail-modal" role="dialog"
 					aria-modal="true"
 					aria-labelledby="log-detail-title"
 					tabindex="-1"

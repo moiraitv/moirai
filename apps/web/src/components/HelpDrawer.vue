@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowUpRight, BookOpen, X } from '@lucide/vue';
 import LoadingState from './LoadingState.vue';
 import { helpReviewLabel, type HelpReviewReason } from '../help-review';
@@ -28,7 +28,7 @@ const dialog = ref<HTMLElement>();
 const manifest = ref<HelpManifest>();
 const loading = ref(true);
 const error = ref('');
-const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
 const topic = computed(() => manifest.value?.topics[props.topicId]);
 
 /** Load the version-matched topic manifest bundled with the application. */
@@ -61,23 +61,7 @@ function handleKeydown(event: KeyboardEvent): void {
 		emit('close');
 		return;
 	}
-	if (event.key !== 'Tab') {
-		return;
-	}
 
-	const focusable = [...(dialog.value?.querySelectorAll<HTMLElement>(
-		'a[href], button:not(:disabled), [tabindex]:not([tabindex="-1"])',
-	) ?? [])];
-	const first = focusable[0] ?? dialog.value;
-	const last = focusable.at(-1) ?? dialog.value;
-	if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) {
-		event.preventDefault();
-		last?.focus();
-	}
-	else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.value)) {
-		event.preventDefault();
-		first?.focus();
-	}
 }
 
 watch(() => props.topicId, () => void loadTopic());
@@ -85,7 +69,6 @@ onMounted(() => {
 	dialog.value?.focus();
 	void loadTopic();
 });
-onUnmounted(() => void nextTick(() => opener?.isConnected && opener.focus()));
 </script>
 
 <template>
@@ -93,8 +76,8 @@ onUnmounted(() => void nextTick(() => opener?.isConnected && opener.focus()));
 		<div class="help-drawer-backdrop" @click.self="emit('close')">
 			<aside
 				ref="dialog"
-				class="help-drawer"
-				role="dialog"
+				v-modal-focus="{ escape: () => emit('close') }"
+				class="help-drawer" role="dialog"
 				aria-modal="true"
 				aria-label="Moirai help"
 				:aria-labelledby="topic ? 'help-drawer-title' : undefined"

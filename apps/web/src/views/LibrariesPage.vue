@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { onBeforeRouteLeave } from 'vue-router';
+import { useDraftProtection } from '../draft-protection';
+import { requestConfirmation } from '../confirmation';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ChevronRight, FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
@@ -42,6 +45,8 @@ const form = reactive<LibraryCreate>({
 	watcherEnabled: true,
 	enabled: true,
 });
+const baseline = ref(JSON.stringify(form));
+const libraryDraftDirty = computed(() => JSON.stringify(form) !== baseline.value);
 const libraryFormValid = computed(() => libraryCreateSchema.safeParse({
 	...form,
 	sourceConfig: { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null },
@@ -130,6 +135,7 @@ async function create() {
 		showForm.value = false;
 		form.name = '';
 		form.sourceConfig.scanRoot = '';
+		baseline.value = JSON.stringify(form);
 		await librariesStore.load();
 		await loadContentPreviews();
 	}
@@ -157,6 +163,15 @@ onUnmounted(() => {
 	window.clearTimeout(previewRefreshTimer);
 	unsubscribe();
 });
+useDraftProtection(() => libraryDraftDirty.value);
+onBeforeRouteLeave(async () => !busy.value && (!libraryDraftDirty.value || await requestConfirmation({
+	key: 'discard-new-library',
+	title: 'Discard Unsaved Changes?',
+	message: 'Leave without adding this library?',
+	confirmLabel: 'Discard Changes',
+	cancelLabel: 'Keep Editing',
+	destructive: true,
+})));
 </script>
 <template>
 	<section>

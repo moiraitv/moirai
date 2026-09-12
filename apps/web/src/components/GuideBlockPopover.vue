@@ -9,6 +9,7 @@ import { programColorStyle } from '../program-colors';
 const props = withDefaults(defineProps<{ segments: TimelineSegment[]; timeZone: string; selectable?: boolean; programNames?: Record<string, string> }>(), { selectable: true, programNames: () => ({}) });
 const emit = defineEmits<{ select: [segment: TimelineSegment] }>();
 const panel = ref<HTMLElement>();
+const teleportTarget = ref<HTMLElement | string>('body');
 const entry = ref<GuideEntry | null>(null);
 const fraction = ref(0.5);
 let anchorBounds: DOMRect | null = null;
@@ -89,6 +90,8 @@ async function show(value: GuideEntry, target: HTMLElement, focus = false, clien
 		return;
 	}
 	keepOpen();
+	// Keep editor-owned previews inside their focus boundary and outside scrolling content.
+	teleportTarget.value = target.closest<HTMLElement>('.moirai-dialog-backdrop') ?? 'body';
 	anchorBounds = target.getBoundingClientRect();
 	fraction.value = clientX === undefined ? 0.5 : guidePointerFraction(clientX, anchorBounds.left, anchorBounds.width);
 	entry.value = value;
@@ -184,7 +187,7 @@ defineExpose({ show, move, leave, close });
 </script>
 
 <template>
-	<Teleport to="body">
+	<Teleport :to="teleportTarget">
 		<template v-if="entry">
 			<span class="guide-position-marker" :style="markerPosition" aria-hidden="true"></span>
 			<span v-for="(boundary, index) in rangePositions" :key="index" class="guide-range-marker" :style="boundary" aria-hidden="true"></span>
