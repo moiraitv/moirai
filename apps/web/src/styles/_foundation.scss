@@ -918,9 +918,14 @@ a.nav-link.router-link-exact-active {
 .resource-editor-title-with-help {
 	display: flex;
 	align-items: baseline;
-	flex-wrap: wrap;
 	gap: 0.5rem;
 	min-width: 0;
+	max-width: 100%;
+}
+
+.resource-editor-title-with-help h2 {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .resource-editor-action-bar {

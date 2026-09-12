@@ -9,6 +9,8 @@ contextual: true
 
 Open a library to browse its indexed catalog. Search narrows the current results by name. Sorting, date windows, and filters help with larger collections.
 
+When browsing by title, select a letter above the catalog to jump to that section. On touch screens, swipe the letter strip sideways to reach additional letters.
+
 ![An indexed media library](/screenshots/library-catalog.png)
 
 The filter editor can include or exclude genres and apply facts such as actors, directors, ratings, and dates when those values exist in the source metadata. An empty result means nothing matches the whole active filter; it does not mean the library is empty.

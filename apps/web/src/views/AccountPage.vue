@@ -4,6 +4,7 @@ import { KeyRound } from '@lucide/vue';
 import { localAuthenticationCredentialsSchema } from '@moirai/shared/api-contracts';
 import { errorMessage } from '../error-message';
 import PageHeader from '../components/PageHeader.vue';
+import TransientToast from '../components/TransientToast.vue';
 import { useAuthenticationStore } from '../stores/authentication';
 
 const authentication = useAuthenticationStore();
@@ -77,7 +78,6 @@ async function saveCredentials(): Promise<void> {
 							: 'Create local credentials that remain available if Logto cannot be reached.' }}
 					</p>
 				</div>
-				<p v-if="credentialMessage" class="notice success span-2">{{ credentialMessage }}</p>
 				<p v-if="credentialError" class="notice error span-2">{{ credentialError }}</p>
 				<label class="span-2">
 					<span>Username</span>
@@ -122,5 +122,6 @@ async function saveCredentials(): Promise<void> {
 				</div>
 			</form>
 		</div>
+		<TransientToast v-if="credentialMessage" :message="credentialMessage" @close="credentialMessage = ''" />
 	</section>
 </template>

@@ -907,6 +907,10 @@ The primary Status navigation item also carries the live IPTV readiness state an
 count without a separate sidebar card. Navigation scrolls within the available viewport while the
 account and sign-out controls remain accessible in the sidebar footer.
 
+Status conflicts link directly to the affected program or template, with catalog destinations when
+no resource ID is available. Account credential updates use the shared dismissible success toast;
+credential errors remain beside the form.
+
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
 returns to a page; initial empty collections have explicit loading states.

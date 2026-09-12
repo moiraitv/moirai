@@ -986,3 +986,78 @@ for (const kind of ['programs', 'templates'] as const) {
 		await expect(help).toBeFocused();
 	});
 }
+
+test('opens affected resources from dashboard identity conflicts', async ({ page, documentationServer }) => {
+	const { program, template } = await seedSchedule(page, documentationServer.directory);
+	const conflicts = [
+		{ id: 'program', resourceType: 'program', resourceId: program.id, title: 'Program conflict' },
+		{ id: 'template', resourceType: 'template', resourceId: template.id, title: 'Template conflict' },
+		{ id: 'program-list', resourceType: 'program', resourceId: null, title: 'Program catalog conflict' },
+		{ id: 'template-list', resourceType: 'template', resourceId: null, title: 'Template catalog conflict' },
+	].map((conflict) => ({ ...conflict, kind: 'resource-name', severity: 'warning', libraryId: null, message: 'Duplicate resource name', paths: [], observedAt: null }));
+	await page.route('**/api/v1/status/conflicts', (route) => route.fulfill({ json: { conflicts, truncated: false } }));
+
+	for (const conflict of conflicts) {
+		await page.goto('/');
+		await page.getByRole('link', { name: new RegExp(conflict.title, 'u') }).click();
+		const collection = conflict.resourceType === 'program' ? 'programs' : 'templates';
+		await expect(page).toHaveURL(`${documentationServer.url}/schedules/${collection}${conflict.resourceId ? `/${conflict.resourceId}` : ''}`);
+		if (conflict.resourceId) {
+			await expect(page.getByRole('dialog')).toBeVisible();
+		}
+		else {
+			await expect(page.getByRole('heading', { name: collection === 'programs' ? 'Programs' : 'Templates', exact: true })).toBeVisible();
+		}
+	}
+});
+
+test('shows dismissible account success while retaining credential errors', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/account');
+	for (const manualDismissal of [true, false]) {
+		await page.getByLabel('Current password').fill(E2E_ADMIN_PASSWORD);
+		await page.getByRole('textbox', { name: /^New password/u }).fill(E2E_ADMIN_PASSWORD);
+		await page.getByLabel('Confirm new password').fill(E2E_ADMIN_PASSWORD);
+		await page.getByRole('button', { name: 'Update Credentials' }).click();
+		const toast = page.getByRole('status').filter({ hasText: 'Local credentials updated.' });
+		await expect(toast).toBeVisible();
+		if (manualDismissal) {
+			await toast.getByRole('button', { name: 'Dismiss notification' }).click();
+		}
+		await expect(toast).toBeHidden({ timeout: 8_000 });
+	}
+
+	await page.getByLabel('Current password').fill('an incorrect current password');
+	await page.getByRole('textbox', { name: /^New password/u }).fill(E2E_ADMIN_PASSWORD);
+	await page.getByLabel('Confirm new password').fill(E2E_ADMIN_PASSWORD);
+	await page.getByRole('button', { name: 'Update Credentials' }).click();
+	const error = page.locator('.account-panel .notice.error');
+	await expect(error).toBeVisible();
+	await page.waitForTimeout(5_500);
+	await expect(error).toBeVisible();
+	await expect(page.locator('.transient-toast')).toHaveCount(0);
+});
+
+test('keeps alphabet navigation reachable with touch targets', async ({ page, browser, documentationServer }) => {
+	const { libraryId } = await seedLibrary(page, documentationServer.directory);
+	const context = await browser.newContext({ baseURL: documentationServer.url, hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+	try {
+		const touchPage = await context.newPage();
+		await authenticateAdministrator(touchPage);
+		await touchPage.goto(`/libraries/${libraryId}`);
+		const alphabet = touchPage.locator('.alphabet-filter');
+		for (const letter of ['W', 'A']) {
+			const button = alphabet.getByRole('button', { name: letter, exact: true });
+			await button.scrollIntoViewIfNeeded();
+			await expect(button).toBeInViewport();
+			const bounds = await button.boundingBox();
+			expect(bounds!.width).toBeGreaterThanOrEqual(44);
+			expect(bounds!.height).toBeGreaterThanOrEqual(44);
+			await touchPage.touchscreen.tap(bounds!.x + 4, bounds!.y + 4);
+			await expect(touchPage.getByText(letter === 'W' ? 'Winter Archive' : 'Afterlight Station', { exact: true })).toBeInViewport();
+		}
+	}
+	finally {
+		await context.close();
+	}
+});

@@ -618,8 +618,8 @@
 	min-height: 43px;
 	padding: 0 8px;
 	display: flex;
-	align-items: center;
-	justify-content: center;
+	align-items: stretch;
+	justify-content: flex-start;
 	overflow-x: auto;
 	border: 1px solid var(--line);
 	border-radius: 9px;
@@ -629,11 +629,19 @@
 .alphabet-filter button {
 	width: 100%;
 	min-width: 19px;
+	min-height: 41px;
 	padding: 0;
 	border: 0;
 	color: #a3afbc;
 	background: transparent;
 	font-size: 0.67rem;
+}
+
+@media (pointer: coarse) {
+	.alphabet-filter button {
+		min-width: 44px;
+		min-height: 44px;
+	}
 }
 
 .alphabet-filter button:not(:disabled) {

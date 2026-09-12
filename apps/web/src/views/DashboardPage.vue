@@ -75,11 +75,11 @@ function conflictLink(conflict: DataConflict): string {
 	}
 
 	if (conflict.resourceType === 'program') {
-		return '/scheduling/programs';
+		return conflict.resourceId ? `/schedules/programs/${encodeURIComponent(conflict.resourceId)}` : '/schedules/programs';
 	}
 
 	if (conflict.resourceType === 'template') {
-		return '/scheduling/templates';
+		return conflict.resourceId ? `/schedules/templates/${encodeURIComponent(conflict.resourceId)}` : '/schedules/templates';
 	}
 
 	return '/channels';

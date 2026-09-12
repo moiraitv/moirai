@@ -9,6 +9,8 @@ contextual: true
 
 The dashboard is the first place to check when viewers report a problem. It summarizes playback readiness, active channels, library health, and data conflicts.
 
+Select a program or template conflict to open the affected resource. If the conflict does not identify a specific resource, Moirai opens its catalog instead.
+
 ![The Moirai status dashboard](/screenshots/dashboard.png)
 
 An active channel shows connected playback work and can be restarted from its action menu. Restarting interrupts the current stream, so use it only when viewers can tolerate a reconnect.
