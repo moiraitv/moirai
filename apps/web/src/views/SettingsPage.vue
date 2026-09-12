@@ -9,6 +9,8 @@ import type {
 	ViewingPreferenceSummary,
 	FallbackFillerStatus,
 } from '@moirai/shared';
+import { playbackSettingsSchema } from '@moirai/shared';
+import { useFieldValidation, numericInputAttributes } from '../field-validation';
 import { api } from '../api';
 import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
@@ -29,7 +31,14 @@ const status = ref<PlaybackEngineStatus | null>(null);
 const initialLoading = ref(true);
 const savingSection = ref<'playback' | 'viewing-preferences' | null>(null);
 const message = ref('');
-const error = ref('');
+const settingsLoadError = ref('');
+const statusError = ref('');
+const statusLoading = ref(true);
+const saveErrors = reactive({ playback: '', 'viewing-preferences': '' });
+const clipboardError = ref('');
+const historyError = ref('');
+const capacityValidation = useFieldValidation(() => playbackSettingsSchema.safeParse(settings));
+const capacityAttributes = numericInputAttributes(playbackSettingsSchema.shape.maxActiveSessions.removeDefault());
 const preferences = ref<ViewingPreferenceSummary[]>([]);
 const preferencesLoading = ref(true);
 const preferencesError = ref('');
@@ -43,49 +52,59 @@ const fallbackError = ref('');
 const fallbackLoadError = ref('');
 const playbackSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.maxActiveSessions !== savedSettings.value.maxActiveSessions);
-const playbackSettingsValid = computed(() => Number.isInteger(settings.maxActiveSessions)
-	&& settings.maxActiveSessions >= 1
-	&& settings.maxActiveSessions <= 32);
+const playbackSettingsValid = computed(() => playbackSettingsSchema.shape.maxActiveSessions.safeParse(settings.maxActiveSessions).success);
 const viewingPreferenceSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.viewingPreferencesEnabled !== savedSettings.value.viewingPreferencesEnabled);
 const fallbackDirty = computed(() => fallbackFile.value !== null || removeFallbackOnSave.value);
-let refreshingStatus = false;
+const refreshingStatus = ref(false);
+let loadingSettings = false;
+let loadingPreferences = false;
 let fallbackLoadSequence = 0;
 let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
 /** Polling interval that keeps client activity current without following every segment request. */
 const STATUS_REFRESH_INTERVAL_MS = 15_000;
 
-/** Load playback settings and live engine state. */
-async function load(): Promise<void> {
-	const preferenceLoad = api.viewingPreferences()
-		.then((loadedPreferences) => {
-			preferences.value = loadedPreferences;
-			preferencesError.value = '';
-		})
-		.catch((cause) => {
-			preferencesError.value = errorMessage(cause);
-		})
-		.finally(() => {
-			preferencesLoading.value = false;
-		});
-	const fallbackLoad = refreshFallback(true);
+/** Retry settings without replacing drafts owned by other resources. */
+async function loadSettings(): Promise<void> {
+	if (loadingSettings) {
+		return;
+	}
+	loadingSettings = true;
+	initialLoading.value = true;
 	try {
-		const [loadedSettings, loadedStatus] = await Promise.all([
-			api.playbackSettings(),
-			api.playbackStatus(),
-		]);
-		Object.assign(settings, loadedSettings);
-		savedSettings.value = { ...loadedSettings };
-		status.value = loadedStatus;
-		error.value = '';
+		const loaded = await api.playbackSettings();
+		Object.assign(settings, loaded);
+		savedSettings.value = { ...loaded };
+		settingsLoadError.value = '';
+		capacityValidation.reset();
 	}
 	catch (cause) {
-		error.value = errorMessage(cause);
+		settingsLoadError.value = errorMessage(cause);
 	}
 	finally {
 		initialLoading.value = false;
+		loadingSettings = false;
 	}
-	await Promise.all([preferenceLoad, fallbackLoad]);
+}
+
+/** Load learned history independently of the editable playback settings. */
+async function loadPreferences(): Promise<void> {
+	if (loadingPreferences || clearingPreferences.value) {
+		return;
+	}
+	loadingPreferences = true;
+	preferencesLoading.value = true;
+	try {
+		preferences.value = await api.viewingPreferences();
+		preferencesError.value = '';
+	}
+	catch (cause) {
+		preferencesError.value = errorMessage(cause);
+	}
+	finally {
+		preferencesLoading.value = false;
+		loadingPreferences = false;
+	}
 }
 
 /** Refresh global fallback metadata without allowing an older request to replace newer state. */
@@ -163,14 +182,14 @@ async function clearViewingPreferences(): Promise<void> {
 
 	clearingPreferences.value = true;
 	message.value = '';
-	error.value = '';
+	historyError.value = '';
 	try {
 		await api.clearViewingPreferences();
 		preferences.value = [];
 		message.value = 'Viewing history cleared.';
 	}
 	catch (cause) {
-		error.value = errorMessage(cause);
+		historyError.value = errorMessage(cause);
 	}
 	finally {
 		clearingPreferences.value = false;
@@ -184,20 +203,21 @@ function preferenceScore(value: number): string {
 
 /** Refresh engine state without replacing an edited capacity value. */
 async function refreshStatus(): Promise<void> {
-	if (refreshingStatus) {
+	if (refreshingStatus.value) {
 		return;
 	}
 
-	refreshingStatus = true;
+	refreshingStatus.value = true;
 	try {
 		status.value = await api.playbackStatus();
-		error.value = '';
+		statusError.value = '';
 	}
 	catch (cause) {
-		error.value = errorMessage(cause);
+		statusError.value = errorMessage(cause);
 	}
 	finally {
-		refreshingStatus = false;
+		refreshingStatus.value = false;
+		statusLoading.value = false;
 	}
 }
 
@@ -214,7 +234,7 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 	const submitted = { ...settings };
 	savingSection.value = section;
 	message.value = '';
-	error.value = '';
+	saveErrors[section] = '';
 	try {
 		const authoritative = await api.savePlaybackSettings({
 			maxActiveSessions: section === 'playback'
@@ -245,7 +265,7 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 		}
 	}
 	catch (cause) {
-		error.value = errorMessage(cause);
+		saveErrors[section] = errorMessage(cause);
 	}
 	finally {
 		savingSection.value = null;
@@ -255,13 +275,13 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 /** Copy a client URL to the clipboard. */
 async function copyUrl(value: string, label: string): Promise<void> {
 	message.value = '';
-	error.value = '';
+	clipboardError.value = '';
 	try {
 		await navigator.clipboard.writeText(value);
 		message.value = `${label} copied.`;
 	}
 	catch {
-		error.value = `Unable to copy ${label.toLowerCase()}.`;
+		clipboardError.value = `Unable to copy ${label.toLowerCase()}.`;
 	}
 }
 
@@ -280,7 +300,10 @@ const unsubscribe = liveEvents.subscribe((event) => {
 });
 
 onMounted(() => {
-	void load();
+	void loadSettings();
+	void refreshStatus();
+	void loadPreferences();
+	void refreshFallback(true);
 	statusRefreshTimer = setInterval(() => void refreshStatus(), STATUS_REFRESH_INTERVAL_MS);
 });
 onUnmounted(() => {
@@ -312,56 +335,66 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 			title="IPTV service"
 			description="Moirai serves the channel playlist, guide, and live streams directly."
 		>
-			<button class="button secondary" :disabled="initialLoading" @click="refreshStatus">
+			<button class="button secondary" :disabled="refreshingStatus" @click="refreshStatus">
 				<RefreshCw :size="17" />Refresh Status
 			</button>
 		</PageHeader>
-		<p v-if="error" class="notice error">{{ error }}</p>
-		<LoadingState v-if="initialLoading" label="Loading playback settings…" />
-		<div v-else class="settings-layout async-state-surface">
+		<div class="settings-layout async-state-surface">
 			<form class="panel form-grid" @submit.prevent="save('playback')">
 				<div class="span-2">
 					<p class="eyebrow">Client setup</p>
 					<h2>Playlist and guide</h2>
 					<p>Add these URLs to an IPTV client that can reach this Moirai server.</p>
 				</div>
-				<label class="span-2">
-					<span>Channel playlist</span>
-					<span class="input-with-action">
-						<input :value="status?.m3uUrl ?? ''" readonly />
-						<button type="button" class="icon-button" aria-label="Copy channel playlist URL" @click="copyUrl(status?.m3uUrl ?? '', 'Playlist URL')">
-							<Copy :size="17" />
-						</button>
-					</span>
-				</label>
-				<label class="span-2">
-					<span>XMLTV guide</span>
-					<span class="input-with-action">
-						<input :value="status?.epgUrl ?? ''" readonly />
-						<button type="button" class="icon-button" aria-label="Copy XMLTV guide URL" @click="copyUrl(status?.epgUrl ?? '', 'Guide URL')">
-							<Copy :size="17" />
-						</button>
-					</span>
-				</label>
-				<label class="span-2">
+				<p v-if="clipboardError" class="notice error span-2" role="alert">{{ clipboardError }}</p>
+				<LoadingState v-if="statusLoading" class="span-2" label="Loading client URLs…" />
+				<template v-if="status">
+					<label class="span-2">
+						<span>Channel playlist</span>
+						<span class="input-with-action">
+							<input :value="status?.m3uUrl ?? ''" readonly />
+							<button type="button" class="icon-button" aria-label="Copy channel playlist URL" @click="copyUrl(status?.m3uUrl ?? '', 'Playlist URL')">
+								<Copy :size="17" />
+							</button>
+						</span>
+					</label>
+					<label class="span-2">
+						<span>XMLTV guide</span>
+						<span class="input-with-action">
+							<input :value="status?.epgUrl ?? ''" readonly />
+							<button type="button" class="icon-button" aria-label="Copy XMLTV guide URL" @click="copyUrl(status?.epgUrl ?? '', 'Guide URL')">
+								<Copy :size="17" />
+							</button>
+						</span>
+					</label>
+				</template>
+				<LoadingState v-if="initialLoading" class="span-2" label="Loading playback settings…" />
+				<div v-else-if="settingsLoadError" class="span-2"><p class="notice error" role="alert">{{ settingsLoadError }}</p><button type="button" class="button secondary" @click="loadSettings">Retry Settings</button></div>
+				<label v-if="savedSettings" class="span-2">
 					<span>Maximum active channel sessions</span>
-					<input v-model.number="settings.maxActiveSessions" type="number" min="1" max="32" />
+					<input v-model.number="settings.maxActiveSessions" type="number" v-bind="{ ...capacityAttributes, ...capacityValidation.attributes('maxActiveSessions') }" />
+					<small v-if="capacityValidation.error('maxActiveSessions')" :id="capacityValidation.errorId('maxActiveSessions')" class="field-error">{{ capacityValidation.error('maxActiveSessions') }}</small>
 					<small>Additional tune requests receive a retryable capacity response. Default: 4.</small>
 				</label>
-				<div class="form-actions span-2">
+				<p v-if="saveErrors.playback" class="notice error span-2" role="alert">{{ saveErrors.playback }}</p>
+				<div v-if="savedSettings" class="form-actions span-2">
 					<button class="button" :disabled="savingSection !== null || !playbackSettingsDirty || !playbackSettingsValid"><Save :size="17" />Save Settings</button>
 				</div>
 			</form>
 			<aside class="panel playback-card">
 				<p class="eyebrow">Playback engine</p>
-				<StatusPill :value="status?.status ?? 'degraded'" />
-				<h2>
-					{{ status?.activeSessionCount ?? 0 }}/{{ status?.maxActiveSessions ?? settings.maxActiveSessions }}
-					{{ (status?.activeSessionCount ?? 0) === 1 ? 'channel' : 'channels' }} active
-				</h2>
-				<p v-if="status?.engineVersion">{{ status.engineVersion }}</p>
-				<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
-				<code>{{ status?.contractRevision.slice(0, 12) }}</code>
+				<LoadingState v-if="statusLoading" label="Loading playback status…" />
+				<div v-if="statusError"><p class="notice error" role="alert">{{ statusError }}</p><button type="button" class="button secondary" :disabled="refreshingStatus" @click="refreshStatus">Retry Status</button></div>
+				<template v-if="status">
+					<StatusPill :value="status.status" />
+					<h2>
+						{{ status?.activeSessionCount ?? 0 }}/{{ status?.maxActiveSessions ?? settings.maxActiveSessions }}
+						{{ (status?.activeSessionCount ?? 0) === 1 ? 'channel' : 'channels' }} active
+					</h2>
+					<p v-if="status?.engineVersion">{{ status.engineVersion }}</p>
+					<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
+					<code>{{ status.contractRevision.slice(0, 12) }}</code>
+				</template>
 			</aside>
 			<section class="panel fallback-filler-panel span-2">
 				<p class="eyebrow">Playback safety</p>
@@ -378,7 +411,7 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 					@validation-error="fallbackError = $event"
 				/>
 				<p v-if="fallbackError" class="notice error">{{ fallbackError }}</p>
-				<p v-if="fallbackLoadError" class="notice error">{{ fallbackLoadError }}</p>
+				<div v-if="fallbackLoadError"><p class="notice error" role="alert">{{ fallbackLoadError }}</p><button type="button" class="button secondary" :disabled="fallbackLoading || savingFallback" @click="refreshFallback(true)">Retry Fallback</button></div>
 				<div class="form-actions">
 					<TwoStepActionButton
 						class="button secondary"
@@ -405,13 +438,14 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 				<p class="eyebrow">Local viewing preferences</p>
 				<h2>Learn what viewers choose</h2>
 				<p>Moirai anonymously scores media that remains tuned for at least two minutes. Network addresses and client details are never stored in viewing history.</p>
-				<label class="settings-toggle">
+				<label v-if="savedSettings" class="settings-toggle">
 					<input v-model="settings.viewingPreferencesEnabled" type="checkbox" />
 					<span>Learn from channel viewing and apply it to Weighted Random programs</span>
 				</label>
-				<div class="form-actions"><button type="button" class="button" :disabled="savingSection !== null || !viewingPreferenceSettingsDirty" @click="save('viewing-preferences')"><Save :size="17" />Save Settings</button></div>
+				<p v-if="saveErrors['viewing-preferences']" class="notice error" role="alert">{{ saveErrors['viewing-preferences'] }}</p>
+				<div v-if="savedSettings" class="form-actions"><button type="button" class="button" :disabled="savingSection !== null || !viewingPreferenceSettingsDirty" @click="save('viewing-preferences')"><Save :size="17" />Save Settings</button></div>
 				<p v-if="preferencesLoading">Loading learned preferences…</p>
-				<p v-else-if="preferencesError" class="notice error">{{ preferencesError }}</p>
+				<div v-else-if="preferencesError"><p class="notice error" role="alert">{{ preferencesError }}</p><button type="button" class="button secondary" :disabled="clearingPreferences" @click="loadPreferences">Retry History</button></div>
 				<p v-else-if="preferences.length === 0" class="muted">No qualified viewing has been recorded yet.</p>
 				<ol v-else class="viewing-preference-list">
 					<li v-for="preference in preferences" :key="`${preference.kind}:${preference.id}`">
@@ -419,10 +453,11 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 						<output>{{ preferenceScore(preference.score) }}</output>
 					</li>
 				</ol>
+				<p v-if="historyError" class="notice error" role="alert">{{ historyError }}</p>
 				<div class="viewing-preference-danger">
 					<strong>Clear all viewing history</strong>
 					<p>This permanently removes every learned preference.</p>
-					<button type="button" class="button secondary" :disabled="clearingPreferences" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear History' }}</button>
+					<button type="button" class="button secondary" :disabled="clearingPreferences || preferencesLoading" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear History' }}</button>
 				</div>
 			</section>
 		</div>

@@ -7,6 +7,7 @@ import EncodingSettingsEditor from './EncodingSettingsEditor.vue';
 import FormDisclosure from './FormDisclosure.vue';
 
 const props = defineProps<{ profileId?: string | null | undefined; accelerationPredictionText?: string; accelerationDetail?: string | undefined }>();
+const emit = defineEmits<{ 'validation-change': [invalid: boolean] }>();
 const audio = defineModel<ChannelCreate['audio']>('audio', { required: true });
 const video = defineModel<ChannelCreate['video']>('video', { required: true });
 const expanded = useDisclosureState('channel-encoding', !props.profileId);
@@ -25,6 +26,6 @@ watch(() => props.profileId, () => {
 			<span class="encoding-disclosure-copy"><strong>Video &amp; audio settings</strong><small>{{ profileId ? 'Read-only settings from the selected encoding profile' : 'Custom settings for this channel (overrides default profile)' }}</small></span>
 			<span class="encoding-disclosure-badges"><span>{{ profileId ? 'Linked profile' : 'Custom' }}</span><span v-if="video.format">{{ video.format === 'h264' ? 'H.264' : video.format.toUpperCase() }}</span><span v-if="video.width && video.height">{{ video.width }} × {{ video.height }}</span><span v-if="audio.format">{{ audio.format.toUpperCase() }}</span><span v-if="audio.bitrateKbps">{{ audio.bitrateKbps }} kbps</span></span>
 		</template>
-		<EncodingSettingsEditor v-model:audio="audio" v-model:video="video" show-descriptions :disabled="Boolean(profileId)" :acceleration-prediction-text="accelerationPredictionText ?? ''" :acceleration-detail="accelerationDetail" />
+		<EncodingSettingsEditor v-model:audio="audio" v-model:video="video" show-descriptions :disabled="Boolean(profileId)" :acceleration-prediction-text="accelerationPredictionText ?? ''" :acceleration-detail="accelerationDetail" @validation-change="emit('validation-change', $event)" />
 	</FormDisclosure>
 </template>

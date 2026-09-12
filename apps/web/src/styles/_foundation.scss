@@ -1060,3 +1060,19 @@ a.nav-link.router-link-exact-active {
 	background: linear-gradient(145deg, rgba(14, 29, 42, 0.94), rgba(8, 19, 29, 0.98));
 	box-shadow: 0 18px 55px rgba(0, 0, 0, 0.14);
 }
+
+.field-error {
+	color: var(--danger, #ff9caa);
+	font-size: .8rem;
+	margin-top: .35rem;
+}
+
+[aria-invalid="true"] {
+	border-color: var(--danger, #ff9caa);
+}
+
+.resource-editor-validation {
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+}

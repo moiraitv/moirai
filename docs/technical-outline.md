@@ -921,6 +921,14 @@ Saveable resource drafts register native unload protection only while dirty. Lib
 Settings also confirm route departure without implicitly saving independent sections. Explicit
 sign-out checks active drafts before revoking authentication. Cancelled unloads preserve live events.
 
+Settings loads configuration, engine status, learned history, and fallback metadata independently.
+Failures retain contextual retry actions; status polling cannot clear unrelated load or save errors,
+and retries preserve drafts belonging to other panels. Unavailable configuration and engine state
+are not presented as loaded defaults or zero activity. Account, capacity, and shared encoding fields
+reveal schema-based errors after blur and update them during correction. Encoding editors summarize
+touched errors beside Save, including when channel encoding controls are collapsed; replacing a draft
+clears its interaction history without changing the underlying validation contracts.
+
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
 returns to a page; initial empty collections have explicit loading states.

@@ -273,6 +273,7 @@ function channelFormSnapshot(): string {
 
 const channelFormDirty = computed(() =>
 	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
+const encodingInvalid = ref(false);
 const channelFormValid = computed(() => channelCreateSchema.safeParse(payload()).success);
 const channelSaveDisabled = computed(() =>
 	saving.value || (!editingId.value && !encodingProfilesReady.value) || !channelFormValid.value || (Boolean(editingId.value) && !channelFormDirty.value));
@@ -1041,7 +1042,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					</div>
 
 					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
-						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" />
+						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
 					</EncodingProfileSelector>
 					<AudioPreferencesEditor v-model="form.audioPreferences" />
 					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">
@@ -1068,6 +1069,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<p v-if="error" class="notice error">{{ error }}</p>
 				</div>
 				<ResourceEditorActionBar
+					:validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''"
 					resource-type="Channel"
 					:show-delete="Boolean(editingId)"
 					:busy="saving || deleting"

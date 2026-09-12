@@ -4,6 +4,7 @@ import TwoStepActionButton from './TwoStepActionButton.vue';
 
 const props = withDefaults(defineProps<{
 	resourceType?: string;
+	validationMessage?: string;
 	showDelete?: boolean;
 	busy?: boolean;
 	deleting?: boolean;
@@ -13,6 +14,7 @@ const props = withDefaults(defineProps<{
 	saving?: boolean;
 }>(), {
 	resourceType: '',
+	validationMessage: '',
 	showDelete: false,
 	busy: false,
 	deleting: false,
@@ -51,6 +53,7 @@ function activateSave(): void {
 				{{ deleting ? 'Deleting…' : deleteLabel }}
 			</button>
 		</div>
+		<p v-if="validationMessage" class="field-error resource-editor-validation" role="status">{{ validationMessage }}</p>
 		<div class="resource-editor-save-actions">
 			<TwoStepActionButton
 				class="button secondary"

@@ -34,6 +34,7 @@ const displayProfiles = computed(() => [...profiles.value].sort((left, right) =>
 const selectedDefault = computed(() => profiles.value.find((profile) => profile.isDefault)?.id ?? '');
 const isCurrentDefault = computed(() => Boolean(id.value && id.value === selectedDefault.value));
 const nameInput = ref<HTMLInputElement>();
+const encodingInvalid = ref(false);
 const form = reactive({ name: '', description: '', audio: audioNormalizationSchema.parse({}), video: videoNormalizationSchema.parse({}) });
 const baseline = ref('');
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
@@ -203,10 +204,10 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 					<p v-if="readonlyPreset" class="encoding-profile-info"><Info :size="22" aria-hidden="true" /><span>Built-in presets are read-only. Duplicate this preset to customize its settings.</span></p>
 					<p v-else>Saving changes updates every channel using this profile. Choose Custom on a channel to keep its settings independent.</p>
 					<p v-if="!readonlyPreset && isCurrentDefault">Choose another default before deleting this profile.</p>
-					<EncodingSettingsEditor v-model:audio="form.audio" v-model:video="form.video" :disabled="busy || readonlyPreset" />
+					<EncodingSettingsEditor v-model:audio="form.audio" v-model:video="form.video" :disabled="busy || readonlyPreset" @validation-change="encodingInvalid = $event" />
 					<p v-if="editorError" class="notice error">{{ editorError }}</p>
 				</div>
-				<ResourceEditorActionBar v-if="!readonlyPreset" resource-type="Encoding Profile" :show-delete="Boolean(id) && !isCurrentDefault" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @reset="Object.assign(form, JSON.parse(baseline))" @delete="remove" />
+				<ResourceEditorActionBar v-if="!readonlyPreset" :validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''" resource-type="Encoding Profile" :show-delete="Boolean(id) && !isCurrentDefault" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @reset="Object.assign(form, JSON.parse(baseline))" @delete="remove" />
 				<footer v-if="readonlyPreset" class="resource-editor-action-bar encoding-profile-view-actions"><button class="button secondary" type="button" @click="close">Close</button><button class="button secondary" type="button" @click="duplicateViewedProfile"><Copy :size="20" aria-hidden="true" />Duplicate</button></footer>
 			</form>
 		</div>
