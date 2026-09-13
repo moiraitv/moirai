@@ -7,6 +7,35 @@ contextual: true
 
 # ![](/icons/tv-minimal-play.svg) Channel schedules
 
+> [!INTRODUCTION]
+>
+> ## ![](/icons/introduction-layers.svg) What is a channel schedule?
+>
+> A channel schedule layers reusable templates into one resolved lineup. Start with an always-available base, then add conditional programming for specific days, dates, seasons, or hours.
+>
+> ### Channel schedules help you
+>
+> - ![](/icons/introduction-layers.svg)
+>
+>   **Keep a reliable base**
+>
+>   Supply normal programming whenever no higher conditional layer applies.
+>
+> - ![](/icons/introduction-calendar.svg)
+>
+>   **Target special times**
+>
+>   Combine calendar and time predicates for seasonal or recurring programming.
+>
+> - ![](/icons/introduction-preview.svg)
+>
+>   **Preview the result**
+>
+>   Inspect the concrete lineup after template priority and boundaries resolve.
+
+
+
+
 A ![](/icons/tv-minimal-play.svg) Channel Schedule chooses which ![](/icons/calendar-range.svg) Templates apply to one ![](/icons/tv-minimal.svg) Channel. Start with a base ![](/icons/calendar-range.svg) Template, then add conditional layers when particular dates or times need different programming.
 
 ## Choose the base Template

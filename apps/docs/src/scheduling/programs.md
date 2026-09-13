@@ -7,6 +7,41 @@ contextual: true
 
 # ![](/icons/list-video.svg) Programs
 
+> [!INTRODUCTION]
+>
+> ## ![](/icons/introduction-program.svg) What is a program?
+>
+> A program is a reusable rule that tells Moirai what content to play and in what order. Use programs in your schedule slots to build your channel lineup.
+>
+> ### Common program types
+>
+> - ![](/icons/introduction-shuffle.svg)
+>
+>   **Shuffle Movies**
+>
+>   Random movies with no repeats until all play
+>
+> - ![](/icons/introduction-ordered.svg)
+>
+>   **Sequential Shows**
+>
+>   Play episodes in order, continuing where you left off
+>
+> - ![](/icons/introduction-sequence.svg)
+>
+>   **Mixed Sequence**
+>
+>   Combine shows, movies, and more in a custom order
+>
+> - ![](/icons/introduction-random.svg)
+>
+>   **Random Anything**
+>
+>   Random from any collection or library query
+
+
+In a saved program, expand **Used by** to see direct sequence, template, and schedule references.
+
 A ![](/icons/list-video.svg) Program is a reusable rule that tells Moirai what content to play and in what order. ![](/icons/calendar-range.svg) Templates use ![](/icons/list-video.svg) Programs in their time slots, so one ![](/icons/list-video.svg) Program can appear on several ![](/icons/tv-minimal.svg) Channels or days.
 
 ![The programs catalog](/screenshots/programs.png)

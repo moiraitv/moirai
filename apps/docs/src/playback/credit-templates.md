@@ -9,6 +9,8 @@ contextual: true
 
 Credit templates show song information over music videos. Open **Playback → Credit templates**, choose **New template**, and start with the included design. Templates are reusable: choose a default in a Channel’s **Subtitles and music video credits** settings, or select an override in a Program.
 
+Expand **Used by** in a saved credit template to see its explicit channel and program assignments. These are direct references, not a complete list of channels that may inherit the template through their programs.
+
 ## Built-in template
 
 The included **Music video credits** template offers a classic-style music video credits intro and outro. Choose **View** to inspect its source or render a preview. Choose **Duplicate** on its card or in the viewer to create an editable copy.
@@ -19,11 +21,15 @@ The included **Music video credits** template offers a classic-style music video
 
 ## Edit and preview a template
 
-Give the template a distinct name and an optional single-line description. The **Credit template (Liquid)** editor uses [Liquid expressions and tags](https://liquidjs.com/tutorials/intro-to-liquid.html) to generate a subtitle document in Advanced SubStation Alpha (ASS) format.
+Give the template a distinct name and an optional single-line description. The **Credit template (Liquid)** editor uses [Liquid expressions and tags](https://liquidjs.com/tutorials/intro-to-liquid.html) to generate a subtitle document in [Advanced SubStation Alpha (ASS) format](https://aegisub.org/docs/latest/ass_tags/).
 
 ![Credit template editor with the included music video design](/screenshots/credit-template-editor.png)
 
-Choose a music video library and a Channel under **Preview on a music video**. Search for a video, select its source time in seconds, and choose **Render preview**. The preview uses that Channel’s resolution and fonts. Expand **Generated subtitles (.ass)** to inspect the output. Errors stay beside the controls so you can correct the draft before saving.
+Choose a music video from the preview carousel, set the source time in seconds, and choose **Render preview**. The preview uses the default encoding profile’s resolution and scaling with installed system fonts; no Channel is required. Audio settings do not affect the still image. 
+
+![Music video carousel and preview controls using the default encoding profile](/screenshots/credit-template-preview.png)
+
+If a video has no measured duration, check FFprobe in **Status** and rescan its library before previewing. The preview area expands and scrolls into view. Expand **Generated subtitles (.ass)** to inspect the output. Errors are shown when applicable so you can correct the draft before saving.
 
 **Save** stores the template. **Reset** asks for a second confirmation before restoring the opening draft. **Duplicate** creates an independently editable copy. Deleting a template requires confirmation and is blocked while a Channel or Program references it.
 

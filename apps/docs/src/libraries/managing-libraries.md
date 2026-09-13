@@ -7,6 +7,10 @@ contextual: true
 
 # ![](/icons/library.svg) Libraries and scanning
 
+Choose **Add Library** to open the library editor. Enter the source details, then choose **Add and Scan**. **Reset** discards the draft after confirmation; closing the editor also protects unsaved changes.
+
+![Add Library editor](/screenshots/library-create.png)
+
 A ![](/icons/library.svg) Library tells Moirai where media lives. Open **![](/icons/library.svg) Libraries** to add a source, see its current health, or start a synchronization.
 
 ![The libraries page before a source is added](/screenshots/libraries.png)

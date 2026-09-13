@@ -9,6 +9,8 @@ contextual: true
 
 Open **Playback → Encoding profiles** to manage reusable audio and video settings. **Credit templates** also live under Playback; scheduling pages continue to control what plays and when.
 
+Expand **Used by** in a saved profile to see channels explicitly linked to it. Open a channel from that list to inspect its settings.
+
 ## Create a profile
 
 Choose **New profile**, give it a distinct name and an optional description of when to use it, and configure its video and audio settings. A profile includes resolution, codecs, bitrates and buffers, scaling, bit depth, hardware acceleration, deinterlacing, audio channels, sample rate, and loudness normalization. Hardware acceleration still requires a compatible playback server. **Automatic** lets Moirai select a supported backend for each channel.

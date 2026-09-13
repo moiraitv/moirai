@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitepress';
+import { userDocsIntroductions } from '../../../scripts/user-docs-introductions';
 import { userDocsTermBadges } from '../../../scripts/user-docs-term-badges';
 import { reviewSidebar } from '../../../scripts/user-docs-sidebar';
 import reviewManifest from '../src/public/contextual-help.json';
@@ -14,7 +15,7 @@ export default defineConfig({
 	appearance: 'dark',
 	lastUpdated: true,
 	markdown: {
-		config: (markdown) => markdown.use(userDocsTermBadges).use(userDocsHighlights, reviewManifest.pages),
+		config: (markdown) => markdown.use(userDocsTermBadges).use(userDocsIntroductions).use(userDocsHighlights, reviewManifest.pages),
 	},
 	ignoreDeadLinks: false,
 	head: [

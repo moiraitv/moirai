@@ -7,18 +7,47 @@ contextual: true
 
 # ![](/icons/calendar-range.svg) Templates
 
+> [!INTRODUCTION]
+>
+> ## ![](/icons/introduction-template.svg) What is a template?
+>
+> A template defines how a channel’s 24-hour day is structured using reusable schedule slots. Reuse templates across channels and dates to keep schedules consistent and easy to manage.
+>
+> ### Templates help you
+>
+> - ![](/icons/introduction-clock.svg)
+>
+>   **Plan a nominal day**
+>
+>   Allocate time across slots without worrying about actual media durations.
+>
+> - ![](/icons/introduction-eye.svg)
+>
+>   **Preview resolution**
+>
+>   See how slots resolve with real media durations and boundary policies.
+>
+> - ![](/icons/introduction-repeat.svg)
+>
+>   **Reuse everywhere**
+>
+>   Use the same template across channels, rotations, and seasons.
+
+
+In a saved template, **Used by** lists channel schedules that assign it as a base or conditional template. Direct references do not include every indirectly affected channel.
+
 A ![](/icons/calendar-range.svg) Template divides a nominal day into slots. Each slot starts at an authored time and normally uses one ![](/icons/list-video.svg) Program. ![](/icons/tv-minimal-play.svg) Channel Schedules can reuse the same ![](/icons/calendar-range.svg) Template on many dates or layers.
 
 ![The templates catalog](/screenshots/templates.png)
 
 ## Create a Template and add slots
 
-Create the ![](/icons/list-video.svg) Programs you want to use first, then open ![](/icons/calendar-range.svg) Templates and choose **New Template**. Give it a descriptive name, such as “Evening Cinema Day.” A new ![](/icons/calendar-range.svg) Template starts with one slot covering 00:00–24:00.
+Create the ![](/icons/list-video.svg) Programs you want to use first, then open ![](/icons/calendar-range.svg) Templates and choose **New Template**. Give it a descriptive name, such as “Evening Cinema Day.” A new ![](/icons/calendar-range.svg) Template starts with one slot covering midnight to midnight. Timeline and slot labels use 12-hour time with AM or PM.
 
 1. Select the initial slot and choose its **Program** in the **Selected slot** panel.
 2. Choose **Add Slot**. Move over the timeline to choose where to divide an existing slot, then click to place the new boundary. With a keyboard, use the arrow keys to adjust the proposed position and Enter to confirm; Escape cancels.
 3. Select the new slot and choose its **Program**. Adding a slot divides the existing time rather than extending the day.
-4. Set **Starts** to the exact time you want. You can also drag the boundary between slots on the timeline. The first slot stays at 00:00; each slot ends where the next begins, and the last ends at 24:00.
+4. Set **Starts** to the exact time you want. You can also drag the boundary between slots on the timeline. The first slot stays at midnight (12:00 AM); each slot ends where the next begins, and the last ends at the following midnight.
 5. Repeat for the remaining parts of the day. Switch to **List** if you prefer selecting slots from rows instead of the timeline.
 
 ![Template creation editor with three slots, selected-slot controls, and a resolved preview](/screenshots/template-editor.png)

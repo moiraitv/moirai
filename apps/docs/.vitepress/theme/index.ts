@@ -5,6 +5,7 @@ import ReviewChanges from './ReviewChanges.vue';
 import '../../../web/src/styles/_tokens.scss';
 import './theme.scss';
 import '../../../web/src/styles/_help-term-badges.scss';
+import '../../../web/src/styles/_help-introductions.scss';
 
 export default {
 	extends: DefaultTheme,
