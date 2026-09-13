@@ -497,10 +497,11 @@ a.nav-link.router-link-exact-active {
 }
 
 .app-content {
+	--app-content-block-padding: 28px;
 	--app-content-inline-padding: clamp(24px, 2.6vw, 42px);
 	width: 100%;
 	min-width: 0;
-	padding: 28px var(--app-content-inline-padding) 54px;
+	padding: var(--app-content-block-padding) var(--app-content-inline-padding) 54px;
 }
 
 .transient-toast {
@@ -798,6 +799,28 @@ a.nav-link.router-link-exact-active {
 	background: transparent;
 }
 
+.button.secondary.contextual {
+	min-height: 34px;
+	padding: 0 11px;
+	gap: 6px;
+	font-size: .78rem;
+	font-weight: 500;
+	color: var(--muted-strong);
+	border-color: var(--line);
+	background: transparent;
+	box-shadow: none;
+
+	> svg {
+		width: 16px;
+		height: 16px;
+	}
+
+	&:hover {
+		color: var(--text);
+		background: var(--panel-2);
+	}
+}
+
 .button.danger {
 	color: var(--danger);
 	border-color: rgba(255, 111, 127, 0.42);
@@ -1075,4 +1098,73 @@ a.nav-link.router-link-exact-active {
 	flex: 1 1 auto;
 	min-width: 0;
 	margin: 0;
+}
+
+.introduction-panel {
+	margin-block: 1rem;
+	min-width: 0;
+}
+
+.introduction-panel .form-disclosure-content {
+	padding: 1rem;
+	position: relative;
+}
+
+.introduction-dismiss {
+	position: absolute;
+	top: .5rem;
+	right: .5rem;
+	z-index: 1;
+}
+
+.introduction-panel .dismissible-help-panel {
+	margin: 0;
+}
+
+.button > svg,
+.icon-button > svg {
+	flex-shrink: 0;
+}
+
+.introduction-panel > .form-disclosure > .form-disclosure-trigger > svg {
+	transform: rotate(-90deg);
+	transition: transform var(--motion-system) var(--motion-system-ease);
+}
+
+.introduction-panel > .form-disclosure.is-open > .form-disclosure-trigger > svg {
+	transform: rotate(0);
+}
+
+.resource-primary-field > span {
+	font-size: .95rem;
+}
+
+.resource-primary-field > small {
+	font-size: .82rem;
+}
+
+input[type='time'],
+input[type='date'] {
+	appearance: none;
+	display: block;
+	min-width: 0;
+	max-width: 100%;
+	height: 42px;
+	min-height: 42px;
+	padding-block: 0;
+	font: inherit;
+	line-height: 40px;
+}
+
+input[type='time']::-webkit-date-and-time-value,
+input[type='date']::-webkit-date-and-time-value {
+	display: block;
+	line-height: 40px;
+	text-align: left;
+}
+
+input[type='time']::-webkit-datetime-edit,
+input[type='date']::-webkit-datetime-edit {
+	padding: 0;
+	line-height: 40px;
 }

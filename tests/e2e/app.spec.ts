@@ -317,7 +317,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('link', { name: 'Create Channel' }).click();
 	await expect(page).toHaveURL(/\/channels\?new=1$/);
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
-	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /(?:Edit|Create) Channel/ })).toBeVisible();
 	await page.locator('.channel-encoding-disclosure > button').click();
 	await expect(page.locator('.acceleration-prediction')).toBeVisible();
 	const saveChannel = page.getByRole('button', { name: 'Save', exact: true });
@@ -341,7 +341,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.status-nav-link')).toContainText('IPTV service ready');
 	await expect(page.locator('.etv-card')).toHaveCount(0);
 	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
-	await expect(page.getByRole('heading', { name: 'Broadcast profile' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /(?:Edit|Create) Channel/ })).toBeVisible();
 	await expect(page.getByLabel('Name')).toHaveValue(channelName);
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
@@ -500,12 +500,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByRole('status')).toBeHidden();
 	await page.unroute('**/api/v1/scheduling/overview');
 	const programHelpHeading = page.getByRole('heading', { name: 'What is a program?' });
-	await expect(programHelpHeading).toBeVisible();
-	await page.getByRole('button', { name: 'Dismiss program help' }).click();
-	await expect(programHelpHeading).toBeHidden();
-	await page.reload();
 	await expect(programHelpHeading).toBeHidden();
 	await page.getByRole('button', { name: 'Help with Programs' }).click();
+	await expect(programHelpHeading).toBeVisible();
 	await expect(page.getByRole('dialog').getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Close help' }).click();
 
@@ -858,7 +855,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Template name').fill(templateName);
 	await expect(page.getByLabel('Preview as channel')).toHaveCount(0);
 	await expect(page.getByLabel('Preview date')).toHaveCount(0);
-	await expect(page.getByText('NOT CURRENTLY IN USE', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Used by', exact: true })).toHaveCount(0);
 	await expect(page.locator('.resolved-track')).toBeVisible();
 	await expect(page.locator('.resolved-segment small').first()).toContainText(/\d{1,2}:\d{2}/);
 	expect(timelinePreviewRequests).toBeGreaterThan(0);
@@ -929,7 +926,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const unsavedTemplateName = `${templateName} Draft`;
 	await page.getByLabel('Template name').fill(unsavedTemplateName);
 	await page.getByRole('button', { name: `Edit ${programName}` }).click();
-	const nestedProgramEditor = page.getByRole('dialog', { name: 'Edit program' });
+	const nestedProgramEditor = page.getByRole('dialog', { name: 'Edit Program' });
 	await expect(nestedProgramEditor).toBeVisible();
 	await expect(nestedProgramEditor.getByRole('button', { name: 'Delete Program' })).toHaveCount(0);
 	await nestedProgramEditor.getByLabel('Name').fill(`${programName} Quick Edit`);
@@ -983,12 +980,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	).toHaveAttribute('aria-pressed', 'true');
 	await page.goto('/schedules/channels');
 	const channelScheduleHelp = page.getByRole('heading', { name: 'What is a channel schedule?' });
-	await expect(channelScheduleHelp).toBeVisible();
-	await page.getByRole('button', { name: 'Dismiss channel schedule help' }).click();
-	await expect(channelScheduleHelp).toBeHidden();
-	await page.reload();
 	await expect(channelScheduleHelp).toBeHidden();
 	await page.getByRole('button', { name: 'Help with Channel schedules' }).click();
+	await expect(channelScheduleHelp).toBeVisible();
 	await expect(page.getByRole('dialog').getByRole('heading', { name: 'Channel schedules', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Close help' }).click();
 	await page.getByRole('searchbox', { name: 'Search channels' }).fill('No matching channel');
@@ -1314,12 +1308,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.goto('/schedules/templates?sort=name&view=grid');
 	await expect(page).not.toHaveURL(/(?:sort|view)=/);
 	const templateHelpHeading = page.getByRole('heading', { name: 'What is a template?' });
-	await expect(templateHelpHeading).toBeVisible();
-	await page.getByRole('button', { name: 'Dismiss template help' }).click();
-	await expect(templateHelpHeading).toBeHidden();
-	await page.reload();
 	await expect(templateHelpHeading).toBeHidden();
 	await page.getByRole('button', { name: 'Help with Templates' }).click();
+	await expect(templateHelpHeading).toBeVisible();
 	await expect(page.getByRole('dialog').getByRole('heading', { name: 'Templates', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Close help' }).click();
 	await expect(page.getByLabel('Sort templates')).toHaveCount(0);

@@ -194,6 +194,9 @@ rendering escapes metadata text and disables file-loading tags. Generated credit
 over ordinary subtitles on music videos and force channel-wide Burn mode. Source-relative cues do not restart when viewers tune in. Templates have unique
 case-insensitive names and cannot be deleted while referenced; existing resources inherit disabled
 subtitle/credit defaults without changing normalization or playback cursor state.
+Draft previews offer at most 12 available catalog music videos in newest-added order and use the
+saved default encoding profile’s video geometry with system fonts, without requiring a channel.
+The still-image preview does not encode audio. Explicit legacy preview channel IDs remain supported.
 Credit references are validated without global assignment graph reads. Content and sequence cursor
 fingerprints exclude subtitle preferences, preserving sequence counts, entry positions, and completion.
 Channel credits or effective program credits in the prepared guide override the runtime subtitle mode
@@ -893,7 +896,9 @@ Docker uses readiness for its container health check.
 Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views include:
 
 - library configuration, browsing, health, and reconciliation;
-- media details and best-effort in-browser file preview;
+- media details and best-effort in-browser file preview; credits distinguish explicit non-acting
+  appearances and production jobs from Stars, preserving unknown or mixed acting roles as cast, with
+  independently remembered More disclosures;
 - channel normalization and artwork;
 - a Playback group for reusable encoding profiles and music video credit templates;
 - guided Quick Setup for movie, show, and music video channels;
@@ -928,6 +933,35 @@ are not presented as loaded defaults or zero activity. Account, capacity, and sh
 reveal schema-based errors after blur and update them during correction. Encoding editors summarize
 touched errors beside Save, including when channel encoding controls are collapsed; replacing a draft
 clears its interaction history without changing the underlying validation contracts.
+
+### Resource navigation and direct usage
+
+Resource catalogs use the same destination vocabulary as navigation. Library creation shares fields
+and the modal lifecycle with library settings, retaining Add and Scan and existing draft protection.
+Program, template, and channel-schedule introductions live in their corresponding guide topics.
+Restricted Markdown callouts preserve their icon and card presentation in both the guide and Help
+drawer. Internal management links use ordinary guarded routes.
+
+Saved programs, templates, encoding profiles, and credit templates expose an on-demand Used by
+right-side disclosure that narrows the editor content, with an icon-and-chevron edge pill that does
+not displace content when closed. On narrow screens the open panel replaces the form visually
+without unmounting its draft. The sidebar animates a contained grid-width transition so controls
+reflow without scaling; reduced motion skips the animation. Continuous resizing is an intentional
+UX tradeoff to avoid an abrupt width change. The authenticated resource-usage
+endpoint groups direct authored occurrences by owner, with role labels and bounded pagination (50
+resources by default, at most 100). For reusable resources, three scoped queries check existence, count owners, and retrieve
+a page in one read transaction; neither catalog requests nor playback acquire additional queries.
+Media detail pages reuse this disclosure for direct item selections, ancestor-group membership, and
+current library-query matches. Query matching shares the scheduling catalog, filters, ordering, and
+item limits; one library catalog serves all relevant queries without per-program database reads.
+Membership includes unavailable items and does not guarantee playback. Adding an item to a program
+refreshes an open disclosure. A separately paginated Playing at section reads current and upcoming
+committed timeline occurrences with channel names and times, including absorbed item aliases. It
+never materializes schedules or advances selection state; empty results describe only committed
+showings. The media-only TV disclosure is anchored to the app content edge.
+Usage does not expand inheritance or downstream channels and does not replace authoritative deletion
+checks. Channel references open `/channels?edit=<id>`; missing channels are reported and route
+changes preserve dirty-editor guards.
 
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user

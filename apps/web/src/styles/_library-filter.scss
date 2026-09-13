@@ -70,6 +70,7 @@
 .filter-input {
 	position: relative;
 	display: block;
+	min-width: 0;
 }
 
 .filter-input input {
@@ -85,6 +86,10 @@
 
 .filter-input input::placeholder {
 	color: #768390;
+}
+
+.filter-input input[type='date'] {
+	padding-block: 0;
 }
 
 .filter-input > svg {

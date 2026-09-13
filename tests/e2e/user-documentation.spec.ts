@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { rename } from 'node:fs/promises';
+import { rename, mkdir, writeFile, copyFile, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { expect } from '@playwright/test';
 import { SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplate } from '@moirai/shared';
 import { authenticateAdministrator, E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD } from './authentication';
@@ -22,12 +23,15 @@ test('captures setup and authentication', async ({ page }) => {
 	await page.getByRole('button', { name: 'Create User', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Create user', exact: true })).toBeHidden();
 	await page.goto('/');
-	await expect(page.getByRole('heading', { name: 'Moirai overview' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Status' })).toBeVisible();
 	await capture(page, 'dashboard.png');
 
 	await page.goto('/libraries');
 	await expect(page.getByText('Build your first library')).toBeVisible();
 	await capture(page, 'libraries.png');
+	await page.getByRole('button', { name: 'Add Library', exact: true }).first().click();
+	await capture(page, 'library-create.png');
+	await page.getByRole('button', { name: 'Close library editor' }).click();
 
 });
 test('captures libraries and scanning', async ({ page, documentationServer }) => {
@@ -67,7 +71,6 @@ test('captures libraries and scanning', async ({ page, documentationServer }) =>
 
 	await page.getByRole('link', { name: /Moonrise Theater/u }).first().click();
 	await expect(page.getByRole('heading', { name: 'Moonrise Theater' })).toBeVisible();
-	await capture(page, 'media-item.png');
 
 	await page.goto('/quick');
 	await page.getByRole('button', { name: /Movie Channel/u }).click();
@@ -91,7 +94,7 @@ test('captures Programs', async ({ page, documentationServer }) => {
 	await expect(page.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
 	await capture(page, 'programs.png');
 	await page.goto('/schedules/programs/new');
-	await expect(page.getByRole('dialog', { name: 'Create content rule' })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Create Program' })).toBeVisible();
 	await page.getByPlaceholder('e.g. Primetime Movies').fill('Evening Cinema Selection');
 	await page.getByRole('combobox', { name: 'Library', exact: true }).selectOption(libraryId);
 	await expect(page.locator('.quick-query-carousel-item').first()).toBeVisible();
@@ -103,7 +106,7 @@ test('captures Programs', async ({ page, documentationServer }) => {
 	await subtitles.getByRole('button', { name: /Audio and subtitles/ }).click();
 
 	await page.getByRole('radio', { name: /^Sequence/u }).check();
-	await expect(page.getByRole('dialog', { name: 'Create sequence rule' })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Create Program' })).toBeVisible();
 	await page.getByPlaceholder('e.g. Evening Lineup').fill('Evening Cinema Sequence');
 	for (const [index, programId] of sequenceProgramIds.entries()) {
 		await page.getByRole('button', { name: 'Add Step', exact: true }).click();
@@ -256,7 +259,7 @@ test('captures channel settings and operations', async ({ page, documentationSer
 	await expect(page.getByRole('heading', { name: 'Channels', exact: true })).toBeVisible();
 	await capture(page, 'channels.png');
 	await page.goto('/settings');
-	await expect(page.getByRole('heading', { name: 'IPTV service', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 	await expect(page.locator('.fallback-filler-loading')).toBeHidden();
 	await expect(page.locator('.fallback-filler-editor video')).toBeVisible();
 	await capture(page, 'settings.png');
@@ -270,7 +273,7 @@ test('captures channel settings and operations', async ({ page, documentationSer
 	await page.setViewportSize({ width: 1440, height: 1200 });
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
-	const broadcastEditor = page.getByRole('dialog', { name: 'Broadcast profile', exact: true });
+	const broadcastEditor = page.getByRole('dialog', { name: /(?:Edit|Create) Channel/, exact: true });
 	await expect(broadcastEditor.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Moonrise Classics');
 	await expect(broadcastEditor.locator('.fallback-filler-loading')).toBeHidden();
 	await expect(broadcastEditor.locator('.acceleration-prediction')).not.toHaveText('Checking…', { timeout: 45_000 });
@@ -450,12 +453,28 @@ test('keeps guide badge icons compact after production asset processing', async 
 	}
 });
 
-test('captures music-video credit templates and verifies draft actions', async ({ page }) => {
-	await authenticateAdministrator(page);
+test('captures music-video credit templates and verifies draft actions', async ({ page, documentationServer }) => {
+	const csrf = await authenticateAdministrator(page);
+	const root = path.join(documentationServer.directory, 'music');
+	await mkdir(root);
+	for (const [title, artist, poster] of [
+		['Night Drive', 'The Satellites', 'glass-midnight-poster.png'],
+		['Harbor Lights', 'Echo Garden', 'echo-garden-poster.png'],
+		['Afterlight', 'The Satellites', 'afterlight-station-poster.png'],
+	]) {
+		await writeFile(path.join(root, `${title}.mp4`), 'documentation fixture');
+		await writeFile(path.join(root, `${title}.nfo`), `<musicvideo><title>${title}</title><artist>${artist}</artist><album>Night Signals</album></musicvideo>`);
+		await copyFile(path.resolve('tests/e2e/fixtures/user-documentation', poster!), path.join(root, `${title}-poster.png`));
+	}
+	const created = await page.request.post('/api/v1/libraries', { headers: { 'x-moirai-csrf': csrf }, data: {
+		name: 'Music videos', typeKey: 'music-videos', sourceType: 'on-disk', sourceConfig: { scanRoot: root },
+	} });
+	expect(created.ok()).toBe(true);
+	await expect.poll(async () => (await page.request.get('/api/v1/credit-templates/preview-videos')).json().then(rows => rows.length), { timeout: 30000 }).toBe(3);
 	await page.goto('/playback/credit-templates');
 	await capture(page, 'credit-templates.png');
 	await page.getByRole('button', { name: 'View', exact: true }).click();
-	const view = page.getByRole('dialog', { name: 'View credit template' });
+	const view = page.getByRole('dialog', { name: 'View Credit Template' });
 	await expect(view.getByLabel('Name', { exact: true })).toBeDisabled();
 	await expect(view.getByLabel('Credit template (Liquid)')).toHaveAttribute('readonly', '');
 	await expect(view.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
@@ -465,6 +484,7 @@ test('captures music-video credit templates and verifies draft actions', async (
 	const editor = page.getByRole('dialog', { name: 'New credit template' });
 	await expect(editor.getByLabel('Credit template (Liquid)')).toHaveValue(/\[Script Info\]/);
 	await capture(page, 'credit-template-editor.png');
+	await captureSection(page, editor.locator('.credit-preview'), 'credit-template-preview.png');
 	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(editor).toBeHidden();
 	await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -480,8 +500,8 @@ test('captures music-video credit templates and verifies draft actions', async (
 test('captures encoding profiles and assigns or detaches channel settings', async ({ page }) => {
 	const csrf = await authenticateAdministrator(page);
 	await page.goto('/playback/encoding-profiles');
-	await page.getByRole('button', { name: 'New profile', exact: true }).click();
-	const editor = page.getByRole('dialog', { name: 'New encoding profile', exact: true });
+	await page.getByRole('button', { name: 'New Profile', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'New Encoding Profile', exact: true });
 	await editor.getByLabel('Name', { exact: true }).fill('HD broadcast');
 	await editor.getByLabel('Width', { exact: true }).fill('1280');
 	await editor.getByLabel('Height', { exact: true }).fill('720');
@@ -491,7 +511,7 @@ test('captures encoding profiles and assigns or detaches channel settings', asyn
 	const profile = (await (await page.request.get('/api/v1/encoding-profiles')).json()).find((entry: { name: string }) => entry.name === 'HD broadcast');
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
-	const channel = page.getByRole('dialog', { name: 'Broadcast profile' });
+	const channel = page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ });
 	await channel.getByLabel('Number', { exact: true }).fill('1');
 	await channel.getByLabel('Name', { exact: true }).fill('Music');
 	await channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).selectOption(profile.id);
@@ -509,7 +529,7 @@ test('captures encoding profiles and assigns or detaches channel settings', asyn
 	expect(saved.encodingProfileId).toBe(profile.id);
 	await page.goto('/playback/encoding-profiles');
 	await page.getByRole('button', { name: 'Edit', exact: true }).click();
-	const existing = page.getByRole('dialog', { name: 'Edit encoding profile', exact: true });
+	const existing = page.getByRole('dialog', { name: 'Edit Encoding Profile', exact: true });
 	await existing.getByLabel('Width', { exact: true }).fill('1920');
 	await existing.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(existing).toBeHidden();
@@ -542,7 +562,7 @@ test('captures encoding profiles and assigns or detaches channel settings', asyn
 	expect(saved).toMatchObject({ encodingProfileId: null, video: { ...profile.video, width: 640 }, audio: profile.audio });
 	await page.getByRole('button', { name: 'Edit Independent' }).click();
 	await channel.getByLabel('Group', { exact: true }).fill('Unsaved group');
-	await channel.getByRole('link', { name: 'Manage encoding profiles' }).click();
+	await channel.getByRole('link', { name: 'Manage Encoding Profiles' }).click();
 	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
 	await expect(confirmation).toBeVisible();
 	await confirmation.getByRole('button', { name: 'Discard Changes' }).click();
@@ -560,12 +580,12 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.reload();
 	await expect(selector).toBeVisible();
-	await expect(page.getByRole('button', { name: 'New profile', exact: true })).toBeInViewport();
+	await expect(page.getByRole('button', { name: 'New Profile', exact: true })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const preset = page.locator('article').filter({ has: page.getByRole('heading', { name: '720p', exact: true }) });
 	await preset.getByRole('button', { name: 'View', exact: true }).click();
-	const view = page.getByRole('dialog', { name: 'View encoding profile' });
+	const view = page.getByRole('dialog', { name: 'View Encoding Profile' });
 	await expect(view.getByLabel('Width', { exact: true })).toBeDisabled();
 	await expect(view.getByLabel('Description', { exact: true })).toBeDisabled();
 	await expect(view.getByRole('button', { name: 'Delete Encoding Profile' })).toHaveCount(0);
@@ -580,7 +600,7 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 	await expect(preset).toContainText('Default');
 	await preset.getByRole('button', { name: 'View', exact: true }).click();
 	await view.getByRole('button', { name: 'Duplicate', exact: true }).click();
-	const copy = page.getByRole('dialog', { name: 'New encoding profile' });
+	const copy = page.getByRole('dialog', { name: 'New Encoding Profile' });
 	await expect(copy.getByLabel('Width', { exact: true })).toBeEnabled();
 	await expect(copy.getByLabel('Description', { exact: true })).not.toHaveValue('');
 	await copy.getByLabel('Name', { exact: true }).fill('My preset');
@@ -593,7 +613,7 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 	await expect(page.locator('article').filter({ has: page.getByRole('heading', { name: 'My preset', exact: true }) })).toContainText('Default');
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
-	const channel = page.getByRole('dialog', { name: 'Broadcast profile' });
+	const channel = page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ });
 	await expect(channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).locator('option:checked')).toHaveText('My preset (default)');
 	await expect(channel.getByLabel('Height', { exact: true })).toHaveValue('720');
 	await expect(channel.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
@@ -608,11 +628,11 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 test('protects program drafts when navigating to credit templates', async ({ page, documentationServer }) => {
 	const { program } = await seedSchedule(page, documentationServer.directory);
 	await page.goto(`/schedules/programs/${program.id}`);
-	const editor = page.getByRole('dialog', { name: 'Edit program', exact: true });
+	const editor = page.getByRole('dialog', { name: 'Edit Program', exact: true });
 	const name = editor.getByRole('textbox', { name: /^Name/u });
 	await editor.getByRole('button', { name: /Audio and subtitles.*optional/ }).click();
 	await name.fill('Pending program name');
-	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
 	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
 	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(name).toHaveValue('Pending program name');
@@ -626,13 +646,13 @@ test('protects program drafts when navigating to credit templates', async ({ pag
 			await route.continue();
 		}
 	});
-	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
 	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
 	await expect(editor.getByText('Save temporarily unavailable', { exact: true })).toBeVisible();
 	await expect(name).toHaveValue('Pending program name');
 	await page.unroute(`**/api/v1/programs/${program.id}`);
 
-	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
 	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
 	await expect(page).toHaveURL(/\/playback\/credit-templates$/u);
 	const overview = await (await page.request.get('/api/v1/scheduling/overview')).json();
@@ -640,7 +660,7 @@ test('protects program drafts when navigating to credit templates', async ({ pag
 
 	await page.goto(`/schedules/programs/${program.id}`);
 	await name.fill('Discarded program name');
-	await editor.getByRole('link', { name: 'Manage credit templates' }).click();
+	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
 	await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
 	await expect(page).toHaveURL(/\/playback\/credit-templates$/u);
 	await page.goto(`/schedules/programs/${program.id}`);
@@ -655,7 +675,7 @@ test('animates encoding disclosure layout and respects reduced motion', async ({
 	await authenticateAdministrator(page);
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
-	const editor = page.getByRole('dialog', { name: 'Broadcast profile' });
+	const editor = page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ });
 	const disclosure = editor.locator('.channel-encoding-disclosure');
 	const trigger = disclosure.getByRole('button', { name: /Video & audio settings/ });
 	await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
@@ -698,7 +718,7 @@ test('preserves subtitle settings across the additional-settings disclosure', as
 	await authenticateAdministrator(page);
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
-	const editor = page.getByRole('dialog', { name: 'Broadcast profile' });
+	const editor = page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ });
 	await editor.getByLabel('Number', { exact: true }).fill('12');
 	await editor.getByLabel('Name', { exact: true }).fill('Subtitle layout');
 	const subtitles = editor.getByRole('group', { name: 'Subtitles', exact: true });
@@ -726,7 +746,7 @@ test('remembers channel disclosures after reopening and refreshing', async ({ pa
 	await authenticateAdministrator(page);
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
-	const editor = page.getByRole('dialog', { name: 'Broadcast profile' });
+	const editor = page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ });
 	await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
 	const states = [
 		{ name: /Video & audio settings/, open: false },
@@ -751,36 +771,86 @@ test('remembers channel disclosures after reopening and refreshing', async ({ pa
 	await expect(editor.getByRole('button', { name: /Video & audio settings/ })).toHaveAttribute('aria-expanded', 'true');
 });
 
-test('resets credit preview pagination when switching to a smaller library', async ({ page }) => {
+test('refreshes incomplete credit preview metadata without losing the selection or draft', async ({ page }) => {
 	await authenticateAdministrator(page);
-	const large = randomUUID();
-	const small = randomUUID();
-	const requests: Array<{ library: string; page: number }> = [];
-	await page.route('**/api/v1/libraries', (route) => route.fulfill({ json: [
-		{ id: large, name: 'Large music library', typeKey: 'music-videos', enabled: true },
-		{ id: small, name: 'Small music library', typeKey: 'music-videos', enabled: true },
+	const first = randomUUID(), second = randomUUID();
+	let scanned = false;
+	let fail = false;
+	await page.route('**/api/v1/credit-templates/preview-videos', route => route.fulfill(fail
+		? { status: 503, json: { message: 'Catalog unavailable' } }
+		: { json: [
+			{ id: first, title: 'First video', durationSeconds: 180, artists: [], artworkUrl: null },
+			{ id: second, title: 'Scanning video', durationSeconds: scanned ? 4 : null, artists: [], artworkUrl: null },
+		] }));
+	await page.goto('/playback/credit-templates');
+	await page.getByRole('button', { name: 'New template', exact: true }).click();
+	const editor = page.getByRole('dialog');
+	await editor.getByLabel('Name', { exact: true }).fill('Unsaved preview draft');
+	const source = editor.getByLabel('Credit template (Liquid)');
+	await source.fill('Draft credits');
+	const preview = editor.locator('.credit-preview');
+	await preview.getByRole('button', { name: 'Scanning video' }).click();
+	await expect(preview.getByRole('button', { name: 'Render preview' })).toBeDisabled();
+	fail = true;
+	await preview.getByRole('button', { name: 'Refresh videos' }).click();
+	await expect(preview).toContainText('Catalog unavailable');
+	fail = false;
+	scanned = true;
+	await preview.getByRole('button', { name: 'Retry', exact: true }).click();
+	await expect(preview.getByRole('button', { name: 'Scanning video' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(preview.getByLabel('Source time (seconds)')).toHaveValue('2');
+	await expect(preview.getByRole('button', { name: 'Render preview' })).toBeEnabled();
+	await expect(preview.getByText(/scan is incomplete/)).toHaveCount(0);
+	await expect(editor.getByLabel('Name', { exact: true })).toHaveValue('Unsaved preview draft');
+	await expect(source).toHaveValue('Draft credits');
+});
+
+test('selects a carousel video and previews without a channel', async ({ page }) => {
+	await authenticateAdministrator(page);
+	const first = randomUUID(), second = randomUUID();
+	await page.route('**/api/v1/credit-templates/preview-videos', route => route.fulfill({ json: [
+		{ id: first, title: 'First video', durationSeconds: 180, artists: ['Artist'], artworkUrl: null },
+		{ id: second, title: 'Second video', durationSeconds: 4, artists: [], artworkUrl: null },
 	] }));
-	await page.route('**/api/v1/channels', (route) => route.fulfill({ json: [{ id: randomUUID(), name: 'Music', number: '1' }] }));
-	await page.route('**/media-source-options?*', (route) => {
-		const url = new URL(route.request().url());
-		const library = url.pathname.includes(small) ? small : large;
-		const requestedPage = Number(url.searchParams.get('page'));
-		requests.push({ library, page: requestedPage });
-		return route.fulfill({ json: {
-			entries: library === small && requestedPage > 1 ? [] : [{ item: { id: randomUUID(), title: library === small ? 'Small library video' : `Large library page ${requestedPage}` } }],
-			pagination: { page: requestedPage, pageSize: 20, totalPages: library === small ? 1 : 2, totalItems: library === small ? 1 : 21 },
-		} });
+	let payload: Record<string, unknown> | undefined;
+	let renderCount = 0;
+	let finishRender!: () => void;
+	const rendering = new Promise<void>(resolve => {
+		finishRender = resolve;
+	});
+	const frameImage = (await readFile(path.resolve('tests/e2e/fixtures/user-documentation/glass-midnight-poster.png'))).toString('base64');
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.route('**/api/v1/credit-templates/preview', async route => {
+		payload = route.request().postDataJSON();
+		if (++renderCount > 1) {
+			return route.fulfill({ status: 400, json: { message: 'Preview fixture failed' } });
+		}
+		await rendering;
+		return route.fulfill({ json: { ass: '[Script Info]', image: `data:image/png;base64,${frameImage}` } });
 	});
 	await page.goto('/playback/credit-templates');
 	await page.getByRole('button', { name: 'View', exact: true }).click();
 	const preview = page.locator('.credit-preview');
-	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Large library page 1');
-	await preview.getByRole('button', { name: 'Next', exact: true }).click();
-	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Large library page 2');
-	await preview.getByRole('combobox', { name: 'Library', exact: true }).selectOption(small);
-	await expect(preview.getByRole('combobox', { name: 'Music video', exact: true }).locator('option:checked')).toHaveText('Small library video');
-	await expect(preview.getByRole('button', { name: 'Render preview', exact: true })).toBeEnabled();
-	expect(requests.filter((request) => request.library === small)).toEqual([{ library: small, page: 1 }]);
+	await expect(preview.getByRole('button', { name: 'First video Artist' })).toHaveAttribute('aria-pressed', 'true');
+	await preview.getByRole('button', { name: 'Second video' }).click();
+	await expect(preview.getByRole('button', { name: 'Second video' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(preview.getByRole('combobox')).toHaveCount(0);
+	await preview.getByRole('button', { name: 'Render preview' }).click();
+	await expect(preview.getByRole('status')).toHaveText('Rendering credit preview…');
+	const frame = preview.locator('.credit-preview-frame');
+	await expect(frame).toBeInViewport({ ratio: .95 });
+	const loadingHeight = (await frame.boundingBox())!.height;
+	finishRender();
+	await expect(preview.getByAltText('Music video frame with the generated credits')).toBeVisible();
+	await expect(frame).toHaveAttribute('aria-busy', 'false');
+	expect((await frame.boundingBox())!.height).toBeCloseTo(loadingHeight, 0);
+	expect(payload).toMatchObject({ mediaItemId: second, seconds: 2 });
+	expect(payload).not.toHaveProperty('channelId');
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await preview.getByRole('button', { name: 'Render preview' }).click();
+	await expect(frame.getByRole('alert')).toContainText('Preview fixture failed');
+	await expect(frame).toBeInViewport({ ratio: .95 });
+	expect((await frame.boundingBox())!.height).toBeCloseTo(loadingHeight, 0);
 });
 
 test('compares pending guide images in place with After selected initially', async ({ page }, testInfo) => {
@@ -839,7 +909,7 @@ test('saves channel and inherited program audio preferences', async ({ page, doc
 	await audio.getByRole('textbox', { name: /^Preferred language code/ }).fill('EN');
 	await audio.getByRole('textbox', { name: /^Preferred audio title/ }).pressSequentially('Original Surround');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(page.getByRole('dialog', { name: 'Broadcast profile' })).toBeHidden();
+	await expect(page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ })).toBeHidden();
 	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).audioPreferences).toEqual({ language: 'en', title: 'Original Surround' });
 	await page.reload();
 	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
@@ -968,7 +1038,7 @@ for (const kind of ['programs', 'templates'] as const) {
 		const pending = new Promise<void>((resolve) => {
 			release = resolve;
 		});
-		await page.route('/api/v1/programs', async (route) => {
+		await page.route(`/api/v1/${kind}`, async (route) => {
 			await pending;
 			await route.continue();
 		});
@@ -1053,11 +1123,73 @@ test('keeps alphabet navigation reachable with touch targets', async ({ page, br
 			const bounds = await button.boundingBox();
 			expect(bounds!.width).toBeGreaterThanOrEqual(44);
 			expect(bounds!.height).toBeGreaterThanOrEqual(44);
-			await touchPage.touchscreen.tap(bounds!.x + 4, bounds!.y + 4);
+			await button.tap({ position: { x: 4, y: 4 } });
 			await expect(touchPage.getByText(letter === 'W' ? 'Winter Archive' : 'Afterlight Station', { exact: true })).toBeInViewport();
 		}
 	}
 	finally {
 		await context.close();
 	}
+});
+
+test('shows media usage on demand, including library queries, refreshes additions, and links to programs', async ({ page, documentationServer }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	const { libraryId, requestHeaders, template, channel } = await seedSchedule(page, documentationServer.directory);
+	const scheduled = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, { headers: requestHeaders, data: { defaultTemplateId: template.id } });
+	expect(scheduled.ok(), await scheduled.text()).toBe(true);
+	const response = await page.request.post('/api/v1/programs', { headers: requestHeaders, data: {
+		name: 'Drama Library Query', config: { type: 'content', source: { type: 'library-query', libraryId, genres: ['drama'] }, strategy: { type: 'sequential' } },
+	} });
+	expect(response.ok(), await response.text()).toBe(true);
+	const queryProgram = await response.json() as { id: string };
+	let requests = 0;
+	page.on('request', request => {
+		if (request.url().includes('/resource-usage/media/')) {
+			requests++;
+		}
+	});
+	await page.goto(`/libraries/${libraryId}`);
+	await page.getByRole('link', { name: /Moonrise Theater/u }).first().click();
+	await expect(page.getByRole('heading', { name: 'Moonrise Theater' })).toBeVisible();
+	expect(requests).toBe(0);
+	const mediaId = new URL(page.url()).pathname.split('/').at(-1)!;
+	await expect.poll(async () => (await (await page.request.get(`/api/v1/media/${mediaId}/airings`)).json()).total, { timeout: 30000 }).toBeGreaterThan(0);
+	await capture(page, 'media-item.png');
+	await page.getByRole('button', { name: 'Used by', exact: true }).click();
+	const usage = page.getByRole('complementary', { name: 'Resource usage' });
+	await expect(usage.getByRole('link', { name: 'Drama Library Query', exact: true })).toBeVisible();
+	await expect(usage.getByRole('link', { name: 'Midnight Feature Collection', exact: true })).toBeVisible();
+	const playingAt = usage.getByRole('region', { name: 'Playing at' });
+	await expect(playingAt.getByRole('link', { name: /Moonrise Classics/ }).first()).toBeVisible();
+	await expect(playingAt.locator('time').first()).toBeVisible();
+	expect(await usage.evaluate(element => Math.abs(element.getBoundingClientRect().right - document.documentElement.clientWidth))).toBeLessThan(2);
+	await capture(page, 'media-item-usage.png');
+	expect(await usage.evaluate(element => element.getBoundingClientRect().top)).toBe(0);
+	await page.route('**/api/v1/media/*/airings?*', route => route.fulfill({ status: 503, json: { message: 'Showings unavailable' } }));
+	await playingAt.getByRole('button', { name: 'Refresh showings' }).click();
+	await expect(playingAt).toContainText('Showings unavailable');
+	await expect(usage.getByRole('link', { name: 'Drama Library Query', exact: true })).toBeVisible();
+	await page.unroute('**/api/v1/media/*/airings?*');
+	await playingAt.getByRole('button', { name: 'Retry showings' }).click();
+	await expect(playingAt.locator('time').first()).toBeVisible();
+	await page.getByRole('button', { name: 'Add to Program', exact: true }).click();
+	const addition = page.getByRole('dialog', { name: 'Add to program', exact: true });
+	await addition.getByRole('radio', { name: /Create/ }).check();
+	await addition.getByRole('textbox', { name: 'Program name' }).fill('Moonrise Favorites');
+	await addition.getByRole('button', { name: 'Add to Program', exact: true }).click();
+	await expect(addition).toBeHidden();
+	await expect(usage.getByRole('link', { name: 'Moonrise Favorites', exact: true })).toBeVisible();
+	for (const width of [1024, 768]) {
+		await page.setViewportSize({ width, height: 1024 });
+		expect(await page.locator('.media-detail-usage > .resource-usage-main').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(usage.getByRole('button', { name: 'Used by', exact: true })).toBeVisible();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	await usage.getByRole('button', { name: 'Used by', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Moonrise Theater' })).toBeVisible();
+	await usage.getByRole('button', { name: 'Used by', exact: true }).click();
+	await usage.getByRole('link', { name: 'Drama Library Query', exact: true }).click();
+	await expect(page).toHaveURL(new RegExp(`/schedules/programs/${queryProgram.id}$`));
+	await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue('Drama Library Query');
 });

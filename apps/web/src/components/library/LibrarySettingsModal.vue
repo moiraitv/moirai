@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import LibraryFields from './LibraryFields.vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
-import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { libraryUpdateSchema, type Library, type LibraryUpdate } from '@moirai/shared';
 import { api } from '../../api';
 import { requestConfirmation } from '../../confirmation';
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 	deleted: [];
 	saved: [library: Library];
 }>();
-const nameInput = useTemplateRef<HTMLInputElement>('nameInput');
+const dialog = ref<HTMLElement>();
 const saving = ref(false);
 const deleting = ref(false);
 const error = ref('');
@@ -117,7 +118,7 @@ async function remove(): Promise<void> {
 	}
 }
 
-onMounted(() => nameInput.value?.focus());
+onMounted(() => dialog.value?.querySelector('input')?.focus());
 onBeforeRouteLeave(async () => allowRouteLeave || !visible.value || (!saving.value && !deleting.value && (!isDirty.value || await requestConfirmation({
 	key: `discard-library:${props.library.id}`,
 	title: 'Discard Unsaved Changes?',
@@ -134,6 +135,7 @@ useDraftProtection(() => visible.value && isDirty.value);
 		<Transition name="moirai-overlay" appear @after-leave="finishClose">
 			<div v-show="visible" class="moirai-dialog-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="closeEditor" @keydown.esc.stop.prevent="closeEditor">
 				<form
+					ref="dialog"
 					v-modal-focus="{ escape: closeEditor }"
 					class="moirai-dialog resource-editor-modal library-settings-modal" role="dialog"
 					aria-modal="true"
@@ -146,17 +148,7 @@ useDraftProtection(() => visible.value && isDirty.value);
 					</ResourceEditorHeader>
 
 					<div class="resource-editor-scroll library-settings-scroll">
-						<div class="form-grid library-settings-fields">
-							<label><span>Name</span><input ref="nameInput" v-model="form.name" required maxlength="120" autocapitalize="words" /></label>
-							<label><span>Type</span><select v-model="form.typeKey"><option value="movies">Movies</option><option value="shows">Shows</option><option value="music-videos">Music videos</option><option value="other">Other</option></select></label>
-							<label class="span-2"><span>Path Moirai scans</span><input v-model="form.sourceConfig!.scanRoot" required /></label>
-							<label class="span-2"><span>Path playback engine sees <small>optional</small></span><input v-model="form.sourceConfig!.playbackRoot" /></label>
-							<label><span>Fallback scan, minutes</span><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080" required /><small>Used when live watching is unavailable.</small></label>
-							<div class="library-settings-checks">
-								<label class="check"><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label>
-								<label class="check"><input v-model="form.enabled" type="checkbox" /> Enabled for scheduling</label>
-							</div>
-						</div>
+						<LibraryFields :form="form" @update:form="Object.assign(form, $event)" />
 
 						<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
 						<p v-if="error" class="notice error">{{ error }}</p>

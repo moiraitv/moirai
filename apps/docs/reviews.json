@@ -344,16 +344,16 @@
       }
     },
     "playback.credit-templates": {
-      "digest": "2057cd842673be46976ac07286960bb51db11743c515bd4ec5ddd4ead7a00f9f",
-      "reviewedAt": "2026-09-13T20:13:52.785Z",
+      "digest": "50ba1a8ddb5da5939a353fd5428db439afff87993e87143204d17805ecb84d47",
+      "reviewedAt": "2026-09-13T20:33:19.778Z",
       "components": {
         "text": {
           "digest": "8bd490672fb4aa99d97c262124b1d3c65ef5321e315d85f1d50cbfc9eec4da36",
           "reviewedAt": "2026-09-13T20:13:52.785Z"
         },
         "screenshots": {
-          "digest": "77c8a67d4d3f59508f80f8335368f3c86b2256783d4e7531d2c62159d5e9a6f4",
-          "reviewedAt": "2026-09-13T20:13:52.785Z"
+          "digest": "36fb4055c75bafd72c7e65a82f8b3f123e7daf0b48e2eefb30b981ffbaedb8a9",
+          "reviewedAt": "2026-09-13T20:33:19.778Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

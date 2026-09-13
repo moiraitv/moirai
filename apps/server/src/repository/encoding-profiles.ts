@@ -40,6 +40,15 @@ export function applyDefaultEncodingProfile(db: Pick<MoiraiDatabase, 'select'>, 
 export class EncodingProfileRepository {
 	constructor(private readonly db: MoiraiDatabase) {}
 
+	/** Read the saved default settings for previews that do not belong to a channel. */
+	getDefault(): EncodingProfileCreate {
+		const profile = this.db.select().from(encodingProfiles).where(eq(encodingProfiles.isDefault, true)).get();
+		if (!profile) {
+			throw new EncodingProfileError('Default encoding profile is unavailable', 503);
+		}
+		return profile.config;
+	}
+
 	/** List named profiles in display order. */
 	async list(): Promise<EncodingProfile[]> {
 		return this.db.select().from(encodingProfiles).orderBy(asc(encodingProfiles.nameKey)).all()

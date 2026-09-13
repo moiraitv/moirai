@@ -48,7 +48,7 @@ function handlePointerMove(event: PointerEvent): void {
 		<div class="template-schedule-main">
 			<div class="template-day-summary">
 				<strong>{{ draft.name || 'Untitled template' }}</strong>
-				<span>00:00 – 24:00</span>
+				<span>{{ timeLabel(0) }} – {{ timeLabel(SECONDS_PER_SCHEDULING_DAY) }}</span>
 				<small
 				>{{ sortedSlots.length }} slot{{ sortedSlots.length === 1 ? '' : 's' }}</small
 				>
@@ -56,7 +56,7 @@ function handlePointerMove(event: PointerEvent): void {
 			<div class="template-timeline-column">
 				<div v-if="editorView === 'timeline'" class="template-hours">
 					<span v-for="hour in [0, 3, 6, 9, 12, 15, 18, 21, 24]" :key="hour"
-					>{{ String(hour).padStart(2, '0') }}:00</span
+					>{{ timeLabel(hour * 3_600) }}</span
 					>
 				</div>
 				<div

@@ -5,7 +5,7 @@ import ResolvedGuideTrack from '../components/templates/ResolvedGuideTrack.vue';
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import {
 	ArrowDown,
 	ArrowUp,
@@ -43,7 +43,6 @@ import TwoStepActionButton from '../components/TwoStepActionButton.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
 import ChannelFillerEditor from '../components/schedules/ChannelFillerEditor.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
-import ChannelSchedulesAbout from '../components/schedules/ChannelSchedulesAbout.vue';
 import LayeredSchedulingGuide from '../components/schedules/LayeredSchedulingGuide.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SchedulePredicateEditor from '../components/SchedulePredicateEditor.vue';
@@ -61,7 +60,6 @@ import { guideWindowMilliseconds } from '../guide-geometry';
 import { programColorStyle } from '../program-colors';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
-import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { liveEvents } from '../live-events';
 import { closeUnsavedEditor } from '../unsaved-editor';
 import { deadAirAction } from '../schedule-diagnostic-actions';
@@ -76,10 +74,7 @@ const route = useRoute();
 const router = useRouter();
 const channelsStore = useChannelsStore();
 const scheduling = useSchedulingStore();
-const {
-	visible: channelSchedulesHelpVisible,
-	dismiss: dismissChannelSchedulesHelp,
-} = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.channelSchedules);
+
 const { capabilitiesLoaded, channels, guide, timeZone }
 	= storeToRefs(channelsStore);
 const draft = ref<ChannelScheduleConfig | null>(null);
@@ -621,16 +616,24 @@ function schedulePreview(delay = PREVIEW_DELAY_MS): void {
 
 
 
-onBeforeRouteLeave(async () => allowRouteLeave || !scheduleNeedsSave.value || requestConfirmation({
-	key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
-	title: 'Discard Unsaved Changes?',
-	message: 'Leave this channel schedule without saving your changes?',
-	confirmLabel: 'Discard Changes',
-	destructive: true,
-}));
+/** Protect the owning schedule on both page departures and channel-to-channel navigation. */
+async function confirmRouteLeave(): Promise<boolean> {
+	return allowRouteLeave || !scheduleNeedsSave.value || await requestConfirmation({
+		key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
+		title: 'Discard Unsaved Changes?',
+		message: 'Leave this channel schedule without saving your changes?',
+		confirmLabel: 'Discard Changes',
+		destructive: true,
+	});
+}
+onBeforeRouteLeave(confirmRouteLeave);
+onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await confirmRouteLeave());
 watch(
 	() => route.params.id,
 	() => {
+		// Dismiss the previous schedule's nested editors only after navigation is accepted.
+		quickEditingTemplateId.value = null;
+		quickEditingProgramId.value = null;
 		loadDraft();
 		void loadListGuide();
 	},
@@ -688,7 +691,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 	<section class="channel-schedules-page" :class="{ 'editing-schedule': editing }">
 		<PageHeader
 			eyebrow="Layered channel programming"
-			title="Channel schedules"
+			title="Channel Schedules"
 			description="Choose a channel to configure its base and conditional template stack."
 		>
 		</PageHeader>
@@ -696,11 +699,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 		<p v-else-if="error && !editing" class="notice error">{{ error }}</p>
 
 		<div v-else class="async-state-surface">
-			<ChannelSchedulesAbout
-				:visible="!editing && channelSchedulesHelpVisible"
-				@dismiss="dismissChannelSchedulesHelp"
-				@learn="showLayeredGuide"
-			/>
+
 
 			<div class="channel-schedules-content">
 				<p v-if="listGuideError" class="notice error">

@@ -9,6 +9,8 @@ import {
 } from '@server/api-documentation.js';
 
 const EXPECTED_HTTP_OPERATIONS = [
+	'getResourceUsage',
+	'getMediaAirings',
 	'addLibraryItemsToProgram',
 	'applyChannelMaterialization',
 	'browseLibraryMedia',
@@ -27,6 +29,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'deleteCreditTemplate',
 	'listCreditTemplates',
 	'previewCreditTemplate',
+	'listCreditPreviewVideos',
 	'getChannelSubtitleIssues',
 	'createLibrary',
 	'createProgram',

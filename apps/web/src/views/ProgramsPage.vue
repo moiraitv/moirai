@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import {
-	ArrowRight, ListVideo, ChevronLeft, ChevronRight, Dices, FileText,
-	Layers3, Lightbulb, ListOrdered, Plus, Search, Shuffle, X, Zap,
+	ChevronLeft, ChevronRight, FileText,
+	Layers3, Lightbulb, ListOrdered, Plus, Search, Zap,
 } from '@lucide/vue';
 import type { SchedulingProgram } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
-import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
 import LoadingState from '../components/LoadingState.vue';
 import MediaCardPreview from '../components/MediaCardPreview.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import { countProgramUsages } from '../program-usage';
-import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { useLibrariesStore } from '../stores/libraries';
 import { useSchedulingStore } from '../stores/scheduling';
 import { errorMessage } from '../error-message';
@@ -31,7 +29,6 @@ const route = useRoute();
 const router = useRouter();
 const scheduling = useSchedulingStore();
 const librariesStore = useLibrariesStore();
-const { visible: programHelpVisible, dismiss: dismissProgramHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.programs);
 const initialLoading = ref(!(scheduling.loaded && librariesStore.loaded));
 const error = ref('');
 const editorOpen = computed(() => props.embedded ? Boolean(props.programId) : route.params.id !== undefined);
@@ -65,12 +62,7 @@ const visiblePrograms = computed(() => {
 });
 const programRangeStart = computed(() => filteredPrograms.value.length === 0 ? 0 : (programPage.value - 1) * programPageSize.value + 1);
 const programRangeEnd = computed(() => Math.min(programPage.value * programPageSize.value, filteredPrograms.value.length));
-const programExamples = [
-	{ title: 'Shuffle Movies', description: 'Random movies with no repeats until all play', icon: Shuffle, tone: 'green' },
-	{ title: 'Sequential Shows', description: 'Play episodes in order, continuing where you left off', icon: ListOrdered, tone: 'blue' },
-	{ title: 'Mixed Sequence', description: 'Combine shows, movies, and more in a custom order', icon: Layers3, tone: 'purple' },
-	{ title: 'Random Anything', description: 'Random from any collection or library query', icon: Dices, tone: 'orange' },
-];
+
 
 /** Return the user-facing label for health. */
 function healthLabel(program: SchedulingProgram): string {
@@ -147,48 +139,11 @@ onMounted(async () => {
 			{{ error || scheduling.error }}
 		</p>
 
-		<AnimatedHelpPanel :visible="!embedded && !editorOpen && programHelpVisible">
-			<section class="programs-intro dismissible-help-panel" aria-labelledby="programs-intro-title">
-				<button
-					type="button"
-					class="dismiss-help-button"
-					aria-label="Dismiss program help"
-					@click="dismissProgramHelp"
-				>
-					<X :size="18" />
-				</button>
-				<div class="programs-intro-copy">
-					<div class="programs-intro-icon"><ListVideo :size="27" /></div>
-					<div>
-						<h2 id="programs-intro-title">What is a program?</h2>
-						<p>
-							A program is a reusable rule that tells Moirai what content to play and in what order.
-							Use programs in your schedule slots to build your channel lineup.
-						</p>
-						<a class="programs-learn-link" href="#program-types">
-							Learn More About Programs <ArrowRight :size="18" />
-						</a>
-					</div>
-				</div>
-				<div id="program-types" class="programs-types">
-					<h2>Common program types</h2>
-					<div class="program-type-grid">
-						<article v-for="example in programExamples" :key="example.title">
-							<div class="program-type-icon" :class="`tone-${example.tone}`">
-								<component :is="example.icon" :size="26" />
-							</div>
-							<h3>{{ example.title }}</h3>
-							<p>{{ example.description }}</p>
-						</article>
-					</div>
-				</div>
-			</section>
-		</AnimatedHelpPanel>
+
 
 		<LoadingState v-if="!embedded && !editorOpen && initialLoading" label="Loading programs…" />
 		<template v-else-if="!embedded && !editorOpen && scheduling.loaded">
-			<section class="programs-catalog async-state-surface" aria-labelledby="your-programs-title">
-				<h2 id="your-programs-title">Your programs</h2>
+			<section class="programs-catalog async-state-surface" aria-label="Programs catalog">
 				<div class="programs-catalog-toolbar">
 					<label class="program-search-control"><Search :size="20" /><input type="search" aria-label="Search programs" placeholder="Search programs…" :value="programSearch" @input="updateListQuery({ q: ($event.target as HTMLInputElement).value || null, page: null }, true)" /></label>
 					<select aria-label="Filter programs by type" :value="programTypeFilter" @change="updateListQuery({ type: ($event.target as HTMLSelectElement).value === 'all' ? null : ($event.target as HTMLSelectElement).value, page: null })"><option value="all">All program types</option><option value="content">Content</option><option value="sequence">Sequence</option></select>

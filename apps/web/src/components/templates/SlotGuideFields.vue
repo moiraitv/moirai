@@ -36,7 +36,7 @@ function changeMode(event: Event): void {
 					</select>
 				</label>
 				<label><span>Guide description (optional)</span>
-					<textarea v-model="slot.guide.description" :maxlength="MAX_XMLTV_DESCRIPTION_LENGTH" rows="3" @input="emit('change')"></textarea>
+					<input v-model="slot.guide.description" type="text" :maxlength="MAX_XMLTV_DESCRIPTION_LENGTH" @input="emit('change')" />
 				</label>
 			</template>
 		</div>

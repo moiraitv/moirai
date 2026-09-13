@@ -141,21 +141,30 @@
 	gap: 1rem;
 }
 
+.encoding-profile-usage-note {
+	margin-top: .75rem;
+}
+
 .encoding-profile-info {
 	display: flex;
+	width: fit-content;
+	max-width: 100%;
 	align-items: center;
-	gap: 1rem;
-	padding: 1rem;
-	margin: 0;
-	border: 1px solid var(--line-bright);
-	border-left: 2px solid var(--accent);
-	border-radius: 8px;
-	background: var(--panel-2);
+	gap: .65rem;
+	padding: .6325rem 1.035rem;
+	margin: .5rem auto;
+	border: 1px solid #294453;
+	border-radius: 999px;
+	background: #0b1e29;
 	color: var(--muted-strong);
+	font-size: .875rem;
+	line-height: 1.4;
 
 	svg {
+		width: 18px;
+		height: 18px;
 		flex-shrink: 0;
-		color: var(--accent);
+		color: #88aabd;
 	}
 }
 

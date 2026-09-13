@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
@@ -148,7 +149,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 
 <template>
 	<div>
-		<PageHeader title="Credit templates" description="Create styled artist, song, and album credits for music videos."><button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New template</button></PageHeader>
+		<PageHeader title="Credit Templates" description="Create styled artist, song, and album credits for music videos."><button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New template</button></PageHeader>
 		<p v-if="error" class="notice error">{{ error }} <button type="button" class="button secondary" @click="load">Retry</button></p>
 		<LoadingState v-if="!loaded && !error" />
 		<div v-if="loaded" class="credit-template-list">
@@ -161,15 +162,17 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 		</div>
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
 			<form v-modal-focus="{ escape: close }" class="moirai-dialog resource-editor-modal credit-template-editor" role="dialog" aria-modal="true" aria-labelledby="credit-editor-title" @submit.prevent="save">
-				<ResourceEditorHeader close-label="Close credit template" :disabled="busy || previewBusy" @close="close"><div class="credit-template-title"><div class="resource-editor-title-with-help"><h2 id="credit-editor-title">{{ readonlyTemplate ? 'View' : id ? 'Edit' : 'New' }} credit template</h2><PageHelpButton label="Credit templates" topic-id="playback.credit-templates" /></div><span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span></div></ResourceEditorHeader>
+				<ResourceEditorHeader close-label="Close credit template" :disabled="busy || previewBusy" @close="close"><div class="credit-template-title"><div class="resource-editor-title-with-help"><h2 id="credit-editor-title">{{ readonlyTemplate ? 'View' : id ? 'Edit' : 'New' }} Credit Template</h2><PageHelpButton label="Credit templates" topic-id="playback.credit-templates" /></div><span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span></div></ResourceEditorHeader>
 				<div class="resource-editor-scroll">
-					<div class="credit-template-metadata"><label><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyTemplate" required maxlength="120" /></label><label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyTemplate" maxlength="500" placeholder="Describe when to use this template" /></label></div>
-					<p v-if="readonlyTemplate" class="credit-template-info"><Info :size="22" aria-hidden="true" /><span>Built-in templates are read-only. Duplicate this template to customize its credits.</span></p>
-					<label><span class="credit-template-source-label"><FileCode :size="20" aria-hidden="true" />Credit template (Liquid)</span><textarea v-model="form.source" :readonly="readonlyTemplate" :disabled="busy" class="credit-template-source" :maxlength="MAX_CREDIT_TEMPLATE_LENGTH" spellcheck="false" required /></label>
-					<p>Use Liquid expressions and tags to generate subtitles in Advanced SubStation Alpha (ASS) format. Text values are escaped automatically. Use <code>ass_time</code> to format seconds. Credits use fixed source time and require Burn mode.</p>
-					<details :open="metadataOpen" @toggle="metadataOpen = ($event.target as HTMLDetailsElement).open"><summary>Available metadata and fonts</summary><p><code>resolution.width</code>, <code>resolution.height</code>, <code>title</code>, <code>artist</code>, <code>all_artists</code>, <code>album</code>, <code>track</code>, <code>plot</code>, <code>release_date.year</code>, <code>studios</code>, <code>directors</code>, <code>duration.total_seconds</code>. Guard missing release dates with an if condition. Font names must match fonts installed on the server or in the channel’s subtitle fonts folder.</p></details>
-					<CreditTemplatePreview :source="form.source" @busy="previewBusy = $event" />
-					<p v-if="editorError" class="notice error">{{ editorError }}</p>
+					<ResourceUsage kind="credit-template" :resource-id="id ?? undefined">
+						<div class="credit-template-metadata"><label class="resource-primary-field"><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyTemplate" required maxlength="120" /></label><label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyTemplate" maxlength="500" placeholder="Describe when to use this template" /></label></div>
+						<p v-if="readonlyTemplate" class="credit-template-info"><Info :size="22" aria-hidden="true" /><span>Built-in templates are read-only. Duplicate this template to customize its credits.</span></p>
+						<label><span class="credit-template-source-label"><FileCode :size="20" aria-hidden="true" />Credit template (Liquid)</span><textarea v-model="form.source" :readonly="readonlyTemplate" :disabled="busy" class="credit-template-source" :maxlength="MAX_CREDIT_TEMPLATE_LENGTH" spellcheck="false" required /></label>
+						<p class="credit-template-syntax-help">Use <a href="https://liquidjs.com/tutorials/intro-to-liquid.html" target="_blank" rel="noopener noreferrer">Liquid expressions and tags</a> to generate subtitles in <a href="https://aegisub.org/docs/latest/ass_tags/" target="_blank" rel="noopener noreferrer">Advanced SubStation Alpha (ASS) format</a>. Text values are escaped automatically. Use <code>ass_time</code> to format seconds. Credits use fixed source time and require Burn mode.</p>
+						<details :open="metadataOpen" @toggle="metadataOpen = ($event.target as HTMLDetailsElement).open"><summary>Available metadata and fonts</summary><p><code>resolution.width</code>, <code>resolution.height</code>, <code>title</code>, <code>artist</code>, <code>all_artists</code>, <code>album</code>, <code>track</code>, <code>plot</code>, <code>release_date.year</code>, <code>studios</code>, <code>directors</code>, <code>duration.total_seconds</code>. Guard missing release dates with an if condition. Font names must match fonts installed on the server or in the channel’s subtitle fonts folder.</p></details>
+						<CreditTemplatePreview :source="form.source" @busy="previewBusy = $event" />
+						<p v-if="editorError" class="notice error">{{ editorError }}</p>
+					</ResourceUsage>
 				</div>
 				<ResourceEditorActionBar v-if="!readonlyTemplate" resource-type="Credit Template" :show-delete="Boolean(id)" :busy="busy || previewBusy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @reset="Object.assign(form, JSON.parse(baseline))" @delete="remove" />
 				<footer v-if="readonlyTemplate" class="resource-editor-action-bar credit-template-view-actions"><button class="button secondary" type="button" :disabled="previewBusy" @click="close">Close</button><button class="button secondary" type="button" :disabled="previewBusy" @click="duplicateViewedTemplate"><Copy :size="20" aria-hidden="true" />Duplicate</button></footer>

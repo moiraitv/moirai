@@ -63,13 +63,16 @@ for (const kind of ['program', 'template', 'channel', 'library', 'encoding', 'cr
 
 test('protects library creation and each independent Settings draft on navigation', async ({ page }) => {
 	await authenticateAdministrator(page);
-	await page.goto('/libraries');
+	await page.goto('/channels');
+	await page.locator('.sidebar').getByRole('link', { name: 'Libraries', exact: true }).click();
 	await page.getByRole('button', { name: 'Add Library', exact: true }).first().click();
 	await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Unsaved library');
-	await page.locator('.sidebar').getByRole('link', { name: 'Channels', exact: true }).click();
+	await page.goBack();
 	await page.getByRole('button', { name: 'Keep Editing', exact: true }).click();
+	await expect(page.locator('.confirmation-modal-backdrop')).toHaveCount(0);
+	await expect(page).toHaveURL(/\/libraries$/u);
 	await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unsaved library');
-	await page.locator('.sidebar').getByRole('link', { name: 'Channels', exact: true }).click();
+	await page.goBack();
 	await page.getByRole('button', { name: 'Discard Changes', exact: true }).click();
 	await expect(page).toHaveURL(/\/channels$/u);
 	for (const section of ['capacity', 'preferences']) {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceUsage from '../ResourceUsage.vue';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
@@ -19,7 +20,7 @@ import {
 	type SchedulingProgram,
 	type SelectedMediaSort,
 } from '@moirai/shared';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import { cloneContractValue } from '../../reactive-clone';
@@ -809,7 +810,8 @@ async function closeEditor(): Promise<void> {
 	});
 }
 
-onBeforeRouteLeave(async () => {
+/** Protect the current draft before navigating to another resource or page. */
+async function confirmRouteLeave(): Promise<boolean> {
 	if (allowRouteLeave || !editorOpen.value) {
 		return true;
 	}
@@ -827,7 +829,9 @@ onBeforeRouteLeave(async () => {
 		},
 	});
 	return proceed;
-});
+}
+onBeforeRouteLeave(confirmRouteLeave);
+onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await confirmRouteLeave());
 
 watch(
 	() => [route.params.id, props.programId],
@@ -898,7 +902,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 						{{ initialLoading ? 'Program editor' : editingId ? `Edit ${form.type} rule` : 'New program' }}
 					</p>
 					<div class="resource-editor-title-with-help"><h2 id="program-editor-title">
-						{{ initialLoading ? 'Loading Program' : editingId ? 'Edit program' : `Create ${form.type} rule` }}
+						{{ initialLoading ? 'Loading Program' : editingId ? 'Edit Program' : 'Create Program' }}
 					</h2><PageHelpButton label="Programs" topic-id="scheduling.programs" /></div>
 					<p v-if="!initialLoading">
 						{{
@@ -910,243 +914,245 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 				</ResourceEditorHeader>
 				<LoadingState v-if="initialLoading" label="Loading program editor…" />
 				<div v-if="!initialLoading" class="program-editor-scroll">
-					<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
-					<div class="program-editor-main">
-						<p v-if="error" class="notice error">{{ error }}</p>
-						<label class="program-name-field">
-							<span>Name</span>
-							<small>A descriptive name for this {{ form.type }} rule.</small>
-							<input
-								v-model="form.name"
-								autocapitalize="words"
-								required
-								:placeholder="
-									form.type === 'content' ? 'e.g. Primetime Movies' : 'e.g. Evening Lineup'
-								"
-							/>
-						</label>
+					<ResourceUsage kind="program" :resource-id="editingId ?? undefined"><div class="program-editor-layout">
+						<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
+						<div class="program-editor-main">
+							<p v-if="error" class="notice error">{{ error }}</p>
+							<label class="program-name-field resource-primary-field">
+								<span>Name</span>
+								<small>A descriptive name for this {{ form.type }} rule.</small>
+								<input
+									v-model="form.name"
+									autocapitalize="words"
+									required
+									:placeholder="
+										form.type === 'content' ? 'e.g. Primetime Movies' : 'e.g. Evening Lineup'
+									"
+								/>
+							</label>
 
-						<template v-if="form.type === 'content'">
-							<section class="program-editor-section">
-								<div class="program-section-heading">
-									<span>1</span>
-									<div class="program-section-heading-copy">
-										<strong>Content source</strong>
-										<p class="program-section-description">Choose the source of eligible media.</p>
-									</div>
-								</div>
-								<div class="program-source-panel">
-									<div class="form-grid">
-										<div v-if="editingId" class="program-fixed-field">
-											<span>Source type</span>
-											<strong>{{ sourceTypeLabel }}</strong>
+							<template v-if="form.type === 'content'">
+								<section class="program-editor-section">
+									<div class="program-section-heading">
+										<span>1</span>
+										<div class="program-section-heading-copy">
+											<strong>Content source</strong>
+											<p class="program-section-description">Choose the source of eligible media.</p>
 										</div>
-										<label v-else
-										><span>Source type</span
-										><select
-											v-model="form.sourceType"
-											aria-label="Source type"
-											@change="changeSourceType"
-										>
-											<option value="library-query">Library query</option>
-											<option value="collection">Specific media items</option>
-											<option value="group-collection">Specific media groups</option>
-											<option v-if="form.sourceType === 'group'" value="group">
-												Show or season (legacy)
-											</option>
-											<option v-if="form.sourceType === 'item'" value="item">
-												Exact item (legacy)
-											</option>
-										</select></label
-										>
-										<div v-if="editingId" class="program-fixed-field">
-											<span>Library</span>
-											<strong>{{ sourceLibraryLabel }}</strong>
-										</div>
-										<label v-else
-										><span>Library</span
-										><select
-											v-model="form.libraryId"
-											aria-label="Library"
-											@change="changeSourceLibrary"
-										>
-											<option v-if="sourceLibraries.length === 0" value="" disabled>
-												No compatible libraries
-											</option>
-											<option
-												v-for="library in sourceLibraries"
-												:key="library.id"
-												:value="library.id"
-											>
-												{{ library.name }}
-											</option>
-										</select></label
-										>
 									</div>
-									<template v-if="form.sourceType === 'library-query'">
-										<ProgramLibraryQuery
-											v-model="form.filter"
-											v-model:sort="form.querySort"
-											v-model:item-limit="form.queryItemLimit"
-											:library-id="form.libraryId"
-											:library-type="selectedLibraryType"
-											:genres="genres"
-											:loading="sourceLoading"
-											:loaded="sourceLoaded"
-											:refresh-revision="queryPreviewRevision"
-										/>
-									</template>
-									<template v-else>
-										<p
-											v-if="
-												form.sourceType !== 'collection' && form.sourceType !== 'group-collection'
-											"
-											class="selected-source"
-										>
-											Selected: {{ selectedSourceLabel || 'None' }}
-										</p>
-										<div v-else class="selected-collection-summary">
-											<div class="selected-collection-copy">
-												<strong
-												>{{
-													form.sourceType === 'group-collection'
-														? form.selectedGroupIds.length
-														: form.selectedItemIds.length
-												}}
-													selected</strong
-												>
-												<small
-													v-if="
-														form.sourceType === 'group-collection'
-															? selectedGroupsLoading && !selectedGroupsLoaded
-															: selectedItemsLoading && !selectedItemsLoaded
-													"
-												>Loading selection…</small
-												>
-												<small
-													v-else-if="
-														form.sourceType === 'group-collection'
-															? missingSelectedGroupCount > 0
-															: missingSelectedCount > 0
-													"
-													class="availability-warning"
-												>
-													{{
-														form.sourceType === 'group-collection'
-															? missingSelectedGroupCount
-															: missingSelectedCount
-													}}
-													no longer indexed · references preserved
-												</small>
-												<small v-else
-												>Maximum
-													{{
-														form.sourceType === 'group-collection'
-															? MAX_EXPLICIT_MEDIA_GROUPS
-															: channelsStore.maxExplicitMediaItems
-													}}</small
-												>
+									<div class="program-source-panel">
+										<div class="form-grid">
+											<div v-if="editingId" class="program-fixed-field">
+												<span>Source type</span>
+												<strong>{{ sourceTypeLabel }}</strong>
 											</div>
-											<div class="selected-collection-actions">
-												<div
-													v-if="
-														form.sourceType === 'group-collection'
-															? selectedGroups.length
-															: selectedItems.length
-													"
-													class="selected-poster-stack"
-													aria-hidden="true"
+											<label v-else
+											><span>Source type</span
+											><select
+												v-model="form.sourceType"
+												aria-label="Source type"
+												@change="changeSourceType"
+											>
+												<option value="library-query">Library query</option>
+												<option value="collection">Specific media items</option>
+												<option value="group-collection">Specific media groups</option>
+												<option v-if="form.sourceType === 'group'" value="group">
+													Show or season (legacy)
+												</option>
+												<option v-if="form.sourceType === 'item'" value="item">
+													Exact item (legacy)
+												</option>
+											</select></label
+											>
+											<div v-if="editingId" class="program-fixed-field">
+												<span>Library</span>
+												<strong>{{ sourceLibraryLabel }}</strong>
+											</div>
+											<label v-else
+											><span>Library</span
+											><select
+												v-model="form.libraryId"
+												aria-label="Library"
+												@change="changeSourceLibrary"
+											>
+												<option v-if="sourceLibraries.length === 0" value="" disabled>
+													No compatible libraries
+												</option>
+												<option
+													v-for="library in sourceLibraries"
+													:key="library.id"
+													:value="library.id"
 												>
-													<span
-														v-for="selection in form.sourceType === 'group-collection'
-															? selectedGroups.slice(0, 4)
-															: selectedItems.slice(0, 4)"
-														:key="selection.id"
-													>
-														<span class="source-artwork-placeholder"><Asterisk :size="14" /></span>
-														<img
-															v-if="selection.artworkUrl"
-															:src="artworkVariantUrl(selection.artworkUrl, 'thumb')"
-															:srcset="artworkSrcset(selection.artworkUrl, 'thumb')"
-															alt=""
-															loading="eager"
-															decoding="async"
-															@error="hideBrokenImage"
-														/>
-													</span>
-													<b
-														v-if="
-															(form.sourceType === 'group-collection'
-																? form.selectedGroupIds.length
-																: form.selectedItemIds.length) > 4
-														"
-													>+{{
-														(form.sourceType === 'group-collection'
+													{{ library.name }}
+												</option>
+											</select></label
+											>
+										</div>
+										<template v-if="form.sourceType === 'library-query'">
+											<ProgramLibraryQuery
+												v-model="form.filter"
+												v-model:sort="form.querySort"
+												v-model:item-limit="form.queryItemLimit"
+												:library-id="form.libraryId"
+												:library-type="selectedLibraryType"
+												:genres="genres"
+												:loading="sourceLoading"
+												:loaded="sourceLoaded"
+												:refresh-revision="queryPreviewRevision"
+											/>
+										</template>
+										<template v-else>
+											<p
+												v-if="
+													form.sourceType !== 'collection' && form.sourceType !== 'group-collection'
+												"
+												class="selected-source"
+											>
+												Selected: {{ selectedSourceLabel || 'None' }}
+											</p>
+											<div v-else class="selected-collection-summary">
+												<div class="selected-collection-copy">
+													<strong
+													>{{
+														form.sourceType === 'group-collection'
 															? form.selectedGroupIds.length
-															: form.selectedItemIds.length) - 4
-													}}</b
+															: form.selectedItemIds.length
+													}}
+														selected</strong
+													>
+													<small
+														v-if="
+															form.sourceType === 'group-collection'
+																? selectedGroupsLoading && !selectedGroupsLoaded
+																: selectedItemsLoading && !selectedItemsLoaded
+														"
+													>Loading selection…</small
+													>
+													<small
+														v-else-if="
+															form.sourceType === 'group-collection'
+																? missingSelectedGroupCount > 0
+																: missingSelectedCount > 0
+														"
+														class="availability-warning"
+													>
+														{{
+															form.sourceType === 'group-collection'
+																? missingSelectedGroupCount
+																: missingSelectedCount
+														}}
+														no longer indexed · references preserved
+													</small>
+													<small v-else
+													>Maximum
+														{{
+															form.sourceType === 'group-collection'
+																? MAX_EXPLICIT_MEDIA_GROUPS
+																: channelsStore.maxExplicitMediaItems
+														}}</small
 													>
 												</div>
-												<button
-													ref="selectionReviewButton"
-													type="button"
-													class="toolbar-button selected-review-button"
-													:disabled="
-														form.sourceType === 'group-collection'
-															? form.selectedGroupIds.length === 0
-															: form.selectedItemIds.length === 0
-													"
-													@click="openSelectionDrawer"
-												>
-													Review Selection
-												</button>
+												<div class="selected-collection-actions">
+													<div
+														v-if="
+															form.sourceType === 'group-collection'
+																? selectedGroups.length
+																: selectedItems.length
+														"
+														class="selected-poster-stack"
+														aria-hidden="true"
+													>
+														<span
+															v-for="selection in form.sourceType === 'group-collection'
+																? selectedGroups.slice(0, 4)
+																: selectedItems.slice(0, 4)"
+															:key="selection.id"
+														>
+															<span class="source-artwork-placeholder"><Asterisk :size="14" /></span>
+															<img
+																v-if="selection.artworkUrl"
+																:src="artworkVariantUrl(selection.artworkUrl, 'thumb')"
+																:srcset="artworkSrcset(selection.artworkUrl, 'thumb')"
+																alt=""
+																loading="eager"
+																decoding="async"
+																@error="hideBrokenImage"
+															/>
+														</span>
+														<b
+															v-if="
+																(form.sourceType === 'group-collection'
+																	? form.selectedGroupIds.length
+																	: form.selectedItemIds.length) > 4
+															"
+														>+{{
+															(form.sourceType === 'group-collection'
+																? form.selectedGroupIds.length
+																: form.selectedItemIds.length) - 4
+														}}</b
+														>
+													</div>
+													<button
+														ref="selectionReviewButton"
+														type="button"
+														class="toolbar-button selected-review-button"
+														:disabled="
+															form.sourceType === 'group-collection'
+																? form.selectedGroupIds.length === 0
+																: form.selectedItemIds.length === 0
+														"
+														@click="openSelectionDrawer"
+													>
+														Review Selection
+													</button>
+												</div>
 											</div>
-										</div>
-										<label v-if="form.sourceType === 'group'" class="check-row"
-										><input v-model="form.includeDescendants" type="checkbox" />Include
-											descendants</label
-										>
-										<ProgramSourceBrowser
-											v-model:open="sourceBrowserOpen" v-model:search="sourceSearch"
-											:source-type="form.sourceType" :library-type="selectedLibraryType"
-											:source-entries="sourceEntries" :source-loading="sourceLoading" :source-loaded="sourceLoaded"
-											:source-parent-id="sourceParentId" :source-page="sourcePage" :source-total-pages="sourceTotalPages"
-											:selected-id-set="selectedIdSet" :selected-group-id-set="selectedGroupIdSet"
-											@search="searchSources" @browse="browseGroup" @select="selectSource"
-											@toggle-item="toggleSelectedItem" @toggle-group="toggleSelectedGroup" @page="changeSourcePage"
-											@root="sourceParentId = undefined; sourcePage = 1; loadSourceOptions();"
-										/>
-									</template>
-								</div>
-							</section>
-							<SelectionStrategyEditor v-model="form.strategy" v-model:seed="form.seed" />
-						</template>
-
-						<SequenceProgramEditor
-							v-else
-							v-model:entries="form.entries"
-							v-model:repeat="form.repeat"
-							:programs="programs"
-							:editing-id="editingId"
-							@add="addSequenceEntry"
-							@move="moveEntry"
-							@remove="form.entries.splice($event, 1)"
-						/>
-						<FormDisclosure v-model:open="subtitlesOpen" class="program-subtitle-disclosure">
-							<template #summary>
-								<div class="program-section-heading">
-									<span>{{ form.type === 'content' ? 3 : 2 }}</span>
-									<div class="program-section-heading-copy">
-										<strong>Audio and subtitles — optional</strong>
-										<p class="program-section-description">Override inherited audio and subtitle settings for this program.</p>
+											<label v-if="form.sourceType === 'group'" class="check-row"
+											><input v-model="form.includeDescendants" type="checkbox" />Include
+												descendants</label
+											>
+											<ProgramSourceBrowser
+												v-model:open="sourceBrowserOpen" v-model:search="sourceSearch"
+												:source-type="form.sourceType" :library-type="selectedLibraryType"
+												:source-entries="sourceEntries" :source-loading="sourceLoading" :source-loaded="sourceLoaded"
+												:source-parent-id="sourceParentId" :source-page="sourcePage" :source-total-pages="sourceTotalPages"
+												:selected-id-set="selectedIdSet" :selected-group-id-set="selectedGroupIdSet"
+												@search="searchSources" @browse="browseGroup" @select="selectSource"
+												@toggle-item="toggleSelectedItem" @toggle-group="toggleSelectedGroup" @page="changeSourcePage"
+												@root="sourceParentId = undefined; sourcePage = 1; loadSourceOptions();"
+											/>
+										</template>
 									</div>
-								</div>
-								<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
+								</section>
+								<SelectionStrategyEditor v-model="form.strategy" v-model:seed="form.seed" />
 							</template>
-							<AudioPreferencesEditor v-model="form.audioPreferences" inherit unframed />
-							<SubtitlePreferencesEditor v-model="form.subtitlePreferences" inherit unframed />
-						</FormDisclosure>
-					</div>
+
+							<SequenceProgramEditor
+								v-else
+								v-model:entries="form.entries"
+								v-model:repeat="form.repeat"
+								:programs="programs"
+								:editing-id="editingId"
+								@add="addSequenceEntry"
+								@move="moveEntry"
+								@remove="form.entries.splice($event, 1)"
+							/>
+							<FormDisclosure v-model:open="subtitlesOpen" class="program-subtitle-disclosure">
+								<template #summary>
+									<div class="program-section-heading">
+										<span>{{ form.type === 'content' ? 3 : 2 }}</span>
+										<div class="program-section-heading-copy">
+											<strong>Audio and subtitles — optional</strong>
+											<p class="program-section-description">Override inherited audio and subtitle settings for this program.</p>
+										</div>
+									</div>
+									<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
+								</template>
+								<AudioPreferencesEditor v-model="form.audioPreferences" inherit unframed />
+								<SubtitlePreferencesEditor v-model="form.subtitlePreferences" inherit unframed />
+							</FormDisclosure>
+						</div>
+					</div></ResourceUsage>
 				</div>
 				<ResourceEditorActionBar
 					v-if="!initialLoading"

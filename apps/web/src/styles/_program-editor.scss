@@ -12,6 +12,11 @@
 
 .program-editor-scroll {
 	min-height: 0;
+	overflow: auto;
+}
+
+.program-editor-layout {
+	min-height: 0;
 	display: grid;
 	grid-template-columns: 195px minmax(0, 1fr);
 	overflow: auto;

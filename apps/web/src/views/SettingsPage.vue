@@ -332,7 +332,7 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 	<section>
 		<PageHeader
 			eyebrow="Integrated playback"
-			title="IPTV service"
+			title="Settings"
 			description="Moirai serves the channel playlist, guide, and live streams directly."
 		>
 			<button class="button secondary" :disabled="refreshingStatus" @click="refreshStatus">

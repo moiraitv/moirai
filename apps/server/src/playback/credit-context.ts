@@ -6,7 +6,7 @@ function names(value: unknown): string[] {
 }
 
 /** Expose only documented plain metadata values to authored templates. */
-export function creditContext(item: MediaItem, channel: Channel): Record<string, unknown> {
+export function creditContext(item: MediaItem, channel: Pick<Channel, 'video'>): Record<string, unknown> {
 	const date = item.releaseDate;
 	return {
 		resolution: { width: channel.video.width ?? 1920, height: channel.video.height ?? 1080 },

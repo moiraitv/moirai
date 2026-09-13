@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { creditTemplateCreateSchema, creditTemplateSchema, creditPreviewSchema, creditPreviewResultSchema } from '@moirai/shared';
+import { mediaItemSchema } from '@moirai/shared/api-contracts';
 import type { Repository } from '../repository/index.js';
 import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
 import type { LiveEventHub } from '../operations/live-events.js';
@@ -58,12 +59,17 @@ export function registerCreditTemplateRoutes(app: FastifyInstance, dependencies:
 		await repository.creditTemplates.delete(parseId(request));
 		return reply.status(204).send();
 	});
+	app.get('/api/v1/credit-templates/preview-videos', { schema: apiOperation({
+		operationId: 'listCreditPreviewVideos', tags: ['Credit templates'], summary: 'List sample music videos for credit previews',
+		response: { 200: responseContent('Available music videos', 'application/json', z.array(mediaItemSchema)) }, errors: [500, 503],
+	}) }, async () => repository.creditTemplates.previewVideos());
 	app.post('/api/v1/credit-templates/preview', { schema: apiOperation({
 		operationId: 'previewCreditTemplate', tags: ['Credit templates'], summary: 'Preview draft credits on a music video',
 		body: creditPreviewSchema, response: { 200: responseContent('Rendered credits', 'application/json', creditPreviewResultSchema) }, errors: [400, 404, 500, 503],
 	}) }, async (request) => {
 		const input = creditPreviewSchema.parse(request.body);
-		const channel = await repository.getChannel(input.channelId);
+		const channel = input.channelId ? await repository.getChannel(input.channelId)
+			: { ...repository.encodingProfiles.getDefault(), ffmpegPath: null, subtitleFontsFolder: null };
 		const item = (await repository.creditTemplates.media([input.mediaItemId])).get(input.mediaItemId);
 		if (!channel || !item) {
 			throw app.httpErrors.notFound('Channel or media item not found');

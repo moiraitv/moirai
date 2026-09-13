@@ -1,3 +1,4 @@
+import { registerResourceUsageRoutes } from './resource-usage.js';
 import { registerEncodingProfileRoutes } from './encoding-profiles.js';
 import { registerCreditTemplateRoutes } from './credit-templates.js';
 import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
@@ -53,6 +54,7 @@ export function registerHttpRoutes(
 ): void {
 	registerAuthenticationRoutes(app, dependencies.config, dependencies.authentication);
 	registerSystemRoutes(app, dependencies);
+	registerResourceUsageRoutes(app, dependencies);
 	registerCreditTemplateRoutes(app, dependencies);
 	registerEncodingProfileRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);

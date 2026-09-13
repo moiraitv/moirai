@@ -9,7 +9,7 @@ import AudioPreferencesEditor from '../components/AudioPreferencesEditor.vue';
 import SubtitlePreferencesEditor from '../components/SubtitlePreferencesEditor.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { RouterLink, onBeforeRouteUpdate, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import {
 	CalendarDays,
 	ChevronDown,
@@ -74,6 +74,7 @@ const {
 const initialLoading = ref(
 	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 7),
 );
+const editorLinksReady = ref(false);
 const scheduling = useSchedulingStore();
 const editingId = ref<string>();
 const showForm = ref(false);
@@ -287,9 +288,10 @@ function finishCloseForm(): void {
 	fallbackStatus.value = null;
 	fallbackLoading.value = false;
 	showForm.value = false;
-	if (!leavingPage && route.query.new === '1') {
+	if (!leavingPage && (route.query.new === '1' || route.query.edit)) {
 		const query = { ...route.query };
 		delete query.new;
+		delete query.edit;
 		void router.replace({ path: '/channels', query });
 	}
 }
@@ -344,7 +346,8 @@ async function closeForm(): Promise<void> {
 	});
 }
 
-onBeforeRouteLeave(async () => {
+/** Preserve channel drafts when either the destination route or editor query changes. */
+async function leaveEditor(): Promise<boolean> {
 	leavingPage = true;
 	try {
 		if (showForm.value) {
@@ -355,7 +358,10 @@ onBeforeRouteLeave(async () => {
 	finally {
 		leavingPage = false;
 	}
-});
+}
+onBeforeRouteLeave(leaveEditor);
+onBeforeRouteUpdate(async (to, from) => (to.query.edit === from.query.edit && to.query.new === from.query.new) || await leaveEditor());
+
 
 
 /** Debounce a server-side prediction and discard responses for superseded form values. */
@@ -573,6 +579,7 @@ async function loadInitial(): Promise<void> {
 	error.value = '';
 	try {
 		await Promise.all([loadChannels(), channelsStore.loadCapabilities(), scheduling.load()]);
+		editorLinksReady.value = true;
 		if (!weekStart.value) {
 			weekStart.value = dateKey(new Date(), timeZone.value);
 		}
@@ -811,16 +818,24 @@ watch(
 	scheduleAccelerationPrediction,
 );
 
-/** Open the blank channel creator when requested through the durable channel entry URL. */
-watch(
-	() => route.query.new,
-	(value) => {
-		if (value === '1' && !showForm.value) {
-			add();
+/** Resolve editor links against this page's refreshed catalog rather than previously cached data. */
+watch(() => [route.query.edit, route.query.new, editorLinksReady.value], () => {
+	if (showForm.value) {
+		return;
+	}
+	if (route.query.new === '1') {
+		add();
+	}
+	else if (typeof route.query.edit === 'string' && editorLinksReady.value) {
+		const channel = channels.value.find(candidate => candidate.id === route.query.edit);
+		if (channel) {
+			edit(channel);
 		}
-	},
-	{ immediate: true },
-);
+		else {
+			error.value = 'Channel not found. It may have been deleted.';
+		}
+	}
+}, { immediate: true });
 
 onMounted(() => {
 	void loadInitial();
@@ -922,7 +937,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 			>
 				<ResourceEditorHeader close-label="Close channel editor" :disabled="saving || deleting" @close="closeForm">
 					<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>
-					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">Broadcast profile</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
+					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">{{ editingId ? 'Edit Channel' : 'Create Channel' }}</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
 				</ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="channel-identity-fields">

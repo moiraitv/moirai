@@ -168,7 +168,7 @@ onUnmounted(() => {
 	<section>
 		<PageHeader
 			eyebrow="System status"
-			title="Moirai overview"
+			title="Status"
 			description="Monitor the media index, channel configuration, and integrated IPTV service."
 		/>
 		<p v-if="error || libraryError || channelError" class="notice error">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useDisclosureState } from '../disclosure-state';
 import { computed, onMounted, ref, watch } from 'vue';
-import { Captions, ChevronDown, ExternalLink, Info } from '@lucide/vue';
+import { Captions, ChevronDown, FileText, Info } from '@lucide/vue';
 import FormDisclosure from './FormDisclosure.vue';
 import type { CreditTemplate, SubtitlePreferences } from '@moirai/shared';
 import { api } from '../api';
@@ -78,7 +78,7 @@ watch(() => props.channelId, async (id) => {
 					<option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option>
 				</select></label>
 				<p class="subtitle-credits-hint"><Info :size="20" aria-hidden="true" /><span>Music video credits replace ordinary subtitles for music videos and automatically use Burn mode for the whole channel.</span></p>
-				<RouterLink class="subtitle-manage-link" to="/playback/credit-templates">Manage credit templates<ExternalLink :size="16" aria-hidden="true" /></RouterLink>
+				<RouterLink class="button secondary contextual subtitle-manage-link" to="/playback/credit-templates"><FileText :size="18" aria-hidden="true" />Manage Credit Templates</RouterLink>
 			</div>
 		</div>
 		<FormDisclosure v-if="channelLayout" v-model:open="additionalOpen" class="subtitle-additional-settings">
@@ -92,7 +92,7 @@ watch(() => props.channelId, async (id) => {
 						<option value="">Off</option><option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option>
 					</select></label>
 					<p class="subtitle-credits-hint"><Info :size="20" aria-hidden="true" /><span>Music video credits replace ordinary subtitles for music videos and automatically use Burn mode for the whole channel.</span></p>
-					<RouterLink class="subtitle-manage-link" to="/playback/credit-templates">Manage credit templates<ExternalLink :size="16" aria-hidden="true" /></RouterLink></div>
+					<RouterLink class="button secondary contextual subtitle-manage-link" to="/playback/credit-templates"><FileText :size="18" aria-hidden="true" />Manage Credit Templates</RouterLink></div>
 				<slot />
 			</div>
 		</FormDisclosure>

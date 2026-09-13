@@ -204,6 +204,10 @@ describe('subtitle assets and playout', () => {
 		expect(prepared.get(entry.id)).toEqual([null]);
 		expect(assets.issues.get(configured.id)?.[0]).toContain(media.title);
 	});
+	it('reports missing duration separately from an out-of-range preview time', async () => {
+		await expect(previewCredits(MUSIC_VIDEO_CREDIT_TEMPLATE, { ...item(), durationSeconds: null }, channel(), 10)).rejects.toThrow('The library scan is incomplete');
+		await expect(previewCredits(MUSIC_VIDEO_CREDIT_TEMPLATE, { ...item(), durationSeconds: 4 }, channel(), 10)).rejects.toThrow('Preview time must be within the video');
+	});
 	it.skipIf(!hasAss)('extracts embedded text for Burn, retains direct indices for Convert, and renders visible credit frames', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-credit-ffmpeg-'));
 		roots.push(root);

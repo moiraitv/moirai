@@ -9,6 +9,7 @@
 @use 'program-item-addition';
 @use 'quick-setup';
 @use 'program-editor';
+@use 'resource-usage';
 @use 'templates';
 @use 'template-editor';
 @use 'channel-schedules';
@@ -16,6 +17,7 @@
 @use 'channels';
 @use 'logs';
 @use 'help';
+@use 'help-introductions';
 @use 'media-settings';
 @use 'media-card-preview';
 @use 'form-disclosure';

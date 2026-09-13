@@ -1,5 +1,13 @@
 import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 
+/** Format a nominal schedule time in 12-hour notation, with midnight at either day boundary. */
+export function scheduleTwelveHourLabel(seconds: number): string {
+	const normalized = seconds % SECONDS_PER_SCHEDULING_DAY;
+	const hours = Math.floor(normalized / 3_600);
+	const minutes = Math.floor((normalized % 3_600) / 60);
+	return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
+}
+
 /** Format seconds within a schedule day as a 24-hour clock label. */
 export function scheduleClockLabel(seconds: number, preserveDayEnd = false): string {
 	if (preserveDayEnd && seconds === SECONDS_PER_SCHEDULING_DAY) {

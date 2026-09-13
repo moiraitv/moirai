@@ -94,8 +94,13 @@ guidance before running commands. It does not replace these repository guideline
   measurements once after completion instead of on every frame.
 - Animate presentation layers that accompany a FLIP transition, such as a newly exposed header or
   panel background, as independent opacity or transform layers using the same duration, direction,
-  and easing. Avoid animating height, grid tracks, margins, or other layout properties when doing so
-  would continuously reflow substantial, sticky, or virtualized content.
+  and easing. By default, avoid animating height, grid tracks, margins, or other layout properties
+  when doing so would continuously reflow substantial, sticky, or virtualized content.
+- Treat these animation techniques as defaults, not mandatory implementations. Direct layout
+  animation is acceptable when representative browser/device checks or user feedback establish
+  acceptable smoothness and responsiveness. Prefer the result that looks and feels better; do not
+  replace an acceptable animation solely to enforce FLIP or compositor-only rendering. Preserve
+  reduced-motion support, focus, and interaction behavior regardless of the technique used.
 
 ## Testing
 

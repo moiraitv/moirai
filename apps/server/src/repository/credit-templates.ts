@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq, inArray } from 'drizzle-orm';
-import { canonicalIdentityKey, type CreditTemplate, type CreditTemplateCreate, type MediaItem } from '@moirai/shared';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { CREDIT_PREVIEW_VIDEO_LIMIT, canonicalIdentityKey, type CreditTemplate, type CreditTemplateCreate, type MediaItem } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import { creditTemplates, channels, schedulingPrograms, mediaItems } from '../db/schema.js';
 import { mappedItem, type RawItemRow } from './catalog-records.js';
@@ -69,6 +69,14 @@ export class CreditTemplateRepository {
 				throw new CreditTemplateError('Credit template not found', 404);
 			}
 		});
+	}
+
+	/** Offer a bounded, deterministic sample of available music videos across libraries. */
+	async previewVideos(): Promise<MediaItem[]> {
+		const rows = await this.db.select().from(mediaItems)
+			.where(and(eq(mediaItems.kind, 'music-video'), eq(mediaItems.availability, 'available')))
+			.orderBy(desc(mediaItems.dateAddedAt), asc(mediaItems.id)).limit(CREDIT_PREVIEW_VIDEO_LIMIT);
+		return rows.map(row => mappedItem(row as RawItemRow));
 	}
 
 	/** Load only media used by the pending playout, with bounded SQLite parameter batches. */

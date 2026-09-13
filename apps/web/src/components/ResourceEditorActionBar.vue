@@ -4,6 +4,8 @@ import TwoStepActionButton from './TwoStepActionButton.vue';
 
 const props = withDefaults(defineProps<{
 	resourceType?: string;
+	saveLabel?: string;
+	savingLabel?: string;
 	validationMessage?: string;
 	showDelete?: boolean;
 	busy?: boolean;
@@ -14,6 +16,8 @@ const props = withDefaults(defineProps<{
 	saving?: boolean;
 }>(), {
 	resourceType: '',
+	saveLabel: 'Save',
+	savingLabel: 'Saving…',
 	validationMessage: '',
 	showDelete: false,
 	busy: false,
@@ -72,7 +76,7 @@ function activateSave(): void {
 				:disabled="busy || saveDisabled"
 				@click="activateSave"
 			>
-				{{ saving ? 'Saving…' : 'Save' }}
+				{{ saving ? savingLabel : saveLabel }}
 			</button>
 		</div>
 	</footer>

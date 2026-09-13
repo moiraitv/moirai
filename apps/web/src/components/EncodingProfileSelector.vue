@@ -55,7 +55,7 @@ onMounted(load);
 		<legend>Encoding profile</legend>
 		<LoadingState v-if="!loaded && !error" label="Loading encoding profiles…" />
 		<p v-if="error" class="notice error">{{ error }} <button class="button secondary" type="button" @click="load">Retry</button></p>
-		<div class="encoding-profile-selector-row"><label><span>Audio and video settings</span><select :value="model ?? ''" :disabled="!loaded" @change="select"><option value="">Custom</option><option v-if="model && !profiles.some((profile) => profile.id === model)" :value="model">Selected profile unavailable</option><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}{{ profile.isDefault ? ' (default)' : '' }}</option></select></label><RouterLink class="button secondary" to="/playback/encoding-profiles"><Settings :size="19" aria-hidden="true" />Manage encoding profiles</RouterLink></div>
+		<div class="encoding-profile-selector-row"><label><span>Audio and video settings</span><select :value="model ?? ''" :disabled="!loaded" @change="select"><option value="">Custom</option><option v-if="model && !profiles.some((profile) => profile.id === model)" :value="model">Selected profile unavailable</option><option v-for="profile in profiles" :key="profile.id" :value="profile.id">{{ profile.name }}{{ profile.isDefault ? ' (default)' : '' }}</option></select></label><RouterLink class="button secondary contextual" to="/playback/encoding-profiles"><Settings :size="19" aria-hidden="true" />Manage Encoding Profiles</RouterLink></div>
 		<slot />
 	</fieldset>
 </template>

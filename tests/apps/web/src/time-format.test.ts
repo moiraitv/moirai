@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { instantLabel, missingSinceLabel, scheduleClockLabel } from '@web/time-format';
+import { instantLabel, missingSinceLabel, scheduleClockLabel, scheduleTwelveHourLabel } from '@web/time-format';
 
 describe('time formatting', () => {
+	it('formats nominal times with unambiguous morning and afternoon labels', () => {
+		expect(scheduleTwelveHourLabel(0)).toBe('12:00 AM');
+		expect(scheduleTwelveHourLabel(3_900)).toBe('1:05 AM');
+		expect(scheduleTwelveHourLabel(43_200)).toBe('12:00 PM');
+		expect(scheduleTwelveHourLabel(65_100)).toBe('6:05 PM');
+		expect(scheduleTwelveHourLabel(86_400)).toBe('12:00 AM');
+	});
+
 	it('formats schedule seconds and preserves an authored day end when requested', () => {
 		expect(scheduleClockLabel(3_900)).toBe('01:05');
 		expect(scheduleClockLabel(86_400)).toBe('00:00');

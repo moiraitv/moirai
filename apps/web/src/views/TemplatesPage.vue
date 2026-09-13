@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Eye, Plus, Repeat2, Search, X } from '@lucide/vue';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, Search } from '@lucide/vue';
 import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import { templateSlotStyle } from '../channel-schedule-display';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
-import AnimatedHelpPanel from '../components/AnimatedHelpPanel.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import TemplateEditor from '../components/templates/TemplateEditor.vue';
 import { programColorStyle } from '../program-colors';
-import { DISMISSIBLE_HELP_STORAGE_KEYS, useDismissibleHelp } from '../dismissible-help';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { scheduleClockLabel } from '../time-format';
@@ -25,7 +23,6 @@ const router = useRouter();
 const scheduling = useSchedulingStore();
 const channelsStore = useChannelsStore();
 const { channels } = storeToRefs(channelsStore);
-const { visible: templateHelpVisible, dismiss: dismissTemplateHelp } = useDismissibleHelp(DISMISSIBLE_HELP_STORAGE_KEYS.templates);
 const initialLoading = ref(!(scheduling.loaded && channelsStore.loaded && channelsStore.capabilitiesLoaded));
 const error = ref('');
 const editing = computed(() => props.embedded ? Boolean(props.templateId) : route.params.id !== undefined);
@@ -191,58 +188,12 @@ onMounted(async () => {
 			{{ error || scheduling.error }}
 		</p>
 
-		<AnimatedHelpPanel :visible="!embedded && !editing && templateHelpVisible">
-			<section class="templates-intro dismissible-help-panel" aria-labelledby="templates-intro-title">
-				<button
-					type="button"
-					class="dismiss-help-button"
-					aria-label="Dismiss template help"
-					@click="dismissTemplateHelp"
-				>
-					<X :size="18" />
-				</button>
-				<div class="templates-intro-copy">
-					<div class="templates-intro-icon"><CalendarDays :size="27" /></div>
-					<div>
-						<h2 id="templates-intro-title">What is a template?</h2>
-						<p>
-							A template defines how a channel's 24-hour day is structured using reusable schedule
-							slots. Reuse templates across channels and dates to keep schedules consistent and easy
-							to manage.
-						</p>
-						<a class="templates-learn-link" href="#templates-help">
-							Learn More About Templates <ArrowRight :size="18" />
-						</a>
-					</div>
-				</div>
-				<div id="templates-help" class="templates-benefits">
-					<h2>Templates help you</h2>
-					<div class="templates-benefit-grid">
-						<article>
-							<div class="template-benefit-icon tone-green"><Clock3 :size="24" /></div>
-							<h3>Plan a nominal day</h3>
-							<p>Allocate time across slots without worrying about actual media durations.</p>
-						</article>
-						<article>
-							<div class="template-benefit-icon tone-blue"><Eye :size="24" /></div>
-							<h3>Preview resolution</h3>
-							<p>See how slots resolve with real media durations and boundary policies.</p>
-						</article>
-						<article>
-							<div class="template-benefit-icon tone-purple"><Repeat2 :size="24" /></div>
-							<h3>Reuse everywhere</h3>
-							<p>Use the same template across channels, rotations, and seasons.</p>
-						</article>
-					</div>
-				</div>
-			</section>
-		</AnimatedHelpPanel>
+
 
 		<LoadingState v-if="!embedded && !editing && initialLoading" label="Loading templates…" />
 
 		<template v-else-if="!embedded && !editing && scheduling.loaded">
-			<section class="templates-catalog async-state-surface" aria-labelledby="your-templates-title">
-				<h2 id="your-templates-title">Your templates</h2>
+			<section class="templates-catalog async-state-surface" aria-label="Templates catalog">
 				<div class="templates-catalog-toolbar">
 					<label class="template-search-control">
 						<Search :size="20" />

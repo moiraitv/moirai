@@ -429,6 +429,7 @@
 }
 
 .predicate-field-grid > label {
+	min-width: 0;
 	flex: 1;
 }
 
@@ -437,7 +438,6 @@
 	height: 42px;
 	min-height: 42px;
 	flex: 0 0 42px;
-	line-height: normal;
 }
 
 .layer-boundary-grid {
@@ -451,6 +451,7 @@
 	margin: 0;
 	padding: 14px;
 	display: grid;
+	align-content: start;
 	gap: 10px;
 	border: 1px solid var(--line-bright);
 	border-radius: 8px;

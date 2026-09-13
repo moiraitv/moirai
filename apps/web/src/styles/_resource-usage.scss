@@ -1,0 +1,227 @@
+.resource-usage-layout {
+	position: relative;
+	min-width: 0;
+	min-height: 100%;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 0px;
+	align-items: start;
+	transition: grid-template-columns var(--motion-system) var(--motion-system-ease);
+}
+
+.resource-usage-layout.usage-open {
+	grid-template-columns: minmax(0, 1fr) 270px;
+}
+
+.resource-usage-main {
+	grid-area: 1 / 1;
+	min-width: 0;
+	contain: layout style;
+}
+
+.resource-usage {
+	position: absolute;
+	top: 18px;
+	right: 0;
+	width: 64px;
+	z-index: 1;
+	min-width: 0;
+	align-self: start;
+	margin-top: 0;
+	border-radius: 26px 0 0 26px;
+}
+
+.resource-usage-layout.usage-open::before,
+.resource-usage-layout.usage-open::after {
+	content: '';
+	grid-area: 1 / 2;
+	align-self: stretch;
+	pointer-events: none;
+}
+
+.resource-usage-layout.usage-open::before {
+	background: #091722;
+}
+
+.resource-usage-layout.usage-open::after {
+	z-index: 2;
+	width: 1px;
+	background: var(--line);
+}
+
+.usage-open > .resource-usage {
+	grid-area: 1 / 2;
+	position: sticky;
+	top: 0;
+	width: 270px;
+	margin-top: 0;
+	padding: 18px;
+	border: 0;
+	border-radius: 0;
+	background: #091722;
+}
+
+.resource-usage-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	width: 100%;
+	min-height: 32px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--text);
+	cursor: pointer;
+}
+
+.usage-open .resource-usage-toggle {
+	justify-content: flex-start;
+	gap: 12px;
+}
+
+.resource-usage-toggle > svg:first-child {
+	color: var(--accent);
+}
+
+.resource-usage-toggle > svg:last-child {
+	margin-left: auto;
+}
+
+.resource-usage-content {
+	padding-top: 14px;
+	font-size: .875rem;
+	overflow-wrap: anywhere;
+}
+
+.resource-usage-content > p {
+	color: var(--muted);
+	line-height: 1.5;
+}
+
+.resource-usage-content ul {
+	display: grid;
+	gap: 10px;
+	list-style: none;
+	padding: 0;
+	margin: 20px 0;
+}
+
+.resource-usage-card {
+	display: grid;
+	grid-template-columns: 20px minmax(0, 1fr) 16px;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 10px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	color: var(--text);
+	text-decoration: none;
+	background: #07141e;
+}
+
+.resource-usage-card:hover {
+	border-color: var(--accent);
+}
+
+.resource-usage-card small {
+	display: block;
+	margin-top: 4px;
+	color: var(--muted);
+}
+
+.resource-usage-note {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, .03);
+}
+
+.resource-usage svg {
+	flex-shrink: 0;
+}
+
+
+
+.resource-editor-scroll:has(> .resource-usage-layout),
+.scheduling-workspace-scroll:has(> .resource-usage-layout) {
+	padding: 0;
+	display: block;
+}
+
+.resource-editor-scroll > .resource-usage-layout > .resource-usage-main {
+	grid-area: 1 / 1;
+	padding: 24px;
+}
+
+.scheduling-workspace-scroll > .resource-usage-layout > .resource-usage-main {
+	grid-area: 1 / 1;
+	display: grid;
+	align-content: start;
+	gap: 16px;
+	padding: 16px;
+}
+
+.resource-editor-scroll > .resource-usage-layout:not(.usage-open) > .resource-usage {
+	top: 0;
+}
+
+.resource-usage-layout:not(.usage-open) .resource-usage-toggle {
+	min-height: 42px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-right: 0;
+	border-radius: inherit;
+	background: #102431;
+}
+
+.media-playing-at {
+	margin-top: 24px;
+	padding-top: 18px;
+	border-top: 1px solid var(--line);
+}
+
+.media-playing-at h3 {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 16px;
+}
+
+.media-airing {
+	display: grid;
+	gap: 6px;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	font-size: .85rem;
+}
+
+.media-airing a {
+	font-weight: 600;
+}
+
+.media-playing-at-refresh {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 32px;
+	width: 32px;
+	height: 32px;
+	padding: 6px;
+	border: 0;
+	background: transparent;
+	color: var(--muted-strong);
+	cursor: pointer;
+}
+
+.media-playing-at-refresh:hover:not(:disabled) {
+	color: var(--accent);
+}
+
+.media-playing-at-refresh:disabled {
+	opacity: .5;
+	cursor: default;
+}

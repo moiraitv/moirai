@@ -16,11 +16,14 @@ function filterPath(value: string): string {
 }
 
 /** Render credits over a selected catalog frame at fixed source-relative time. */
-export async function previewCredits(source: string, item: MediaItem, channel: Channel, seconds: number): Promise<CreditPreviewResult> {
+export async function previewCredits(source: string, item: MediaItem, channel: Pick<Channel, 'video' | 'ffmpegPath' | 'subtitleFontsFolder'>, seconds: number): Promise<CreditPreviewResult> {
 	if (item.kind !== 'music-video' || item.availability !== 'available') {
 		throw new Error('Choose an available music video');
 	}
-	if (seconds >= (item.durationSeconds ?? 0)) {
+	if (item.durationSeconds == null || !Number.isFinite(item.durationSeconds) || item.durationSeconds <= 0) {
+		throw new Error('The library scan is incomplete. Wait for scanning to finish before previewing this video.');
+	}
+	if (seconds >= item.durationSeconds) {
 		throw new Error('Preview time must be within the video');
 	}
 	const ass = await renderCreditTemplate(source, creditContext(item, channel));

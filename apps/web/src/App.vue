@@ -256,7 +256,7 @@ onUnmounted(() => {
 				<div class="nav-section">
 					<div class="nav-section-heading">
 						<RouterLink class="nav-link nav-section-link" to="/libraries">
-							<Library :size="18" /><span>Library</span>
+							<Library :size="18" /><span>Libraries</span>
 						</RouterLink>
 						<button
 							v-if="!loaded || libraries.length > 0"

@@ -29,11 +29,13 @@ export const creditTemplateSchema = creditTemplateCreateSchema.extend({
 export type CreditTemplate = z.infer<typeof creditTemplateSchema>;
 /** Complete draft accepted when creating or replacing a template. */
 export type CreditTemplateCreate = z.infer<typeof creditTemplateCreateSchema>;
-/** Render a draft using catalog metadata and a channel's output resolution. */
+/** Maximum number of catalog videos offered in the credit preview carousel. */
+export const CREDIT_PREVIEW_VIDEO_LIMIT = 12;
+/** Render using the default encoding profile, or an explicitly supplied legacy channel. */
 export const creditPreviewSchema = z.object({
 	source: creditTemplateCreateSchema.shape.source,
 	mediaItemId: z.uuid(),
-	channelId: z.uuid(),
+	channelId: z.uuid().optional(),
 	seconds: z.number().min(0).max(86_400).default(10),
 }).strict();
 /** Generated ASS and rendered frame returned to the editor. */

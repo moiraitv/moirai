@@ -1,3 +1,4 @@
+import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
 import type { EncodingProfile, EncodingProfileCreate } from '@moirai/shared';
 import type { CreditTemplate, CreditTemplateCreate, CreditPreview, CreditPreviewResult } from '@moirai/shared';
 import type {
@@ -241,6 +242,8 @@ async function uploadFallbackFiller(url: string, file: File): Promise<FallbackFi
 
 /** Module-level api value for api. */
 export const api = {
+	mediaAirings: (id: string, page = 1) => request<MediaAirings>(`/api/v1/media/${id}/airings?page=${page}&pageSize=20`),
+	resourceUsage: (kind: ResourceUsageKind, id: string, page = 1) => request<ResourceUsage>(`/api/v1/resource-usage/${kind}/${id}?page=${page}&pageSize=50`),
 	setDefaultEncodingProfile: (id: string) => request<EncodingProfile>(`/api/v1/encoding-profiles/${id}/default`, { method: 'PUT' }),
 	encodingProfiles: () => request<EncodingProfile[]>('/api/v1/encoding-profiles'),
 	createEncodingProfile: (body: EncodingProfileCreate) => request<EncodingProfile>('/api/v1/encoding-profiles', { method: 'POST', body: JSON.stringify(body) }),
@@ -250,6 +253,7 @@ export const api = {
 	createCreditTemplate: (body: CreditTemplateCreate) => request<CreditTemplate>('/api/v1/credit-templates', { method: 'POST', body: JSON.stringify(body) }),
 	updateCreditTemplate: (id: string, body: CreditTemplateCreate) => request<CreditTemplate>(`/api/v1/credit-templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 	deleteCreditTemplate: (id: string) => request<void>(`/api/v1/credit-templates/${id}`, { method: 'DELETE' }),
+	creditPreviewVideos: () => request<MediaItem[]>('/api/v1/credit-templates/preview-videos'),
 	previewCreditTemplate: (body: CreditPreview) => request<CreditPreviewResult>('/api/v1/credit-templates/preview', { method: 'POST', body: JSON.stringify(body) }),
 	subtitleIssues: (id: string) => request<string[]>(`/api/v1/channels/${id}/subtitle-issues`),
 	authenticationState: (signal?: AbortSignal) => request<AuthenticationState>(

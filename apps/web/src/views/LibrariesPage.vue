@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import { onBeforeRouteLeave } from 'vue-router';
-import { useDraftProtection } from '../draft-protection';
-import { requestConfirmation } from '../confirmation';
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import LibraryCreateModal from '../components/library/LibraryCreateModal.vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ChevronRight, FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
 import {
-	DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
-	libraryCreateSchema,
 	type Library,
 	type LibraryContentPreview,
-	type LibraryCreate,
 } from '@moirai/shared';
 import { api } from '../api';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
@@ -28,29 +23,12 @@ import { useLibrariesStore } from '../stores/libraries';
 const librariesStore = useLibrariesStore();
 const { libraries, loading, loaded, error: loadError } = storeToRefs(librariesStore);
 const showForm = ref(false);
-const busy = ref(false);
-const error = ref('');
 const contentPreviews = ref(new Map<string, LibraryContentPreview>());
 const previewsLoading = ref(true);
 const previewsLoaded = ref(false);
 const previewsError = ref('');
 let previewLoadSequence = 0;
 let previewRefreshTimer: number | undefined;
-const form = reactive<LibraryCreate>({
-	name: '',
-	typeKey: 'movies',
-	sourceType: 'on-disk',
-	sourceConfig: { scanRoot: '', playbackRoot: null },
-	scanIntervalMinutes: DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
-	watcherEnabled: true,
-	enabled: true,
-});
-const baseline = ref(JSON.stringify(form));
-const libraryDraftDirty = computed(() => JSON.stringify(form) !== baseline.value);
-const libraryFormValid = computed(() => libraryCreateSchema.safeParse({
-	...form,
-	sourceConfig: { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null },
-}).success);
 /** Return whether the library has a scan that has not completed. */
 function isScanning(library: Library): boolean {
 	return Boolean(
@@ -119,32 +97,10 @@ function schedulePreviewRefresh(): void {
 	window.clearTimeout(previewRefreshTimer);
 	previewRefreshTimer = window.setTimeout(() => void loadContentPreviews(), 100);
 }
-/** Create a library from the form and refresh the list. */
-async function create() {
-	if (busy.value || !libraryFormValid.value) {
-		return;
-	}
-
-	busy.value = true;
-	error.value = '';
-	try {
-		await api.createLibrary({
-			...form,
-			sourceConfig: { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null },
-		});
-		showForm.value = false;
-		form.name = '';
-		form.sourceConfig.scanRoot = '';
-		baseline.value = JSON.stringify(form);
-		await librariesStore.load();
-		await loadContentPreviews();
-	}
-	catch (cause) {
-		error.value = errorMessage(cause);
-	}
-	finally {
-		busy.value = false;
-	}
+/** Refresh the catalog after the creator has persisted a library. */
+async function created(): Promise<void> {
+	await librariesStore.load();
+	await loadContentPreviews();
 }
 const unsubscribe = liveEvents.subscribe((event) => {
 	if (
@@ -163,15 +119,6 @@ onUnmounted(() => {
 	window.clearTimeout(previewRefreshTimer);
 	unsubscribe();
 });
-useDraftProtection(() => libraryDraftDirty.value);
-onBeforeRouteLeave(async () => !busy.value && (!libraryDraftDirty.value || await requestConfirmation({
-	key: 'discard-new-library',
-	title: 'Discard Unsaved Changes?',
-	message: 'Leave without adding this library?',
-	confirmLabel: 'Discard Changes',
-	cancelLabel: 'Keep Editing',
-	destructive: true,
-})));
 </script>
 <template>
 	<section>
@@ -179,48 +126,12 @@ onBeforeRouteLeave(async () => !busy.value && (!libraryDraftDirty.value || await
 			eyebrow="Media sources"
 			title="Libraries"
 			description="Moirai watches each source, reconciles metadata, and keeps an index ready for scheduling."
-		><button class="button" @click="showForm = !showForm">
+		><button class="button" @click="showForm = true">
 			<Plus :size="18" />
-			{{ showForm ? 'Close' : 'Add Library' }}
+			Add Library
 		</button></PageHeader
 		>
-		<Transition name="moirai-collapse">
-			<form v-if="showForm" class="panel form-grid" @submit.prevent="create">
-				<label
-				><span>Name</span><input v-model="form.name" required autocapitalize="words" placeholder="Cinema archive"
-				/></label>
-				<label
-				><span>Type</span
-				><select v-model="form.typeKey">
-					<option value="movies">Movies</option>
-					<option value="shows">Shows</option>
-					<option value="music-videos">Music videos</option>
-					<option value="other">Other</option>
-				</select></label
-				>
-				<div class="library-source-row span-2">
-					<label
-					><span>Path Moirai scans</span
-					><input v-model="form.sourceConfig.scanRoot" required placeholder="/media/movies"
-					/></label>
-					<label class="check"
-					><input v-model="form.watcherEnabled" type="checkbox" /> Watch for changes</label
-					>
-				</div>
-				<label class="span-2"
-				><span>Path playback engine sees <small>optional</small></span
-				><input v-model="form.sourceConfig.playbackRoot" placeholder="/media/movies"
-				/></label>
-				<label class="span-2"
-				><span>Fallback scan, minutes</span
-				><input v-model.number="form.scanIntervalMinutes" type="number" min="1" max="10080"
-				/><small>Used when live watching is unavailable; healthy watchers receive a daily integrity scan.</small></label>
-				<p v-if="error" class="notice error span-2">{{ error }}</p>
-				<div class="form-actions span-2">
-					<button class="button" :disabled="busy || !libraryFormValid">{{ busy ? 'Adding…' : 'Add and Scan' }}</button>
-				</div>
-			</form>
-		</Transition>
+		<LibraryCreateModal v-if="showForm" @close="showForm = false" @saved="created" />
 		<p v-if="loadError" class="notice error">
 			{{ loadError }}
 			<button class="button ghost" @click="librariesStore.load">Retry</button>

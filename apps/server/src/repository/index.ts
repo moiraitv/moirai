@@ -1,3 +1,7 @@
+import { mediaAirings } from './media-airings.js';
+import { mediaResourceUsage } from './media-resource-usage.js';
+import { resourceUsage } from './resource-usage.js';
+import type { ResourceUsageKind } from '@moirai/shared';
 import { audioMetadata } from './audio-metadata.js';
 import { EncodingProfileRepository } from './encoding-profiles.js';
 import { sql } from 'drizzle-orm';
@@ -79,6 +83,18 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Inspect committed showings without generating new schedule data. */
+	mediaAirings(id: string, page: number, pageSize: number) {
+		return mediaAirings(this.database, id, page, pageSize);
+	}
+
+	/** Inspect authored references or current media membership without loading the scheduling overview. */
+	resourceUsage(kind: ResourceUsageKind, id: string, page: number, pageSize: number) {
+		return kind === 'media'
+			? mediaResourceUsage(this.database, this.scheduling, id, page, pageSize)
+			: resourceUsage(this.database, kind, id, page, pageSize);
+	}
+
 	/** Read indexed audio streams for referenced physical files in bounded batches. */
 	audioMetadata(ids: string[]): Promise<Map<string, unknown>> {
 		return audioMetadata(this.database, ids);

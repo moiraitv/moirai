@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import MarkdownIt from 'markdown-it';
 import { buildReviewChanges, reviewChangesFrontmatter } from './user-docs-review.js';
+import { userDocsIntroductions } from './user-docs-introductions.js';
 import { userDocsTermBadges } from './user-docs-term-badges.js';
 import { reviewHighlights } from './user-docs-highlights.js';
 import { helpTopicIds } from '../apps/web/src/help.js';
@@ -267,7 +268,7 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 /** Render restricted, repository-authored Markdown for the in-app help drawer. */
 function contextualHtml(body: string): string {
 	const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
-	markdown.use(userDocsTermBadges);
+	markdown.use(userDocsTermBadges).use(userDocsIntroductions);
 	markdown.renderer.rules.image = (tokens, index, options, _env, renderer) => {
 		const token = tokens[index]!;
 		const source = token.attrGet('src');
