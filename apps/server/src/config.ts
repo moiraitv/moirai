@@ -20,6 +20,7 @@ export interface AppConfig {
 	trustedProxies: string[];
 	publicUrl: string;
 	managementUrl: string;
+	debug: boolean;
 	logLevel: string;
 	logDir: string;
 	logRetentionDays: number;
@@ -72,6 +73,19 @@ const TRUSTED_PROXY_GROUPS = new Set(['loopback', 'linklocal', 'uniquelocal']);
 /** Resolve a configured relative path from the project root. */
 function resolveFromProjectRoot(value: string): string {
 	return path.resolve(projectRoot, value);
+}
+
+/** Parse the opt-in debug flag without treating nonempty false values as enabled. */
+function debugFromEnvironment(value: string | undefined): boolean {
+	const normalized = value?.trim().toLowerCase() ?? '';
+	if (['', 'false', '0'].includes(normalized)) {
+		return false;
+	}
+	if (['true', '1'].includes(normalized)) {
+		return true;
+	}
+
+	throw new Error('MOIRAI_DEBUG must be true, false, 1, or 0');
 }
 
 /** Parse a positive megabyte setting and convert it to bytes. */
@@ -287,6 +301,7 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 			?? resolveTrustedProxies(process.env.MOIRAI_TRUST_PROXY),
 		publicUrl,
 		managementUrl,
+		debug: overrides.debug ?? debugFromEnvironment(process.env.MOIRAI_DEBUG),
 		logLevel: overrides.logLevel ?? process.env.MOIRAI_LOG_LEVEL ?? 'info',
 		dataDir,
 		logDir: overrides.logDir

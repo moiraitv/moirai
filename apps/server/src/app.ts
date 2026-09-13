@@ -171,6 +171,7 @@ export async function buildApp(
 		config.playbackReadyTimeoutMs,
 		config.playbackStopGraceMs,
 		resourcePressure,
+		config.debug,
 	);
 
 	// Register optional resource consumers in the order they should be shed.

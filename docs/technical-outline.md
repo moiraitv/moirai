@@ -734,15 +734,30 @@ the gap is intentional dead air.
 ### ErsatzTV-Next integration
 
 Moirai owns channel configuration and maps it through a compatibility adapter pinned to ErsatzTV-Next
-revision `4eec042fc847aac3799b1d1ab27a4d20f4984575`. The adapter retains only the channel and playout
+revision `11a9fe8f8f383eab2de83f2173019cde34726830`. The adapter retains only the channel and playout
 schemas used by the integrated worker; vendored files retain upstream MIT attribution.
+Generated playout uses schema `0.0.4`; the worker also accepts existing `0.0.3` documents.
+Deploy the application and engine together. On rollback, stop workers and regenerate playout with
+the restored application before tuning because the previous engine rejects `0.0.4`.
+
+The worker probes HDR10 metadata from containers and, when needed, a bounded first-frame probe
+(with a five-second timeout). Existing settings gain QSV HDR10 tone mapping, legacy Intel capability
+detection, hardware padding/filter fusion, CUDA/libplacebo optimization, and AMF capability detection
+and scaling where supported. Moirai continues to omit probe hints so worker probing remains active.
+
+`MOIRAI_DEBUG` enables engine fallback error cards for all channels after a server restart. It defaults
+to false, accepts trimmed case-insensitive `true`/`false` or `1`/`0`, treats empty values as false, and
+rejects other values at startup. Explicit application configuration overrides the environment.
+This flag is independent of `MOIRAI_LOG_LEVEL` and does not replace managed schedule fallback video.
+Cards can expose file paths and FFmpeg details to viewers; ordinary operation keeps them disabled.
 
 New channels default to Moirai's `Automatic` hardware-acceleration setting. Immediately before
 playback, Moirai runs bounded one-frame FFmpeg encoder probes for the configured codec, bit depth,
 and output dimensions, preferring discrete devices and then platform-integrated backends. The
 verified result is converted to a concrete ErsatzTV-Next acceleration value; if no compatible
-encoder is found, playback receives `None`. Editor predictions use the same server-visible probe and
-five-minute bounded cache. Automatic probes support 8-bit and 10-bit targets through 8K UHD, while
+encoder is found, playback receives `None`. Channel and encoding-profile editor predictions use the same server-visible probe and
+five-minute bounded cache. Read-only profile views also predict Automatic acceleration using the
+server-default FFmpeg; channel predictions retain their channel-specific FFmpeg override. Automatic probes support 8-bit and 10-bit targets through 8K UHD, while
 explicit backend selections remain available for other configurations. Existing channels that store
 `None` are not migrated. Distinct probes share a bounded queue whose eight-second deadline includes
 queue time. Indeterminate results and source-sized outputs are not cached, allowing playback to retry

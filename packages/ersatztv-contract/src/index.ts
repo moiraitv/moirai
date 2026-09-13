@@ -70,12 +70,16 @@ export type EtvCompatibleChannel = Omit<Channel, 'video'> & {
 	};
 };
 
-/** Build and validate ErsatzTV normalization and playout settings for one Moirai channel. */
+/**
+ * Build and validate worker settings, with viewer-visible fallback diagnostics explicitly opt-in.
+ */
 export function toEtvChannelConfig(
 	channel: EtvCompatibleChannel,
 	playoutFolder = './playout',
+	showFallbackError = false,
 ): Record<string, unknown> {
 	const document = {
+		fallback: { show_error: showFallbackError },
 		playout: {
 			folder: playoutFolder,
 			virtual_start: null,

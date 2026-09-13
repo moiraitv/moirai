@@ -11,6 +11,12 @@ contextual: true
 
 Open the dashboard and inspect the playback status. Confirm the channel worker is present in a custom installation. For Docker hardware acceleration, confirm `/dev/dri` is passed through and that the container user belongs to the numeric groups owning the video and render devices. Switch the channel to automatic or software processing to isolate a device problem.
 
+## Diagnose black or silent playback
+
+Check Logs for the failed item and its scheduled time. For temporary on-screen diagnostics, set `MOIRAI_DEBUG=true` in the server environment and restart Moirai. When the playback engine cannot select or play an item, its fallback can show the reason to viewers, including file paths and FFmpeg error details. Set `MOIRAI_DEBUG=false` and restart to turn these cards off. This setting is off by default and is independent of `MOIRAI_LOG_LEVEL`.
+
+Debug cards do not replace your configured fallback video for schedule gaps. They appear only when the engine itself substitutes fallback after a selection or playback failure, or an uncovered interval.
+
 ## An IPTV client cannot connect
 
 Open **![](/icons/calendar-days.svg) Guide** and inspect the published addresses. Replace a loopback `MOIRAI_PUBLIC_URL` with an origin reachable from the client. Check firewall and reverse-proxy rules, then try the M3U URL in a browser on the client device.

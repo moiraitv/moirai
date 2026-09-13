@@ -134,6 +134,7 @@ export class PlaybackEngine {
 		private readonly readyTimeoutMs: number,
 		private readonly stopGraceMs: number,
 		private readonly resourcePressure?: ResourcePressureCoordinator,
+		private readonly showFallbackError = false,
 	) {
 		playout.consumerActive = (id) => this.sessions.has(id) || this.starts.has(id);
 		playout.beforeSubtitleModeChange = async (id, mode) => {
@@ -391,7 +392,7 @@ export class PlaybackEngine {
 		const effectiveChannel = await this.effectiveChannel(channel, true);
 		const session = await this.playout.withChannelConfiguration(channel.id, async () => {
 			effectiveChannel.subtitleMode = this.playout.subtitleMode(channel);
-			const document = toEtvChannelConfig(effectiveChannel, playoutFolder);
+			const document = toEtvChannelConfig(effectiveChannel, playoutFolder, this.showFallbackError);
 			const config = `${JSON.stringify(document)}\n`;
 			const outputFolder = this.outputFolder(channel.id);
 			await rm(outputFolder, { recursive: true, force: true });
@@ -480,7 +481,7 @@ export class PlaybackEngine {
 		}
 
 		const effectiveChannel = await this.effectiveChannel(channel);
-		const document = toEtvChannelConfig(effectiveChannel, this.playout.channelFolder(channel.id));
+		const document = toEtvChannelConfig(effectiveChannel, this.playout.channelFolder(channel.id), this.showFallbackError);
 		const config = `${JSON.stringify(document)}\n`;
 		if (session.configDigest !== this.configDigest(channel, config)) {
 			session.state = 'stale';

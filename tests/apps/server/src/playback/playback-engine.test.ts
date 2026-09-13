@@ -270,3 +270,41 @@ it.each(['configuration', 'spawn'] as const)('coordinates a subtitle mode change
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+it.each([false, true])('keeps startup and unchanged-session fallback diagnostics consistent for debug=%s', async (debug) => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-debug-worker-'));
+	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Debug', video: { accel: null } }), id: randomUUID(), createdAt: '', updatedAt: '' };
+	const repository = { getChannel: async () => channel } as unknown as Repository;
+	const events = { publish: vi.fn() } as LiveEventPublisher;
+	const logger = { error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger;
+	const playout = new PlayoutSynchronizer(repository, root, 'UTC', 60, async () => {}, {} as FallbackFillerStore, events, logger);
+	const engine = new PlaybackEngine(repository, playout, events, logger, {} as HardwareAccelerationResolver, '/engine', root, 'http://localhost', 1000, 1000, undefined, debug);
+	const end = vi.fn();
+	const internals = engine as unknown as {
+		running: boolean;
+		effectiveChannel(): Promise<unknown>;
+		spawnEngine(): Promise<unknown>;
+		launchSession(channel: Channel): Promise<void>;
+		logChildOutput(): void;
+		observeExit(): void;
+		waitUntilReady(session: { resolveReady(): void }): Promise<void>;
+	};
+	internals.running = true;
+	vi.spyOn(internals, 'effectiveChannel').mockImplementation(async () => ({ ...channel }));
+	vi.spyOn(internals, 'spawnEngine').mockResolvedValue({ stdin: { end } });
+	vi.spyOn(internals, 'logChildOutput').mockImplementation(() => {});
+	vi.spyOn(internals, 'observeExit').mockImplementation(() => {});
+	vi.spyOn(internals, 'waitUntilReady').mockImplementation(async (session) => session.resolveReady());
+	try {
+		await internals.launchSession(channel);
+		expect(JSON.parse(end.mock.calls[0]![0])).toMatchObject({ fallback: { show_error: debug } });
+		await engine.handleChannelChange(channel.id);
+		expect(events.publish).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reason: 'stale' }) }));
+		channel.video.width = 640;
+		await engine.handleChannelChange(channel.id);
+		expect(events.publish).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reason: 'stale' }) }));
+	}
+	finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

@@ -498,6 +498,11 @@ test('captures music-video credit templates and verifies draft actions', async (
 });
 
 test('captures encoding profiles and assigns or detaches channel settings', async ({ page }) => {
+	const predictionRequests: Array<{ width: number; height: number; ffmpegPath: string | null }> = [];
+	await page.route('**/api/v1/playback/hardware-acceleration/predict', async (route) => {
+		predictionRequests.push(route.request().postDataJSON());
+		await route.fulfill({ json: { outcome: 'none', accel: null, detail: 'Software processing on this server.' } });
+	});
 	const csrf = await authenticateAdministrator(page);
 	await page.goto('/playback/encoding-profiles');
 	await page.getByRole('button', { name: 'New Profile', exact: true }).click();
@@ -505,6 +510,8 @@ test('captures encoding profiles and assigns or detaches channel settings', asyn
 	await editor.getByLabel('Name', { exact: true }).fill('HD broadcast');
 	await editor.getByLabel('Width', { exact: true }).fill('1280');
 	await editor.getByLabel('Height', { exact: true }).fill('720');
+	await expect(editor.locator('.acceleration-prediction')).toHaveText('None');
+	expect(predictionRequests.at(-1)).toMatchObject({ width: 1280, height: 720, ffmpegPath: null });
 	await capture(page, 'encoding-profile-editor.png');
 	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(editor).toBeHidden();
@@ -572,6 +579,11 @@ test('captures encoding profiles and assigns or detaches channel settings', asyn
 });
 
 test('chooses built-in defaults and protects presets while allowing custom copies', async ({ page }) => {
+	const predictionRequests: Array<{ width: number; height: number; ffmpegPath: string | null }> = [];
+	await page.route('**/api/v1/playback/hardware-acceleration/predict', async (route) => {
+		predictionRequests.push(route.request().postDataJSON());
+		await route.fulfill({ json: { outcome: 'none', accel: null, detail: 'Software processing on this server.' } });
+	});
 	await authenticateAdministrator(page);
 	await page.goto('/playback/encoding-profiles');
 	const selector = page.getByRole('combobox', { name: 'Default for new channels', exact: true });
@@ -590,6 +602,8 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 	await expect(view.getByLabel('Description', { exact: true })).toBeDisabled();
 	await expect(view.getByRole('button', { name: 'Delete Encoding Profile' })).toHaveCount(0);
 	await expect(view.locator('.builtin-badge')).toBeVisible();
+	await expect(view.locator('.acceleration-prediction')).toHaveText('None');
+	expect(predictionRequests.at(-1)).toMatchObject({ width: 1280, height: 720, ffmpegPath: null });
 	await capture(page, 'encoding-profile-view.png');
 	await page.setViewportSize({ width: 390, height: 844 });
 	expect(await view.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);

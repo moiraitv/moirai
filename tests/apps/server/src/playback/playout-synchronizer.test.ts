@@ -1,7 +1,7 @@
 import { channelCreateSchema, type ScheduleGuide } from '@moirai/shared';
 import * as scheduleGuide from '@server/guide/schedule-guide.js';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -199,3 +199,38 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+it('replaces prior-version playout through normal synchronization while preserving fallback content', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-upgrade-'));
+	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Upgrade' }), id: randomUUID(), createdAt: '', updatedAt: '' };
+	const guideValue: ScheduleGuide = { timeZone: 'UTC', startDate: '2026-09-13', requestedDays: 1, days: 1, segmentLimitApplied: false, channels: [] };
+	const synchronizer = new PlayoutSynchronizer(
+		{ getChannel: async () => channel, listPrograms: async () => [] } as unknown as Repository,
+		root,
+		'UTC',
+		60,
+		async () => {},
+		{ resolve: async () => ({ path: '/fallback/custom.mp4', durationMilliseconds: 60_000, hasAudio: true }) } as unknown as FallbackFillerStore,
+		{ publish: vi.fn() } as LiveEventPublisher,
+		{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+	);
+	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue(guideValue);
+	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
+	try {
+		const folder = await synchronizer.syncChannel(channel.id);
+		const file = path.join(folder, (await readdir(folder)).find((name) => name.endsWith('.json'))!);
+		const current = JSON.parse(await readFile(file, 'utf8'));
+		await writeFile(file, JSON.stringify({ ...current, version: 'https://ersatztv.org/playout/version/0.0.3' }));
+
+		await synchronizer.syncChannel(channel.id);
+		const updated = JSON.parse(await readFile(file, 'utf8'));
+		expect(updated.version).toBe('https://ersatztv.org/playout/version/0.0.4');
+		expect(updated.items.length).toBeGreaterThan(0);
+		expect(updated.items).toEqual(current.items);
+		expect(updated.items[0].source.path).toBe('/fallback/custom.mp4');
+	}
+	finally {
+		guide.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+}, 30_000);

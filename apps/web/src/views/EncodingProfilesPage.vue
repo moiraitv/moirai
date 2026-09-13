@@ -15,6 +15,7 @@ import LoadingState from '../components/LoadingState.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
 import EncodingSettingsEditor from '../components/EncodingSettingsEditor.vue';
+import { useHardwareAccelerationPrediction } from '../channel-acceleration';
 import { cloneContractValue } from '../reactive-clone';
 
 /** Present the recommended HD presets before the remaining resolution choices. */
@@ -37,6 +38,17 @@ const isCurrentDefault = computed(() => Boolean(id.value && id.value === selecte
 const nameInput = ref<HTMLInputElement>();
 const encodingInvalid = ref(false);
 const form = reactive({ name: '', description: '', audio: audioNormalizationSchema.parse({}), video: videoNormalizationSchema.parse({}) });
+const { prediction: accelerationPrediction, text: accelerationPredictionText } = useHardwareAccelerationPrediction(
+	() => open.value && form.video.accel === 'automatic' ? {
+		format: form.video.format,
+		bitDepth: form.video.bitDepth,
+		width: form.video.width,
+		height: form.video.height,
+		vaapiDevice: form.video.vaapiDevice,
+		vaapiDriver: form.video.vaapiDriver,
+		ffmpegPath: null,
+	} : null,
+);
 const baseline = ref('');
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const valid = computed(() => encodingProfileCreateSchema.safeParse(form).success);
@@ -206,7 +218,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 						<p v-if="readonlyPreset" class="encoding-profile-info"><Info :size="22" aria-hidden="true" /><span>Built-in presets are read-only. Duplicate this preset to customize its settings.</span></p>
 						<p v-else-if="id" class="encoding-profile-usage-note">Saving changes updates every channel using this profile. Choose Custom on a channel to keep its settings independent.</p>
 						<p v-if="!readonlyPreset && isCurrentDefault">Choose another default before deleting this profile.</p>
-						<EncodingSettingsEditor v-model:audio="form.audio" v-model:video="form.video" :disabled="busy || readonlyPreset" @validation-change="encodingInvalid = $event" />
+						<EncodingSettingsEditor v-model:audio="form.audio" v-model:video="form.video" :disabled="busy || readonlyPreset" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
 						<p v-if="editorError" class="notice error">{{ editorError }}</p>
 					</ResourceUsage>
 				</div>

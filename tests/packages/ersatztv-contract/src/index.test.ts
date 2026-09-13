@@ -105,3 +105,15 @@ it('keeps worker channel configuration unchanged by audio selection preferences'
 	expect(toEtvChannelConfig({ ...configured, audioPreferences: { language: 'fr', title: 'Original' } }))
 		.toEqual(toEtvChannelConfig(configured));
 });
+
+
+it.each([false, true])('validates fallback error cards when enabled=%s', (enabled) => {
+	const document = toEtvChannelConfig(channel(), './playout', enabled);
+	expect(document).toMatchObject({ fallback: { show_error: enabled } });
+	expect(() => validateEtvDocument('channel', document)).not.toThrow();
+});
+
+it('defaults to private fallback diagnostics and emits the current playout version', () => {
+	expect(toEtvChannelConfig(channel())).toMatchObject({ fallback: { show_error: false } });
+	expect(toEtvPlayout([])).toMatchObject({ version: 'https://ersatztv.org/playout/version/0.0.4' });
+});

@@ -182,3 +182,24 @@ describe('integrated playback configuration', () => {
 		]);
 	});
 });
+
+
+describe('debug configuration', () => {
+	it.each([undefined, '', ' ', 'false', ' FALSE ', '0'])('disables debug for %s', (value) => {
+		vi.stubEnv('MOIRAI_DEBUG', value);
+		expect(loadConfig().debug).toBe(false);
+	});
+
+	it.each(['true', ' TRUE ', '1'])('enables debug for %s independently of logging', (value) => {
+		vi.stubEnv('MOIRAI_DEBUG', value);
+		vi.stubEnv('MOIRAI_LOG_LEVEL', 'warn');
+		expect(loadConfig()).toMatchObject({ debug: true, logLevel: 'warn' });
+	});
+
+	it('rejects invalid input unless explicitly overridden', () => {
+		vi.stubEnv('MOIRAI_DEBUG', 'yes');
+		expect(() => loadConfig()).toThrow(/MOIRAI_DEBUG/);
+		expect(loadConfig({ debug: false }).debug).toBe(false);
+		expect(loadConfig({ debug: true }).debug).toBe(true);
+	});
+});

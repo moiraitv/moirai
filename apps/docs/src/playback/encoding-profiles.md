@@ -13,7 +13,7 @@ Expand **Used by** in a saved profile to see channels explicitly linked to it. O
 
 ## Create a profile
 
-Choose **New profile**, give it a distinct name and an optional description of when to use it, and configure its video and audio settings. A profile includes resolution, codecs, bitrates and buffers, scaling, bit depth, hardware acceleration, deinterlacing, audio channels, sample rate, and loudness normalization. Hardware acceleration still requires a compatible playback server. **Automatic** lets Moirai select a supported backend for each channel.
+Choose **New profile**, give it a distinct name, and configure its video and audio settings. A profile includes resolution, codecs, bitrates and buffers, scaling, bit depth, hardware acceleration, deinterlacing, audio channels, sample rate, and loudness normalization. **Automatic** hardware acceleration lets Moirai select a supported backend for each channel. When viewing or editing a profile, the Acceleration field shows a prediction using the server’s default FFmpeg.
 
 ![Encoding profile editor showing reusable video and audio settings](/screenshots/encoding-profile-editor.png)
 

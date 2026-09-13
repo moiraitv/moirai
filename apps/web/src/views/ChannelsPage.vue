@@ -33,10 +33,9 @@ import {
 	type ChannelCreate,
 	type FallbackFillerStatus,
 } from '@moirai/shared';
-import type { HardwareAccelerationPrediction } from '@moirai/shared/api-contracts';
 import { api } from '../api';
 import { requestConfirmation } from '../confirmation';
-import { formatHardwareAccelerationPrediction } from '../channel-acceleration';
+import { useHardwareAccelerationPrediction } from '../channel-acceleration';
 import { channelLogoUrl } from '../channel-logo';
 import { loadChannelLogoImage, renderChannelLogoPng } from '../channel-logo-image';
 import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
@@ -92,11 +91,7 @@ const saving = ref(false);
 const deleting = ref(false);
 const originalFormSnapshot = ref('');
 const formBaseline = ref<ChannelCreate | null>(null);
-const accelerationPrediction = ref<HardwareAccelerationPrediction>();
-const accelerationPredictionLoading = ref(false);
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-let accelerationPredictionTimer: ReturnType<typeof setTimeout> | undefined;
-let accelerationPredictionSequence = 0;
 let fallbackLoadSequence = 0;
 let suppressChannelEventsUntil = 0;
 /** Channel guide row with layout metadata derived for the visible window. */
@@ -159,11 +154,17 @@ const defaults = (): ChannelCreate => ({
 	preferredFilters: [],
 });
 const form = reactive<ChannelCreate>(defaults());
-/** Compact status displayed beneath the Automatic option without changing modal flow. */
-const accelerationPredictionText = computed(() => formatHardwareAccelerationPrediction(
-	accelerationPrediction.value,
-	accelerationPredictionLoading.value,
-));
+const { prediction: accelerationPrediction, text: accelerationPredictionText } = useHardwareAccelerationPrediction(
+	() => showForm.value && form.video.accel === 'automatic' ? {
+		format: form.video.format,
+		bitDepth: form.video.bitDepth,
+		width: form.video.width,
+		height: form.video.height,
+		vaapiDevice: form.video.vaapiDevice,
+		vaapiDriver: form.video.vaapiDriver,
+		ffmpegPath: form.ffmpegPath,
+	} : null,
+);
 const scheduleByChannel = computed(
 	() =>
 		new Map(
@@ -363,54 +364,6 @@ onBeforeRouteLeave(leaveEditor);
 onBeforeRouteUpdate(async (to, from) => (to.query.edit === from.query.edit && to.query.new === from.query.new) || await leaveEditor());
 
 
-
-/** Debounce a server-side prediction and discard responses for superseded form values. */
-function scheduleAccelerationPrediction(): void {
-	if (accelerationPredictionTimer) {
-		clearTimeout(accelerationPredictionTimer);
-		accelerationPredictionTimer = undefined;
-	}
-
-	const sequence = ++accelerationPredictionSequence;
-	accelerationPrediction.value = undefined;
-	accelerationPredictionLoading.value = false;
-	if (!showForm.value || form.video.accel !== 'automatic') {
-		return;
-	}
-
-	accelerationPredictionLoading.value = true;
-	accelerationPredictionTimer = setTimeout(async () => {
-		accelerationPredictionTimer = undefined;
-		try {
-			const prediction = await api.predictHardwareAcceleration({
-				format: form.video.format,
-				bitDepth: form.video.bitDepth,
-				width: form.video.width,
-				height: form.video.height,
-				vaapiDevice: form.video.vaapiDevice,
-				vaapiDriver: form.video.vaapiDriver,
-				ffmpegPath: form.ffmpegPath,
-			});
-			if (sequence === accelerationPredictionSequence) {
-				accelerationPrediction.value = prediction;
-			}
-		}
-		catch {
-			if (sequence === accelerationPredictionSequence) {
-				accelerationPrediction.value = {
-					outcome: 'indeterminate',
-					accel: null,
-					detail: 'The server prediction request failed.',
-				};
-			}
-		}
-		finally {
-			if (sequence === accelerationPredictionSequence) {
-				accelerationPredictionLoading.value = false;
-			}
-		}
-	}, 350);
-}
 
 /** Capture the pointer and starting geometry for a crop move or resize. */
 function startCropInteraction(event: PointerEvent, mode: CropInteraction): void {
@@ -803,21 +756,6 @@ const unsubscribe = liveEvents.subscribe((event) => {
 		}, 180);
 	}
 });
-watch(
-	() => [
-		showForm.value,
-		form.video.accel,
-		form.video.format,
-		form.video.bitDepth,
-		form.video.width,
-		form.video.height,
-		form.video.vaapiDevice,
-		form.video.vaapiDriver,
-		form.ffmpegPath,
-	],
-	scheduleAccelerationPrediction,
-);
-
 /** Resolve editor links against this page's refreshed catalog rather than previously cached data. */
 watch(() => [route.query.edit, route.query.new, editorLinksReady.value], () => {
 	if (showForm.value) {
@@ -842,10 +780,6 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
 	unsubscribe();
-	accelerationPredictionSequence += 1;
-	if (accelerationPredictionTimer) {
-		clearTimeout(accelerationPredictionTimer);
-	}
 	if (liveRefreshTimer) {
 		clearTimeout(liveRefreshTimer);
 	}
