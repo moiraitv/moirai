@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { libraryScanAttention } from '../library-scan-issues';
 import { useCatalogSelection } from '../composables/useCatalogSelection';
 import { useDisclosureState } from '../disclosure-state';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -92,13 +93,8 @@ const reconciliation = ref<LibraryReconciliation>();
 const genres = ref<MediaGenreFacet[]>([]);
 const browse = ref<MediaBrowseResult>();
 const latestScan = computed(() => scans.value[0]);
-const currentScanIssues = computed(() => {
-	if (!library.value?.warningCount) {
-		return [];
-	}
-
-	return scans.value.find((scan) => scan.status !== 'running' && scan.issues.length)?.issues ?? [];
-});
+const scanAttention = computed(() => libraryScanAttention(library.value, scans.value));
+const currentScanIssues = computed(() => scanAttention.value.issues);
 const activeScanId = ref<string>();
 const activeScanProgress = ref<ScanProgress>();
 const showScanIssues = useDisclosureState('library-scan-issues', false);
@@ -1195,11 +1191,11 @@ onUnmounted(() => {
 
 		<div class="library-status-surface">
 			<p v-if="actionError" class="notice error" role="alert">{{ actionError }}</p>
-			<div v-if="library.warningCount > 0" class="reconciliation-banner library-warning-banner" role="alert">
+			<div v-if="scanAttention.count > 0" class="reconciliation-banner library-warning-banner" role="alert">
 				<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
 				<div>
 					<strong>Library scan needs attention</strong>
-					<p>{{ library.warningCount }} scan {{ library.warningCount === 1 ? 'issue requires' : 'issues require' }} review.</p>
+					<p>{{ scanAttention.count }} scan {{ scanAttention.count === 1 ? 'issue requires' : 'issues require' }} review.</p>
 					<Transition name="moirai-collapse">
 						<ul v-if="showScanIssues && currentScanIssues.length" class="library-warning-issues">
 							<li v-for="issue in currentScanIssues" :key="`${issue.code}:${issue.path}:${issue.message}`"><strong>{{ issue.code }}</strong><span>{{ issue.path ?? issue.message }}</span><small v-if="issue.path">{{ issue.message }}</small></li>

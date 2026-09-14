@@ -401,6 +401,10 @@ For a large removal, 30-minute targeted checks restore any suspect item whose ph
 present without traversing the source, refreshing metadata, or probing media. Items that remain
 absent still require explicit approval and are never deleted by these heal-only checks.
 
+Confirming removals retires the current scan's removal warning without clearing unrelated issues.
+The library attention banner omits resolved removal diagnostics, including stale alerts left by
+older versions; historical scan issues remain unchanged.
+
 Candidate roots are inspected without mixing their entries into the accepted index. Acceptance is
 bound to the reviewed root and manifest, so a stale confirmation cannot approve different content.
 A harmless remount at the same canonical root may change device or inode diagnostics without

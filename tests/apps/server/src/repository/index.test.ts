@@ -631,7 +631,9 @@ describe('Repository scan reconciliation', () => {
 		});
 	});
 
-	it('requires explicit reconciliation for an empty populated source', async () => {
+	it.each(['none', 'same-scan', 'newer-failure'] as const)('clears approved removal warnings while preserving %s unrelated issues', async (otherIssue) => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-09-14T12:00:00Z'));
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-empty-reconciliation-'));
 		const config = loadConfig({
 			dataDir: root,
@@ -655,8 +657,10 @@ describe('Repository scan reconciliation', () => {
 		});
 		const initial = await repository.beginScan(library.id, 'initial');
 		await repository.reconcileScan(initial, [], [item(1)], [], true);
+		vi.setSystemTime(new Date('2026-09-14T12:01:00Z'));
 		const empty = await repository.beginScan(library.id, 'periodic');
-		const result = await repository.reconcileScan(empty, [], [], [], true);
+		const unrelated = { code: 'metadata_warning', message: 'Metadata needs review.', path: null, severity: 'warning' as const };
+		const result = await repository.reconcileScan(empty, [], [], otherIssue === 'same-scan' ? [unrelated] : [], true);
 		expect(result).toMatchObject({ status: 'partial', removedCount: 0 });
 		expect(result.issues).toContainEqual(expect.objectContaining({
 			message: '1 missing item requires explicit reconciliation.',
@@ -666,10 +670,19 @@ describe('Repository scan reconciliation', () => {
 			status: 'removal-approval-required',
 			pendingRemovalCount: 1,
 		});
+		if (otherIssue === 'newer-failure') {
+			vi.setSystemTime(new Date('2026-09-14T12:02:00Z'));
+			await repository.failScan(await repository.beginScan(library.id, 'manual'), new Error('Source scan failed'));
+		}
+		expect(await repository.confirmLibraryRemovals(library.id, randomUUID())).toBe(false);
 		expect(await repository.confirmLibraryRemovals(library.id, reconciliation!.revision!)).toBe(
 			true,
 		);
-		expect(await repository.getLibrary(library.id)).toMatchObject({ itemCount: 0 });
+		expect(await repository.getLibrary(library.id)).toMatchObject({
+			itemCount: 0, pendingRemovalCount: 0, warningCount: otherIssue === 'none' ? 0 : 1,
+		});
+		expect(await repository.getLibraryReconciliation(library.id)).toMatchObject({ status: 'idle' });
+		expect((await repository.listScans(library.id)).find(scan => scan.id === empty.id)?.issues).toEqual(result.issues);
 	});
 
 	it('stages a changed canonical source root without mixing candidate media into the index', async () => {

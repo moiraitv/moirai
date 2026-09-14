@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import type {
 	Library,
 	LibraryReconciliation,
@@ -9,6 +9,7 @@ import type {
 } from '@moirai/shared';
 import {
 	countLabel,
+	isRemovalScanIssue,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 } from '@moirai/shared';
@@ -878,7 +879,7 @@ export abstract class ScanRepository {
 		return result;
 	}
 
-	/** Apply operator-approved tombstones after validating their revision. */
+	/** Confirm current tombstones and clear their active warning while preserving historical scan issues. */
 	async confirmLibraryRemovals(libraryId: string, revision: string): Promise<boolean> {
 		// Reject stale confirmations so a newer scan cannot be reconciled accidentally.
 		const [state] = await this.db
@@ -895,6 +896,14 @@ export abstract class ScanRepository {
 		) {
 			return false;
 		}
+
+		// Only retire removal diagnostics from the current scan; newer failures must remain visible.
+		const [currentScan] = await this.db.select({ issues: scanRuns.issues })
+			.from(scanRuns)
+			.where(and(eq(scanRuns.libraryId, libraryId), ne(scanRuns.status, 'running')))
+			.orderBy(desc(scanRuns.startedAt))
+			.limit(1);
+		const resolvedWarnings = currentScan ? currentScan.issues.filter(isRemovalScanIssue).length : 1;
 
 		// Remove confirmed media, prune empty hierarchy rows, and clear reconciliation state.
 		const timestamp = currentTimestamp();
@@ -919,6 +928,7 @@ export abstract class ScanRepository {
 					reconciliationStatus: 'idle',
 					reconciliationRevision: null,
 					pendingRemovalCount: 0,
+					warningCount: sql`max(0, ${libraries.warningCount} - ${resolvedWarnings})`,
 					lastIndexedChangeAt: timestamp,
 					updatedAt: timestamp,
 				})

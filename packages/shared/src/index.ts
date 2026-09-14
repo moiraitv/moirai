@@ -18,6 +18,7 @@ export * from './normalization.js';
 export * from './catalog.js';
 export * from './catalog-sort.js';
 export * from './availability.js';
+export * from './scan-issues.js';
 
 /** Format a numeric count with the matching singular or plural noun. */
 export function countLabel(count: number, singular: string, plural = `${singular}s`): string {
