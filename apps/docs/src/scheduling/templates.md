@@ -38,6 +38,8 @@ In a saved template, **Used by** lists channel schedules that assign it as a bas
 
 A ![](/icons/calendar-range.svg) Template divides a nominal day into slots. Each slot starts at an authored time and normally uses one ![](/icons/list-video.svg) Program. ![](/icons/tv-minimal-play.svg) Channel Schedules can reuse the same ![](/icons/calendar-range.svg) Template on many dates or layers.
 
+The Templates list is alphabetical by name, ignoring punctuation and leading “A”, “An”, or “The”, just like Programs and media titles.
+
 ![The templates catalog](/screenshots/templates.png)
 
 ## Create a Template and add slots

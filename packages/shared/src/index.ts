@@ -15,6 +15,7 @@ export * from './scheduling.js';
 export * from './guide.js';
 export * from './normalization.js';
 export * from './catalog.js';
+export * from './catalog-sort.js';
 export * from './availability.js';
 
 /** Format a numeric count with the matching singular or plural noun. */

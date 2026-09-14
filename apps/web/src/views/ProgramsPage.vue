@@ -4,7 +4,7 @@ import {
 	ChevronLeft, ChevronRight, FileText,
 	Layers3, Lightbulb, ListOrdered, Plus, Search, Zap,
 } from '@lucide/vue';
-import type { SchedulingProgram } from '@moirai/shared';
+import { catalogSortTitle, type SchedulingProgram } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
@@ -52,7 +52,8 @@ const filteredPrograms = computed(() => {
 
 		const source = statuses.value.get(program.id)?.sourceLabel ?? '';
 		return !search || `${program.name} ${source}`.toLocaleLowerCase().includes(search);
-	}).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+	}).sort((left, right) =>
+		catalogSortTitle(left.name).localeCompare(catalogSortTitle(right.name), 'en-US', { sensitivity: 'base' }));
 });
 const programTotalPages = computed(() => Math.max(1, Math.ceil(filteredPrograms.value.length / programPageSize.value)));
 const programPage = computed(() => Math.min(requestedProgramPage.value, programTotalPages.value));

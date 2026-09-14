@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, Search } from '@lucide/vue';
-import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
+import { catalogSortTitle, SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import { templateSlotStyle } from '../channel-schedule-display';
@@ -53,7 +53,8 @@ const filteredTemplates = computed(() => {
 		}
 
 		return true;
-	}).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+	}).sort((left, right) =>
+		catalogSortTitle(left.name).localeCompare(catalogSortTitle(right.name), 'en-US', { sensitivity: 'base' }));
 });
 const templateTotalPages = computed(() => Math.max(1, Math.ceil(filteredTemplates.value.length / templatePageSize.value)));
 const templatePage = computed(() => Math.min(requestedTemplatePage.value, templateTotalPages.value));

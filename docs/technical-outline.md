@@ -539,7 +539,9 @@ channel priority by day, and falls back to normal selection rather than creating
 candidate conflicts. Already committed guide entries are never rewritten solely to remove a
 collision.
 
-The Programs catalog is searchable and filterable by content or sequence type. Content rows expose
+The Programs catalog is searchable and filterable by content or sequence type. It sorts names
+alphabetically using media title normalization, ignoring punctuation and leading A, An, or The.
+Content rows expose
 a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows
 show their authored child-program entries. Preview data is included in the scheduling status contract
 without exposing playback paths or the full scheduling catalog. A program's type, content-source
@@ -564,6 +566,9 @@ Overlapping selections are deduplicated, and sequential episodes are ordered by 
 metadata. Missing references remain authored so they can recover later.
 
 ### Templates and channel layers
+
+The Templates catalog sorts names alphabetically using the same media title normalization as
+Programs, ignoring punctuation and leading A, An, or The.
 
 A template describes one nominal local day. Slots allocate time to programs, while explicit
 boundaries describe how adjacent slots resolve against real media durations.

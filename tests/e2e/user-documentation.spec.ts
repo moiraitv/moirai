@@ -127,6 +127,61 @@ test('captures Programs', async ({ page, documentationServer }) => {
 	await capture(page, 'program-sequence-create.png');
 
 });
+test('sorts Programs by name ignoring leading articles and punctuation', async ({ page, documentationServer }) => {
+	const { libraryId, mediaIds, requestHeaders } = await seedLibrary(page, documentationServer.directory);
+	for (const name of ['There Sort', 'A Quiet Sort', "The 'Burbs Sort", 'banana Sort', 'An Education Sort']) {
+		const response = await page.request.post('/api/v1/programs', {
+			headers: requestHeaders,
+			data: {
+				name,
+				config: {
+					type: 'content',
+					source: { type: 'collection', libraryId, itemIds: mediaIds },
+					strategy: { type: 'sequential' },
+				},
+			},
+		});
+		expect(response.ok(), await response.text()).toBe(true);
+	}
+
+	await page.goto('/schedules/programs');
+	await expect(page.locator('.program-row-heading > div > a')).toHaveText([
+		'banana Sort', "The 'Burbs Sort", 'An Education Sort', 'A Quiet Sort', 'There Sort',
+	]);
+	await page.getByRole('searchbox', { name: 'Search programs' }).fill('Sort');
+	await expect(page.locator('.program-row-heading > div > a')).toHaveText([
+		'banana Sort', "The 'Burbs Sort", 'An Education Sort', 'A Quiet Sort', 'There Sort',
+	]);
+});
+
+test('sorts Templates by name ignoring leading articles and punctuation', async ({ page, documentationServer }) => {
+	const { program, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	for (const name of ['There Sort', 'A Quiet Sort', "The 'Burbs Sort", 'banana Sort', 'An Education Sort']) {
+		const slotId = randomUUID();
+		const response = await page.request.post('/api/v1/schedule-templates', {
+			headers: requestHeaders,
+			data: {
+				name,
+				slots: [{ id: slotId, startSeconds: 0, programId: program.id }],
+				boundaries: [{
+					id: randomUUID(), leftSlotId: slotId, rightSlotId: slotId,
+					targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard',
+				}],
+			},
+		});
+		expect(response.ok(), await response.text()).toBe(true);
+	}
+
+	await page.goto('/schedules/templates');
+	await expect(page.locator('.template-row-identity > a')).toHaveText([
+		'banana Sort', "The 'Burbs Sort", 'An Education Sort', 'Evening Cinema Day', 'A Quiet Sort', 'There Sort',
+	]);
+	await page.getByRole('searchbox', { name: 'Search templates' }).fill('Sort');
+	await expect(page.locator('.template-row-identity > a')).toHaveText([
+		'banana Sort', "The 'Burbs Sort", 'An Education Sort', 'A Quiet Sort', 'There Sort',
+	]);
+});
+
 test('captures Templates', async ({ page, documentationServer }) => {
 	const { sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/templates');
