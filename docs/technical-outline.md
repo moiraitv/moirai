@@ -821,7 +821,11 @@ pipeline. It also retains at most 16 recently active client identities per share
 using the direct address and bounded User-Agent visible to Moirai. Client observations expire after
 the worker's 90-second heartbeat window and are never persisted. For active workers, one additional
 batched timeline query identifies the committed item occupying the current wall-clock position and
-uses its captured artwork reference. The Status page shows that poster, advances the item's position
+uses its captured artwork reference. Now-playing titles include series and episode coordinates for
+shows and artist credits for music videos. New media snapshots retain artist credits; older music
+snapshots fall back to a catalog join within the same query, without rewriting committed timelines.
+Missing metadata is omitted, and movie titles retain their existing presentation.
+The Status page shows that poster, advances the item's position
 locally, refreshes at its finish boundary, follows playback events, and periodically reads the
 non-cacheable status resource so session starts and stops recover even when a live event connection
 is interrupted.

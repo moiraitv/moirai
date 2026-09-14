@@ -242,6 +242,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						seasonNumber: mediaItems.seasonNumber,
 						episodeNumber: mediaItems.episodeNumber,
 						episodeEndNumber: mediaItems.episodeEndNumber,
+						artists: mediaItems.artists,
 						trackNumber: mediaItems.trackNumber,
 						discNumber: mediaItems.discNumber,
 						multipartStatus: mediaItems.multipartStatus,
@@ -364,6 +365,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					seasonNumber: item.seasonNumber,
 					episodeNumber: item.episodeNumber,
 					episodeEndNumber: item.episodeEndNumber,
+					artists: item.artists,
 					trackNumber: item.trackNumber,
 					discNumber: item.discNumber,
 					multipartStatus: item.multipartStatus,
@@ -508,6 +510,28 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				applyAfter: row.applyAfter,
 				lastError: row.lastError,
 			}));
+	}
+
+	/** Read current programming in one query, filling artist credits absent from older snapshots. */
+	async listCurrentPlaybackSegments(at: string): Promise<MaterializedSegmentRecord[]> {
+		const rows = await this.db
+			.select({ segment: materializedTimelineSegments, artists: mediaItems.artists })
+			.from(materializedTimelineSegments)
+			.leftJoin(mediaItems, and(
+				eq(materializedTimelineSegments.mediaItemId, mediaItems.id),
+				eq(mediaItems.kind, 'music-video'),
+			))
+			.where(and(
+				lte(materializedTimelineSegments.startsAt, at),
+				gt(materializedTimelineSegments.finishesAt, at),
+			));
+		return rows.map((row) => {
+			const record = materializedSegmentRecord(row.segment);
+			if (record.mediaSnapshot?.kind === 'music-video' && record.mediaSnapshot.artists === undefined) {
+				record.mediaSnapshot = { ...record.mediaSnapshot, artists: row.artists ?? [] };
+			}
+			return record;
+		});
 	}
 
 	/** Read a committed range in one query; rows retain metadata after catalog deletion. */

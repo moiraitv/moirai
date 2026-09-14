@@ -13,7 +13,6 @@ import type {
 	ChannelSessionStatus,
 	PlaybackSessionAcceleration,
 	PlaybackEngineStatus,
-	PlaybackNowPlayingStatus,
 	PlaybackSettings,
 } from '@moirai/shared';
 import type {
@@ -23,7 +22,7 @@ import type {
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import type { PlayoutSynchronizer } from './playout-synchronizer.js';
 import type { Repository } from '../repository/index.js';
-import type { MaterializedSegmentRecord } from '../repository/contracts.js';
+import { nowPlayingStatus } from './now-playing-status.js';
 import type { ResourcePressureCoordinator } from '../operations/resource-pressure.js';
 import { currentTimestamp } from '../time.js';
 import type { HardwareAccelerationResolver } from './hardware-acceleration.js';
@@ -88,22 +87,6 @@ function pendingAcceleration(channel: Channel): PlaybackSessionAcceleration {
 	return channel.video.accel === 'automatic'
 		? 'pending'
 		: channel.video.accel ?? 'none';
-}
-
-/** Reduce one committed current segment to the safe fields required by playback status. */
-function nowPlayingStatus(
-	record: MaterializedSegmentRecord | undefined,
-): PlaybackNowPlayingStatus | null {
-	if (!record) {
-		return null;
-	}
-
-	return {
-		title: record.segment.title,
-		artworkUrl: record.mediaSnapshot?.artworkUrl ?? null,
-		startedAt: record.segment.start,
-		finishesAt: record.segment.finish,
-	};
 }
 
 /**
@@ -189,9 +172,8 @@ export class PlaybackEngine {
 	async status(): Promise<PlaybackEngineStatus> {
 		// Load capacity, channel labels, and current committed programming in bounded queries.
 		const statusAt = currentTimestamp();
-		const statusRangeEnd = new Date(Date.parse(statusAt) + 1).toISOString();
 		const currentProgramming = this.sessions.size > 0
-			? this.repository.listMaterializedTimelineSegments(statusAt, statusRangeEnd)
+			? this.repository.listCurrentPlaybackSegments(statusAt)
 			: Promise.resolve([]);
 		const [settings, channels, currentSegments] = await Promise.all([
 			this.repository.getPlaybackSettings(),

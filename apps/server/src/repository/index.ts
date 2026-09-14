@@ -435,6 +435,11 @@ export class Repository extends LibraryRepository {
 		return this.scheduling.listTimelineMaterializations();
 	}
 
+	/** Read current playback metadata, including catalog artist credits for legacy snapshots. */
+	async listCurrentPlaybackSegments(at: string): Promise<MaterializedSegmentRecord[]> {
+		return this.scheduling.listCurrentPlaybackSegments(at);
+	}
+
 	/** Read committed timeline segments overlapping a time range. */
 	async listMaterializedTimelineSegments(
 		rangeStart: string,

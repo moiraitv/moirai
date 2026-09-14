@@ -866,6 +866,8 @@ export interface SchedulableMedia {
 	seasonNumber: number | null;
 	episodeNumber: number | null;
 	episodeEndNumber?: number | null;
+	/** Artist credits captured for music-video playback labels. */
+	artists?: string[];
 	trackNumber?: number | null;
 	discNumber?: number | null;
 	multipartStatus?: 'none' | 'complete' | 'incomplete' | 'ambiguous';

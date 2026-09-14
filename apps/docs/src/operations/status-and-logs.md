@@ -13,6 +13,8 @@ Select a program or template conflict to open the affected resource. If the conf
 
 ![The Moirai status dashboard](/screenshots/dashboard.png)
 
+**Now playing** adapts to the current content: movies show their title; shows include the show name, season and episode numbers, and episode name; music videos include artist credits and the song name. Missing metadata is omitted.
+
 An active channel shows connected playback work and can be restarted from its action menu. Restarting interrupts the current stream, so use it only when viewers can tolerate a reconnect.
 
 The **Logs** page presents retained structured server activity. Filter by level or search for the channel, library, request, or error involved. Open an entry for its timestamp and structured context.
