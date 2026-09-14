@@ -37,6 +37,11 @@ test('captures setup and authentication', async ({ page }) => {
 test('captures libraries and scanning', async ({ page, documentationServer }) => {
 	const { libraryId, mediaRoot } = await seedLibrary(page, documentationServer.directory, true);
 	await capture(page, 'library-catalog.png');
+	await page.goto(`/libraries/${libraryId}?q=Drama`);
+	await expect(page.locator('.media-card-match').first()).toContainText('Genre');
+	await capture(page, 'library-search.png');
+	await page.goto(`/libraries/${libraryId}`);
+	await expect(page.getByRole('link', { name: /Afterlight Station/ }).first()).toBeVisible();
 	await page.getByRole('button', { name: 'Select items', exact: true }).click();
 	await page.getByRole('button', { name: 'Select Afterlight Station', exact: true }).click();
 	await page.getByRole('button', { name: 'Select Checkout Please', exact: true }).click();

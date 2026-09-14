@@ -238,7 +238,9 @@ const sortLabel = computed(() => {
 const activeFilterCount = computed(
 	() =>
 		[
-			queryString('q'),
+			queryString('name'),
+			queryString('artist'),
+			queryString('album'),
 			queryString('releaseFrom') || queryString('releaseTo'),
 			queryString('minimumRating'),
 			queryString('minimumUserRating'),
@@ -412,7 +414,10 @@ function currentMediaQuery(): MediaQuery {
 		pageSize: 100,
 		sort: sort.value,
 		direction: direction.value,
-		name: queryString('q') || undefined,
+		search: queryString('q') || undefined,
+		name: queryString('name') || undefined,
+		artist: queryString('artist') || undefined,
+		album: queryString('album') || undefined,
 		releaseYearFrom: releaseFrom || undefined,
 		releaseYearTo: releaseTo || undefined,
 		minimumRating: queryString('minimumRating') ? minimumRating : undefined,
@@ -943,7 +948,9 @@ async function jump(index: number): Promise<void> {
 /** Seed the filter draft from route state before opening the filter dialog. */
 function openFilters(): void {
 	filterModalInstance.value += 1;
-	filterDraft.name = queryString('q');
+	filterDraft.name = queryString('name');
+	filterDraft.artist = queryString('artist');
+	filterDraft.album = queryString('album');
 	filterDraft.releaseFrom = queryString('releaseFrom');
 	filterDraft.releaseTo = queryString('releaseTo');
 	filterDraft.minimumRating = queryString('minimumRating');
@@ -961,9 +968,10 @@ function openFilters(): void {
 /** Write the filter draft into route state and return to the first page. */
 async function applyFilters(draft: LibraryFilterDraft): Promise<void> {
 	showFilter.value = false;
-	searchText.value = draft.name;
 	await navigate({
-		q: draft.name || undefined,
+		name: draft.name || undefined,
+		artist: draft.artist || undefined,
+		album: draft.album || undefined,
 		releaseFrom: draft.releaseFrom || undefined,
 		releaseTo: draft.releaseTo || undefined,
 		minimumRating: draft.minimumRating || undefined,
@@ -1182,7 +1190,7 @@ onUnmounted(() => {
 					<input
 						ref="searchInput"
 						v-model="searchText"
-						:placeholder="`Search ${typeLabel.toLowerCase()}…`"
+						:placeholder="library.typeKey === 'music-videos' ? 'Search title, plot, artist, album, genre…' : 'Search title, plot, genre, actor, director…'"
 					/>
 					<kbd>⌘ K</kbd>
 				</label>
@@ -1405,7 +1413,7 @@ onUnmounted(() => {
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
 		<LibrarySettingsModal v-if="showSettings" :library="library" @close="showSettings = false" @saved="finishSettings" @deleted="finishDeletion" />
-		<LibraryFilterModal v-if="showFilter" :key="filterModalInstance" :library-id="id" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
+		<LibraryFilterModal v-if="showFilter" :key="filterModalInstance" :library-id="id" :library-type="library.typeKey" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
 		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />
 		<TransientToast v-if="message" :message="message" @close="message = ''" />

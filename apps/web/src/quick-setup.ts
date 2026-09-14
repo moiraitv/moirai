@@ -145,6 +145,8 @@ export function quickSourceSummary(source: QuickChannelSetupCreate['source']): s
 			...source.excludedGenres,
 			source.actor,
 			source.director,
+			source.artist ?? '',
+			source.album ?? '',
 		].filter((value) => value !== '' && value !== null).length;
 		const order = source.sort.type === 'name'
 			? 'Title / episode'

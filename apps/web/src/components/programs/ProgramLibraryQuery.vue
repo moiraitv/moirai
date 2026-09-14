@@ -149,6 +149,7 @@ onMounted(() => void loadPreview());
 			v-model="filter"
 			v-model:sort="sort"
 			v-model:item-limit="itemLimit"
+			:library-type="libraryType"
 			:library-id="libraryId"
 			:genres="genres"
 			:loading="props.loading"

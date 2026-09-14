@@ -327,6 +327,7 @@ onMounted(() => {
 					v-model="draft.filter"
 					v-model:sort="draft.querySort"
 					v-model:item-limit="draft.queryItemLimit"
+					:library-type="scenario"
 					:library-id="libraryId"
 					:genres="genres"
 					:loading="loading"

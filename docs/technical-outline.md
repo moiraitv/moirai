@@ -486,6 +486,18 @@ A program separates content eligibility from selection behavior. Content sources
 - a library query;
 - a counted, repeating sequence of other programs.
 
+Library search uses a separate optional `search` parameter; the existing `name` filter remains
+title-only. Catalog and source-picker item searches share literal substring predicates for titles,
+plots/descriptions, genres, normalized people, hierarchy labels, music artist credits, and album metadata. Search
+results carry optional match reasons, resolved in page-bounded batches only while searching;
+cards share the same formatter and virtualized rows account for the extra explanation line.
+Recursive Add All selection applies the same search and filters as browsing. Music-video Artist
+and Album filters are shared by Library, Programs, and Quick Setup and evaluated against the same
+credits and hierarchy labels in SQL and scheduling. Music matching shares Unicode lowercase
+conversion across SQL, explanations, and scheduling, preserving accents and literal punctuation.
+Absent filters preserve saved selection state;
+these additions need no database migration or rescan.
+
 Library catalog pages can add one page-local selection or every recursively matching filtered item
 to a selected-items program. The same action is available from media details. A destination can be
 an existing selected-items program for that library or a newly named program with sequential,

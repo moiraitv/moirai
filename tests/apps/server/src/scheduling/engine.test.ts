@@ -175,6 +175,22 @@ function primaryTitles(result: ReturnType<typeof generateTimeline>, slotIndex = 
 }
 
 describe('schedule timeline engine', () => {
+	it('schedules only music matching both artist and album filters', () => {
+		const query = program(10, {
+			type: 'content',
+			source: { type: 'library-query', libraryId: uuid(900), kinds: [], genres: [], artist: 'guest', album: 'live' },
+			strategy: { type: 'sequential' },
+		});
+		const items = [
+			media(1, 3600, { artists: ['Main', 'Guest'], albumNames: ['Live Sessions'] }),
+			media(2, 3600, { artists: ['Guest'], albumNames: ['Studio'] }),
+			media(3, 3600, { artists: ['Other'], albumNames: ['Live Sessions'] }),
+			media(4, 3600),
+		];
+		const daily = template([{ programId: query.id, startSeconds: 0 }]);
+		expect(new Set(primaryTitles(generateTimeline(input([query], items, daily))))).toEqual(new Set(['Item 1']));
+	});
+
 	it.each(['unavailable', 'unmeasured'] as const)(
 		'does not replace an %s limited query match with an item outside the preview',
 		(reason) => {

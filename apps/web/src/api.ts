@@ -109,6 +109,9 @@ export interface MediaQuery {
 	sort: MediaSort;
 	direction: 'asc' | 'desc';
 	name?: string | undefined;
+	search?: string | undefined;
+	artist?: string | undefined;
+	album?: string | undefined;
 	releaseYearFrom?: number | undefined;
 	releaseYearTo?: number | undefined;
 	minimumRating?: number | undefined;

@@ -13,6 +13,7 @@ import type {
 } from '@moirai/shared';
 import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
+import { addSourceMatch, escapeLike, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
 import type {
 	MediaBrowseQuery,
@@ -46,26 +47,6 @@ interface FilteredItemScope {
 	params: Array<string | number>;
 }
 
-/** Escape user text before placing it inside a SQL `LIKE` pattern. */
-function escapeLike(value: string): string {
-	return value.replace(/[\\%_]/g, '\\$&');
-}
-
-/** Record one deduplicated reason why a catalog source matched the current search. */
-function addSourceMatch(
-	matches: Map<string, MediaSourceMatch[]>,
-	id: string,
-	match: MediaSourceMatch,
-): void {
-	const current = matches.get(id) ?? [];
-	if (
-		!current.some((candidate) => candidate.field === match.field && candidate.label === match.label)
-	) {
-		current.push(match);
-		matches.set(id, current);
-	}
-}
-
 /**
  * Provide indexed catalog browsing, lookup, and artwork-owner queries. This repository translates
  * persistent catalog rows into stable hierarchy, search, detail, and source-picker views while
@@ -93,6 +74,19 @@ export class MediaCatalogRepository {
 			scopeParams.push(query.parentId);
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
 		}
+		if (query.search) {
+			const search = itemSearchPredicate(query.search);
+			conditions.push(search.sql);
+			conditionParams.push(...search.params);
+		}
+		for (const field of ['artist', 'album'] as const) {
+			if (query[field]) {
+				const filter = musicFieldPredicate(field, query[field]);
+				conditions.push(filter.sql);
+				conditionParams.push(...filter.params);
+			}
+		}
+
 		if (query.name) {
 			conditions.push("i.title LIKE ? ESCAPE '\\' COLLATE NOCASE");
 			conditionParams.push(`%${escapeLike(query.name)}%`);
@@ -186,6 +180,9 @@ export class MediaCatalogRepository {
 		// Preserve hierarchy only for the unfiltered title view.
 		const hasFilters = Boolean(
 			query.name
+			|| query.search
+			|| query.artist
+			|| query.album
 			|| query.actor
 			|| query.director
 			|| query.releaseYearFrom !== null
@@ -248,7 +245,9 @@ export class MediaCatalogRepository {
       i.fingerprint, i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
       i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt`;
 		const direction = query.direction.toUpperCase();
-		const join = query.sort === 'genre' ? 'JOIN media_item_genres pg ON pg.item_id = i.id' : '';
+		const join = (query.sort === 'genre' ? 'JOIN media_item_genres pg ON pg.item_id = i.id ' : '')
+			+ (query.search ? 'LEFT JOIN media_groups g ON g.id = i.group_id LEFT JOIN media_groups parent ON parent.id = g.parent_id' : '');
+		const searchColumns = query.search ? ', g.title AS groupTitle, g.kind AS groupKind, parent.title AS parentTitle, parent.kind AS parentKind' : '';
 		const sectionColumns
 			= query.sort === 'genre'
 				? ', pg.genre_key AS sectionKey, pg.genre_name AS sectionLabel'
@@ -262,9 +261,14 @@ export class MediaCatalogRepository {
 		const offset = (query.page - 1) * query.pageSize;
 		const rows = this.db.$client
 			.prepare(
-				`${scopeCte}SELECT ${itemColumns}${sectionColumns} FROM media_items i ${join} WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
+				`${scopeCte}SELECT ${itemColumns}${sectionColumns}${searchColumns} FROM media_items i ${join} WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
 			)
-			.all(...allParams, query.pageSize, offset) as RawItemRow[];
+			.all(...allParams, query.pageSize, offset) as Array<RawItemRow & { groupTitle: string | null; groupKind: MediaGroup['kind'] | null; parentTitle: string | null; parentKind: MediaGroup['kind'] | null }>;
+
+		const patterns = itemSearchPredicate(query.search ?? '');
+		const matches = query.search
+			? itemSourceMatches(this.db, rows, patterns.rawPattern, patterns.normalizedPattern, patterns.genrePattern)
+			: null;
 
 		// Attach section keys used by scroll-aware sub-navigation in the SPA.
 		const items = rows.map(mappedItem);
@@ -280,6 +284,7 @@ export class MediaCatalogRepository {
 			sectionLabel: rows[index]!.sectionLabel ?? null,
 			item,
 			group: null,
+			...(matches ? { matches: matches.get(item.id) ?? [] } : {}),
 		}));
 		return {
 			entries,
@@ -495,28 +500,9 @@ export class MediaCatalogRepository {
 		if (query.parentId) {
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
 		}
-		conditions.push(`(
-      i.title LIKE ? ESCAPE '\\' COLLATE NOCASE
-      OR EXISTS (
-        SELECT 1 FROM media_item_genres smg
-        WHERE smg.item_id = i.id
-          AND (smg.genre_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR smg.genre_key LIKE ? ESCAPE '\\' COLLATE NOCASE)
-      )
-      OR EXISTS (
-        SELECT 1 FROM media_item_people smp
-        WHERE smp.item_id = i.id AND smp.normalized_name LIKE ? ESCAPE '\\'
-      )
-      OR g.title LIKE ? ESCAPE '\\' COLLATE NOCASE
-      OR parent.title LIKE ? ESCAPE '\\' COLLATE NOCASE
-    )`);
-		conditionParams.push(
-			rawPattern,
-			rawPattern,
-			genrePattern,
-			normalizedPattern,
-			rawPattern,
-			rawPattern,
-		);
+		const search = itemSearchPredicate(query.search);
+		conditions.push(search.sql);
+		conditionParams.push(...search.params);
 		const where = conditions.join(' AND ');
 		const allParams = [...scopeParams, ...conditionParams];
 		const joins
@@ -558,7 +544,7 @@ export class MediaCatalogRepository {
 		>;
 
 		// Resolve and attach the fields that caused each item to match.
-		const matches = this.itemSourceMatches(rows, rawPattern, normalizedPattern, genrePattern);
+		const matches = itemSourceMatches(this.db, rows, rawPattern, normalizedPattern, genrePattern);
 		const entries = rows.map((row) => {
 			const item = mappedItem(row);
 			return {
@@ -583,71 +569,6 @@ export class MediaCatalogRepository {
 		};
 	}
 
-	/** Report whether item source matches. */
-	private itemSourceMatches(
-		rows: Array<
-			RawItemRow & {
-				groupTitle: string | null;
-				groupKind: MediaGroup['kind'] | null;
-				parentTitle: string | null;
-				parentKind: MediaGroup['kind'] | null;
-			}
-		>,
-		rawPattern: string,
-		normalizedPattern: string,
-		genrePattern: string,
-	): Map<string, MediaSourceMatch[]> {
-		const matches = new Map<string, MediaSourceMatch[]>();
-		const rawSearch = rawPattern
-			.slice(1, -1)
-			.replace(/\\([\\%_])/g, '$1')
-			.toLocaleLowerCase();
-		for (const row of rows) {
-			if (row.title.toLocaleLowerCase().includes(rawSearch)) {
-				addSourceMatch(matches, row.id, { field: 'title', label: row.title });
-			}
-			for (const [label, kind] of [
-				[row.groupTitle, row.groupKind],
-				[row.parentTitle, row.parentKind],
-			] as const) {
-				if (label?.toLocaleLowerCase().includes(rawSearch) && kind) {
-					addSourceMatch(matches, row.id, { field: kind, label });
-				}
-			}
-		}
-		const ids = rows.map((row) => row.id);
-		if (ids.length === 0) {
-			return matches;
-		}
-
-		const placeholders = ids.map(() => '?').join(', ');
-		const genreRows = this.db.$client
-			.prepare(
-				`SELECT item_id AS itemId, genre_name AS label FROM media_item_genres
-        WHERE item_id IN (${placeholders})
-          AND (genre_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR genre_key LIKE ? ESCAPE '\\' COLLATE NOCASE)
-        ORDER BY genre_name COLLATE NOCASE`,
-			)
-			.all(...ids, rawPattern, genrePattern) as Array<{ itemId: string; label: string }>;
-		for (const row of genreRows) {
-			addSourceMatch(matches, row.itemId, { field: 'genre', label: row.label });
-		}
-		const peopleRows = this.db.$client
-			.prepare(
-				`SELECT item_id AS itemId, person_type AS field, name AS label FROM media_item_people
-        WHERE item_id IN (${placeholders}) AND normalized_name LIKE ? ESCAPE '\\'
-        ORDER BY name COLLATE NOCASE`,
-			)
-			.all(...ids, normalizedPattern) as Array<{
-			itemId: string;
-			field: 'actor' | 'director';
-			label: string;
-		}>;
-		for (const row of peopleRows) {
-			addSourceMatch(matches, row.itemId, { field: row.field, label: row.label });
-		}
-		return matches;
-	}
 
 	/** Browse shows or seasons available to a grouped program source. */
 	private browseGroupSourceOptions(

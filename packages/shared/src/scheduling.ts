@@ -223,6 +223,8 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 			.default([])
 			.transform((values) => canonicalStringSet(values)),
 		name: catalogProgramItemFilterShape.name.removeDefault().optional(),
+		artist: catalogProgramItemFilterShape.artist,
+		album: catalogProgramItemFilterShape.album,
 		releaseYearFrom: catalogProgramItemFilterShape.releaseYearFrom.removeDefault().optional(),
 		releaseYearTo: catalogProgramItemFilterShape.releaseYearTo.removeDefault().optional(),
 		minimumRating: catalogProgramItemFilterShape.minimumRating.removeDefault().optional(),
@@ -887,6 +889,9 @@ export interface SchedulableMedia {
 	episodeEndNumber?: number | null;
 	/** Artist credits captured for music-video playback labels. */
 	artists?: string[];
+	/** Music hierarchy and metadata labels used by library filters. */
+	artistNames?: string[];
+	albumNames?: string[];
 	trackNumber?: number | null;
 	discNumber?: number | null;
 	multipartStatus?: 'none' | 'complete' | 'incomplete' | 'ambiguous';

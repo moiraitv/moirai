@@ -8,6 +8,8 @@ import type { MediaQuery } from '../../api';
 /** Editable catalog filters retained privately until the user applies them. */
 export interface LibraryFilterDraft {
 	name: string;
+	artist?: string;
+	album?: string;
 	releaseFrom: string;
 	releaseTo: string;
 	minimumRating: string;
@@ -25,6 +27,8 @@ export interface LibraryFilterDraft {
 export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 	return {
 		name: '',
+		artist: '',
+		album: '',
 		releaseFrom: '',
 		releaseTo: '',
 		minimumRating: '',
@@ -118,6 +122,12 @@ export function catalogProgramItemFilterSummary(
 	if (filter.minimumUserRating !== null) {
 		labels.push(`User rating: ${filter.minimumUserRating}+`);
 	}
+	if (filter.artist) {
+		labels.push(`Artist: ${compactFilterValue(filter.artist)}`);
+	}
+	if (filter.album) {
+		labels.push(`Album: ${compactFilterValue(filter.album)}`);
+	}
 	if (filter.actor) {
 		labels.push(`Actor: ${compactFilterValue(filter.actor)}`);
 	}
@@ -161,6 +171,8 @@ function localDateInstant(value: string, end = false): string | null {
 export function libraryFilterDraft(filter: CatalogProgramItemFilter): LibraryFilterDraft {
 	return {
 		name: filter.name,
+		artist: filter.artist ?? '',
+		album: filter.album ?? '',
 		releaseFrom: filter.releaseYearFrom === null ? '' : String(filter.releaseYearFrom),
 		releaseTo: filter.releaseYearTo === null ? '' : String(filter.releaseYearTo),
 		minimumRating: filter.minimumRating === null ? '' : String(filter.minimumRating),
@@ -181,6 +193,8 @@ export function catalogProgramItemFilter(
 ): CatalogProgramItemFilter {
 	return {
 		name: draft.name.trim(),
+		...(draft.artist?.trim() ? { artist: draft.artist.trim() } : {}),
+		...(draft.album?.trim() ? { album: draft.album.trim() } : {}),
 		releaseYearFrom: draft.releaseFrom ? Number(draft.releaseFrom) : null,
 		releaseYearTo: draft.releaseTo ? Number(draft.releaseTo) : null,
 		minimumRating: draft.minimumRating ? Number(draft.minimumRating) : null,
@@ -202,6 +216,9 @@ export function catalogProgramQuery(query: MediaQuery): CatalogProgramItemQuery 
 		sort: query.sort,
 		direction: query.direction,
 		name: query.name ?? '',
+		...(query.search ? { search: query.search } : {}),
+		...(query.artist ? { artist: query.artist } : {}),
+		...(query.album ? { album: query.album } : {}),
 		releaseYearFrom: query.releaseYearFrom ?? null,
 		releaseYearTo: query.releaseYearTo ?? null,
 		minimumRating: query.minimumRating ?? null,

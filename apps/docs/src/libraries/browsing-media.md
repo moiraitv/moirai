@@ -7,7 +7,11 @@ contextual: true
 
 # Browse and filter media
 
-Open a library to browse its indexed catalog. Search narrows the current results by name. Sorting, date windows, and filters help with larger collections.
+Open a library to browse its indexed catalog. Search matches titles, plots/descriptions, genres, actors, directors, and parent show, season, artist, or album names. Sorting, date windows, and filters help with larger collections.
+
+Cards show a **Matched** line when metadata other than the title explains the result, such as **Matched Actor · …**, **Matched Plot · …**, or **Matched Album · …**. Hover over a shortened explanation to read it in full.
+
+![Library search results explaining their matching metadata](/screenshots/library-search.png)
 
 Music video libraries browse through **Artists → Albums → Songs**, just as show libraries browse through shows and seasons. Open an artist to see their albums, then an album to see its songs. Use the breadcrumbs or browser Back button to move up. Artist and album cards show how many albums or songs they contain.
 
@@ -19,9 +23,11 @@ When browsing by title, select a letter above the catalog to jump to that sectio
 
 The filter editor can include or exclude genres and apply facts such as actors, directors, ratings, and dates when those values exist in the source metadata. An empty result means nothing matches the whole active filter; it does not mean the library is empty.
 
-Select ![Filter media](/icons/funnel.svg) above the catalog to open these controls, then choose **Apply Filters** to update the results. **Clear All** clears the choices in the filter editor.
+Select ![Filter media](/icons/funnel.svg) above the catalog to open these controls, then choose **Apply Filters** to update the results. **Clear All** clears the choices in the filter editor without clearing the main search. The title filter remains title-only and narrows the broad search results.
 
 ![Filter media editor showing genre choices, title search, release year, and added-date controls](/screenshots/library-filters.png)
+
+Music-video libraries also offer **Artist** and **Album** filters. Artist matches any credited artist or the parent artist; Album matches album metadata or the parent album. Both accept part of a name, ignoring case.
 
 The same filters are available in Quick Setup and program library queries. Use **Match all** when every selected genre must be present or **Match any** when one is enough; excluded genres remove matching items. Release-year and indexed-date filters answer different questions: when the media was released versus when Moirai added it to the catalog.
 

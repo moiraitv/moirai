@@ -17,6 +17,7 @@ import {
 
 const props = defineProps<{
 	libraryId: string;
+	libraryType?: string | undefined;
 	genres: MediaGenreFacet[];
 	loading: boolean;
 	loaded: boolean;
@@ -103,6 +104,7 @@ function updateItemLimit(event: Event): void {
 		<Teleport to="body">
 			<LibraryFilterModal
 				v-if="modalOpen"
+				:library-type="libraryType"
 				:library-id="props.libraryId"
 				:draft="draft"
 				:genres="genres"

@@ -1108,3 +1108,14 @@ a.media-card {
 	color: #eafff9;
 	background: rgba(8, 74, 61, 0.7);
 }
+
+.media-card-match {
+	display: block;
+	padding: 0 11px 10px;
+	overflow: hidden;
+	color: var(--accent);
+	font-size: 0.68rem;
+	line-height: 1.4;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

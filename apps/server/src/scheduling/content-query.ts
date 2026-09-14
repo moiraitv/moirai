@@ -3,6 +3,7 @@ import type {
 	ProgramConfig,
 	SchedulableMedia,
 } from '@moirai/shared';
+import { musicTextMatches } from '../media/music-search.js';
 import { normalizeSearchText } from '../scanner/catalog-metadata.js';
 
 /** Persisted dynamic library-query source accepted by content programs. */
@@ -63,8 +64,15 @@ export function mediaMatchesLibraryQuery(
 		&& (source.excludedGenres ?? []).length === 0
 		&& !source.actor
 		&& !source.director
+		&& !source.artist
+		&& !source.album
 	) {
 		return true;
+	}
+	for (const [query, labels] of [[source.artist, media.artistNames ?? media.artists], [source.album, media.albumNames]] as const) {
+		if (query && !(labels ?? []).some(label => musicTextMatches(label, query))) {
+			return false;
+		}
 	}
 	if (source.name && !media.title.toLocaleLowerCase().includes(source.name.toLocaleLowerCase())) {
 		return false;

@@ -225,8 +225,15 @@ export const libraryContentPreviewSchema = z.object({
 	})).max(MAX_LIBRARY_CONTENT_PREVIEW_ITEMS),
 });
 
+/** Metadata explanation shared by catalog and source-picker search results. */
+export const mediaSourceMatchSchema = z.object({
+	field: z.enum(['title', 'plot', 'genre', 'actor', 'director', 'show', 'season', 'artist', 'album']),
+	label: z.string(),
+});
+
 /** One media item or hierarchy group returned by catalog browsing. */
 export const mediaBrowseEntrySchema = z.object({
+	matches: z.array(mediaSourceMatchSchema).optional(),
 	key: z.string(),
 	kind: z.enum(['item', 'group']),
 	navigationKey: z.string(),
@@ -261,10 +268,7 @@ export const mediaBrowseResultSchema = z.object({
 /** Search result used by explicit-item and media-group program pickers. */
 export const mediaSourcePickerResultSchema = z.object({
 	entries: z.array(mediaBrowseEntrySchema.extend({
-		matches: z.array(z.object({
-			field: z.enum(['title', 'genre', 'actor', 'director', 'show', 'season', 'artist', 'album']),
-			label: z.string(),
-		})),
+		matches: z.array(mediaSourceMatchSchema),
 	})),
 	pagination: paginationSchema,
 });

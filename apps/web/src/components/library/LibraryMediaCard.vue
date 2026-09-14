@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { AlertTriangle, Asterisk, Check, CircleHelp, MoreHorizontal } from '@lucide/vue';
 import type { MediaBrowseEntry, MediaGroup } from '@moirai/shared';
-import { useAttrs } from 'vue';
+import { computed, useAttrs } from 'vue';
 import { RouterLink } from 'vue-router';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
+import { mediaSearchMatchText } from '../../media-search-matches';
 import MediaCardPreview from '../MediaCardPreview.vue';
 
 defineOptions({ inheritAttrs: false });
@@ -19,6 +20,7 @@ const props = defineProps<{
 	selectable: boolean;
 }>();
 const attrs = useAttrs();
+const matchText = computed(() => mediaSearchMatchText(props.entry.matches));
 const emit = defineEmits<{
 	enter: [group: MediaGroup];
 	toggle: [itemId: string];
@@ -79,6 +81,7 @@ function statusLabel(): string {
 			</span>
 			<span v-if="entry.group" class="media-card-copy"><span class="media-card-title">{{ entry.group.title }}</span><span class="media-card-subtitle">{{ mediaGroupSubtitle(libraryType, entry.group) || entry.group.kind }}</span><MoreHorizontal class="card-menu-icon" :size="16" /></span>
 			<span v-else-if="entry.item" class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(libraryType, entry.item) || entry.item.kind }}</span><span class="media-card-status" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="14" /><AlertTriangle v-else-if="entry.item.metadataStatus !== 'complete'" :size="14" /><Check v-else :size="14" /><small v-if="statusLabel()">{{ statusLabel() }}</small></span></span>
+			<span v-if="matchText" class="media-card-match" :title="`Matched ${matchText}`">Matched {{ matchText }}</span>
 		</component>
 		<button
 			v-if="selectable"

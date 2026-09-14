@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Asterisk, ChevronDown, Layers3, Plus, X } from '@lucide/vue';
 import type { ContentSource, MediaGroup, MediaItem, MediaSourcePickerEntry } from '@moirai/shared';
+import { mediaSearchMatchText } from '../../media-search-matches';
 import LoadingState from '../LoadingState.vue';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
@@ -43,15 +44,6 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 	return '';
 }
 
-/** Describe which metadata field matched the source search. */
-function sourceMatchText(entry: MediaSourcePickerEntry): string {
-	return entry.matches
-		.filter((match) => match.field !== 'title')
-		.map(
-			(match) => `${match.field.charAt(0).toUpperCase() + match.field.slice(1)} · ${match.label}`,
-		)
-		.join(' · ');
-}
 
 </script>
 
@@ -67,7 +59,7 @@ function sourceMatchText(entry: MediaSourcePickerEntry): string {
 				v-model="search"
 				type="search"
 				aria-label="Search source media"
-				placeholder="Search title, genre, actor, or director…"
+				:placeholder="libraryType === 'music-videos' ? 'Search title, plot, artist, album, genre…' : 'Search title, plot, genre, actor, director…'"
 				@keydown.enter.prevent="emit('search')"
 			/>
 			<button type="button" class="toolbar-button" @click="emit('search')">
@@ -113,8 +105,8 @@ function sourceMatchText(entry: MediaSourcePickerEntry): string {
 				<span class="source-picker-copy">
 					<strong>{{ entry.group?.title ?? entry.item?.title }}</strong>
 					<small>{{ sourceEntrySubtitle(entry) }}</small>
-					<small v-if="sourceMatchText(entry)" class="source-match-context">
-						Matched {{ sourceMatchText(entry) }}
+					<small v-if="mediaSearchMatchText(entry.matches)" class="source-match-context" :title="`Matched ${mediaSearchMatchText(entry.matches)}`">
+						Matched {{ mediaSearchMatchText(entry.matches) }}
 					</small>
 				</span>
 				<div class="source-picker-actions">

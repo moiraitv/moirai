@@ -39,7 +39,8 @@ function estimateRow(index: number): number {
 			Math.max(0, props.catalogWidth)
 			- catalogCardColumnGap * Math.max(0, props.columnCount - 1)
 		) / Math.max(1, props.columnCount);
-	return Math.max(240, cardWidth * 1.5 + 51);
+	const matchHeight = row?.cards.some(card => card.entry.matches?.some(match => match.field !== 'title')) ? 28 : 0;
+	return Math.max(240, cardWidth * 1.5 + 51) + matchHeight;
 }
 
 const virtualizer = useWindowVirtualizer<HTMLElement>(computed(() => ({

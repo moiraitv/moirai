@@ -283,6 +283,18 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			).values(),
 		];
 		const groupsById = new Map(groups.map((group) => [group.id, group]));
+		/** Collect music labels from the existing catalog hierarchy without extra reads. */
+		const musicLabels = (groupId: string | null, kind: 'artist' | 'album'): string[] => {
+			const labels: string[] = [];
+			const group = groupId ? groupsById.get(groupId) : undefined;
+			const parent = group?.parentId ? groupsById.get(group.parentId) : undefined;
+			for (const entry of [group, parent]) {
+				if (entry?.kind === kind) {
+					labels.push(entry.title);
+				}
+			}
+			return labels;
+		};
 		/** Build a stable hierarchy key for sequential catalog ordering. */
 		const groupSortKey = (groupId: string | null): string => {
 			const names: string[] = [];
@@ -366,6 +378,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					episodeNumber: item.episodeNumber,
 					episodeEndNumber: item.episodeEndNumber,
 					artists: item.artists,
+					artistNames: [...item.artists, ...musicLabels(item.groupId, 'artist')],
+					albumNames: [...(typeof metadata.album === 'string' ? [metadata.album] : []), ...musicLabels(item.groupId, 'album')],
 					trackNumber: item.trackNumber,
 					discNumber: item.discNumber,
 					multipartStatus: item.multipartStatus,

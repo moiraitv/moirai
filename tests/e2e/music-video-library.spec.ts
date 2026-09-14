@@ -38,6 +38,42 @@ test('browses music videos through artist and album cards with navigable breadcr
 		await expect(cards.first()).toContainText('Evening Sessions');
 		await page.goBack();
 		await expect(cards.first()).toContainText('Example Artist');
+
+		for (const width of [1440, 390]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.goto(`/libraries/${libraryId}?q=Example`);
+			await expect(cards.first()).toContainText('Opening Song');
+			const explanation = cards.first().locator('.media-card-match');
+			await expect(explanation).toContainText('Matched Artist · Example Artist');
+			await expect(explanation).toHaveAttribute('title', 'Matched Artist · Example Artist');
+			await expect.poll(() => explanation.evaluate(element => element.getBoundingClientRect().bottom <= element.closest('.media-card')!.getBoundingClientRect().bottom)).toBe(true);
+			await page.getByRole('button', { name: 'Filter media', exact: true }).click();
+			const filters = page.getByRole('dialog', { name: 'Filter media' });
+			await expect(filters.getByLabel('Artist', { exact: true })).toBeVisible();
+			await filters.getByLabel('Album', { exact: true }).fill('Evening');
+			await filters.getByPlaceholder('Partial title').fill('Opening');
+			await filters.getByRole('button', { name: 'Apply Filters' }).click();
+			await expect(page).toHaveURL(/q=Example/);
+			await expect(page).toHaveURL(/name=Opening/);
+			await expect(cards.first()).toContainText('Opening Song');
+		}
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/schedules/programs/new');
+		await page.getByLabel('Library', { exact: true }).selectOption(libraryId!);
+		await page.getByRole('button', { name: 'Configure Filters' }).click();
+		let filters = page.getByRole('dialog', { name: 'Filter media' });
+		await expect(filters.getByLabel('Artist', { exact: true })).toBeVisible();
+		await expect(filters.getByLabel('Album', { exact: true })).toBeVisible();
+		await filters.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await page.goto('/quick');
+		await page.getByRole('button', { name: /Music.*Channel/ }).click();
+		await page.getByRole('combobox', { name: /^Library/ }).selectOption(libraryId!);
+		await page.locator('#quick-setup-actions').getByRole('button', { name: 'Continue', exact: true }).click();
+		await page.getByRole('button', { name: 'Configure Filters' }).click();
+		filters = page.getByRole('dialog', { name: 'Filter media' });
+		await expect(filters.getByLabel('Artist', { exact: true })).toBeVisible();
+		await expect(filters.getByLabel('Album', { exact: true })).toBeVisible();
+
 	}
 	finally {
 		if (libraryId) {

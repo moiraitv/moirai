@@ -5,6 +5,7 @@ import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	catalogProgramItemQuerySchema,
 	MAX_LIBRARY_CONTENT_PREVIEW_ITEMS,
 	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
@@ -970,6 +971,26 @@ describe('Repository scan reconciliation', () => {
 			actor: '',
 			director: '',
 		};
+		for (const [search, field] of [['alpHA', 'title'], ['Sci-Fi', 'genre'], ['Performer', 'actor'], ['Director', 'director'], ['UNSTABLE frontier', 'plot']] as const) {
+			const result = await repository.browseMedia(library.id, { ...baseQuery, search });
+			expect(result.items.map(item => item.id)).toEqual([alpha.id]);
+			expect(result.entries[0]?.matches?.some(match => match.field === field)).toBe(true);
+			const picked = await repository.browseMediaSourceOptions(library.id, { target: 'items', search, parentId: null, page: 1, pageSize: 50 });
+			expect(picked.entries.map(entry => entry.item?.id)).toEqual([alpha.id]);
+			expect(picked.entries[0]?.matches?.some(match => match.field === field)).toBe(true);
+			expect(repository.resolveProgramItemSelection(library.id, { ...baseQuery, search }).itemIds).toEqual([alpha.id]);
+		}
+		expect((await repository.browseMedia(library.id, { ...baseQuery, search: 'frontier', name: 'Beta' })).items).toEqual([]);
+		const paged = await repository.browseMedia(library.id, { ...baseQuery, search: 'Drama', page: 2 });
+		expect(paged.pagination.totalEntries).toBe(2);
+		expect(paged.items.map(item => item.id)).toEqual([beta.id]);
+		expect(paged.navigation.reduce((sum, entry) => sum + entry.count, 0)).toBe(2);
+		expect((await repository.browseMedia(library.id, { ...baseQuery, search: 'Drama', name: 'Beta' })).items.map(item => item.id)).toEqual([beta.id]);
+		expect((await repository.browseMedia(library.id, { ...baseQuery, search: 'Director', genres: ['science-fiction'] })).items.map(item => item.id)).toEqual([alpha.id]);
+		for (const search of ['%', '_', '\\']) {
+			expect((await repository.browseMedia(library.id, { ...baseQuery, search })).items).toEqual([]);
+		}
+
 		const titlePage = await repository.browseMedia(library.id, baseQuery);
 		expect(titlePage.entries[0]?.item?.title).toBe('Alpha');
 		expect(titlePage.navigation).toMatchObject([
@@ -1118,6 +1139,19 @@ describe('Repository scan reconciliation', () => {
 			field: 'director',
 			label: 'Dee Director',
 		});
+		const special = { ...item(3), title: 'Literal %_\\ Name', plot: 'Synopsis %_\\ detail', metadata: {}, artists: ['Literal %_\\ Credit'] };
+		await repository.reconcileScan(await repository.beginScan(library.id, 'manual'), [], [alpha, beta, special], [], true);
+		for (const search of ['%', '_', '\\']) {
+			const found = await repository.browseMedia(library.id, { ...baseQuery, search });
+			expect(found.items.map(item => item.id)).toEqual([special.id]);
+			expect(found.entries[0]?.matches?.map(match => match.field)).toEqual(['artist', 'plot', 'title']);
+		}
+		const plotSearch = 'Synopsis %_\\';
+		const plotted = await repository.browseMedia(library.id, { ...baseQuery, search: plotSearch });
+		expect(plotted.entries).toMatchObject([{ item: { id: special.id }, matches: [{ field: 'plot', label: special.plot }] }]);
+		const pickedPlot = await repository.browseMediaSourceOptions(library.id, { target: 'items', search: plotSearch, parentId: null, page: 1, pageSize: 50 });
+		expect(pickedPlot.entries).toMatchObject([{ item: { id: special.id }, matches: [{ field: 'plot', label: special.plot }] }]);
+
 	});
 
 	it('keeps show and season source results separate from playable items', async () => {
@@ -1263,6 +1297,11 @@ describe('Repository scan reconciliation', () => {
 		expect(inheritedTitle.entries).toMatchObject([
 			{ item: { title: 'First Contact' }, matches: [{ field: 'show', label: 'Space Station' }] },
 		]);
+		const browsed = await repository.browseMedia(library.id, {
+			...catalogProgramItemQuerySchema.parse({ search: 'Space Station' }), page: 1, pageSize: 10,
+		});
+		expect(browsed.entries.map(entry => entry.matches)).toEqual(inheritedTitle.entries.map(entry => entry.matches));
+
 	});
 });
 

@@ -12,6 +12,7 @@ import {
 
 const props = defineProps<{
 	libraryId: string;
+	libraryType?: string | undefined;
 	draft: LibraryFilterDraft;
 	genres: MediaGenreFacet[];
 }>();
@@ -272,6 +273,8 @@ onUnmounted(() => genreCountsController?.abort());
 							<span>Director</span>
 							<span class="filter-input"><input v-model="localDraft.director" placeholder="Partial director name" /><UserRound :size="20" aria-hidden="true" /></span>
 						</label>
+						<label v-if="libraryType === 'music-videos' || draft.artist" class="filter-field"><span>Artist</span><span class="filter-input"><input v-model="localDraft.artist" placeholder="Partial artist name" /><UserRound :size="20" aria-hidden="true" /></span></label>
+						<label v-if="libraryType === 'music-videos' || draft.album" class="filter-field"><span>Album</span><span class="filter-input"><input v-model="localDraft.album" placeholder="Partial album name" /><Search :size="20" aria-hidden="true" /></span></label>
 					</div>
 				</div>
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	catalogProgramQuery,
 	catalogProgramItemFilterSummary,
 	catalogProgramItemFilter,
 	emptyCatalogProgramItemFilter,
@@ -10,6 +11,8 @@ describe('shared library query filter controls', () => {
 	it('round-trips every persisted filter through date and numeric form fields', () => {
 		const filter = catalogProgramItemFilter({
 			name: 'Example',
+			artist: 'Guest',
+			album: 'Live',
 			releaseFrom: '1990',
 			releaseTo: '2024',
 			minimumRating: '7.1',
@@ -25,6 +28,8 @@ describe('shared library query filter controls', () => {
 
 		expect(libraryFilterDraft(filter)).toEqual({
 			name: 'Example',
+			artist: 'Guest',
+			album: 'Live',
 			releaseFrom: '1990',
 			releaseTo: '2024',
 			minimumRating: '7.1',
@@ -37,6 +42,13 @@ describe('shared library query filter controls', () => {
 			actor: 'Actor',
 			director: 'Director',
 		});
+	});
+
+	it('preserves broad search and independent title/music filters when adding all results', () => {
+		expect(catalogProgramQuery({
+			page: 2, pageSize: 100, sort: 'title', direction: 'asc',
+			search: 'Guest', name: 'Song', artist: 'Main', album: 'Live',
+		})).toMatchObject({ search: 'Guest', name: 'Song', artist: 'Main', album: 'Live' });
 	});
 
 	it('provides an independent empty persisted filter', () => {

@@ -148,6 +148,8 @@ export function validateMediaGenreRules(value: MediaGenreRules, context: z.Refin
 /** Fields shared by library browsing and dynamic scheduling filters. */
 export const catalogProgramItemFilterShape = {
 	name: z.string().trim().max(120).default(''),
+	artist: z.string().trim().max(120).optional(),
+	album: z.string().trim().max(120).optional(),
 	releaseYearFrom: z.number().int().min(1800).max(2200).nullable().default(null),
 	releaseYearTo: z.number().int().min(1800).max(2200).nullable().default(null),
 	minimumRating: z.number().min(0).max(10).nullable().default(null),
@@ -169,6 +171,7 @@ export type CatalogProgramItemFilter = z.infer<typeof catalogProgramItemFilterSc
 /** Validate a recursive catalog query used to select items for an explicit program. */
 export const catalogProgramItemQuerySchema = z.object({
 	parentId: z.uuid().nullable().default(null),
+	search: z.string().trim().max(120).optional(),
 	sort: mediaSortSchema.default('title'),
 	direction: sortDirectionSchema.default('asc'),
 	...catalogProgramItemFilterShape,
@@ -184,6 +187,7 @@ export type CatalogProgramItemQuery = z.infer<typeof catalogProgramItemQuerySche
 
 /** One item or hierarchy group returned by catalog browsing. */
 export interface MediaBrowseEntry {
+	matches?: MediaSourceMatch[];
 	key: string;
 	kind: 'item' | 'group';
 	navigationKey: string;
@@ -215,11 +219,11 @@ export interface MediaBrowseResult {
 	navigation: MediaNavigationOption[];
 }
 
-/** Metadata field that caused a scheduling-source search match. */
+/** Metadata field that caused a catalog or scheduling-source search match. */
 export type MediaSourceMatchField
-	= | 'title' | 'genre' | 'actor' | 'director' | 'show' | 'season' | 'artist' | 'album';
+	= | 'title' | 'plot' | 'genre' | 'actor' | 'director' | 'show' | 'season' | 'artist' | 'album';
 
-/** One reason a media source matched the picker search. */
+/** One reason a media item or group matched a catalog search. */
 export interface MediaSourceMatch {
 	field: MediaSourceMatchField;
 	label: string;
