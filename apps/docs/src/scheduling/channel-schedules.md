@@ -105,6 +105,8 @@ These settings work together with the ![](/icons/calendar-range.svg) Template's 
 
 Use **Preview date** and **Refresh Now** to inspect the actual lineup. Test a date where the condition matches, one where it does not, and any overlap with a higher layer. For time-limited layers, inspect the entry and exit times as well as the content inside the window. Review dead-air warnings and other issues before saving.
 
-Hover over a guide block to see a zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. Hover, focus, or tap a guide block to inspect the actual items within it; dead-air diagnostics continue to use actual playback times. Choose **Save** to store the schedule and return to the channel schedule list. If saving fails, the editor stays open with your changes; **Reset** discards pending changes after confirmation.
+Hover over a guide block to see a zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. Hover, focus, or tap a guide block to inspect the actual items within it; dead-air diagnostics continue to use actual playback times. 
+
+Choose **Save** to store the schedule and return to the channel schedule list. If saving fails, the editor stays open with your changes; **Reset** discards pending changes after confirmation.
 
 Saved changes normally become active at the next local midnight, protecting programming that has already been committed. When offered, **Apply after current item** brings a change forward without cutting the item viewers are currently watching.

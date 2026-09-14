@@ -558,6 +558,7 @@ export type PlaybackSessionAcceleration = ConcreteHardwareAcceleration | 'none' 
 
 /** Committed programming occupying a channel's current wall-clock playback position. */
 export interface PlaybackNowPlayingStatus {
+	/** Movie title, show/episode identity, or artist/song identity for the current content. */
 	title: string;
 	artworkUrl: string | null;
 	startedAt: string;

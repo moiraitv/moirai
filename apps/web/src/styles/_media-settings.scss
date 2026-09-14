@@ -686,9 +686,7 @@
 
 .playback-now-playing-copy > strong {
 	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: anywhere;
 }
 
 .playback-position-track {
