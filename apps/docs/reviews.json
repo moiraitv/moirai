@@ -74,20 +74,20 @@
       }
     },
     "getting-started.first-channel": {
-      "digest": "f9248f86d0ec86a9b696d3bf8d62f470b0e20c38475c4ae8986100cf6a407827",
-      "reviewedAt": "2026-09-14T17:46:34.085Z",
+      "digest": "903fb304ebbcb6448581035e52fc1353e7be10c85eb9aeb747cbf02845827568",
+      "reviewedAt": "2026-09-14T21:52:58.609Z",
       "components": {
         "text": {
           "digest": "7c3f0189a860f6601ec15b81c377051e2b93ed077c266ccc0b8837978f6dc9e8",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "reviewedAt": "2026-09-14T21:52:58.609Z"
         },
         "screenshots": {
-          "digest": "8d6fdbe24e5c88ba8fd1dbd5fd612d13a9779a59b9a987e84bd38b153387924b",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "digest": "339c883d555b7031c6b6854ebf7f3b99132894e6c1f31e2b1be675dbd27017b5",
+          "reviewedAt": "2026-09-14T21:52:58.609Z"
         },
         "icons": {
           "digest": "c0c96b86e2bb6a8f17a5da7bb118df64083e8a8b20412dda4278a254f1dffed2",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "reviewedAt": "2026-09-14T21:52:58.609Z"
         }
       }
     },
@@ -218,20 +218,20 @@
       }
     },
     "channels.manage": {
-      "digest": "ffcd58a2097681d0c8c6c4f4630b2d5557375e8eb84902c0c6c292b80d9e5f22",
-      "reviewedAt": "2026-09-14T19:03:10.818Z",
+      "digest": "ac042687bc4d1ee944d6d9000e4822ea13264b51fc2e6f75cd43eab7982ee917",
+      "reviewedAt": "2026-09-14T21:53:28.423Z",
       "components": {
         "text": {
-          "digest": "b801791e73dbdb6e8d517be10cc212a4cce5154d6d0132bdbc9e1e32ecb3e34b",
-          "reviewedAt": "2026-09-14T19:03:10.818Z"
+          "digest": "52926f9ab07e09f732172ccd8930fc416d9962430a9af0a30f0f8502e70c8627",
+          "reviewedAt": "2026-09-14T21:53:28.423Z"
         },
         "screenshots": {
           "digest": "3686ba78b68b8c319a274a3d0ff8aa3eb334b49e165c94e77fcdef865e87874f",
-          "reviewedAt": "2026-09-14T19:03:10.818Z"
+          "reviewedAt": "2026-09-14T21:53:28.423Z"
         },
         "icons": {
           "digest": "3267327b63bf3fa93928dfa06a3b8c1135a7d6db406ebc82d82608a36c3a2b49",
-          "reviewedAt": "2026-09-14T19:03:10.818Z"
+          "reviewedAt": "2026-09-14T21:53:28.423Z"
         }
       }
     },
