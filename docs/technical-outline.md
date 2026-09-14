@@ -479,6 +479,12 @@ limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 5,000 and may be set from 1
 25,000-item
 contract ceiling.
 
+Group artwork falls back to the immediate parent poster when the group has no artwork, consistently
+across catalog browsing and program source pickers, without additional database queries. During music
+video scans, artists without artwork inherit the first album poster in stable source order, falling
+back to the first song poster only when no album artwork exists. The selected source fingerprint
+also versions the artist artwork cache; rescans recompute the fallback when artwork changes.
+
 Hierarchy browsing also supports page-local show, season, artist, and album selection. Group and
 item selections remain separate, with an explicit kind selector on mixed pages. Recursive item
 additions remain available on group-only pages as Add All Items. Group additions

@@ -278,9 +278,10 @@ export class CatalogAssetsRepository {
 				`SELECT g.id, g.library_id AS libraryId, g.parent_id AS parentId, g.kind,
           g.title, g.sort_title AS sortTitle, g.year, g.plot, g.metadata,
           g.artwork_relative_path AS artworkRelativePath,
+          parent.artwork_relative_path AS parentArtworkRelativePath, parent.metadata AS parentMetadata,
           (SELECT COUNT(*) FROM media_groups child WHERE child.parent_id = g.id) +
             (SELECT COUNT(*) FROM media_items child_item WHERE child_item.group_id = g.id) AS childCount
-        FROM media_groups g
+        FROM media_groups g LEFT JOIN media_groups parent ON parent.id = g.parent_id AND parent.library_id = g.library_id
         WHERE g.library_id = ? AND g.id IN (${placeholders})`,
 			)
 			.all(libraryId, ...groupIds) as RawGroupRow[];

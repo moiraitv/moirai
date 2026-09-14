@@ -55,6 +55,8 @@ export interface RawGroupRow {
 	metadata: string | Record<string, unknown>;
 	artworkRelativePath: string | null;
 	childCount: number;
+	parentArtworkRelativePath?: string | null;
+	parentMetadata?: string | Record<string, unknown> | null;
 	parentTitle?: string | null;
 	parentKind?: MediaGroup['kind'] | null;
 }
@@ -227,7 +229,7 @@ export function mappedItem(row: RawItemRow): MediaItem {
 	};
 }
 
-/** Build an API media group from a stored catalog row. */
+/** Build a media group, falling back to its parent poster when its own artwork is absent. */
 export function mappedGroup(row: RawGroupRow): MediaGroup {
 	const metadata = decodedMetadata(row.metadata);
 	return {
@@ -245,7 +247,12 @@ export function mappedGroup(row: RawGroupRow): MediaGroup {
 			row.id,
 			row.artworkRelativePath,
 			cacheVersion(metadata, row.artworkRelativePath ?? row.id),
-		),
+		) ?? (row.parentId && row.parentArtworkRelativePath ? artworkUrl(
+			'groups',
+			row.parentId,
+			row.parentArtworkRelativePath,
+			cacheVersion(decodedMetadata(row.parentMetadata ?? {}), row.parentArtworkRelativePath),
+		) : null),
 		childCount: row.childCount,
 	};
 }

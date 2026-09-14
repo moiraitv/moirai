@@ -360,11 +360,13 @@ export class MediaCatalogRepository {
 		'none' AS multipartStatus, '[]' AS parts, '[]' AS subtitleTracks,
         NULL AS metadataStatus, NULL AS availability, NULL AS lastObservedAt,
         g.metadata, g.artwork_relative_path AS artworkRelativePath,
+        parent.artwork_relative_path AS parentArtworkRelativePath, parent.metadata AS parentMetadata,
         '' AS fingerprint, NULL AS fileModifiedAt, g.created_at AS dateAddedAt,
         ${groupBucket} AS titleBucket, g.created_at AS createdAt, g.updated_at AS updatedAt,
         (SELECT COUNT(*) FROM media_groups child WHERE child.parent_id = g.id) +
           (SELECT COUNT(*) FROM media_items child_item WHERE child_item.group_id = g.id) AS childCount
-      FROM media_groups g WHERE g.library_id = ? AND ${groupParent}
+      FROM media_groups g LEFT JOIN media_groups parent ON parent.id = g.parent_id AND parent.library_id = g.library_id
+      WHERE g.library_id = ? AND ${groupParent}
       UNION ALL
       SELECT 'item' AS rowKind, i.id, i.library_id AS libraryId, i.group_id AS groupId,
         i.stable_key AS stableKey, i.kind, i.title, i.sort_title AS sortTitle,
@@ -376,7 +378,7 @@ export class MediaCatalogRepository {
 		i.multipart_status AS multipartStatus, i.parts, i.subtitle_tracks AS subtitleTracks,
 		i.metadata_status AS metadataStatus, i.availability,
 		i.last_observed_at AS lastObservedAt, i.metadata,
-        i.artwork_relative_path AS artworkRelativePath, i.fingerprint,
+        i.artwork_relative_path AS artworkRelativePath, NULL AS parentArtworkRelativePath, NULL AS parentMetadata, i.fingerprint,
         i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
         i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt,
         0 AS childCount
@@ -387,7 +389,7 @@ export class MediaCatalogRepository {
 				`${catalogRows} SELECT * FROM catalog ORDER BY CASE WHEN titleBucket = '#' THEN 0 ELSE 1 END ${query.direction === 'asc' ? 'ASC' : 'DESC'}, sortTitle COLLATE NOCASE ${query.direction.toUpperCase()}, id ${query.direction.toUpperCase()} LIMIT ? OFFSET ?`,
 			)
 			.all(...params, query.pageSize, offset) as Array<
-			RawItemRow & { rowKind: 'group' | 'item'; childCount: number }
+			RawItemRow & Pick<RawGroupRow, 'parentArtworkRelativePath' | 'parentMetadata'> & { rowKind: 'group' | 'item'; childCount: number }
 		>;
 
 		// Restore the distinct public contracts after reading the unified SQL result.
@@ -709,6 +711,7 @@ export class MediaCatalogRepository {
 				`SELECT g.id, g.library_id AS libraryId, g.parent_id AS parentId, g.kind,
           g.title, g.sort_title AS sortTitle, g.year, g.plot, g.metadata,
           g.artwork_relative_path AS artworkRelativePath,
+          parent.artwork_relative_path AS parentArtworkRelativePath, parent.metadata AS parentMetadata,
           (SELECT COUNT(*) FROM media_groups child WHERE child.parent_id = g.id) +
             (SELECT COUNT(*) FROM media_items child_item WHERE child_item.group_id = g.id) AS childCount,
           parent.title AS parentTitle, parent.kind AS parentKind

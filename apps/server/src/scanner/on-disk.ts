@@ -12,6 +12,7 @@ import {
 	type SourceIdentity,
 } from '@moirai/shared';
 import { deterministicId } from './catalog-identity.js';
+import { inheritMusicArtistArtwork } from './music-video-artwork.js';
 import { groupLooseMusicVideos } from './music-video-groups.js';
 import { internalErrorMessage } from '../error-message.js';
 import { ARTWORK_EXTENSIONS } from '../artwork/artwork-formats.js';
@@ -1020,6 +1021,7 @@ export async function discoverOnDisk(
 	// Complete music hierarchy for files outside the documented artist/album folder layout.
 	if (library.typeKey === 'music-videos') {
 		groupLooseMusicVideos(library.id, groupsByKey, items);
+		inheritMusicArtistArtwork([...groupsByKey.values()], items);
 	}
 
 	// Collapse numbered physical files into one logical, schedulable catalog item.
