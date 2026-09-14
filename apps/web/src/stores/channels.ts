@@ -36,6 +36,19 @@ export const useChannelsStore = defineStore('channels', () => {
 	let capabilitySequence = 0;
 	let guideSequence = 0;
 
+	/** Apply a server-confirmed save immediately and discard older in-flight catalog responses. */
+	function acceptSavedChannel(channel: Channel): void {
+		channelSequence += 1;
+		const index = channels.value.findIndex(candidate => candidate.id === channel.id);
+		if (index === -1) {
+			channels.value.push(channel);
+		}
+		else {
+			channels.value[index] = channel;
+		}
+		loading.value = false;
+	}
+
 	/** Load channels from the authoritative source and update the shared UI store. */
 	async function loadChannels(): Promise<void> {
 		const sequence = ++channelSequence;
@@ -189,6 +202,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		guideLoaded,
 		error,
 		loadChannels,
+		acceptSavedChannel,
 		loadCapabilities,
 		loadGuide,
 		guideNavigationTarget,

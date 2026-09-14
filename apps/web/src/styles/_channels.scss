@@ -637,3 +637,24 @@ legend {
 		transition: none;
 	}
 }
+
+.channel-editor-modal .encoding-profile-selector-row {
+	select,
+	.button {
+		height: 42px;
+		min-height: 42px;
+	}
+}
+
+.channel-number-feedback {
+	font-size: .75rem;
+	font-weight: 400;
+	color: var(--muted);
+
+	ul {
+		margin: .35rem 0 0;
+		padding: 0;
+		list-style: none;
+		overflow-wrap: anywhere;
+	}
+}

@@ -960,7 +960,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												<label v-if="selectedLayer[side].policy !== 'hard'"
 												><span>Maximum drift past boundary (minutes)</span
 												><input
-													type="number"
+													type="number" inputmode="numeric"
 													min="0"
 													max="1440"
 													:disabled="selectedLayer[side].maxDriftSeconds === null"
@@ -1014,7 +1014,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												<label v-if="selectedLayer[side].fallback === 'favor-right'"
 												><span>Maximum early start (minutes)</span
 												><input
-													type="number"
+													type="number" inputmode="numeric"
 													min="0"
 													max="1440"
 													:disabled="

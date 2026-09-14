@@ -192,6 +192,11 @@ A single saved default starts at 1080p and applies only to new channels; Quick S
 without explicit normalization use it. Explicit Custom or legacy manual API input stays independent.
 Migrations preserve existing profiles and assignments, suffixing colliding built-in names.
 Subtitle choices, fonts, process paths, presentation, and scheduling remain channel-owned.
+The channel editor checks canonical number conflicts locally against the loaded channel list,
+excluding itself, and shows up to three prefix matches. Existing groups supply autocomplete
+suggestions without additional queries. Server-confirmed channel saves update the shared list
+immediately and invalidate older catalog requests; lineup and guide refreshes run in the background. Numeric fields request mobile numeric keyboards; compact
+resource-editor footers retain accessible action names and reset confirmation with icon controls.
 Successful template and channel-schedule saves close their editors, including saves requested
 through the unsaved-changes dialog; failed saves preserve the open draft.
 

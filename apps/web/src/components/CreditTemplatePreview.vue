@@ -123,7 +123,7 @@ onMounted(load);
 				</div>
 				<p v-if="duration <= 0" class="notice warning">The library scan is incomplete. Wait for scanning to finish before previewing this video. <button class="button secondary contextual" type="button" @click="load">Refresh videos</button></p>
 				<div class="credit-preview-actions">
-					<label><span>Source time (seconds)</span><input v-model.number="seconds" :disabled="rendering" type="number" min="0" max="86400" step="0.1" /></label>
+					<label><span>Source time (seconds)</span><input v-model.number="seconds" :disabled="rendering" type="number" inputmode="decimal" min="0" max="86400" step="0.1" /></label>
 					<button class="button secondary" type="button" :disabled="rendering || !itemId || !validTime" @click="render">{{ rendering ? 'Rendering…' : 'Render preview' }}</button>
 				</div>
 			</template>

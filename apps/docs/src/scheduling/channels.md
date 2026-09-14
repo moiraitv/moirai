@@ -15,15 +15,17 @@ A ![](/icons/tv-minimal.svg) Channel combines a viewer-facing number and name wi
 
 ## Open the Channel editor
 
-Choose **New Channel**, or use the pencil button beside an existing ![](/icons/tv-minimal.svg) Channel. The **Broadcast profile** editor controls its identity and the video/audio format delivered to viewers. Its **Save** and **Reset** actions stay at the bottom while you scroll through the settings.
+Choose **New Channel**, or click an existing ![](/icons/tv-minimal.svg) Channel. The editor controls its identity and the video/audio format delivered to viewers.
 
 ![Channel Broadcast profile editor showing the Lineup configuration](/screenshots/channel-editor.png)
 
+After a successful save, the channel appears in the lineup immediately while its schedule and guide refresh in the background. Any selected logo or fallback video finishes uploading before the editor closes.
+
 ## Lineup: identity and schedule
 
-- **Number** identifies the ![](/icons/tv-minimal.svg) Channel in the lineup. Numbers must be distinct; choose stable values because IPTV applications may use them when organizing favorites.
+- **Number** identifies the ![](/icons/tv-minimal.svg) Channel in the lineup. As you type, the editor shows up to three existing channels matching the number prefix and flags a number already in use. Numbers must be distinct; choose stable values because IPTV applications may use them when organizing favorites.
 - **Name** is the viewer-facing name.
-- **Group** provides a category for the lineup, such as “Movies.” How groups appear depends on the IPTV client.
+- **Group** provides a category for the lineup, such as “Movies.” Choose a suggested existing group as you type, or enter a new one. How groups appear depends on the IPTV client.
 - **Manage Layered Schedule** opens the ![](/icons/tv-minimal-play.svg) [Channel Schedule](/scheduling/channel-schedules), where you assign ![](/icons/calendar-range.svg) Templates and conditions. Save a new or changed ![](/icons/tv-minimal.svg) Channel first; the schedule link is disabled while the profile has pending changes.
 
 ### Channel logo

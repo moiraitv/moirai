@@ -1067,7 +1067,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 											><span>Start drift (minutes)</span
 											><input
 												:value="selectedSlot.startEligibility.maxDriftSeconds / 60"
-												type="number"
+												type="number" inputmode="numeric"
 												min="0"
 												max="1440"
 												@input="
@@ -1105,7 +1105,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 														class="boundary-drift-minutes"
 													>
 														<input
-															type="number"
+															type="number" inputmode="numeric"
 															aria-label="Maximum drift in minutes"
 															min="0"
 															max="1440"
@@ -1164,7 +1164,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 												<label v-if="selectedBoundary.fallback === 'favor-right'"
 												><span>Maximum early start (minutes)</span
 												><input
-													type="number"
+													type="number" inputmode="numeric"
 													min="0"
 													max="1440"
 													:disabled="

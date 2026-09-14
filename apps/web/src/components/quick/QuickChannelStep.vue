@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useChannelsStore } from '../../stores/channels';
+import { channelNumberSuggestions, channelGroupSuggestions } from '../../channel-identity-suggestions';
 import QuickStepActions from './QuickStepActions.vue';
 import { computed, ref } from 'vue';
 import { ImagePlus, Trash2 } from '@lucide/vue';
@@ -18,7 +20,10 @@ const emit = defineEmits<{ back: []; next: [] }>();
 const logoInput = ref<HTMLInputElement>();
 const preparingLogo = ref(false);
 const error = ref('');
-const valid = computed(() => channelCreateSchema.safeParse({
+const channelsStore = useChannelsStore();
+const numberSuggestions = computed(() => channelNumberSuggestions(channelsStore.channels, draft.value.number));
+const groupSuggestions = computed(() => channelGroupSuggestions(channelsStore.channels));
+const valid = computed(() => !numberSuggestions.value.duplicate && channelCreateSchema.safeParse({
 	number: draft.value.number,
 	name: draft.value.name,
 	group: draft.value.group.trim() || null,
@@ -74,9 +79,17 @@ function removeLogo(): void {
 			<p>Audio and video settings use the default encoding profile selected under Playback.</p>
 		</div>
 		<div class="panel form-grid">
-			<label><span>Channel number</span><input v-model="draft.number" required pattern="[A-Za-z0-9._-]+" /></label>
+			<label><span>Channel number</span><input v-model="draft.number" aria-label="Channel number" :aria-invalid="Boolean(numberSuggestions.duplicate)" aria-describedby="quick-channel-number-feedback" inputmode="decimal" required pattern="[A-Za-z0-9._-]+" />
+				<div id="quick-channel-number-feedback" class="channel-number-feedback" aria-live="polite">
+					<small v-if="numberSuggestions.duplicate" class="field-error">This number is already used by {{ numberSuggestions.duplicate.name }}.</small>
+					<template v-if="numberSuggestions.matches.length">
+						<small>Existing channels</small>
+						<ul><li v-for="channel in numberSuggestions.matches" :key="channel.id">{{ channel.number }} · {{ channel.name }}</li></ul>
+					</template>
+				</div>
+			</label>
 			<label><span>Channel name</span><input v-model="draft.name" required autocapitalize="words" /></label>
-			<label class="span-2"><span>Group <small>optional</small></span><input v-model="draft.group" autocapitalize="words" /></label>
+			<label class="span-2"><span>Group <small>optional</small></span><input v-model="draft.group" list="quick-channel-group-suggestions" autocapitalize="words" /><datalist id="quick-channel-group-suggestions"><option v-for="group in groupSuggestions" :key="group" :value="group" /></datalist></label>
 			<div class="quick-logo-field span-2">
 				<span>Channel logo <small>optional</small></span>
 				<input ref="logoInput" class="visually-hidden" type="file" accept="image/*" @change="selectLogo" />

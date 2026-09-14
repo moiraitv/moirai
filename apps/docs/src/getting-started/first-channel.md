@@ -15,7 +15,7 @@ Open **Quick Setup** from navigation or the dashboard. Choose **Movie Channel**,
 
 1. **Choose a media library.** Reuse a compatible library or choose **Create new**, enter a name and the folder path as Moirai sees it, then select **Create and Continue**. Scanning starts immediately.
 2. **Choose the programming.** Use a dynamic library query to include matching media as the library changes, or select specific items. Show channels can also select shows or seasons. Configure filters, ordering, an optional item limit, and playback selection behavior; then preview the matching media sample.
-3. **Name and brand the channel.** Set a distinct channel number, name, optional group, and optional logo. The logo keeps its full image and transparency. Playback starts with automatic defaults.
+3. **Name and brand the channel.** Set a distinct channel number, name, optional group, and optional logo. As you type a number, similarly-numbered channels appear so you can see what may be already used. The Group field suggests existing groups, the logo keeps its full image and transparency, and playback starts with automatic defaults.
 4. **Review Setup.** Inspect the library, programming, channel, and sample day, then select **Create Channel**. Open the schedule from the completion screen or visit **![](/icons/calendar-days.svg) Guide** for IPTV addresses.
 
 ![Quick Setup programming with an indexed movie library](/screenshots/quick-setup.png)

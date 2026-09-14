@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ScheduleGuide } from '@moirai/shared';
+import { channelSchema } from '@moirai/shared/api-contracts';
+import type { Channel, ScheduleGuide } from '@moirai/shared';
 import { api } from '@web/api.js';
 import { useChannelsStore } from '@web/stores/channels.js';
 
@@ -46,5 +47,37 @@ describe('channel guide navigation', () => {
 		await store.loadGuide('2026-08-04', 7);
 
 		expect(store.guideNavigationTarget('backward')).toBe('2026-08-01');
+	});
+});
+
+
+describe('server-confirmed channel saves', () => {
+	it('inserts new channels and replaces edits without duplicating them', () => {
+		const store = useChannelsStore();
+		const channel = channelSchema.parse({ id: '00000000-0000-4000-8000-000000000001', number: '10', name: 'Saved channel', createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' });
+
+		store.acceptSavedChannel(channel);
+		expect(store.channels).toEqual([channel]);
+		store.acceptSavedChannel({ ...channel, name: 'Edited channel' });
+		expect(store.channels).toEqual([{ ...channel, name: 'Edited channel' }]);
+	});
+
+	it('ignores a catalog response started before the save and allows subsequent refreshes', async () => {
+		let resolveCatalog!: (channels: Channel[]) => void;
+		vi.spyOn(api, 'channels').mockImplementationOnce(() => new Promise(resolve => {
+			resolveCatalog = resolve;
+		}));
+		const store = useChannelsStore();
+		const channel = channelSchema.parse({ id: '00000000-0000-4000-8000-000000000001', number: '10', name: 'Saved channel', createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' });
+		const loading = store.loadChannels();
+
+		store.acceptSavedChannel(channel);
+		resolveCatalog([]);
+		await loading;
+		expect(store.channels).toEqual([channel]);
+
+		vi.mocked(api.channels).mockResolvedValue([{ ...channel, name: 'Refreshed channel' }]);
+		await store.loadChannels();
+		expect(store.channels[0]?.name).toBe('Refreshed channel');
 	});
 });

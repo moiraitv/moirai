@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RotateCcw, Save, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
 import TwoStepActionButton from './TwoStepActionButton.vue';
 
@@ -52,9 +53,11 @@ function activateSave(): void {
 				type="button"
 				class="button resource-editor-delete"
 				:disabled="busy"
+				:aria-label="deleting ? 'Deleting…' : deleteLabel"
+				:title="deleting ? 'Deleting…' : deleteLabel"
 				@click="emit('delete')"
 			>
-				{{ deleting ? 'Deleting…' : deleteLabel }}
+				<Trash2 class="resource-editor-action-icon" :size="18" aria-hidden="true" /><span>{{ deleting ? 'Deleting…' : deleteLabel }}</span>
 			</button>
 		</div>
 		<p v-if="validationMessage" class="field-error resource-editor-validation" role="status">{{ validationMessage }}</p>
@@ -68,15 +71,17 @@ function activateSave(): void {
 				:disabled="busy || resetDisabled"
 				@confirm="emit('reset')"
 			>
-				Reset
+				<RotateCcw class="resource-editor-action-icon" :size="18" aria-hidden="true" /><span>Reset</span>
 			</TwoStepActionButton>
 			<button
 				:type="saveSubmits ? 'submit' : 'button'"
 				class="button"
 				:disabled="busy || saveDisabled"
+				:aria-label="saving ? savingLabel : saveLabel"
+				:title="saving ? savingLabel : saveLabel"
 				@click="activateSave"
 			>
-				{{ saving ? savingLabel : saveLabel }}
+				<Save class="resource-editor-action-icon" :size="18" aria-hidden="true" /><span>{{ saving ? savingLabel : saveLabel }}</span>
 			</button>
 		</div>
 	</footer>

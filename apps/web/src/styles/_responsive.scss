@@ -836,21 +836,38 @@
 
 	.resource-editor-action-bar {
 		padding: 12px;
-		align-items: stretch;
-		flex-direction: column;
+		align-items: center;
+		flex-wrap: wrap;
 	}
 
 	.resource-editor-danger-actions,
 	.resource-editor-save-actions {
-		width: 100%;
+		width: auto;
 	}
 
 	.resource-editor-save-actions {
-		margin-left: 0;
+		margin-left: auto;
 	}
 
 	.resource-editor-action-bar .button {
-		flex: 1 1 0;
+		flex: 0 0 44px;
+		min-width: 44px;
+		width: 44px;
+		min-height: 44px;
+		padding: 0;
+
+		> span {
+			display: none;
+		}
+	}
+
+	.resource-editor-action-icon {
+		display: block;
+	}
+
+	.resource-editor-validation {
+		order: 1;
+		flex-basis: 100%;
 	}
 
 	.moirai-dialog fieldset {

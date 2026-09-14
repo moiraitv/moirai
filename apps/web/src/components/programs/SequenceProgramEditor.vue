@@ -30,7 +30,7 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 		</div>
 		<div class="program-sequence-panel">
 			<div v-for="(entry, index) in entries" :key="entry.id" class="sequence-entry">
-				<input :value="entry.count" type="number" min="1" max="10000" @input="updateEntry(index, { count: Number(($event.target as HTMLInputElement).value) })" />
+				<input :value="entry.count" type="number" inputmode="numeric" min="1" max="10000" @input="updateEntry(index, { count: Number(($event.target as HTMLInputElement).value) })" />
 				<span>×</span>
 				<select :value="entry.programId" @change="updateEntry(index, { programId: ($event.target as HTMLSelectElement).value })">
 					<option v-for="program in programs.filter((candidate) => candidate.id !== editingId)" :key="program.id" :value="program.id">{{ program.name }}</option>

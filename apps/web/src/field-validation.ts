@@ -72,5 +72,6 @@ export function numericInputAttributes(schema: { minValue: number | null; maxVal
 		min: minimum === null ? undefined : schema.isInt && !schema.safeParse(minimum).success ? minimum + 1 : minimum,
 		max: schema.maxValue ?? undefined,
 		step: schema.isInt ? 1 : 'any',
+		inputmode: schema.isInt ? 'numeric' as const : 'decimal' as const,
 	};
 }

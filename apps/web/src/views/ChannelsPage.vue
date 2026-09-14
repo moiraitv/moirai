@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { channelNumberSuggestions, channelGroupSuggestions } from '../channel-identity-suggestions';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
@@ -16,7 +17,6 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Clock3,
-	Pencil,
 	Plus,
 	ImagePlus,
 	RadioTower,
@@ -276,7 +276,9 @@ function channelFormSnapshot(): string {
 const channelFormDirty = computed(() =>
 	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
 const encodingInvalid = ref(false);
-const channelFormValid = computed(() => channelCreateSchema.safeParse(payload()).success);
+const numberSuggestions = computed(() => channelNumberSuggestions(channels.value, form.number, editingId.value));
+const groupSuggestions = computed(() => channelGroupSuggestions(channels.value));
+const channelFormValid = computed(() => !numberSuggestions.value.duplicate && channelCreateSchema.safeParse(payload()).success);
 const channelSaveDisabled = computed(() =>
 	saving.value || (!editingId.value && !encodingProfilesReady.value) || !channelFormValid.value || (Boolean(editingId.value) && !channelFormDirty.value));
 
@@ -659,11 +661,14 @@ async function save() {
 			saved = await api.createChannel(payload());
 			editingId.value = saved.id;
 		}
+		channelsStore.acceptSavedChannel(saved);
 		if (croppedLogo) {
 			saved = await api.uploadChannelLogo(saved.id, croppedLogo);
+			channelsStore.acceptSavedChannel(saved);
 		}
 		else if (priorManagedLogo && removeLogoOnSave.value) {
 			saved = await api.deleteChannelLogo(saved.id);
+			channelsStore.acceptSavedChannel(saved);
 		}
 		try {
 			if (fallbackFile.value) {
@@ -679,10 +684,10 @@ async function save() {
 			await Promise.allSettled([loadChannels(), scheduling.load(), loadGuide()]);
 			return;
 		}
-		void saved;
 		finishCloseForm();
-		await Promise.all([loadChannels(), scheduling.load()]);
-		await loadGuide();
+		void Promise.all([loadChannels(), scheduling.load(), loadGuide()]).catch((cause) => {
+			error.value = `Channel saved, but refreshing the lineup failed: ${errorMessage(cause)}`;
+		});
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
@@ -845,7 +850,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 						:aria-label="`Edit ${channel.name}`"
 						@click="edit(channel)"
 					>
-						<Pencil :size="16" />
+						<ChevronRight :size="18" />
 					</button>
 				</template>
 			</GuideTimeline>
@@ -877,9 +882,16 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<div class="channel-identity-fields">
 						<label
 						><span>Number</span
-						><input v-model="form.number" required pattern="[A-Za-z0-9._-]+" /></label
+							><input v-model="form.number" aria-label="Number" inputmode="decimal" required pattern="[A-Za-z0-9._-]+" :aria-invalid="Boolean(numberSuggestions.duplicate)" aria-describedby="channel-number-feedback" />
+							<div id="channel-number-feedback" class="channel-number-feedback" aria-live="polite">
+								<small v-if="numberSuggestions.duplicate" class="field-error">This number is already used by {{ numberSuggestions.duplicate.name }}.</small>
+								<template v-if="numberSuggestions.matches.length">
+									<small>Existing channels</small>
+									<ul><li v-for="channel in numberSuggestions.matches" :key="channel.id">{{ channel.number }} · {{ channel.name }}</li></ul>
+								</template>
+							</div></label
 						><label><span>Name</span><input v-model="form.name" autocapitalize="words" required /></label
-						><label><span>Group</span><input v-model="form.group" autocapitalize="words" /></label>
+						><label><span>Group</span><input v-model="form.group" list="channel-group-suggestions" autocapitalize="words" /><datalist id="channel-group-suggestions"><option v-for="group in groupSuggestions" :key="group" :value="group" /></datalist></label>
 					</div>
 					<div class="channel-schedule-link">
 						<span>Schedule</span>
