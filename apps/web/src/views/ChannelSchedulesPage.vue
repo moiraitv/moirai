@@ -428,7 +428,7 @@ function finishTemplateEdit(): void {
 	schedulePreview(0);
 }
 
-/** Validate and save the selected channel's layered schedule. */
+/** Save the selected channel's layered schedule and return to the schedule collection. */
 async function save(): Promise<boolean> {
 	if (!draft.value || !channel.value || saving.value || !scheduleNeedsSave.value) {
 		return false;
@@ -450,6 +450,7 @@ async function save(): Promise<boolean> {
 		catch (cause) {
 			error.value = `Schedule saved, but timeline status could not be refreshed. ${errorMessage(cause)}`;
 		}
+		await leaveScheduleEditor();
 		return true;
 	}
 	catch (cause) {
@@ -479,11 +480,7 @@ async function closeScheduleEditor(): Promise<void> {
 		dirty: scheduleNeedsSave.value,
 		key: `unsaved-channel-schedule:${channel.value?.id ?? 'new'}`,
 		message: 'Save this channel schedule before closing?',
-		save: async () => {
-			if (await save()) {
-				await leaveScheduleEditor();
-			}
-		},
+		save,
 		discard: leaveScheduleEditor,
 	});
 }

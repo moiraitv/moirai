@@ -56,7 +56,7 @@ Create the ![](/icons/list-video.svg) Programs you want to use first, then open 
 
 This example has three slots and preview warnings where the selected movies leave gaps. Adjust the slot rules or filler before relying on the lineup.
 
-To remove a slot, select it and activate **Delete selected slot** twice to confirm the draft change. You cannot remove the final remaining slot. **Reset** discards pending edits after confirmation; **Save** stores the valid draft.
+To remove a slot, select it and activate **Delete selected slot** twice to confirm the draft change. You cannot remove the final remaining slot. **Reset** discards pending edits after confirmation; **Save** stores the valid draft and closes the editor. If saving fails, the editor stays open with your changes.
 
 ## Choose how a slot appears in the guide
 

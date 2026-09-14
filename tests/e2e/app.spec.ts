@@ -956,8 +956,10 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Preview resolved schedule' })).toBeVisible();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(page).toHaveURL(/\/schedules\/templates\/[0-9a-f-]+$/);
+	await expect(page).toHaveURL(/\/schedules\/templates$/);
+	await expect(page.getByRole('dialog', { name: 'Template editor', exact: true })).toBeHidden();
 	await expect(page.locator('.notice.error')).toHaveCount(0);
+	await page.getByRole('link', { name: `Edit ${templateName}`, exact: true }).click();
 	await page.reload();
 	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
@@ -1168,7 +1170,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 			}),
 		});
 	});
+	const savedScheduleUrl = page.url();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page).toHaveURL(/\/schedules\/channels$/);
+	await expect(page.getByRole('dialog', { name: 'Channel schedule editor', exact: true })).toBeHidden();
+	await page.unroute('**/api/v1/scheduling/overview');
+	await page.goto(savedScheduleUrl);
 	await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();

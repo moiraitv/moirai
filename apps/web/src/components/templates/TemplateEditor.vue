@@ -667,7 +667,7 @@ const templateFormValid = computed(() =>
 const templateSaveDisabled = computed(() =>
 	saving.value || deleting.value || !hasPendingSave.value || !templateFormValid.value);
 
-/** Validate and save the template draft. */
+/** Save the valid template draft and return to its collection or owning editor. */
 async function save(): Promise<boolean> {
 	const body = templatePayload();
 	if (!body || templateSaveDisabled.value) {
@@ -686,17 +686,7 @@ async function save(): Promise<boolean> {
 			return true;
 		}
 
-		if (!editingId.value) {
-			allowRouteLeave = true;
-			try {
-				await router.replace(`/schedules/templates/${saved.id}`);
-			}
-			finally {
-				allowRouteLeave = false;
-			}
-		}
-		loadDraft();
-		refreshPreviewNow();
+		await leaveEditor();
 		return true;
 	}
 	catch (cause) {
@@ -767,11 +757,7 @@ async function closeEditor(): Promise<void> {
 		dirty: hasPendingSave.value,
 		key: `unsaved-template:${editingId.value ?? 'new'}`,
 		message: 'Save this template before closing?',
-		save: async () => {
-			if (await save() && !props.embedded) {
-				await leaveEditor();
-			}
-		},
+		save,
 		discard: leaveEditor,
 	});
 }
@@ -1330,6 +1316,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 					</div>
 					<ResourceEditorActionBar
 						resource-type="Template"
+						:validation-message="error"
 						:show-delete="!embedded && Boolean(editingId)"
 						:busy="saving || deleting"
 						:deleting="deleting"

@@ -187,6 +187,8 @@ A single saved default starts at 1080p and applies only to new channels; Quick S
 without explicit normalization use it. Explicit Custom or legacy manual API input stays independent.
 Migrations preserve existing profiles and assignments, suffixing colliding built-in names.
 Subtitle choices, fonts, process paths, presentation, and scheduling remain channel-owned.
+Successful template and channel-schedule saves close their editors, including saves requested
+through the unsaved-changes dialog; failed saves preserve the open draft.
 
 Reusable music video credit templates use Liquid to generate subtitles in ASS format. They expose
 bounded catalog metadata, source duration converted from persisted milliseconds, and channel resolution. Isolated, resource-limited
