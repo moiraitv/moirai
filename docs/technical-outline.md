@@ -780,7 +780,11 @@ server-default FFmpeg; channel predictions retain their channel-specific FFmpeg 
 explicit backend selections remain available for other configurations. Existing channels that store
 `None` are not migrated. Distinct probes share a bounded queue whose eight-second deadline includes
 queue time. Indeterminate results and source-sized outputs are not cached, allowing playback to retry
-before safely falling back to `None`.
+before safely falling back to `None`. Recognized probe failures distinguish missing devices, denied
+access, unavailable encoders, and unavailable drivers in the existing prediction detail field.
+Explicit VAAPI paths receive a read/write access check; bounded stderr is classified but never
+returned verbatim. Unrecognized failures remain inconclusive. Encoding editors expose these
+details with installation guidance for DRM group/device mappings and NVIDIA Container Toolkit.
 
 The adapter produces validated, non-overlapping playout documents for each local calendar day. It:
 

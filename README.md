@@ -132,6 +132,8 @@ the developer API references as a production route.
 
 ## Docker
 
+For GPU playback, follow the [device mapping, permissions, and verification instructions](apps/docs/src/getting-started/docker.md#hardware-acceleration) before starting the container.
+
 ```sh
 docker compose up --build
 ```

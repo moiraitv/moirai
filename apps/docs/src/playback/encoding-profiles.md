@@ -55,3 +55,5 @@ Moirai includes non-deletable, read-only presets for 480p, 576p, 720p, 1080p, 14
 | 4K     | 3840 × 2160 | 32,000 kbps   |
 
 **1080p** is the initial default. Choose any preset or custom profile under **Default for new channels** to change it. This selection applies to the new-channel editor and Quick Setup; it never reassigns existing channels. Choose Custom in the channel editor to opt out. A custom profile selected as the default cannot be deleted until you choose another default.
+
+Expand **Hardware acceleration setup and diagnostics** in the video editor to inspect the Automatic encode check and open the [device mapping and permissions guide](/getting-started/docker). Failures can include missing devices, denied permissions, unavailable encoders, and unavailable drivers. The panel opens automatically when Automatic cannot select a backend.

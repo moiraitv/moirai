@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process';
+import { runHardwareProbeCommand, hardwareProbeFailureDetail } from './hardware-probe-command.js';
+export { runHardwareProbeCommand } from './hardware-probe-command.js';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
@@ -20,8 +21,6 @@ const CACHE_TTL_MS = 5 * 60_000;
 const MAX_CACHE_ENTRIES = 32;
 /** Maximum distinct active or queued targets retained by the resolver. */
 const MAX_PENDING_RESOLUTIONS = 8;
-/** Maximum diagnostic process output retained before a probe is terminated. */
-const MAX_PROBE_OUTPUT_BYTES = 64 * 1_024;
 /** Largest frame allocation permitted for an automatic hardware smoke test. */
 const MAX_PROBE_PIXELS = 7_680 * 4_320;
 
@@ -42,7 +41,7 @@ export interface HardwareProbeCommand {
 }
 
 /** Outcome of attempting to launch and complete one hardware probe command. */
-export type HardwareProbeCommandResult = 'supported' | 'unsupported' | 'unavailable';
+export type HardwareProbeCommandResult = 'supported' | 'unsupported' | 'unavailable' | 'device-missing' | 'permission-denied' | 'encoder-unavailable' | 'driver-unavailable';
 
 /** Execute one bounded FFmpeg command without invoking a shell. */
 export type HardwareProbeCommandRunner = (
@@ -241,8 +240,11 @@ export async function listLinuxVaapiDevices(): Promise<VaapiRenderDevice[]> {
 	try {
 		entries = await readdir('/dev/dri');
 	}
-	catch {
-		return [];
+	catch (cause) {
+		if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+			return [];
+		}
+		throw cause;
 	}
 
 	const devices = await Promise.all(entries
@@ -270,45 +272,6 @@ export async function listLinuxVaapiDevices(): Promise<VaapiRenderDevice[]> {
 			};
 		}));
 	return devices.sort((left, right) => Number(right.discrete) - Number(left.discrete));
-}
-
-/** Execute a probe while bounding runtime and diagnostic output. */
-export function runHardwareProbeCommand(
-	command: HardwareProbeCommand,
-	timeoutMs: number,
-): Promise<HardwareProbeCommandResult> {
-	return new Promise((resolve) => {
-		let settled = false;
-		let outputBytes = 0;
-		const child = spawn(command.executable, command.args, {
-			env: { ...process.env, ...command.env },
-			stdio: ['ignore', 'pipe', 'pipe'],
-		});
-		const finish = (result: HardwareProbeCommandResult): void => {
-			if (settled) {
-				return;
-			}
-
-			settled = true;
-			clearTimeout(timer);
-			resolve(result);
-		};
-		const collect = (chunk: Buffer): void => {
-			outputBytes += chunk.length;
-			if (outputBytes > MAX_PROBE_OUTPUT_BYTES) {
-				child.kill('SIGKILL');
-				finish('unsupported');
-			}
-		};
-		const timer = setTimeout(() => {
-			child.kill('SIGKILL');
-			finish('unsupported');
-		}, timeoutMs);
-		child.stdout.on('data', collect);
-		child.stderr.on('data', collect);
-		child.once('error', () => finish('unavailable'));
-		child.once('exit', (code) => finish(code === 0 ? 'supported' : 'unsupported'));
-	});
 }
 
 /** Resolve Moirai's automatic setting using the hardware visible to the server process. */
@@ -435,9 +398,19 @@ export class HardwareAccelerationResolver {
 			return this.none('The video target exceeds the 8K automatic-probe limit.');
 		}
 
-		const devices = this.environment.platform === 'linux'
-			? await this.environment.listVaapiDevices()
-			: [];
+		let devices: VaapiRenderDevice[] = [];
+		let discoveryFailure = '';
+		if (this.environment.platform === 'linux') {
+			try {
+				devices = await this.environment.listVaapiDevices();
+			}
+			catch (cause) {
+				const code = (cause as NodeJS.ErrnoException).code;
+				discoveryFailure = code === 'EACCES' || code === 'EPERM'
+					? `DRM device discovery: ${hardwareProbeFailureDetail('permission-denied')}`
+					: 'DRM devices could not be inspected. Check host and container device access.';
+			}
+		}
 		if (Date.now() >= deadline) {
 			return this.indeterminate('Hardware support could not be determined before the probe deadline.');
 		}
@@ -451,10 +424,11 @@ export class HardwareAccelerationResolver {
 			return this.none('No automatic hardware backend is available on this platform.');
 		}
 
+		const failures: string[] = discoveryFailure ? [discoveryFailure] : [];
 		for (const candidate of candidates) {
 			const remaining = deadline - Date.now();
 			if (remaining <= 0) {
-				return this.indeterminate('Hardware support could not be determined before the probe deadline.');
+				return this.indeterminate(['Hardware support could not be determined before the probe deadline.', ...failures].join('\n'));
 			}
 
 			const command = this.command(request, candidate, width, height);
@@ -463,10 +437,13 @@ export class HardwareAccelerationResolver {
 				Math.min(CANDIDATE_TIMEOUT_MS, remaining),
 			);
 			if (Date.now() >= deadline) {
-				return this.indeterminate('Hardware support could not be determined before the probe deadline.');
+				return this.indeterminate(['Hardware support could not be determined before the probe deadline.', ...failures].join('\n'));
 			}
 			if (result === 'unavailable') {
 				return this.indeterminate('The configured FFmpeg executable could not be started.');
+			}
+			if (result !== 'supported') {
+				failures.push(`${candidate.label}: ${hardwareProbeFailureDetail(result)}`);
 			}
 			if (result === 'supported') {
 				const resolution: HardwareAccelerationResolution = {
@@ -484,7 +461,10 @@ export class HardwareAccelerationResolver {
 			}
 		}
 
-		return this.none('No compatible hardware encoder was detected for this video target.');
+		if (this.environment.platform === 'linux' && devices.length === 0 && !request.vaapiDevice && !discoveryFailure) {
+			failures.unshift('Device missing: no DRM render nodes are visible to Moirai. For Intel or AMD on Linux, pass the render device into the container. NVIDIA uses the NVIDIA Container Toolkit instead.');
+		}
+		return this.none(['No compatible hardware encoder was detected for this video target.', ...failures].join('\n'));
 	}
 
 	/** Build the target-specific one-frame FFmpeg smoke-test command. */

@@ -178,3 +178,33 @@ describe('HardwareAccelerationResolver', () => {
 		expect(runCommand).not.toHaveBeenCalled();
 	});
 });
+
+it('reports setup failures per backend without suppressing later successful backends', async () => {
+	const resolver = new HardwareAccelerationResolver(logger, {
+		platform: 'linux', arch: 'x64', listVaapiDevices: async () => [],
+		runCommand: async command => command.args.includes('h264_nvenc') ? 'device-missing' : 'encoder-unavailable',
+	});
+	const result = await resolver.resolve(request());
+	expect(result.outcome).toBe('none');
+	expect(result.detail).toContain('CUDA: Device missing');
+	expect(result.detail).toContain('QSV: Encoder unavailable');
+	const working = new HardwareAccelerationResolver(logger, {
+		platform: 'linux', arch: 'x64', listVaapiDevices: async () => [],
+		runCommand: async command => command.args.includes('h264_nvenc') ? 'permission-denied' : 'supported',
+	});
+	await expect(working.resolve(request())).resolves.toMatchObject({ outcome: 'hardware', accel: 'qsv' });
+});
+
+it('does not misreport denied device discovery as missing hardware', async () => {
+	const resolver = new HardwareAccelerationResolver(logger, {
+		platform: 'linux', arch: 'x64',
+		listVaapiDevices: async () => {
+			throw Object.assign(new Error('private path'), { code: 'EACCES' });
+		},
+		runCommand: async () => 'unsupported',
+	});
+	const result = await resolver.resolve(request());
+	expect(result.detail).toContain('Permission denied');
+	expect(result.detail).not.toContain('Device missing');
+	expect(result.detail).not.toContain('private path');
+});

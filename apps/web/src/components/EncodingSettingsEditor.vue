@@ -97,6 +97,12 @@ const numericFields = {
 				<label v-if="video.accel === 'vaapi' || video.accel === 'qsv'"><span>VAAPI driver</span><select v-model="video.vaapiDriver"><option :value="null">Automatic</option><option value="ihd">iHD</option><option value="i965">i965</option><option value="radeonsi">radeonsi</option></select></label>
 			</div>
 		</fieldset>
+		<details class="acceleration-setup-details" :open="video.accel === 'automatic' && (accelerationPredictionText === 'None' || accelerationPredictionText === 'Undetermined')">
+			<summary>Hardware acceleration setup and diagnostics</summary>
+			<p v-if="video.accel === 'automatic' && accelerationDetail" class="acceleration-diagnostic" role="status">{{ accelerationDetail }}</p>
+			<p v-else>Choose Automatic to check which encoders can use the hardware visible to Moirai for these video settings.</p>
+			<a href="/help/getting-started/docker.html#hardware-acceleration" target="_blank" rel="noopener">Device mapping and permissions guide</a>
+		</details>
 		<fieldset :disabled="disabled" class="encoding-settings-section" aria-label="Audio">
 			<legend><span class="encoding-profile-icon" aria-hidden="true"><Volume2 :size="26" /></span><span>Audio<small v-if="showDescriptions">Audio encoding and output settings</small></span></legend>
 			<div class="form-grid three">

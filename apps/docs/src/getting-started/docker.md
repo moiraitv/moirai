@@ -76,7 +76,7 @@ Start the service from the repository directory with:
 docker compose up --build -d
 ```
 
-For VAAPI hardware access, enable the `/dev/dri` device mapping and the appropriate `group_add` entries shown as comments in the supplied `compose.yaml`. Replace the example group IDs with those from your host.
+Before starting with GPU acceleration, apply the device and permission settings under [Hardware acceleration](#hardware-acceleration). The supplied Compose file includes a commented Intel/AMD example; NVIDIA uses its own runtime configuration.
 
 ### As a standalone container
 
@@ -106,7 +106,106 @@ Omit the transcode mount if you want generated output to stay in the data volume
 
 See Docker's [container run reference](https://docs.docker.com/engine/containers/run/) for mount, device, and supplementary-group options.
 
-### Open the application
+## Hardware acceleration
+
+Configure GPU access on the Docker host before choosing acceleration in Moirai. Merge the relevant example below into the supplied Compose service or standalone container configuration.
+
+### Intel and AMD on Linux
+
+List the host render devices and their numeric owning groups:
+
+```sh
+ls -l /dev/dri/renderD*
+stat -c '%g %n' /dev/dri/renderD*
+```
+
+Choose the render node for your GPU; often there is only one, but it isn't necessarily the first node on a multi-GPU host. The following example uses `/dev/dri/renderD128`. Export its actual group ID in the shell where you run Compose, or put that numeric value in the project's `.env` file as `MOIRAI_RENDER_GID`:
+
+```sh
+export MOIRAI_RENDER_GID=$(stat -c '%g' /dev/dri/renderD128)
+```
+
+#### Composer
+
+```yaml
+services:
+  moirai:
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    group_add:
+      - '${MOIRAI_RENDER_GID:?Set the host render device group ID}'
+```
+
+#### Standalone
+
+For a standalone `docker run`, the corresponding options are `--device /dev/dri/renderD128:/dev/dri/renderD128 --group-add "$MOIRAI_RENDER_GID"`. Use the same device path in Moirai's VAAPI settings when selecting a device explicitly. Intel commonly uses QSV or VAAPI; AMD on Linux commonly uses VAAPI with the `radeonsi` driver. The host still needs a working GPU driver.
+
+---
+
+Recreate the service after changing devices or supplementary groups. A simple restart does not apply a changed container configuration:
+
+```sh
+docker compose up -d --force-recreate moirai
+```
+
+Verify access as the normal container user, not root:
+
+```sh
+docker compose exec moirai sh -c 'id; ls -ln /dev/dri; test -r /dev/dri/renderD128 && test -w /dev/dri/renderD128'
+```
+
+An absent node means the host driver or device mapping needs attention. A visible node without read/write access means the numeric group mapping or a host access policy needs attention. If Unix permissions are correct, check SELinux or other container security policies on the host. Avoid using privileged mode or making device nodes world-writable as a shortcut.
+
+### NVIDIA on Linux
+
+Install a compatible NVIDIA host driver and follow the [NVIDIA Container Toolkit installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) to configure Docker. Verify the host with `nvidia-smi`, then add GPU access to the Moirai service:
+
+#### Composer
+
+```yaml
+services:
+  moirai:
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
+These environment entries supplement the existing service environment. To select one GPU, replace `count: all` with `device_ids: ['GPU-UUID']`, using the GPU UUID reported by `nvidia-smi -L`, and set `NVIDIA_VISIBLE_DEVICES` to the same UUID. Do not specify both `count` and `device_ids`. See [Docker's GPU Compose documentation](https://docs.docker.com/compose/how-tos/gpu-support/).
+
+#### Standalone
+
+For standalone Docker, use `--gpus all --env NVIDIA_VISIBLE_DEVICES=all --env NVIDIA_DRIVER_CAPABILITIES=compute,video,utility`. 
+
+---
+
+Recreate the container after changing GPU access, then verify it as the normal runtime user:
+
+```sh
+docker compose exec moirai nvidia-smi
+```
+
+A successful `nvidia-smi` confirms GPU visibility; it does not prove that the chosen video codec, bit depth, or resolution can be encoded. In Moirai, **CUDA** is the NVIDIA backend and uses NVENC for encoding. Use the in-app check below to verify an actual encode.
+
+### Verify in Moirai
+
+Open an encoding profile or a channel's custom video settings, select **Automatic**, and set a concrete width, height, format, and bit depth. Expand **Hardware acceleration setup and diagnostics**. Moirai attempts a bounded one-frame encode using the FFmpeg executable and hardware visible to the server process.
+
+On failure, the details distinguish **Device missing**, **Permission denied**, **Encoder unavailable**, and **Driver unavailable** errors. A successful check identifies the backend that encoded that target; it does not guarantee every source codec or filter combination will work -- confirm real playback afterward under **Status**.
+
+Results may be cached for up to five minutes. After correcting a driver or permission issue without recreating the container, wait for that cache to expire or restart Moirai. Source-sized output cannot be predicted; choose concrete dimensions for the check. Explicit backend settings remain available, but do not run this Automatic prediction.
+
+### Other hosts
+
+The Linux device examples do not apply to native Windows or macOS installations. Native macOS uses VideoToolbox. Docker Desktop runs Linux containers inside a VM, so a host GPU is not automatically available to Moirai; mapping `/dev/dri` cannot expose an Apple GPU. Windows GPU containers require an explicitly supported Docker/WSL GPU setup. Moirai's supplied container image currently targets `linux/amd64`; an emulated container may not hardware acceleration.
+
+## Open the application
 
 Open `http://<server-address>:3000`. The first visitor is allowed to create the administrator, so complete [administrator setup](/getting-started/access) before making the service reachable from an untrusted network.
 

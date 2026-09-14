@@ -33,13 +33,15 @@ services:
       - moirai-data:/data
       # Add media libraries as read-only mounts, for example:
       # - /host/media/movies:/media/movies:ro
-    # Hardware acceleration must be passed through explicitly. Also add the host video/render
-    # group GIDs under group_add when the device nodes are not accessible to the container user.
+    # Optional Intel/AMD GPU access on Linux. Choose the correct host render node, then run:
+    # export MOIRAI_RENDER_GID=$(stat -c '%g' /dev/dri/renderD128)
+    # Uncomment both blocks and recreate the container; a restart alone is insufficient.
     # devices:
-    #   - /dev/dri:/dev/dri
+    #   - /dev/dri/renderD128:/dev/dri/renderD128
     # group_add:
-    #   - '44'
-    #   - '109'
+    #   - '${MOIRAI_RENDER_GID:?Set the host render device group ID}'
+    # NVIDIA needs NVIDIA Container Toolkit and a GPU reservation instead.
+    # See apps/docs/src/getting-started/docker.md for NVIDIA and verification examples.
 
 volumes:
   moirai-data:
