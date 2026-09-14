@@ -103,18 +103,47 @@ describe('upcoming guide refresh lifecycle', () => {
 		expect(summary.window.value.start).toBe(Date.now());
 	});
 
-	it('preserves a failed state until a deliberate retry and cleans up the clock on unmount', async () => {
-		store.loadGuide.mockRejectedValueOnce(new Error('offline'));
+	it('retries a transport failure on the next clock tick and cleans up on unmount', async () => {
+		store.loadGuide.mockRejectedValueOnce(new TypeError('offline'));
 		const summary = useUpcomingScheduleGuide(() => true);
 		lifecycle.mounted.forEach((mount) => mount());
 		await summary.load();
 		expect(summary.status.value).toBe('failed');
 		await vi.advanceTimersByTimeAsync(SCHEDULE_SUMMARY_REFRESH_MS);
-		expect(store.loadGuide).toHaveBeenCalledTimes(1);
+		expect(store.loadGuide).toHaveBeenCalledTimes(2);
 		document.dispatchEvent(new Event('visibilitychange'));
 		await summary.load();
 		expect(summary.status.value).toBe('ready');
 		lifecycle.unmounted.splice(0).forEach((unmount) => unmount());
 		expect(vi.getTimerCount()).toBe(0);
 	});
+});
+
+
+it('exhausts two retries, then allows an explicit retry', async () => {
+	store.loadGuide.mockRejectedValue(new TypeError('offline'));
+	const summary = useUpcomingScheduleGuide(() => true);
+	lifecycle.mounted.forEach(mount => mount());
+	await summary.load();
+	await vi.advanceTimersByTimeAsync(SCHEDULE_SUMMARY_REFRESH_MS * 5);
+	expect(store.loadGuide).toHaveBeenCalledTimes(3);
+	expect(summary.recovering.value).toBe(false);
+	await summary.load(true);
+	expect(store.loadGuide).toHaveBeenCalledTimes(4);
+	expect(summary.recovering.value).toBe(true);
+});
+
+it('does not automatically retry a validation failure and keeps covered cached summaries', async () => {
+	store.guide = guide('2026-09-03', 3);
+	store.loadGuide.mockRejectedValue(new Error('Validation failed'));
+	const summary = useUpcomingScheduleGuide(() => true);
+	lifecycle.mounted.forEach(mount => mount());
+	await summary.load(true);
+	expect(summary.status.value).toBe('stale');
+	await vi.advanceTimersByTimeAsync(SCHEDULE_SUMMARY_REFRESH_MS * 3);
+	expect(store.loadGuide).toHaveBeenCalledTimes(1);
+	expect(summary.recovering.value).toBe(false);
+	document.dispatchEvent(new Event('visibilitychange'));
+	await summary.load();
+	expect(store.loadGuide).toHaveBeenCalledTimes(1);
 });

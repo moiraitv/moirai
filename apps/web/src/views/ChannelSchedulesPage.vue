@@ -113,7 +113,7 @@ const programs = computed(() => scheduling.overview?.programs ?? []);
 const schedules = computed(() => scheduling.overview?.channelSchedules ?? []);
 const {
 	window: summaryWindow, covered: summaryCovered, status: summaryStatus,
-	error: listGuideError, load: loadListGuide,
+	error: listGuideError, recovering: listGuideRecovering, load: loadListGuide,
 } = useUpcomingScheduleGuide(() => !editing.value && schedules.value.length > 0);
 const initialLoading = ref(
 	!(channelsStore.loaded && scheduling.loaded && channelsStore.capabilitiesLoaded)
@@ -699,8 +699,10 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 
 
 			<div class="channel-schedules-content">
-				<p v-if="listGuideError" class="notice error">
-					Schedule previews are temporarily unavailable: {{ listGuideError }}
+				<p v-if="listGuideError" class="notice" :class="listGuideRecovering ? 'warning' : 'error'" role="status">
+					{{ listGuideRecovering ? 'Reconnecting to schedule previews.' : 'Schedule previews could not be refreshed.' }}
+					{{ summaryCovered ? 'Showing the last loaded previews.' : 'Previews are unavailable.' }}
+					<template v-if="!listGuideRecovering">{{ listGuideError }} <button class="button secondary" type="button" @click="loadListGuide(true)">Retry</button></template>
 				</p>
 
 				<ChannelScheduleCatalog

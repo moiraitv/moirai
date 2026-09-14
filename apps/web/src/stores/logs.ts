@@ -42,9 +42,10 @@ export const useLogsStore = defineStore('logs', () => {
 			error.value = '';
 		}
 		catch (cause) {
-			if (current === sequence) {
-				error.value = errorMessage(cause);
+			if (current !== sequence) {
+				return;
 			}
+			error.value = errorMessage(cause);
 			throw cause;
 		}
 		finally {
@@ -60,6 +61,7 @@ export const useLogsStore = defineStore('logs', () => {
 			return;
 		}
 
+		const current = sequence;
 		loadingMore.value = true;
 		try {
 			const page = await api.logs({
@@ -68,13 +70,18 @@ export const useLogsStore = defineStore('logs', () => {
 				search: activeSearch.value || undefined,
 				limit: 100,
 			});
+			if (current !== sequence) {
+				return;
+			}
 			entries.value.push(...page.entries);
 			nextCursor.value = page.nextCursor;
 			scanLimitReached.value = page.scanLimitReached;
 			error.value = '';
 		}
 		catch (cause) {
-			error.value = errorMessage(cause);
+			if (current === sequence) {
+				error.value = errorMessage(cause);
+			}
 		}
 		finally {
 			loadingMore.value = false;

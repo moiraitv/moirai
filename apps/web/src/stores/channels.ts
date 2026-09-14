@@ -6,7 +6,7 @@ import {
 	type ScheduleGuide,
 } from '@moirai/shared';
 import { api } from '../api';
-import { shiftDateKey } from '../date-key';
+import { dateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 
 /** History effect applied after one successful guide request. */
@@ -66,9 +66,10 @@ export const useChannelsStore = defineStore('channels', () => {
 			error.value = '';
 		}
 		catch (cause) {
-			if (sequence === channelSequence) {
-				error.value = errorMessage(cause);
+			if (sequence !== channelSequence) {
+				return;
 			}
+			error.value = errorMessage(cause);
 			throw cause;
 		}
 		finally {
@@ -95,19 +96,26 @@ export const useChannelsStore = defineStore('channels', () => {
 			error.value = '';
 		}
 		catch (cause) {
-			if (sequence === capabilitySequence) {
-				error.value = errorMessage(cause);
+			if (sequence !== capabilitySequence) {
+				return;
 			}
+			error.value = errorMessage(cause);
 			throw cause;
 		}
 	}
 
-	/** Load guide from the authoritative source and update the shared UI store. */
+	/** Refresh the guide, advancing expired start dates and navigation history to today. */
 	async function loadGuide(
 		startDate: string,
 		days = 7,
 		navigation: GuideNavigation = 'preserve',
 	): Promise<void> {
+		const today = dateKey(new Date(), timeZone.value);
+		if (startDate < today) {
+			startDate = today;
+			days = 7;
+			navigation = 'preserve';
+		}
 		const sequence = ++guideSequence;
 		const previousStart = guideWeekStart.value;
 		if (
@@ -123,11 +131,12 @@ export const useChannelsStore = defineStore('channels', () => {
 				return;
 			}
 
+			guideStartHistory.value = guideStartHistory.value.filter(date => date >= today);
 			guide.value = result;
 			guideWeekStart.value = startDate;
 			guideDays.value = days;
 			guideLoaded.value = true;
-			if (navigation === 'forward' && previousStart && previousStart !== startDate) {
+			if (navigation === 'forward' && previousStart >= today && previousStart !== startDate) {
 				if (guideStartHistory.value.at(-1) !== previousStart) {
 					guideStartHistory.value.push(previousStart);
 				}
@@ -141,9 +150,10 @@ export const useChannelsStore = defineStore('channels', () => {
 			error.value = '';
 		}
 		catch (cause) {
-			if (sequence === guideSequence) {
-				error.value = errorMessage(cause);
+			if (sequence !== guideSequence) {
+				return;
 			}
+			error.value = errorMessage(cause);
 			throw cause;
 		}
 		finally {
@@ -166,7 +176,9 @@ export const useChannelsStore = defineStore('channels', () => {
 				: target;
 		}
 
-		const committedStart = guide.value.committedStartDate;
+		const today = dateKey(new Date(), timeZone.value);
+		const committedStart = guide.value.committedStartDate && guide.value.committedStartDate > today
+			? guide.value.committedStartDate : today;
 		if (committedStart && guideWeekStart.value <= committedStart) {
 			return null;
 		}

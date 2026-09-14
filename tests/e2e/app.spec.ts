@@ -1400,6 +1400,8 @@ test('retains only the fallback draft when a channel fallback upload fails', asy
 	await expect(page.getByLabel('Name')).toHaveValue(savedName);
 	await expect(page.locator('.fallback-filler-editor')).toContainText('retry-fallback.mp4');
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	// Save becomes available only after the post-failure guide refresh has settled.
+	await expect(page.getByText(/Channel changes were saved, but the fallback filler was not/)).toBeVisible();
 	await page.unroute(`**/api/v1/channels/${created.id}/fallback-filler`);
 
 	await page.getByRole('button', { name: 'Close channel editor' }).click();

@@ -21,7 +21,7 @@ export async function previewCredits(source: string, item: MediaItem, channel: P
 		throw new Error('Choose an available music video');
 	}
 	if (item.durationSeconds == null || !Number.isFinite(item.durationSeconds) || item.durationSeconds <= 0) {
-		throw new Error('The library scan is incomplete. Wait for scanning to finish before previewing this video.');
+		throw new Error('Video duration is unavailable. Inspect the video metadata and scan issues, or refresh after scanning.');
 	}
 	if (seconds >= item.durationSeconds) {
 		throw new Error('Preview time must be within the video');

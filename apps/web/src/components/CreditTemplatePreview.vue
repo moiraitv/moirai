@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { liveEvents } from '../live-events';
+import { useLibrariesStore } from '../stores/libraries';
+import { RouterLink } from 'vue-router';
 import { useDisclosureState } from '../disclosure-state';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import type { CreditPreviewResult, MediaItem } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
@@ -27,6 +30,9 @@ const preview = ref<CreditPreviewResult>();
 const previewFrame = ref<HTMLElement>();
 const previewVisible = computed(() => rendering.value || Boolean(preview.value) || Boolean(error.value));
 let previewSequence = 0;
+let loadSequence = 0;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+const librariesStore = useLibrariesStore();
 
 /** Bring the reserved image area into the editor viewport without moving keyboard focus. */
 function revealPreview(): void {
@@ -41,20 +47,29 @@ function revealPreview(): void {
 
 /** Refresh the bounded video sample while retaining the selected video when it remains available. */
 async function load(): Promise<void> {
-	loading.value = true;
+	const request = ++loadSequence;
+	loading.value = !loaded.value;
 	loadError.value = '';
 	try {
-		items.value = await api.creditPreviewVideos();
+		const result = await api.creditPreviewVideos();
+		if (request !== loadSequence) {
+			return;
+		}
+		items.value = result;
 		if (!items.value.some(item => item.id === itemId.value)) {
 			itemId.value = items.value[0]?.id ?? '';
 		}
 		loaded.value = true;
 	}
 	catch (cause) {
-		loadError.value = errorMessage(cause);
+		if (request === loadSequence) {
+			loadError.value = errorMessage(cause);
+		}
 	}
 	finally {
-		loading.value = false;
+		if (request === loadSequence) {
+			loading.value = false;
+		}
 	}
 }
 
@@ -102,7 +117,24 @@ watch([() => props.source, itemId, seconds], () => {
 	previewSequence++;
 	preview.value = undefined; 
 });
+const unsubscribe = liveEvents.subscribe((event) => {
+	if (event.type !== 'scan.changed' || !['complete', 'partial'].includes(event.data.status)) {
+		return;
+	}
+	const library = librariesStore.libraries.find(entry => entry.id === event.data.libraryId);
+	if (library && library.typeKey !== 'music-videos') {
+		return;
+	}
+	clearTimeout(refreshTimer);
+	refreshTimer = setTimeout(() => void load(), 180);
+});
 onMounted(load);
+onBeforeUnmount(() => {
+	unsubscribe();
+	clearTimeout(refreshTimer);
+	loadSequence++;
+	previewSequence++;
+});
 </script>
 
 <template>
@@ -112,7 +144,7 @@ onMounted(load);
 		<LoadingState v-if="loading" label="Loading music videos…" />
 		<p v-else-if="loadError" class="notice error">{{ loadError }} <button class="button secondary" type="button" @click="load">Retry</button></p>
 		<template v-else-if="loaded">
-			<p v-if="!items.length">Add and scan a music video library to preview credits. <button class="button secondary contextual" type="button" @click="load">Refresh videos</button></p>
+			<p v-if="!items.length">Add and scan a music video library to preview credits. <button class="button secondary contextual" type="button" @click="load">Refresh videos</button> <RouterLink v-if="selectedItem" :to="`/libraries/${selectedItem.libraryId}/items/${selectedItem.id}`">Inspect video</RouterLink></p>
 			<template v-else>
 				<div class="credit-preview-videos" role="group" aria-label="Music videos">
 					<button v-for="item in items" :key="item.id" class="credit-preview-video" type="button" :aria-pressed="itemId === item.id" :disabled="rendering" @click="itemId = item.id">
@@ -121,7 +153,7 @@ onMounted(load);
 						<strong>{{ item.title }}</strong><small>{{ item.artists.join(', ') }}</small>
 					</button>
 				</div>
-				<p v-if="duration <= 0" class="notice warning">The library scan is incomplete. Wait for scanning to finish before previewing this video. <button class="button secondary contextual" type="button" @click="load">Refresh videos</button></p>
+				<p v-if="duration <= 0" class="notice warning">Video duration is unavailable. Inspect the video’s metadata and scan issues, or refresh after scanning. <button class="button secondary contextual" type="button" @click="load">Refresh videos</button> <RouterLink v-if="selectedItem" :to="`/libraries/${selectedItem.libraryId}/items/${selectedItem.id}`">Inspect video</RouterLink></p>
 				<div class="credit-preview-actions">
 					<label><span>Source time (seconds)</span><input v-model.number="seconds" :disabled="rendering" type="number" inputmode="decimal" min="0" max="86400" step="0.1" /></label>
 					<button class="button secondary" type="button" :disabled="rendering || !itemId || !validTime" @click="render">{{ rendering ? 'Rendering…' : 'Render preview' }}</button>

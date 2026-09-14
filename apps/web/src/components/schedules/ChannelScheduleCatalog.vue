@@ -35,7 +35,7 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const failedChannelLogos = ref<Set<string>>(new Set());
-const upcomingSummaries = computed(() => new Map(props.summaryStatus === 'ready'
+const upcomingSummaries = computed(() => new Map((props.summaryStatus === 'ready' || props.summaryStatus === 'stale')
 	? props.guide?.channels.map((entry) =>
 		[entry.channelId, upcomingScheduleSummary(entry.preview, props.summaryWindow)])
 	: []));

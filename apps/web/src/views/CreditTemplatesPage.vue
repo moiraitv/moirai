@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -92,15 +93,26 @@ async function save(): Promise<void> {
 	busy.value = true;
 	editorError.value = '';
 	try {
-		if (id.value) {
-			await api.updateCreditTemplate(id.value, form);
+		const saved = id.value
+			? await api.updateCreditTemplate(id.value, form)
+			: await api.createCreditTemplate(form);
+		const index = templates.value.findIndex(entry => entry.id === saved.id);
+		if (index < 0) {
+			templates.value.push(saved);
 		}
 		else {
-			await api.createCreditTemplate(form);
+			templates.value[index] = saved;
 		}
 		baseline.value = JSON.stringify(form);
 		dismiss();
-		await load();
+		try {
+			templates.value = await readWithRetry(() => api.creditTemplates());
+			loaded.value = true;
+			error.value = '';
+		}
+		catch (cause) {
+			error.value = `Saved, but the list could not be refreshed. ${errorMessage(cause)}`;
+		}
 	}
 	catch (cause) {
 		editorError.value = errorMessage(cause);

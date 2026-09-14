@@ -192,6 +192,19 @@ A single saved default starts at 1080p and applies only to new channels; Quick S
 without explicit normalization use it. Explicit Custom or legacy manual API input stays independent.
 Migrations preserve existing profiles and assignments, suffixing colliding built-in names.
 Subtitle choices, fonts, process paths, presentation, and scheduling remain channel-owned.
+Background read failures are discarded when superseded. Schedule summaries retry transport or
+502/503/504 failures twice on visible one-minute checks, retaining covered cached previews;
+validation and resource-limit responses do not trigger automatic retries. Playback status coalesces
+reads and separates conflict-report failures from playback recovery, retaining the last update time
+and escalating after three failed reads. Encoding-profile and credit-template saves apply returned
+resources immediately; their follow-up collection reads retry a transient failure once without
+repeating mutations. Credit previews report unavailable duration without inferring scan state and
+refresh their sample on completed music scans while preserving the draft and available selection.
+
+Guide and Channels views check the scheduling date every minute and when a tab becomes visible.
+Guide requests clamp past start dates to today and discard expired navigation history, preserving
+future selections. Same-day checks do not issue network requests.
+
 The channel editor checks canonical number conflicts locally against the loaded channel list,
 excluding itself, and shows up to three prefix matches. Existing groups supply autocomplete
 suggestions without additional queries. Server-confirmed channel saves update the shared list

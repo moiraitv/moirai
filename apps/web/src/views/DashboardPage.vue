@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instantLabel } from '../time-format';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { AlertTriangle, ArrowRight, CheckCircle2, Library, RadioTower, RefreshCw, TvMinimal } from '@lucide/vue';
@@ -34,11 +35,13 @@ const dashboardStore = useDashboardStore();
 const {
 	playback,
 	conflictReport,
+	playbackError, playbackUpdatedAt, playbackRecovering, playbackRefreshing,
 	loading: summaryLoading,
 	loaded: summaryLoaded,
 	error,
 } = storeToRefs(dashboardStore);
 const displayNowMs = ref(Date.now());
+const restartError = ref('');
 let unsubscribe: (() => void) | null = null;
 let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let positionClockTimer: ReturnType<typeof setInterval> | undefined;
@@ -95,10 +98,11 @@ function sessionChannelLogo(channelId: string): string | null {
 async function restart(channelId: string): Promise<void> {
 	try {
 		await api.restartPlaybackChannel(channelId);
+		restartError.value = '';
 		await dashboardStore.refreshPlayback();
 	}
 	catch (cause) {
-		dashboardStore.error = errorMessage(cause);
+		restartError.value = errorMessage(cause);
 	}
 }
 
@@ -174,6 +178,15 @@ onUnmounted(() => {
 		<p v-if="error || libraryError || channelError" class="notice error">
 			{{ error || libraryError || channelError }}
 		</p>
+		<p v-if="restartError" class="notice error">{{ restartError }}</p>
+		<div v-if="playbackError" class="notice" :class="playbackRecovering ? 'warning' : 'error'" role="status">
+			<template v-if="playbackRecovering">Reconnecting—showing last update.</template>
+			<template v-else>{{ playback ? 'Playback status could not be refreshed.' : 'Playback status could not be loaded.' }}
+				<button class="button secondary" type="button" :disabled="playbackRefreshing" @click="dashboardStore.refreshPlayback()">Retry playback status</button>
+				<details><summary>Details</summary>{{ playbackError }}</details>
+			</template>
+			<span v-if="playbackUpdatedAt"> Last updated {{ instantLabel(playbackUpdatedAt, { dateStyle: 'short', timeStyle: 'medium' }) }}.</span>
+		</div>
 		<LoadingState
 			v-if="
 				(loading && !loaded) ||

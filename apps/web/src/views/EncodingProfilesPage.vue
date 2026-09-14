@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -112,15 +113,26 @@ async function save(): Promise<void> {
 	busy.value = true;
 	editorError.value = '';
 	try {
-		if (id.value) {
-			await api.updateEncodingProfile(id.value, form);
+		const saved = id.value
+			? await api.updateEncodingProfile(id.value, form)
+			: await api.createEncodingProfile(form);
+		const index = profiles.value.findIndex(entry => entry.id === saved.id);
+		if (index < 0) {
+			profiles.value.push(saved);
 		}
 		else {
-			await api.createEncodingProfile(form);
+			profiles.value[index] = saved;
 		}
 		baseline.value = JSON.stringify(form);
 		dismiss();
-		await load();
+		try {
+			profiles.value = await readWithRetry(() => api.encodingProfiles());
+			loaded.value = true;
+			error.value = '';
+		}
+		catch (cause) {
+			error.value = `Saved, but the list could not be refreshed. ${errorMessage(cause)}`;
+		}
 	}
 	catch (cause) {
 		editorError.value = errorMessage(cause);

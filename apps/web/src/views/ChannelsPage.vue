@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
 import { channelNumberSuggestions, channelGroupSuggestions } from '../channel-identity-suggestions';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -80,6 +81,7 @@ const showForm = ref(false);
 const encodingProfilesReady = ref(false);
 let leavingPage = false;
 const error = ref('');
+const guideRefreshError = ref('');
 const logoInput = ref<HTMLInputElement>();
 const removeLogoOnSave = ref(false);
 const fallbackStatus = ref<FallbackFillerStatus | null>(null);
@@ -518,7 +520,12 @@ async function loadGuide(): Promise<void> {
 	}
 
 	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value);
+	guideRefreshError.value = '';
 }
+
+useGuideDateRefresh(channelsStore, loadGuide, (cause) => {
+	guideRefreshError.value = errorMessage(cause);
+});
 
 /** Load channel, capability, schedule, and guide data without discarding cached state. */
 async function loadInitial(): Promise<void> {
@@ -800,6 +807,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 		><button class="button" @click="add"><Plus :size="18" />New Channel</button></PageHeader
 		>
 		<p v-if="error && !showForm" class="notice error">{{ error }}</p>
+		<p v-if="guideRefreshError && !showForm" class="notice error">{{ guideRefreshError }}</p>
 		<LoadingState v-if="initialLoading" label="Loading channels and guide…" />
 		<div v-else class="async-state-surface">
 			<div class="guide-toolbar">

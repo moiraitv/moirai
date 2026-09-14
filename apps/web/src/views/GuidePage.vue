@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
@@ -86,7 +87,12 @@ async function loadGuide(): Promise<void> {
 	}
 
 	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value);
+	error.value = '';
 }
+
+useGuideDateRefresh(channelsStore, loadGuide, (cause) => {
+	error.value = errorMessage(cause);
+});
 
 /** Load channel metadata and the initial committed guide without discarding cached state. */
 async function loadInitial(): Promise<void> {

@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { channelSchema } from '@moirai/shared/api-contracts';
 import type { Channel, ScheduleGuide } from '@moirai/shared';
 import { api } from '@web/api.js';
@@ -20,9 +20,13 @@ function guide(startDate: string, requestedDays: number, days: number): Schedule
 }
 
 beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
 	setActivePinia(createPinia());
 	vi.restoreAllMocks();
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe('channel guide navigation', () => {
 	it('returns to the exact prior boundary when adaptive page lengths differ', async () => {
@@ -80,4 +84,47 @@ describe('server-confirmed channel saves', () => {
 		await store.loadChannels();
 		expect(store.channels[0]?.name).toBe('Refreshed channel');
 	});
+});
+
+
+it('advances stale requests in the scheduling time zone and drops expired navigation history', async () => {
+	const request = vi.spyOn(api, 'scheduleGuide').mockImplementation(async (start, days) => guide(start, days ?? 7, days ?? 7));
+	const store = useChannelsStore();
+	store.timeZone = 'America/Los_Angeles';
+	await store.loadGuide('2026-08-01', 7);
+	await store.loadGuide('2026-08-08', 7, 'forward');
+	vi.setSystemTime(new Date('2026-08-02T06:59:00Z'));
+	await store.loadGuide('2026-08-01', 2);
+	expect(request).toHaveBeenLastCalledWith('2026-08-01', 2);
+	vi.setSystemTime(new Date('2026-08-02T07:01:00Z'));
+	await store.loadGuide('2026-08-01', 2);
+	expect(request).toHaveBeenLastCalledWith('2026-08-02', 7);
+	expect(store.guideWeekStart).toBe('2026-08-02');
+	await store.loadGuide('2026-08-08', 7);
+	expect(request).toHaveBeenLastCalledWith('2026-08-08', 7);
+	expect(store.guideNavigationTarget('backward')).not.toBe('2026-08-01');
+});
+
+it('does not propagate failures superseded by newer channel, capability, or guide requests', async () => {
+	for (const [method, load] of [
+		['channels', (store: ReturnType<typeof useChannelsStore>) => store.loadChannels()],
+		['capabilities', (store: ReturnType<typeof useChannelsStore>) => store.loadCapabilities()],
+		['scheduleGuide', (store: ReturnType<typeof useChannelsStore>) => store.loadGuide('2026-08-01')],
+	] as const) {
+		const store = useChannelsStore();
+		let reject!: (cause: Error) => void;
+		const request = vi.spyOn(api, method).mockImplementationOnce(() => new Promise<never>((_, fail) => {
+			reject = fail;
+		}));
+		const result = method === 'channels' ? [] : method === 'scheduleGuide' ? guide('2026-08-01', 7, 7) : { timeZone: 'UTC' };
+		request.mockResolvedValue(result as never);
+		const older = load(store);
+		await load(store);
+		reject(new TypeError('Old request failed'));
+		await expect(older).resolves.toBeUndefined();
+		expect(store.error).toBe('');
+		request.mockRejectedValue(new TypeError('Current request failed'));
+		await expect(load(store)).rejects.toThrow('Current request failed');
+		request.mockRestore();
+	}
 });
