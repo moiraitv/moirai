@@ -9,6 +9,10 @@ contextual: true
 
 Open a library to browse its indexed catalog. Search narrows the current results by name. Sorting, date windows, and filters help with larger collections.
 
+Music video libraries browse through **Artists → Albums → Songs**, just as show libraries browse through shows and seasons. Open an artist to see their albums, then an album to see its songs. Use the breadcrumbs or browser Back button to move up. Artist and album cards show how many albums or songs they contain.
+
+Use title sorting with no active filters to browse the hierarchy. Search, filters, and other sort modes show matching songs within the current artist or album.
+
 When browsing by title, select a letter above the catalog to jump to that section. On touch screens, swipe the letter strip sideways to reach additional letters.
 
 ![An indexed media library](/screenshots/library-catalog.png)

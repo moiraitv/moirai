@@ -23,3 +23,8 @@ describe('media card labels', () => {
 		expect(mediaGroupSubtitle('shows', group)).toBe(String(group.year) + '–' + group.yearEnd);
 	});
 });
+
+it('labels music hierarchy cards with albums and songs', () => {
+	expect(mediaGroupSubtitle('music-videos', { kind: 'artist', year: null, childCount: 2 } as MediaGroup)).toBe('2 albums');
+	expect(mediaGroupSubtitle('music-videos', { kind: 'album', year: 2020, childCount: 1 } as MediaGroup)).toBe('2020 · 1 song');
+});

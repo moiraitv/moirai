@@ -149,8 +149,13 @@ field's distinct meaning.
 Portable filename parsing fills gaps when NFO metadata is absent. It recognizes the documented
 movie year, provider-ID, edition, multipart, episode-coordinate, and music video track forms. Show
 folder years and provider IDs remain structural disambiguation metadata rather than display-title
-text. Music video libraries build artist and album groups from the documented directory hierarchy;
-item metadata prefers NFO values, then embedded container tags, then filename and folder values.
+text. Music video libraries retain artist and album groups from the documented directory hierarchy.
+Otherwise ungrouped songs receive artist/album groups from normalized metadata, using the first
+credited artist, then folder fallbacks and explicit unknown groups. Grouping runs during discovery
+without extra browse queries; metadata version 11 refreshes existing indexes on their next scan.
+Existing folder-group IDs, song IDs, playback paths, and program selections remain stable. New groups
+use canonical comparison keys while preserving display spelling. Item metadata prefers NFO values,
+then embedded container tags, then filename and folder values.
 
 NFO data is never trusted for playback-critical facts. Moirai measures the media file directly with
 `ffprobe` to determine:
@@ -468,6 +473,13 @@ atomically, and rejects the whole request when the resulting collection would ex
 limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 5,000 and may be set from 1 through the
 25,000-item
 contract ceiling.
+
+Music group reconciliation preserves existing IDs when
+metadata-owned artist/album groups acquire matching folders; repeated scans retain those owners
+without rewriting authored program references or adding database queries. Reconciliation indexes
+stored music groups by ID, source key, and parent-scoped identity once per scan; claimed owners are
+removed from lookup buckets to preserve first-match precedence and ambiguity checks without
+repeated catalog-wide searches.
 
 Selected-items programs retain chronological insertion batches separately from their effective order.
 They default to oldest-added first and may instead order by normalized title, exact release date with

@@ -1,5 +1,5 @@
 /** Version used to invalidate indexed metadata when normalization behavior changes. */
-export const ON_DISK_METADATA_VERSION = 10;
+export const ON_DISK_METADATA_VERSION = 11;
 
 /** Canonical genre key paired with its preferred display name. */
 export interface NormalizedGenre {

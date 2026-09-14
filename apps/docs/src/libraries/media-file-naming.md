@@ -192,7 +192,7 @@ Music Videos/
         └── cover.jpg
 ```
 
-Moirai uses this hierarchy for artist and album grouping. It also reads embedded music video tags, so check those tags if renaming a file does not change the displayed title. Local NFO values take precedence when present.
+Moirai uses this hierarchy for artist and album grouping. Files at the library root or directly inside an artist folder also appear under artist and album groups: NFO metadata takes precedence over embedded tags, with the artist folder as a fallback. The first credited artist owns the album in this view. Missing values use **Unknown artist** and **Unknown album**. An existing artist/album folder keeps its established grouping. It also reads embedded music video tags, so check those tags if renaming a file does not change the displayed title. Local NFO values take precedence when present.
 
 The article's audio-only music examples describe broader media-center organization, not an audio library workflow in Moirai. For miscellaneous videos, choose clear, consistent titles and provide local metadata where useful rather than assuming a movie or episode naming rule fits everything.
 

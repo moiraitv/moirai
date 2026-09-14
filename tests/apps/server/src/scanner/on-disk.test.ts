@@ -724,3 +724,23 @@ it('refreshes pre-audio-channel-count probe caches during a normal scan', async 
 	expect(result.items[0]!.technicalMetadata.streams).toEqual([expect.objectContaining({ channels: 6 })]);
 	expect(result.items[0]!.probeFingerprint).not.toBe(oldFingerprint);
 });
+
+it('groups artist-folder singles with metadata albums and keeps existing folder identities', async () => {
+	const fixture = await library('music-videos');
+	const artist = path.join(fixture.sourceConfig.scanRoot, 'Artist');
+	await mkdir(path.join(artist, 'Album'), { recursive: true });
+	await writeFile(path.join(artist, 'Album', 'Existing.mp4'), 'video');
+	const before = await discoverOnDisk(fixture);
+	await writeFile(path.join(artist, 'Single.mp4'), 'video');
+	await writeFile(path.join(artist, 'Single.nfo'), '<musicvideo><album>Album</album></musicvideo>');
+	await writeFile(path.join(artist, 'Loose.mp4'), 'video');
+	const after = await discoverOnDisk(fixture);
+	expect(after.groups.filter(group => group.kind === 'artist')).toHaveLength(1);
+	const album = after.groups.find(group => group.title === 'Album')!;
+	expect(album.id).toBe(before.groups.find(group => group.title === 'Album')?.id);
+	expect(after.items.find(item => item.title === 'Single')?.groupId).toBe(album.id);
+	const unknownAlbum = after.groups.find(group => group.title === 'Unknown album')!;
+	expect(after.items.find(item => item.title === 'Loose')?.groupId).toBe(unknownAlbum.id);
+	expect(after.items.find(item => item.title === 'Loose')?.metadata.album).toBeNull();
+	expect(after.items.find(item => item.title === 'Existing')?.id).toBe(before.items[0]?.id);
+});

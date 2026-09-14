@@ -1,3 +1,4 @@
+import { preserveMusicGroupIdentities } from './music-group-identities.js';
 import type { mediaGroups } from '../db/schema.js';
 import type { DiscoveredGroup, DiscoveredItem } from './contracts.js';
 
@@ -13,6 +14,8 @@ export function preserveGroupIdentities(
 	existingGroups: Array<typeof mediaGroups.$inferSelect>,
 	existingItems: Array<{ relativePath: string; groupId: string | null }>,
 ): void {
+	preserveMusicGroupIdentities(groups, items, existingGroups);
+
 	// Associate existing groups with their observed top-level source folders.
 	const groupById = new Map(existingGroups.map((group) => [group.id, group]));
 	const foldersByGroup = new Map<string, Set<string>>();

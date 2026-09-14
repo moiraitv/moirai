@@ -11,6 +11,8 @@ import {
 	type ScanProgress,
 	type SourceIdentity,
 } from '@moirai/shared';
+import { deterministicId } from './catalog-identity.js';
+import { groupLooseMusicVideos } from './music-video-groups.js';
 import { internalErrorMessage } from '../error-message.js';
 import { ARTWORK_EXTENSIONS } from '../artwork/artwork-formats.js';
 import { isPathWithinRoot } from '../media/path-boundary.js';
@@ -69,12 +71,6 @@ interface DiscoveryOptions {
 /** Stop scan traversal promptly after cooperative cancellation. */
 function throwIfCancelled(signal?: AbortSignal): void {
 	signal?.throwIfAborted();
-}
-
-/** Derive a stable UUID from indexed source identity. */
-function deterministicId(namespace: string, key: string): string {
-	const hex = createHash('sha256').update(`${namespace}:${key}`).digest('hex');
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /** Normalize a relative media path to portable forward slashes. */
@@ -903,7 +899,7 @@ export async function discoverOnDisk(
 				? nfoArtists
 				: taggedArtistNames.length > 0
 					? taggedArtistNames
-					: [relativePath.split('/')[0] ?? ''].filter(Boolean))
+					: relativePath.includes('/') ? [relativePath.split('/')[0]!] : [])
 			: [];
 		const discNumber = nfo.parsed?.discNumber ?? taggedNumber(probeTags.disc) ?? filename.discNumber;
 		const trackNumber = typeof nfo.parsed?.metadata.track === 'number'
@@ -962,7 +958,8 @@ export async function discoverOnDisk(
 				...(nfo.parsed?.metadata ?? {}),
 				externalIds,
 				artists,
-				album: nfo.parsed?.metadata.album ?? probeTags.album ?? relativePath.split('/')[1] ?? null,
+				album: nfo.parsed?.metadata.album ?? probeTags.album
+					?? (library.typeKey !== 'music-videos' || relativePath.split('/').length >= 3 ? relativePath.split('/')[1] ?? null : null),
 				track: trackNumber,
 				disc: discNumber,
 				...(itemArtworkFingerprint ? { artworkFingerprint: itemArtworkFingerprint } : {}),
@@ -1019,6 +1016,11 @@ export async function discoverOnDisk(
 		processedCount: walked.files.length,
 		totalCount: walked.files.length,
 	});
+
+	// Complete music hierarchy for files outside the documented artist/album folder layout.
+	if (library.typeKey === 'music-videos') {
+		groupLooseMusicVideos(library.id, groupsByKey, items);
+	}
 
 	// Collapse numbered physical files into one logical, schedulable catalog item.
 	collapseMultipartItems(items, issues, library.typeKey);

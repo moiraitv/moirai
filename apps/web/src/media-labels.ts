@@ -34,8 +34,13 @@ export function mediaItemSubtitle(typeKey: string, item: MediaItem): string {
 	return [displayYear(item.year), item.edition].filter(Boolean).join(' · ');
 }
 
-/** Show series use their indexed release span; other group types use a single year. */
+/** Show series display their release span; music groups describe their next browsing level. */
 export function mediaGroupSubtitle(typeKey: string, group: MediaGroup): string {
+	if (typeKey === 'music-videos' && (group.kind === 'artist' || group.kind === 'album')) {
+		const unit = group.kind === 'artist' ? 'album' : 'song';
+		return [displayYear(group.year), `${group.childCount} ${unit}${group.childCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+	}
+
 	if (typeKey !== 'shows' || group.kind !== 'show') {
 		return displayYear(group.year);
 	}
