@@ -31,6 +31,7 @@ import {
 	type TimelinePreview,
 } from '@moirai/shared';
 import { api } from '../api';
+import { suggestedChannelTemplateId } from '../channel-template-suggestion';
 import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import { randomUuid } from '../random-uuid';
@@ -247,7 +248,7 @@ function predicateSummary(predicate: SchedulePredicate): string {
 	return schedulePredicateSummary(predicate);
 }
 
-/** Clone the selected channel schedule or initialize a valid base-only draft. */
+/** Clone a saved schedule or suggest the closest template name for a new base-only draft. */
 function loadDraft(): void {
 	finiteBoundaryDrift.clear();
 	hasPersistedSchedule.value = false;
@@ -260,7 +261,7 @@ function loadDraft(): void {
 	hasPersistedSchedule.value = Boolean(existing);
 	draft.value = channelScheduleConfigSchema.parse(
 		existing ?? {
-			defaultTemplateId: templates.value[0]!.id,
+			defaultTemplateId: suggestedChannelTemplateId(channel.value?.name ?? '', templates.value),
 			layers: [],
 			defaultFiller: null,
 		},

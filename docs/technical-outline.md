@@ -580,6 +580,9 @@ and omitted-field API parsing retain their existing behavior.
 A channel has an always-available base template. Conditional templates stack above it and can use
 nested date, month, weekday, annual-range, and time-range predicates. A no-program slot is transparent:
 it falls through to the next lower layer. Its slot filler is therefore disabled.
+New schedule drafts suggest a base template by channel name: normalized exact matches precede full
+channel-name phrases, then relative edit distance; ties retain catalog order. The suggestion does
+not replace saved base templates or change how conditional layers are initialized.
 
 Example:
 

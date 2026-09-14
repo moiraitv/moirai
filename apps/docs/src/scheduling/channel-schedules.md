@@ -42,6 +42,8 @@ A ![](/icons/tv-minimal-play.svg) Channel Schedule chooses which ![](/icons/cale
 
 Open the ![](/icons/tv-minimal.svg) Channel's schedule editor, select the base at the bottom of the **Template stack**, and choose its **Base template**. This supplies normal programming wherever no higher-priority layer provides content.
 
+When you add the first template, Moirai preselects the closest template name to the channel name. It prefers an exact name, then a template containing the full channel name, then the closest spelling. You can choose another template before saving. Existing schedules keep their saved base template.
+
 ![Channel Schedule editor with a base Template and a resolved preview](/screenshots/channel-schedules.png)
 
 ## Add a conditional Template

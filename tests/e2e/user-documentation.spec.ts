@@ -253,6 +253,35 @@ test('captures Templates', async ({ page, documentationServer }) => {
 	await captureSection(page, filler, 'template-slot-filler.png');
 
 });
+test('suggests a matching first channel template and preserves a saved override', async ({ page, documentationServer }) => {
+	const { channel, program, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const slotId = randomUUID();
+	const created = await page.request.post('/api/v1/schedule-templates', {
+		headers: requestHeaders,
+		data: {
+			name: 'Moonrise Classics Daily',
+			slots: [{ id: slotId, startSeconds: 0, programId: program.id }],
+			boundaries: [{
+				id: randomUUID(), leftSlotId: slotId, rightSlotId: slotId,
+				targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard',
+			}],
+		},
+	});
+	expect(created.ok()).toBe(true);
+	const matching = await created.json() as ScheduleTemplate;
+	await page.goto('/schedules/channels');
+	await page.getByRole('link', { name: 'Add Template', exact: true }).click();
+	const base = page.getByRole('combobox', { name: 'Base template', exact: true });
+	await expect(base).toHaveValue(matching.id);
+	await base.selectOption(template.id);
+	const saved = page.waitForResponse(response => response.request().method() === 'PUT'
+		&& response.url().endsWith(`/api/v1/channels/${channel.id}/schedule`));
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	expect((await saved).ok()).toBe(true);
+	await page.goto(`/schedules/channels/${channel.id}`);
+	await expect(base).toHaveValue(template.id);
+});
+
 test('captures Channel Schedules and Guide', async ({ page, documentationServer }) => {
 	const { template, channel, sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	const scheduleResponse = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {

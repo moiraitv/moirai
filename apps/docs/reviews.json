@@ -200,20 +200,20 @@
       }
     },
     "scheduling.channel-schedules": {
-      "digest": "5dee8e73ac385edcc1ae37fe0221369542739a83b8550fc4f38982d6c997baa2",
-      "reviewedAt": "2026-09-14T15:42:39.050Z",
+      "digest": "41a11a781aaf445fdd0b8d6146b6285e30c058ffa73915d43115c9f5bcb779d1",
+      "reviewedAt": "2026-09-14T17:46:34.085Z",
       "components": {
         "text": {
-          "digest": "b5ea3511606d6b4d779e18b330396a337b4f18acac79d567f70ef40de581b43d",
-          "reviewedAt": "2026-09-14T15:42:39.050Z"
+          "digest": "5a2619600f856a7e1c8e4d7e27b9b6153a01fcb4d64f7d77d96e8b666ea37805",
+          "reviewedAt": "2026-09-14T17:46:34.085Z"
         },
         "screenshots": {
           "digest": "05f984a99ebf1b222f508c563384b85c5886d102c4a0eb2d90deb0ff9de54cf0",
-          "reviewedAt": "2026-09-14T15:42:39.050Z"
+          "reviewedAt": "2026-09-14T17:46:34.085Z"
         },
         "icons": {
           "digest": "be623b546599e8d5c7f3a82d81c3a8316126a49270e66d44d31d27207933c493",
-          "reviewedAt": "2026-09-14T15:42:39.050Z"
+          "reviewedAt": "2026-09-14T17:46:34.085Z"
         }
       }
     },
