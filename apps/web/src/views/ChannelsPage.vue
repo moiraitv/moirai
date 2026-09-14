@@ -1011,7 +1011,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					</div>
 
 					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
-						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
+						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :creating="!editingId" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
 					</EncodingProfileSelector>
 					<AudioPreferencesEditor v-model="form.audioPreferences" />
 					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">

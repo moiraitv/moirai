@@ -1,12 +1,8 @@
 .channel-number {
-	width: 45px;
-	height: 45px;
-	display: grid;
-	place-items: center;
-	overflow: hidden;
-	border-radius: 8px;
+	max-width: 100%;
+	text-align: center;
+	overflow-wrap: anywhere;
 	color: #effffb;
-	background: linear-gradient(145deg, #0e9578, #075c4b);
 	font-size: 0.76rem;
 	font-weight: 750;
 }

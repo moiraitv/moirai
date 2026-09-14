@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { watch } from 'vue';
+import { ref, watch } from 'vue';
 import { useDisclosureState } from '../disclosure-state';
 import { ChevronDown, SlidersHorizontal } from '@lucide/vue';
 import type { ChannelCreate } from '@moirai/shared';
 import EncodingSettingsEditor from './EncodingSettingsEditor.vue';
 import FormDisclosure from './FormDisclosure.vue';
 
-const props = defineProps<{ profileId?: string | null | undefined; accelerationPredictionText?: string; accelerationDetail?: string | undefined }>();
+const props = defineProps<{ creating?: boolean; profileId?: string | null | undefined; accelerationPredictionText?: string; accelerationDetail?: string | undefined }>();
 const emit = defineEmits<{ 'validation-change': [invalid: boolean] }>();
 const audio = defineModel<ChannelCreate['audio']>('audio', { required: true });
 const video = defineModel<ChannelCreate['video']>('video', { required: true });
-const expanded = useDisclosureState('channel-encoding', !props.profileId);
+const expanded = props.creating ? ref(false) : useDisclosureState('channel-encoding', !props.profileId);
 watch(() => props.profileId, () => {
-	if (!props.profileId) {
+	if (!props.creating && !props.profileId) {
 		expanded.value = true;
 	}
 });

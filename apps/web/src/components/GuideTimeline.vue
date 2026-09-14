@@ -50,7 +50,8 @@ const selectedLoading = ref(false);
 const selectedError = ref('');
 const detailCache = new Map<string, GuideSegmentDetail>();
 let detailRequest = 0;
-const HOUR_WIDTH = 56;
+/** Pixels per elapsed hour shared by the Guide and Channels timelines. */
+const HOUR_WIDTH = 112;
 const daysGeometry = computed(() =>
 	guideDayGeometry(props.startDate, props.days, props.timeZone, HOUR_WIDTH));
 const timelineWidth = computed(() => {
@@ -238,13 +239,16 @@ onMounted(() => scrollToCurrentTime());
 					<template v-else>
 						<template v-for="channel in [row.channel]" :key="channel.id">
 							<article class="guide-channel-cell">
-								<img
-									v-if="channelLogoUrl(channel)"
-									class="guide-channel-logo"
-									:src="channelLogoUrl(channel) ?? undefined"
-									alt=""
-								/>
-								<span v-else class="channel-number">{{ channel.number }}</span>
+								<div class="guide-channel-identity">
+									<img
+										v-if="channelLogoUrl(channel)"
+										class="guide-channel-logo"
+										:src="channelLogoUrl(channel) ?? undefined"
+										alt=""
+									/>
+									<span v-else class="guide-channel-logo"><TvMinimal :size="24" aria-hidden="true" /></span>
+									<span class="channel-number">{{ channel.number }}</span>
+								</div>
 								<div class="guide-channel-copy">
 									<h2>{{ channel.name }}</h2>
 									<p v-if="showTechnicalDetails">

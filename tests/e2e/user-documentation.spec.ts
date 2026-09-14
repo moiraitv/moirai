@@ -263,6 +263,30 @@ test('captures Channel Schedules and Guide', async ({ page, documentationServer 
 	await captureSection(page, channelEditor.locator('.layer-boundary-grid'), 'channel-schedule-boundaries.png');
 
 });
+test('starts each new channel with encoding and additional subtitles collapsed', async ({ page }) => {
+	await page.addInitScript(() => {
+		localStorage.setItem('moirai.ui.disclosure.channel-encoding.v1', 'true');
+		localStorage.setItem('moirai.ui.disclosure.channel-subtitles.v1', 'true');
+	});
+	await authenticateAdministrator(page);
+	await page.goto('/channels');
+	for (let attempt = 0; attempt < 2; attempt += 1) {
+		await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+		const editor = page.getByRole('dialog', { name: 'Create Channel', exact: true });
+		await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
+		const encoding = editor.getByRole('button', { name: /Video & audio settings/u });
+		const subtitles = editor.getByRole('button', { name: /Additional subtitle settings/u });
+		await expect(encoding).toHaveAttribute('aria-expanded', 'false');
+		await expect(subtitles).toHaveAttribute('aria-expanded', 'false');
+		await encoding.click();
+		await subtitles.click();
+		await expect(encoding).toHaveAttribute('aria-expanded', 'true');
+		await expect(subtitles).toHaveAttribute('aria-expanded', 'true');
+		await editor.getByRole('button', { name: 'Close channel editor', exact: true }).click();
+		await expect(editor).toBeHidden();
+	}
+});
+
 test('captures channel settings and operations', async ({ page, documentationServer }) => {
 	await seedSchedule(page, documentationServer.directory);
 	await page.goto('/channels');

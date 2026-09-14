@@ -719,6 +719,8 @@ Moirai serves the client-facing outputs directly:
 | Feed channel logos and artwork    | Images referenced by M3U/XMLTV |
 
 The Guide UI displays copyable channel-playlist and XMLTV URLs derived from `MOIRAI_PUBLIC_URL`.
+Guide and Channels share a timeline scale of 112 pixels per elapsed hour and show channel numbers
+centered below their logos, with a TV icon when no logo is set.
 
 Guide timeline and compact schedule-preview geometry use elapsed instants across each configured
 local date. Daylight-saving transitions therefore render 23-hour and 25-hour days at their actual
@@ -1000,6 +1002,8 @@ are not presented as loaded defaults or zero activity. Account, capacity, and sh
 reveal schema-based errors after blur and update them during correction. Encoding editors summarize
 touched errors beside Save, including when channel encoding controls are collapsed; replacing a draft
 clears its interaction history without changing the underlying validation contracts.
+New channel forms start video/audio and additional subtitle disclosures closed, independently of
+remembered disclosure preferences for existing channels.
 
 ### Resource navigation and direct usage
 
