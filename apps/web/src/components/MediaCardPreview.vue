@@ -17,10 +17,11 @@ export interface MediaCardPreviewSource {
 	artworkUrl: string | null;
 }
 
-const props = defineProps<{ item: MediaCardPreviewSource }>();
+const props = defineProps<{ item: MediaCardPreviewSource; externalAnchor?: HTMLElement; hideInfo?: boolean }>();
 const route = useRoute();
 const anchor = ref<HTMLElement>();
 const tooltip = ref<HTMLElement>();
+const previewAnchor = computed(() => props.externalAnchor ?? anchor.value);
 const preview = ref<MediaCardPreview>();
 const visible = ref(false);
 const pinned = ref(false);
@@ -48,11 +49,11 @@ function supportsHover(): boolean {
 
 /** Reposition the fixed tooltip after its contents or viewport geometry changes. */
 function updatePosition(): void {
-	if (!anchor.value || !tooltip.value) {
+	if (!previewAnchor.value || !tooltip.value) {
 		return;
 	}
 
-	const anchorBox = anchor.value.getBoundingClientRect();
+	const anchorBox = previewAnchor.value.getBoundingClientRect();
 	const tooltipBox = tooltip.value.getBoundingClientRect();
 	position.value = mediaCardPreviewPosition({
 		anchor: anchorBox,
@@ -132,7 +133,7 @@ function handleFocus(): void {
 
 /** Close after keyboard focus leaves the complete card wrapper. */
 function handleBlur(event: FocusEvent): void {
-	if (event.relatedTarget instanceof Node && anchor.value?.contains(event.relatedTarget)) {
+	if (event.relatedTarget instanceof Node && previewAnchor.value?.contains(event.relatedTarget)) {
 		return;
 	}
 
@@ -151,7 +152,7 @@ function togglePinned(): void {
 
 /** Close pinned previews when another part of the document is pressed. */
 function handleDocumentPointer(event: PointerEvent): void {
-	if (pinned.value && event.target instanceof Node && !anchor.value?.contains(event.target)) {
+	if (pinned.value && event.target instanceof Node && !previewAnchor.value?.contains(event.target)) {
 		hidePreview(true);
 	}
 }
@@ -195,6 +196,10 @@ onUnmounted(() => {
 	document.removeEventListener('keydown', handleKeydown);
 	document.removeEventListener(previewOpenEvent, handleOtherPreviewOpen);
 });
+defineExpose({
+	enter: handlePointerEnter,
+	focus: handleFocus,
+});
 </script>
 
 <template>
@@ -209,6 +214,7 @@ onUnmounted(() => {
 	>
 		<slot></slot>
 		<button
+			v-if="!hideInfo"
 			type="button"
 			class="media-card-preview-info"
 			:aria-label="`Preview ${item.title}`"

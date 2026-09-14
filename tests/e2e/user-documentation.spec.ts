@@ -282,6 +282,49 @@ test('suggests a matching first channel template and preserves a saved override'
 	await expect(base).toHaveValue(template.id);
 });
 
+test('previews individual guide media on Guide and Channels while keeping click details', async ({ page, documentationServer }) => {
+	const { channel, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const assigned = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
+		headers: requestHeaders, data: { defaultTemplateId: template.id },
+	});
+	expect(assigned.ok()).toBe(true);
+	const previewRequests: string[] = [];
+	page.on('request', request => {
+		if (request.url().endsWith('/card-preview')) {
+			previewRequests.push(request.url());
+		}
+	});
+	for (const route of ['/guide', '/channels']) {
+		await page.goto(route);
+		const item = page.locator('button.guide-programme.role-primary').first();
+		await expect(item).toBeVisible({ timeout: 30_000 });
+		await page.locator('.guide-scroll').evaluate(element => {
+			element.scrollLeft = 0;
+		});
+		const title = await item.locator('strong').innerText();
+		const tooltip = page.getByRole('tooltip');
+		await expect(tooltip).toHaveCount(0);
+		await item.hover();
+		await expect(tooltip.getByRole('heading', { name: title, exact: true })).toBeVisible();
+		await expect(tooltip.locator('.media-card-preview-plot')).toBeVisible();
+		await expect(tooltip.locator('img')).toBeVisible();
+		await expect(page.getByRole('dialog', { name: 'Actual guide items' })).toHaveCount(0);
+		await page.screenshot({ path: `test-results/guide-item-preview-${route.slice(1)}.png` });
+		await page.mouse.move(0, 0);
+		await expect(tooltip).toHaveCount(0);
+		await item.focus();
+		await expect(tooltip).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(tooltip).toHaveCount(0);
+		await item.click();
+		const detail = page.getByRole('dialog', { name: title, exact: true });
+		await expect(detail).toBeVisible();
+		await expect(tooltip).toHaveCount(0);
+		await detail.getByRole('button', { name: 'Close', exact: true }).click();
+	}
+	expect(previewRequests).toHaveLength(2);
+});
+
 test('captures Channel Schedules and Guide', async ({ page, documentationServer }) => {
 	const { template, channel, sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	const scheduleResponse = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
@@ -324,6 +367,7 @@ test('captures Channel Schedules and Guide', async ({ page, documentationServer 
 	await page.mouse.move(Math.min(trackBounds.x + trackBounds.width - 100, labelBounds.x + 320), blockBounds.y + blockBounds.height / 2);
 	const guideHover = page.getByRole('dialog', { name: 'Actual guide items' });
 	await expect(guideHover).toBeVisible();
+	await expect(page.getByRole('tooltip')).toHaveCount(0);
 	await expect(guideHover.locator('.guide-programme').first()).toBeVisible();
 	await expect(page.locator('.guide-range-marker')).toHaveCount(2);
 	await capture(page, 'guide-single-block.png');

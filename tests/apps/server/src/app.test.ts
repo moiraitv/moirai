@@ -1716,7 +1716,7 @@ describe('API', () => {
 		});
 	});
 
-	it('uses distinct generated TVG identifiers in the client playlist', async () => {
+	it('publishes stable channel identities and display numbers alongside TVG identifiers', async () => {
 		const { app } = await fixture();
 		const first = await app.inject({
 			method: 'POST',
@@ -1731,8 +1731,30 @@ describe('API', () => {
 		});
 		expect(second.statusCode).toBe(201);
 		const playlist = (await app.inject({ url: '/iptv/channels.m3u' })).body;
-		expect(playlist).toContain(`tvg-id="${effectiveChannelTvgId(first.json())}"`);
-		expect(playlist).toContain(`tvg-id="${effectiveChannelTvgId(second.json())}"`);
+		const channels = [first.json(), second.json()];
+		expect(channels[0].id).not.toBe(channels[1].id);
+		for (const channel of channels) {
+			const entry = playlist.split('\n').find((line) => line.includes(`channel-id="${channel.id}"`));
+			expect(entry).toContain(`channel-number="${channel.number}"`);
+			expect(entry).toContain(`tvg-id="${effectiveChannelTvgId(channel)}"`);
+			expect(entry).toContain(`tvg-chno="${channel.number}"`);
+			expect(playlist).toContain(`https://moirai.example.test/iptv/channel/${channel.number}.m3u8`);
+		}
+
+		for (const payload of [{ name: 'Renamed' }, { number: '101.3' }]) {
+			const updated = await app.inject({
+				method: 'PATCH',
+				url: `/api/v1/channels/${channels[0].id}`,
+				payload,
+			});
+			expect(updated.statusCode).toBe(200);
+			const channel = updated.json();
+			const refreshed = (await app.inject({ url: '/iptv/channels.m3u' })).body;
+			const entry = refreshed.split('\n').find((line) => line.includes(`channel-id="${channels[0].id}"`));
+			expect(entry).toContain(`channel-number="${channel.number}"`);
+			expect(entry).toContain(`tvg-id="${effectiveChannelTvgId(channel)}"`);
+			expect(entry).toContain('tvg-name="Renamed"');
+		}
 	});
 
 	it('persists and reports the integrated playback capacity', async () => {

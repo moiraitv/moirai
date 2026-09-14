@@ -735,8 +735,15 @@ Moirai serves the client-facing outputs directly:
 | Feed channel logos and artwork    | Images referenced by M3U/XMLTV |
 
 The Guide UI displays copyable channel-playlist and XMLTV URLs derived from `MOIRAI_PUBLIC_URL`.
+M3U entries include Channels DVR's `channel-id` from the persistent channel UUID and
+`channel-number` from the configured number, using the existing M3U escaping. The UUID remains
+stable across renames and renumbering; existing `tvg-id`, `tvg-chno`, XMLTV identifiers, and stream
+URL generation remain unchanged.
 Guide and Channels share a timeline scale of 112 pixels per elapsed hour and show channel numbers
 centered below their logos, with a TV icon when no logo is set.
+Individual media entries share Programs' delayed, cached metadata preview on hover and keyboard
+focus, using one preview instance per guide. Clicks retain segment details; guide blocks retain
+their actual-items timeline preview. Gaps and entries without media do not request metadata previews.
 
 Guide timeline and compact schedule-preview geometry use elapsed instants across each configured
 local date. Daylight-saving transitions therefore render 23-hour and 25-hour days at their actual

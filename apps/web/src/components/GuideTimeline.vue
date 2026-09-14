@@ -17,6 +17,7 @@ import { programColorStyle } from '../program-colors';
 import GuideSegmentPreviewModal from './GuideSegmentPreviewModal.vue';
 import ScheduleWarningBadge from './ScheduleWarningBadge.vue';
 import GuideBlockPopover from './GuideBlockPopover.vue';
+import GuideItemPreview from './GuideItemPreview.vue';
 
 const props = withDefaults(
 	defineProps<{
@@ -41,8 +42,10 @@ defineSlots<{
 
 const guideScroll = ref<HTMLElement>();
 const blockPopover = ref<InstanceType<typeof GuideBlockPopover>>();
+const itemPreview = ref<InstanceType<typeof GuideItemPreview>>();
 const programNames = computed(() => Object.assign({}, ...(props.guide?.channels.map(channel => channel.preview.programNames ?? {}) ?? [])) as Record<string, string>);
 const actualSegments = computed(() => props.guide?.channels.flatMap((channel) => channel.preview.segments) ?? []);
+const segmentsById = computed(() => new Map(actualSegments.value.map(segment => [segment.id, segment])));
 const displayedByChannel = computed(() => new Map((props.guide?.channels ?? []).map((channel) =>
 	[channel.channelId, channel.entries ?? channel.preview.segments])));
 const selectedDetail = ref<GuideSegmentDetail | null>(null);
@@ -115,6 +118,7 @@ function segmentStyle(segment: Pick<TimelineSegment, 'start' | 'finish' | 'progr
 /** Open grouped listings without sending their presentation IDs to the media endpoint. */
 function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): void {
 	if ('kind' in entry && entry.kind === 'block') {
+		itemPreview.value?.close();
 		void blockPopover.value?.show(
 			entry,
 			event.currentTarget as HTMLElement,
@@ -122,13 +126,25 @@ function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = fa
 			event instanceof MouseEvent && (event.type.startsWith('pointer') || event.detail > 0) ? event.clientX : undefined,
 		);
 	}
-	else if (event.type === 'click') {
+	else {
 		const segment = 'segmentId' in entry
-			? actualSegments.value.find((item) => item.id === entry.segmentId) : entry;
-		if (segment) {
-			void openSegment(segment);
+			? segmentsById.value.get(entry.segmentId ?? '') : entry;
+		if (event.type === 'click') {
+			itemPreview.value?.close();
+			if (segment) {
+				void openSegment(segment);
+			}
+		}
+		else if (segment) {
+			void itemPreview.value?.show(segment, event);
 		}
 	}
+}
+
+/** Dismiss an item hover and retain the grouped listing's existing leave behavior. */
+function leaveEntry(): void {
+	itemPreview.value?.close();
+	blockPopover.value?.leave();
 }
 
 /** Load and display safe metadata for one committed guide segment. */
@@ -283,13 +299,13 @@ onMounted(() => scrollToCurrentTime());
 									:data-program-id="segment.programId"
 									:class="[`role-${segment.role}`, { truncated: segment.truncated, 'guide-block': 'kind' in segment && segment.kind === 'block' }]"
 									:style="segmentStyle(segment)"
-									:title="'kind' in segment && segment.kind === 'block' ? undefined : `${segment.title}\n${segment.start} – ${segment.finish}`"
+									:aria-label="`${segment.title}, ${segment.start} – ${segment.finish}`"
 									@click="openEntry(segment, $event, true)"
 									@pointerenter="openEntry(segment, $event)"
 									@pointermove="'kind' in segment && segment.kind === 'block' && blockPopover?.move($event, segment)"
 									@focusin="openEntry(segment, $event)"
-									@pointerleave="blockPopover?.leave()"
-									@focusout="blockPopover?.leave()"
+									@pointerleave="leaveEntry"
+									@focusout="leaveEntry"
 								>
 									<component
 										:is="'kind' in segment && segment.kind === 'block' ? 'button' : 'span'"
@@ -322,6 +338,7 @@ onMounted(() => scrollToCurrentTime());
 			</div>
 		</div>
 	</div>
+	<GuideItemPreview ref="itemPreview" />
 	<GuideBlockPopover ref="blockPopover" :segments="actualSegments" :program-names="programNames" :time-zone="timeZone" @select="openSegment" />
 	<GuideSegmentPreviewModal
 		v-if="selectedLoading || selectedDetail || selectedError"

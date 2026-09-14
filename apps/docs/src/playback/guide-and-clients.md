@@ -9,6 +9,8 @@ contextual: true
 
 The **![](/icons/calendar-days.svg) Guide** page shows the committed rolling lineup and the addresses an IPTV client needs. Item labels show the source program name, or **Filler** or **Gap** when appropriate.
 
+Hover over an individual media item, or focus it with the keyboard, to see its details in the same preview used on Programs. Click the item to open its full guide details.
+
 ![The electronic program guide and connection addresses](/screenshots/guide.png)
 
 Use the M3U playlist address for channels and the XMLTV address for program listings. Some clients ask for both during setup; others can read the guide address embedded in the playlist.

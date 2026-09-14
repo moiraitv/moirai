@@ -63,6 +63,8 @@ function channelPlaylist(channels: Channel[], publicUrl: string): string {
 	for (const channel of channels) {
 		const logo = publicChannelLogoUrl(channel, publicUrl);
 		const attributes = [
+			`channel-id="${m3uText(channel.id)}"`,
+			`channel-number="${m3uText(channel.number)}"`,
 			`tvg-id="${m3uText(effectiveChannelTvgId(channel))}"`,
 			`tvg-name="${m3uText(channel.name)}"`,
 			`tvg-chno="${m3uText(channel.number)}"`,

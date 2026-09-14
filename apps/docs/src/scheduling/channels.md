@@ -13,6 +13,8 @@ A ![](/icons/tv-minimal.svg) Channel combines a viewer-facing number and name wi
 
 Each row shows the channel number centered below its logo, or a TV icon when no logo is set. The timeline uses the same zoom as the Guide page; scroll horizontally to see later programming.
 
+Hover over an individual media item, or focus it with the keyboard, to preview its details. Click it for full guide details.
+
 ![The channels page](/screenshots/channels.png)
 
 ## Open the Channel editor

@@ -218,38 +218,38 @@
       }
     },
     "channels.manage": {
-      "digest": "028a10c441a70f5e817a363d3040d8ca0ccaa930128ec1c4c6184b9fa3290b22",
-      "reviewedAt": "2026-09-14T17:46:34.085Z",
+      "digest": "ffcd58a2097681d0c8c6c4f4630b2d5557375e8eb84902c0c6c292b80d9e5f22",
+      "reviewedAt": "2026-09-14T19:03:10.818Z",
       "components": {
         "text": {
-          "digest": "0cfcbc5e3d929425e7cfa3d22fb3cce80bb25fa07a57a8c7a5e38a5423be0dbb",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "digest": "b801791e73dbdb6e8d517be10cc212a4cce5154d6d0132bdbc9e1e32ecb3e34b",
+          "reviewedAt": "2026-09-14T19:03:10.818Z"
         },
         "screenshots": {
           "digest": "3686ba78b68b8c319a274a3d0ff8aa3eb334b49e165c94e77fcdef865e87874f",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "reviewedAt": "2026-09-14T19:03:10.818Z"
         },
         "icons": {
           "digest": "3267327b63bf3fa93928dfa06a3b8c1135a7d6db406ebc82d82608a36c3a2b49",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "reviewedAt": "2026-09-14T19:03:10.818Z"
         }
       }
     },
     "playback.guide": {
-      "digest": "d38ab8de1f73324f857d3653239d6b3b46c752a396e6c2c371d40044e67a9cbc",
-      "reviewedAt": "2026-09-14T17:46:34.085Z",
+      "digest": "b8776ef427fcb4f3fc37d5a77c4708d3a494d5c6d42c1143413de87dcffc28f0",
+      "reviewedAt": "2026-09-14T19:03:10.818Z",
       "components": {
         "text": {
-          "digest": "b54f0994615f4995664365f535b43c185e0c08609eaf787feee2e30fbdead993",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "digest": "2f44bb6f8a528e1daac4613d5ae826b870286001be40dc63a93ffe20824cea47",
+          "reviewedAt": "2026-09-14T19:03:10.818Z"
         },
         "screenshots": {
           "digest": "d251ba032352357240820bf10eded67a50c1d816b50b69e002266cb56d7a9bd6",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "reviewedAt": "2026-09-14T19:03:10.818Z"
         },
         "icons": {
           "digest": "ae932c322c289595d8bdcd210d6aa29ef9b8f72cab9da767a637df9ecc25dd09",
-          "reviewedAt": "2026-09-14T17:46:34.085Z"
+          "reviewedAt": "2026-09-14T19:03:10.818Z"
         }
       }
     },
