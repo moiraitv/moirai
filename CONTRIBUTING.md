@@ -2,6 +2,8 @@
 
 Start with the [README](README.md) for installation and a quick local setup. This page covers development workflows and verification commands. Follow [AGENTS.md](AGENTS.md) for repository conventions, testing expectations, and documentation rules; these guidelines apply to human and automated contributions.
 
+Report ordinary bugs through GitHub issues. For vulnerabilities, follow the [security policy](SECURITY.md) and use private reporting instead of posting security details publicly.
+
 ## Running developer instances
 
 Run the commands below from the root of the checkout or worktree you want to test. Use development-only data, not a running production instance's database or playback directories.
@@ -187,13 +189,14 @@ Before the first public release:
    the publishing workflow. Enable GitHub Actions and allow the workflow's `packages: write`
    permission. It uses GitHub's automatic `GITHUB_TOKEN`; no registry password or personal access
    token needs to be stored as a secret.
-3. Update the installation examples to use the final GHCR image address. Complete the release checks
+3. Verify that **Settings → Advanced Security → Private vulnerability reporting** is enabled and that maintainers receive security notifications through **Watch → Custom → Security alerts** (or **All Activity**). Confirm that GitHub displays the root `SECURITY.md` policy and the **Report a vulnerability** button after publication. Adding the policy file does not enable private reporting. See [GitHub's setup instructions](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository) for reporting and notification settings.
+4. Update the installation examples to use the final GHCR image address. Complete the release checks
    above, including screenshot regeneration and explicit guide approval, and smoke-test the Docker
    image with fresh application data. The workflow enforces the Dockerfile's production build and
    guide review gate; it does not run the full application test suite.
-4. Commit the release preparation, push it, and publish a release with a version tag such as
+5. Commit the release preparation, push it, and publish a release with a version tag such as
    `v0.1.0`. Keep the package versions consistent with the release. Mark previews as prereleases.
-5. Wait for **Publish Docker image** in the Actions tab to succeed. After the first publication, open
+6. Wait for **Publish Docker image** in the Actions tab to succeed. After the first publication, open
    the package settings and change its visibility to **Public**. A public source repository does not
    automatically make a newly published container package public. Verify an anonymous image pull
    before announcing the release.

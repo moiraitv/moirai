@@ -5,7 +5,7 @@
   "printWidth": 100,
   "overrides": [
     {
-      "files": ["README.md", "apps/docs/src/**/*.md"],
+      "files": ["README.md", "SECURITY.md", "apps/docs/src/**/*.md"],
       "options": {
         "proseWrap": "never"
       }

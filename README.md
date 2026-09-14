@@ -151,4 +151,6 @@ Open <http://127.0.0.1:3000> unless you changed the port. This serves the applic
 
 Feedback, bug reports, and contributions are welcome. [Open an issue](https://github.com/moiraitv/moirai/issues) to report a problem or discuss an idea, and read [Contributing](CONTRIBUTING.md) for development setup, verification commands, and release checks.
 
+For security vulnerabilities, follow the [security policy](SECURITY.md) and report privately instead of posting details in a public issue.
+
 The [technical outline](docs/technical-outline.md) describes the architecture and supported features. Moirai is available under the [MIT license](LICENSE).
