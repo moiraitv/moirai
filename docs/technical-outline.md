@@ -967,6 +967,13 @@ Dockerfile and builds the Node application around its `/app/ersatztv-channel` ex
 upstream image currently supports `linux/amd64` only. The development submodule is excluded from the
 Docker build context.
 
+Publishing a GitHub release triggers `.github/workflows/publish-image.yml` to build that tagged
+commit for `linux/amd64` and push to `ghcr.io/<owner>/<repository>` using the workflow's scoped
+`GITHUB_TOKEN`. Images receive the release tag and its normalized semantic version; stable releases
+also update `latest`. Prereleases and tags containing a hyphen leave `latest` unchanged. The Docker
+build enforces the production guide review gate. Full application verification and screenshot
+refresh remain required release preparation steps documented in `CONTRIBUTING.md`.
+
 ## API and web application
 
 ### API boundaries

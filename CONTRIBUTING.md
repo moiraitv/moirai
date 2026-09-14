@@ -1,6 +1,6 @@
 # Contributing to Moirai
 
-Start with the [README](README.md) for development setup and verification commands. Follow [AGENTS.md](AGENTS.md) for repository conventions, testing expectations, and documentation rules; these guidelines apply to human and automated contributions.
+Start with the [README](README.md) for installation and a quick local setup. This page covers development workflows and verification commands. Follow [AGENTS.md](AGENTS.md) for repository conventions, testing expectations, and documentation rules; these guidelines apply to human and automated contributions.
 
 ## Running developer instances
 
@@ -35,7 +35,7 @@ npm run dev
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The coordinator starts the API on port 3000, then Vite on port 5173. Vite provides frontend hot updates and proxies API requests; server and shared-source changes trigger API rebuilds and restarts. Stop the coordinator with Ctrl+C to stop the instance.
 
-On a fresh data directory, initialize administrator access in the browser using a local account or a configured Logto provider. Keep the instance bound to loopback until setup is complete. See the [README configuration instructions](README.md#configuration) for OIDC and remote-host access.
+On a fresh data directory, initialize administrator access in the browser using a local account or a configured Logto provider. Keep the instance bound to loopback until setup is complete. See the [configuration reference](apps/docs/src/operations/configuration.md) for remote-host settings and [Logto setup](apps/docs/src/getting-started/access.md#set-up-logto) for provider configuration.
 
 By default, persistent state lives under `data/` in the repository. Relative playback stream and playout paths are resolved beneath `MOIRAI_DATA_DIR`; `MOIRAI_LOG_DIR`, when explicitly set, is resolved from the repository root. Check overrides in `.env`, especially absolute paths, before launching another instance.
 
@@ -75,11 +75,38 @@ This serves the built application and bundled `/help/` guide from the API origin
 
 For guide-only editing, run `npm run docs:user:dev` and use the URL printed by VitePress. Ordinary builds allow documentation drafts; use the release checklist below for the review-gated production build.
 
+## Verification
+
+Run these commands from the repository root:
+
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run docs:user:check
+npm run docs:api:check
+npx playwright install chromium
+npm run test:e2e
+```
+
+Set `PLAYWRIGHT_CHROME_PATH` to an existing Chrome or Chromium executable if you do not use Playwright's downloaded browser. Follow the [release checklist](#before-a-release) before running `npm run build:production`; production and Docker builds require explicit approval of the current guide content.
+
+### API references
+
+Generate offline HTTP and live-event API references with:
+
+```sh
+npm run docs:api
+```
+
+This writes OpenAPI 3.1 and AsyncAPI 3.1 JSON, YAML, and self-contained HTML under the ignored `dist/api-docs/` directory. Open `dist/api-docs/index.html` to browse them. These developer references are not served as production routes. See the [technical outline](docs/technical-outline.md) and [scheduling architecture](docs/scheduling-architecture.md) for implementation details.
+
 ## Where documentation belongs
 
 - **User tasks and how-tos:** `apps/docs/src/`, published in the bundled `/help/` guide. Keep instructions understandable without developer knowledge, use the application's labels and icons, and leave Markdown paragraphs unwrapped so editors can soft-wrap them.
 - **Architecture and implementation contracts:** the [technical outline](docs/technical-outline.md) and focused references under `docs/`.
-- **HTTP and event interfaces:** shared contracts and route descriptions, verified with `npm run docs:api:check`. See the README for generating API references.
+- **HTTP and event interfaces:** shared contracts and route descriptions, verified with `npm run docs:api:check`. See [API references](#api-references) for generating offline documentation.
 - **Contributor workflows and release checks:** this file. Keep the README concise and link to detailed instructions rather than duplicating them.
 
 ## Updating the user guide
@@ -135,7 +162,7 @@ Run these commands from the repository root after the release's UI and documenta
 
    Approve all topics only when a reviewer has explicitly approved all current content. Regenerate screenshots **before** approval: image changes can put previously reviewed pages back in the queue. Commit the reviewed Markdown, image assets, capture-scenario changes, and approval registry together.
 
-5. Run the application's [verification checks](README.md#verification), then build the release:
+5. Run the application's [verification checks](#verification), then build the release:
 
    ```sh
    npm run build:production
@@ -144,3 +171,40 @@ Run these commands from the repository root after the release's UI and documenta
    Production and Docker builds fail while any guide page is unreviewed. Ordinary `npm run build` remains draft-friendly. The production build rebuilds the bundled guide with the latest review state.
 
 **The review gate is not a screenshot-freshness check.** It validates approval of the files currently on disk; it does not determine whether an old screenshot still matches changed UI code. Regenerating screenshots and visually reviewing them before release is therefore a required contributor step, not something the production build performs automatically.
+
+## Publishing a GitHub release
+
+The workflow in `.github/workflows/publish-image.yml` builds the release's tagged commit and publishes
+its Docker image to `ghcr.io/<owner>/<repository>` when a GitHub release is **published**. Saving a
+draft or pushing a Git tag alone does not publish an image. The image name is derived automatically
+from the GitHub repository and normalized to lowercase by Docker's metadata action.
+
+Before the first public release:
+
+1. Choose a project license and retain the required third-party licenses and notices. Review tracked
+   files and Git history for credentials, personal data, and files that should not be public.
+2. Create the GitHub repository, configure its Git remote, and push the prepared commits, including
+   the publishing workflow. Enable GitHub Actions and allow the workflow's `packages: write`
+   permission. It uses GitHub's automatic `GITHUB_TOKEN`; no registry password or personal access
+   token needs to be stored as a secret.
+3. Update the installation examples to use the final GHCR image address. Complete the release checks
+   above, including screenshot regeneration and explicit guide approval, and smoke-test the Docker
+   image with fresh application data. The workflow enforces the Dockerfile's production build and
+   guide review gate; it does not run the full application test suite.
+4. Commit the release preparation, push it, and publish a release with a version tag such as
+   `v0.1.0`. Keep the package versions consistent with the release. Mark previews as prereleases.
+5. Wait for **Publish Docker image** in the Actions tab to succeed. After the first publication, open
+   the package settings and change its visibility to **Public**. A public source repository does not
+   automatically make a newly published container package public. Verify an anonymous image pull
+   before announcing the release.
+
+A stable `v0.1.0` release publishes `:v0.1.0`, `:0.1.0`, and `:latest`. Prereleases publish their
+version tags without changing `latest`; tags containing a hyphen also never update `latest`. Use a
+specific version tag for reproducible installations. Every successful stable release publication
+updates `latest`, so publishing or rerunning an older stable release can move that alias backwards.
+The image currently targets `linux/amd64`, matching the pinned upstream engine.
+
+If publication fails, inspect the failed Actions step and rerun the workflow after resolving the
+cause. A source fix needs a new commit and release tag; do not move an already published version tag.
+GitHub's release page is published before the image build completes, so its existence alone does not
+mean the container is ready to pull.
