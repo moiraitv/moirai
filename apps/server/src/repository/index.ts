@@ -1,3 +1,4 @@
+import { appendProgramGroups } from './program-groups.js';
 import { mediaAirings } from './media-airings.js';
 import { mediaResourceUsage } from './media-resource-usage.js';
 import { resourceUsage } from './resource-usage.js';
@@ -433,6 +434,15 @@ export class Repository extends LibraryRepository {
 	/** List committed timeline windows for all channels. */
 	async listTimelineMaterializations(): Promise<TimelineMaterializationRecord[]> {
 		return this.scheduling.listTimelineMaterializations();
+	}
+
+	/** Atomically extend a compatible program with library-owned group references. */
+	appendProgramGroups(id: string, libraryId: string, groupIds: string[]) {
+		const result = appendProgramGroups(this.database, id, libraryId, groupIds);
+		if (result.status === 'updated' && result.addedGroupCount > 0) {
+			this.invalidateSchedulingCatalog();
+		}
+		return result;
 	}
 
 	/** Read current playback metadata, including catalog artist credits for legacy snapshots. */

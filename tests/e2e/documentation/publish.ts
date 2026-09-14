@@ -34,6 +34,7 @@ export const screenshotNames = [
 	'library-catalog.png',
 	'library-filters.png',
 	'library-offline.png',
+	'library-selection.png',
 	'logs.png',
 	'media-item.png',
 	'media-item-usage.png',

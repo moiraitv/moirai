@@ -16,6 +16,7 @@ const props = defineProps<{
 	scrollMargin: number;
 	scrollPadding: number;
 	selectionMode: boolean;
+	selectionKind: 'items' | 'groups';
 	selectedItemIds: Set<string>;
 	libraryId: string;
 	libraryType: string;
@@ -129,9 +130,8 @@ defineExpose({ anchorPositions, scrollToRow });
 					:library-id="libraryId"
 					:library-type="libraryType"
 					:selection-mode="selectionMode"
-					:selected="card.entry.item
-						? selectedItemIds.has(card.entry.item.id)
-						: false"
+					:selectable="selectionKind === 'groups' ? Boolean(card.entry.group) : Boolean(card.entry.item)"
+					:selected="selectedItemIds.has(card.entry.item?.id ?? card.entry.group?.id ?? '')"
 					@enter="emit('enter', $event)"
 					@toggle="emit('toggle', $event)"
 				/>

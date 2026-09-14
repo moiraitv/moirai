@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCatalogSelection } from '../composables/useCatalogSelection';
 import { useDisclosureState } from '../disclosure-state';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import {
@@ -45,6 +46,8 @@ import type {
 	LibraryReconciliation,
 	ReconciliationAction,
 	ProgramItemAddition,
+	ProgramGroupAddition,
+	ProgramGroupAdditionResult,
 	ProgramItemAdditionResult,
 } from '@moirai/shared';
 import { api, type MediaQuery } from '../api';
@@ -158,9 +161,9 @@ const {
 } = useSelectionToolbarTransition();
 const selectionToolbarMotionActive = ref(false);
 const selectionToolbarShift = ref(0);
-const selectedItemIds = ref<string[]>([]);
-const programSelection = ref<ProgramItemAddition['selection'] | null>(null);
-const programAdditionResult = ref<ProgramItemAdditionResult | null>(null);
+const selectedIds = ref<string[]>([]);
+const programSelection = ref<ProgramItemAddition['selection'] | ProgramGroupAddition['selection'] | null>(null);
+const programAdditionResult = ref<ProgramItemAdditionResult | ProgramGroupAdditionResult | null>(null);
 const reconciliationBusy = ref(false);
 const alphabet = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const navigationButtons = new Map<string, HTMLElement>();
@@ -201,13 +204,8 @@ const paginationWidth = ref(typeof window === 'undefined' ? 1024 : window.innerW
 const catalogColumns = computed(() =>
 	catalogColumnCount(catalogWidth.value, paginationWidth.value));
 const catalogRows = computed(() => buildCatalogVirtualRows(entries.value, catalogColumns.value));
-const pageItemIds = computed(() => [
-	...new Set(entries.value.flatMap((entry) => entry.item ? [entry.item.id] : [])),
-]);
-const selectedItemIdSet = computed(() => new Set(selectedItemIds.value));
-const allPageItemsSelected = computed(() =>
-	pageItemIds.value.length > 0
-	&& pageItemIds.value.every((itemId) => selectedItemIdSet.value.has(itemId)));
+const { selectionKind, hasGroups, hasItems, pageSelectionIds, selectedIdSet, allPageSelected,
+	toggleSelectedEntry, togglePageSelection } = useCatalogSelection(entries, selectedIds);
 const pagination = computed(() => browse.value?.pagination);
 const trail = computed<Array<{ id?: string; title: string }>>(() => {
 	try {
@@ -433,9 +431,10 @@ function currentMediaQuery(): MediaQuery {
 	};
 }
 
-/** Enter page-local item selection without retaining an earlier catalog page. */
+/** Enter page-local selection without retaining an earlier catalog page. */
 function beginSelection(): void {
-	selectedItemIds.value = [];
+	selectionKind.value = hasGroups.value ? 'groups' : 'items';
+	selectedIds.value = [];
 	selectionToolbarMotionActive.value = true;
 	showSelectionToolbar();
 	void nextTick(() => {
@@ -445,7 +444,7 @@ function beginSelection(): void {
 
 /** Leave selection mode and discard its page-local identifiers. */
 function cancelSelection(): void {
-	selectedItemIds.value = [];
+	selectedIds.value = [];
 	selectionToolbarMotionActive.value = selectionToolbarMounted.value;
 	hideSelectionToolbar();
 }
@@ -461,22 +460,12 @@ function finishSelectionToolbarTransition(event: TransitionEvent): void {
 	requestAnimationFrame(updateStickyMetrics);
 }
 
-/** Toggle one item in the current page-local selection. */
-function toggleSelectedItem(itemId: string): void {
-	selectedItemIds.value = selectedItemIdSet.value.has(itemId)
-		? selectedItemIds.value.filter((candidate) => candidate !== itemId)
-		: [...selectedItemIds.value, itemId];
-}
-
-/** Select or clear every item card on the current catalog page. */
-function togglePageSelection(): void {
-	selectedItemIds.value = allPageItemsSelected.value ? [] : [...pageItemIds.value];
-}
-
-/** Open the destination dialog for the explicitly selected item cards. */
+/** Open the destination dialog for the explicitly selected cards. */
 function addSelectedItems(): void {
-	if (selectedItemIds.value.length > 0) {
-		programSelection.value = { type: 'items', itemIds: [...selectedItemIds.value] };
+	if (selectedIds.value.length > 0) {
+		programSelection.value = selectionKind.value === 'groups'
+			? { type: 'groups', groupIds: [...selectedIds.value] }
+			: { type: 'items', itemIds: [...selectedIds.value] };
 	}
 }
 
@@ -486,7 +475,7 @@ function addAllMatchingItems(): void {
 }
 
 /** Close selection UI and retain an accessible link to the changed program. */
-function finishProgramAddition(result: ProgramItemAdditionResult): void {
+function finishProgramAddition(result: ProgramItemAdditionResult | ProgramGroupAdditionResult): void {
 	programSelection.value = null;
 	programAdditionResult.value = result;
 	cancelSelection();
@@ -766,17 +755,20 @@ async function loadLibrary(): Promise<void> {
 	}
 }
 
-/** Load the routed catalog page, optionally retaining selected items that remain visible. */
+/** Load the routed catalog page, optionally retaining selections that remain visible. */
 async function loadMedia(preserveSelection = false): Promise<void> {
 	if (!preserveSelection) {
-		selectedItemIds.value = [];
+		selectedIds.value = [];
 	}
 	mediaLoading.value = true;
 	try {
 		browse.value = await api.media(id.value, currentMediaQuery());
+		if (!preserveSelection) {
+			selectionKind.value = hasGroups.value ? 'groups' : 'items';
+		}
 		if (preserveSelection) {
-			const visibleItemIds = new Set(pageItemIds.value);
-			selectedItemIds.value = selectedItemIds.value.filter((itemId) =>
+			const visibleItemIds = new Set(pageSelectionIds.value);
+			selectedIds.value = selectedIds.value.filter((itemId) =>
 				visibleItemIds.has(itemId));
 		}
 	}
@@ -1138,7 +1130,7 @@ watch(id, () => {
 	// Discard actions captured for the previous library before loading the new route.
 	resetSelectionToolbar();
 	selectionToolbarMotionActive.value = false;
-	selectedItemIds.value = [];
+	selectedIds.value = [];
 	programSelection.value = null;
 	programAdditionResult.value = null;
 	loadedMediaState = mediaStateSignature();
@@ -1326,8 +1318,8 @@ onUnmounted(() => {
 					class="toolbar-button catalog-icon-button catalog-selection-toggle"
 					:class="{ active: selectionMode }"
 					:aria-pressed="selectionMode"
-					:aria-label="selectionMode ? 'Cancel item selection' : 'Select items'"
-					:title="selectionMode ? 'Cancel item selection' : 'Select items'"
+					:aria-label="selectionMode ? 'Cancel selection' : hasGroups ? 'Select groups' : 'Select items'"
+					:title="selectionMode ? 'Cancel selection' : hasGroups ? 'Select groups' : 'Select items'"
 					@click="selectionMode ? cancelSelection() : beginSelection()"
 				>
 					<X v-if="selectionMode" :size="18" />
@@ -1339,15 +1331,16 @@ onUnmounted(() => {
 					<div
 						class="catalog-selection-toolbar"
 						role="toolbar"
-						aria-label="Item selection"
+						:aria-label="selectionKind === 'groups' ? 'Group selection' : 'Item selection'"
 						@transitionend="finishSelectionToolbarTransition"
 					>
 						<div class="catalog-selection-primary">
-							<strong>{{ selectedItemIds.length }} selected</strong>
+							<select v-if="hasGroups && hasItems" v-model="selectionKind" aria-label="Selection type" @change="selectedIds = []"><option value="groups">Groups</option><option value="items">Items</option></select>
+							<strong>{{ selectedIds.length }} selected</strong>
 							<button
 								type="button"
 								class="toolbar-button catalog-selection-action"
-								:disabled="selectedItemIds.length === 0"
+								:disabled="selectedIds.length === 0"
 								@click="addSelectedItems"
 							>
 								<ListPlus :size="15" /> Add Selected
@@ -1358,16 +1351,16 @@ onUnmounted(() => {
 								:disabled="mediaLoading || !browse || entries.length === 0"
 								@click="addAllMatchingItems"
 							>
-								<Layers3 :size="15" /> Add All
+								<Layers3 :size="15" /> {{ selectionKind === 'groups' ? 'Add All Items' : 'Add All' }}
 							</button>
 						</div>
 						<button
 							type="button"
 							class="toolbar-button catalog-selection-page-action"
-							:disabled="pageItemIds.length === 0"
+							:disabled="pageSelectionIds.length === 0"
 							@click="togglePageSelection"
 						>
-							{{ allPageItemsSelected ? 'Clear Page' : 'Select Page' }}
+							{{ allPageSelected ? 'Clear Page' : 'Select Page' }}
 						</button>
 					</div>
 				</div>
@@ -1396,11 +1389,12 @@ onUnmounted(() => {
 				:scroll-margin="catalogScrollMargin"
 				:scroll-padding="catalogScrollPadding"
 				:selection-mode="selectionMode"
-				:selected-item-ids="selectedItemIdSet"
+				:selected-item-ids="selectedIdSet"
+				:selection-kind="selectionKind"
 				:library-id="library.id"
 				:library-type="library.typeKey"
 				@enter="enter"
-				@toggle="toggleSelectedItem"
+				@toggle="toggleSelectedEntry"
 			/>
 			<div v-else class="empty-state"><h3>No matching media</h3><p>Try changing the search or filters, or scan the library again.</p></div>
 		</section>

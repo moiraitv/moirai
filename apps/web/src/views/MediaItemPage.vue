@@ -25,7 +25,7 @@ import {
 	Video,
 	X,
 } from '@lucide/vue';
-import type { MediaItemDetail, ProgramItemAdditionResult } from '@moirai/shared';
+import type { MediaItemDetail, ProgramGroupAdditionResult, ProgramItemAdditionResult } from '@moirai/shared';
 import { api } from '../api';
 import LoadingState from '../components/LoadingState.vue';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
@@ -51,7 +51,7 @@ const showAllAppearances = useDisclosureState('media-appearances');
 const showAllCrew = useDisclosureState('media-crew');
 const copyStatus = ref('');
 const addToProgramOpen = ref(false);
-const programAdditionResult = ref<ProgramItemAdditionResult | null>(null);
+const programAdditionResult = ref<ProgramItemAdditionResult | ProgramGroupAdditionResult | null>(null);
 const usageRevision = ref(0);
 const id = computed(() => String(route.params.id));
 const previewUrl = computed(() => `/api/v1/media/${encodeURIComponent(id.value)}/preview`);
@@ -137,7 +137,7 @@ function closePlayer(): void {
 }
 
 /** Close the destination dialog and report the selected-items program that changed. */
-function finishProgramAddition(result: ProgramItemAdditionResult): void {
+function finishProgramAddition(result: ProgramItemAdditionResult | ProgramGroupAdditionResult): void {
 	addToProgramOpen.value = false;
 	programAdditionResult.value = result;
 	usageRevision.value++;

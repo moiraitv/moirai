@@ -1,3 +1,4 @@
+import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
 import type { EncodingProfile, EncodingProfileCreate } from '@moirai/shared';
 import type { CreditTemplate, CreditTemplateCreate, CreditPreview, CreditPreviewResult } from '@moirai/shared';
@@ -384,6 +385,10 @@ export const api = {
 		}),
 	mediaItem: (id: string) => request<MediaItemDetail>(`/api/v1/media/${id}`),
 	mediaCardPreview: (id: string) => request<MediaCardPreview>(`/api/v1/media/${id}/card-preview`),
+	addLibraryGroupsToProgram: (id: string, body: ProgramGroupAddition) =>
+		request<ProgramGroupAdditionResult>(`/api/v1/libraries/${id}/program-groups`, {
+			method: 'POST', body: JSON.stringify(body),
+		}),
 	addLibraryItemsToProgram: (id: string, body: ProgramItemAddition) =>
 		request<ProgramItemAdditionResult>(`/api/v1/libraries/${id}/program-items`, {
 			method: 'POST',

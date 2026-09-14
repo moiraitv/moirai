@@ -293,6 +293,14 @@ export const programItemAdditionResultSchema = z.object({
 	alreadySelectedCount: z.number().int().nonnegative(),
 });
 
+/** Result of creating or extending a program with library hierarchy groups. */
+export const programGroupAdditionResultSchema = z.object({
+	program: schedulingProgramSchema,
+	created: z.boolean(),
+	addedGroupCount: z.number().int().nonnegative(),
+	alreadySelectedCount: z.number().int().nonnegative(),
+});
+
 /** Compact media preview displayed while confirming a large program addition. */
 export const programItemAdditionConfirmationItemSchema = mediaItemSchema.pick({
 	id: true,

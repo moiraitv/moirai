@@ -1,3 +1,4 @@
+import { registerProgramGroupRoutes } from './program-groups.js';
 import type { FastifyInstance } from 'fastify';
 import { Temporal } from '@js-temporal/polyfill';
 import { z } from 'zod';
@@ -65,6 +66,7 @@ export function registerSchedulingRoutes(
 	app: FastifyInstance,
 	{ config, repository, events, schedulingWorkers }: SchedulingRouteDependencies,
 ): void {
+	registerProgramGroupRoutes(app, repository, events);
 	// Reusable program definitions.
 	app.get('/api/v1/programs', {
 		schema: apiOperation({

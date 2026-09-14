@@ -3,6 +3,8 @@ import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue';
 import { Check, ListPlus, Plus, X } from '@lucide/vue';
 import {
 	type ProgramItemAddition,
+	type ProgramGroupAddition,
+	type ProgramGroupAdditionResult,
 	type ProgramItemAdditionResult,
 	type SchedulingProgram,
 	type SelectionStrategy,
@@ -62,10 +64,10 @@ function rememberProgramId(libraryId: string, programId: string): void {
 const props = defineProps<{
 	libraryId: string;
 	libraryName?: string;
-	selection: ProgramItemAddition['selection'];
+	selection: ProgramItemAddition['selection'] | ProgramGroupAddition['selection'];
 }>();
 const emit = defineEmits<{
-	added: [result: ProgramItemAdditionResult];
+	added: [result: ProgramItemAdditionResult | ProgramGroupAdditionResult];
 	close: [];
 }>();
 const scheduling = useSchedulingStore();
@@ -83,16 +85,19 @@ const strategy = ref<SelectionStrategy['type']>('sequential');
 const compatiblePrograms = computed(() =>
 	(scheduling.overview?.programs ?? []).filter((program) =>
 		program.config.type === 'content'
-		&& program.config.source.type === 'collection'
+		&& program.config.source.type === (props.selection.type === 'groups' ? 'group-collection' : 'collection')
 		&& program.config.source.libraryId === props.libraryId));
 const selectedProgram = computed(() =>
 	compatiblePrograms.value.find((program) => program.id === programId.value));
 const selectionLabel = computed(() => props.selection.type === 'items'
 	? `${props.selection.itemIds.length.toLocaleString()} selected ${props.selection.itemIds.length === 1 ? 'item' : 'items'}`
-	: 'All matching items');
+	: props.selection.type === 'groups' ? countLabel(props.selection.groupIds.length, 'selected group') : 'All matching items');
 
-/** Return the number of items already referenced by a compatible selected-items program. */
+/** Return the number of references already held by a compatible destination. */
 function programItemCount(program: SchedulingProgram): number {
+	if (program.config.type === 'content' && program.config.source.type === 'group-collection') {
+		return program.config.source.groupIds.length;
+	}
 	return program.config.type === 'content' && program.config.source.type === 'collection'
 		? program.config.source.itemIds.length
 		: 0;
@@ -144,7 +149,7 @@ async function loadPrograms(): Promise<void> {
 }
 
 /** Remember a successful destination before handing the result back to the library page. */
-function finishAddition(result: ProgramItemAdditionResult): void {
+function finishAddition(result: ProgramItemAdditionResult | ProgramGroupAdditionResult): void {
 	rememberProgramId(props.libraryId, result.program.id);
 	emit('added', result);
 }
@@ -176,6 +181,10 @@ async function addItems(): Promise<void> {
 		};
 	saving.value = true;
 	try {
+		if (props.selection.type === 'groups') {
+			finishAddition(await api.addLibraryGroupsToProgram(props.libraryId, { destination, selection: props.selection }));
+			return;
+		}
 		const addition: ProgramItemAddition = {
 			destination,
 			selection: props.selection,
@@ -287,7 +296,7 @@ onMounted(async () => {
 				</button>
 			</header>
 
-			<LoadingState v-if="loading" label="Loading selected-items programs…" />
+			<LoadingState v-if="loading" label="Loading compatible programs…" />
 			<div v-else-if="loadError" class="program-item-modal-load-error">
 				<p class="notice error">{{ loadError }}</p>
 				<button type="button" class="button secondary" @click="loadPrograms">Retry</button>
@@ -309,13 +318,13 @@ onMounted(async () => {
 							@change="selectProgram(program.id)"
 						/>
 						<span class="program-destination-icon"><ListPlus :size="19" /></span>
-						<span><strong>{{ program.name }}</strong><small>{{ countLabel(programItemCount(program), 'item') }}</small></span>
+						<span><strong>{{ program.name }}</strong><small>{{ countLabel(programItemCount(program), selection.type === 'groups' ? 'group' : 'item') }}</small></span>
 						<Check v-if="destinationType === 'existing' && programId === program.id" :size="18" />
 					</label>
 					<label class="program-create-option" :class="{ selected: destinationType === 'new' }">
 						<input type="radio" name="program-destination" value="new" :checked="destinationType === 'new'" @change="destinationType = 'new'" />
 						<span class="program-destination-icon"><Plus :size="19" /></span>
-						<span><strong>Create a new program</strong><small>Start a selected-items program for this library</small></span>
+						<span><strong>Create a new program</strong><small>Start a selected-{{ selection.type === 'groups' ? 'groups' : 'items' }} program for this library</small></span>
 						<Check v-if="destinationType === 'new'" :size="18" />
 					</label>
 				</fieldset>

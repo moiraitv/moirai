@@ -479,7 +479,13 @@ limit. `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` defaults to 5,000 and may be set from 1
 25,000-item
 contract ceiling.
 
-Music group reconciliation preserves existing IDs when
+Hierarchy browsing also supports page-local show, season, artist, and album selection. Group and
+item selections remain separate, with an explicit kind selector on mixed pages. Recursive item
+additions remain available on group-only pages as Add All Items. Group additions
+create or atomically extend same-library selected-groups programs, deduplicate identifiers, validate
+library ownership, and enforce the 1,000-group contract limit. New programs default to sequential
+playback. Group references retain dynamic descendant membership; selected seasons play in episode
+order without including unselected seasons. Failed saves retain the destination dialog. Music group reconciliation preserves existing IDs when
 metadata-owned artist/album groups acquire matching folders; repeated scans retain those owners
 without rewriting authored program references or adding database queries. Reconciliation indexes
 stored music groups by ID, source key, and parent-scoped identity once per scan; claimed owners are

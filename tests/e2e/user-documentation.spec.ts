@@ -37,6 +37,16 @@ test('captures setup and authentication', async ({ page }) => {
 test('captures libraries and scanning', async ({ page, documentationServer }) => {
 	const { libraryId, mediaRoot } = await seedLibrary(page, documentationServer.directory, true);
 	await capture(page, 'library-catalog.png');
+	await page.getByRole('button', { name: 'Select items', exact: true }).click();
+	await page.getByRole('button', { name: 'Select Afterlight Station', exact: true }).click();
+	await page.getByRole('button', { name: 'Select Checkout Please', exact: true }).click();
+	await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Add Selected', exact: true })).toBeEnabled();
+	await page.getByRole('heading', { name: 'Evening Cinema' }).hover();
+	await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+	await capture(page, 'library-selection.png');
+	await page.getByRole('button', { name: 'Cancel selection', exact: true }).click();
+
 	await rename(mediaRoot, `${mediaRoot}-offline`);
 	try {
 		await page.goto(`/libraries/${libraryId}`);

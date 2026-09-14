@@ -35,4 +35,10 @@ Open **Used by** at the right edge of the item page to see programs that select 
 
 ![Media usage and realized showings](/screenshots/media-item-usage.png)
 
-Selection mode lets you choose visible items or all items matching the current filter and add them to an existing program. Check the displayed match count before adding a broad recursive selection.
+Selection mode lets you choose shows, seasons, artists, or albums and add them to a new or existing selected-groups program. For example, open a show, choose **Select groups**, select seasons 1–8, then choose **Add Selected**. Name a new program and leave **Playback order** set to **Sequential** to play only those seasons in episode order. Newly indexed episodes within the selected seasons join automatically.
+
+**Select Page** selects the groups or items on the current page. If a page contains both groups and individual items, choose **Groups** or **Items** in the selection toolbar; changing the kind clears the current selection. The destination dialog only offers compatible programs from the same library, and skips references already selected.
+
+![Library selection mode with two movies selected and the Add Selected, Add All, and Select Page controls](/screenshots/library-selection.png)
+
+**Add All Items** remains available while selecting groups and includes every item beneath the current level, including items on other pages. It adds individual items to a selected-items program. In item selection mode, this action is labeled **Add All** and includes all items matching the current filter recursively. Check the displayed match count before adding a broad selection.

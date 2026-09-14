@@ -56,6 +56,8 @@ Choose **Content** when the ![](/icons/list-video.svg) Program should select med
 
 Use an explicit selection when you want to control which items are eligible. Review the selected media and arrange its order before choosing how playback moves through it. A hand-picked list of media is still a Content ![](/icons/list-video.svg) Program; a Sequence ![](/icons/list-video.svg) Program combines other ![](/icons/list-video.svg) Programs instead.
 
+You can also select shows, seasons, artists, or albums directly in the library browser and choose **Add Selected**. Create a new program or add to a selected-groups program from the same library. For example, select seasons 1–8 of a show and use **Sequential** to play their episodes in order, excluding later seasons. Group selections include newly indexed content within those groups; individual-item selections retain specific items.
+
 ### Use a library query
 
 Library queries share the catalog filters: title, release year, indexed date, rating, actors, directors, and included or excluded genres. Choose **Configure Filters** to refine the matches. Order the query by title/episode, indexed date, or release date, in either direction, and optionally limit the ordered set. The media carousel updates as scanning adds or changes matching items.

@@ -433,6 +433,25 @@ export const programItemAdditionSchema = z.object({
 /** Shared request for creating or extending a selected-items program. */
 export type ProgramItemAddition = z.infer<typeof programItemAdditionSchema>;
 
+/** Validate explicit hierarchy groups and a compatible program destination. */
+export const programGroupAdditionSchema = z.object({
+	destination: programItemAdditionSchema.shape.destination,
+	selection: z.object({
+		type: z.literal('groups'),
+		groupIds: z.array(z.uuid()).min(1).max(MAX_EXPLICIT_MEDIA_GROUPS)
+			.refine(ids => new Set(ids).size === ids.length, 'Selected groups must be unique'),
+	}),
+});
+/** Request to retain selected groups in a new or existing program. */
+export type ProgramGroupAddition = z.infer<typeof programGroupAdditionSchema>;
+/** Result counts refer to groups rather than their current descendant items. */
+export interface ProgramGroupAdditionResult {
+	program: SchedulingProgram;
+	created: boolean;
+	addedGroupCount: number;
+	alreadySelectedCount: number;
+}
+
 /** Shared wire contract for scheduling program. */
 export interface SchedulingProgram extends ProgramCreate {
 	id: string;

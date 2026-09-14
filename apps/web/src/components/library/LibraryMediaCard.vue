@@ -16,6 +16,7 @@ const props = defineProps<{
 	libraryType: string;
 	selected: boolean;
 	selectionMode: boolean;
+	selectable: boolean;
 }>();
 const attrs = useAttrs();
 const emit = defineEmits<{
@@ -30,10 +31,11 @@ function activate(): void {
 	}
 }
 
-/** Toggle the item represented by the selection overlay. */
+/** Toggle the group or item represented by the selection overlay. */
 function toggleSelection(): void {
-	if (props.entry.item) {
-		emit('toggle', props.entry.item.id);
+	const id = props.entry.item?.id ?? props.entry.group?.id;
+	if (id) {
+		emit('toggle', id);
 	}
 }
 
@@ -63,11 +65,11 @@ function statusLabel(): string {
 			:is="entry.item ? RouterLink : 'button'"
 			v-bind="attrs"
 			class="media-card"
-			:class="{ 'selectable-media-card': Boolean(entry.item), selected }"
+			:class="{ 'selectable-media-card': selectable, selected }"
 			:to="entry.item ? `/libraries/${libraryId}/items/${entry.item.id}` : undefined"
 			:type="entry.item ? undefined : 'button'"
-			:tabindex="entry.item && selectionMode ? -1 : undefined"
-			:aria-hidden="entry.item && selectionMode ? 'true' : undefined"
+			:tabindex="selectable && selectionMode ? -1 : undefined"
+			:aria-hidden="selectable && selectionMode ? 'true' : undefined"
 			@click="activate"
 		>
 			<span class="poster">
@@ -79,11 +81,11 @@ function statusLabel(): string {
 			<span v-else-if="entry.item" class="media-card-copy"><span class="media-card-title">{{ entry.item.title }}</span><span class="media-card-subtitle">{{ mediaItemSubtitle(libraryType, entry.item) || entry.item.kind }}</span><span class="media-card-status" :data-status="entry.item.metadataStatus" :data-availability="entry.item.availability" :title="entry.item.availability === 'available' ? `Metadata: ${entry.item.metadataStatus}` : 'Media temporarily unavailable'"><CircleHelp v-if="entry.item.availability !== 'available'" :size="14" /><AlertTriangle v-else-if="entry.item.metadataStatus !== 'complete'" :size="14" /><Check v-else :size="14" /><small v-if="statusLabel()">{{ statusLabel() }}</small></span></span>
 		</component>
 		<button
-			v-if="entry.item"
+			v-if="selectable"
 			type="button"
 			class="media-selection-control"
 			:aria-pressed="selected"
-			:aria-label="`${selected ? 'Deselect' : 'Select'} ${entry.item.title}`"
+			:aria-label="`${selected ? 'Deselect' : 'Select'} ${entry.item?.title ?? entry.group?.title}`"
 			@click="toggleSelection"
 		>
 			<span class="media-selection-check"><Check v-if="selected" :size="16" /></span>
