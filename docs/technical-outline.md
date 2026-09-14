@@ -128,7 +128,7 @@ explicitly disclosed, requires exact-name confirmation, and removes Moirai's con
 without changing source media files.
 
 Compact media-item cards expose a shared indexed-metadata preview on pointer hover, keyboard focus,
-or an explicit touch information control. The client waits before loading incidental hover previews,
+or an explicit eye-icon preview control with centered artwork and a 44-pixel mobile touch target. The client waits before loading incidental hover previews,
 deduplicates requests, and retains successful summaries for the browser session. Preview responses
 contain only bounded display metadata and never inspect or open the source media file.
 

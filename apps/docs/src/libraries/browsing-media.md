@@ -21,6 +21,8 @@ Select ![Filter media](/icons/funnel.svg) above the catalog to open these contro
 
 The same filters are available in Quick Setup and program library queries. Use **Match all** when every selected genre must be present or **Match any** when one is enough; excluded genres remove matching items. Release-year and indexed-date filters answer different questions: when the media was released versus when Moirai added it to the catalog.
 
+Use the eye button in the upper-left corner of a media card for a quick preview. It appears on hover or keyboard focus on desktop and stays visible on touch devices.
+
 Open an item to inspect its artwork, plot, credits, source paths, subtitles, and technical playback details. Missing information usually means it was absent from the NFO file or media probe.
 
 ![Indexed media details](/screenshots/media-item.png)

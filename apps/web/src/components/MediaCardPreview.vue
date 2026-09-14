@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
-import { Asterisk, Info } from '@lucide/vue';
+import { Asterisk, Eye } from '@lucide/vue';
 import { useRoute } from 'vue-router';
 import type { MediaCardPreview } from '@moirai/shared';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
@@ -212,11 +212,12 @@ onUnmounted(() => {
 			type="button"
 			class="media-card-preview-info"
 			:aria-label="`Preview ${item.title}`"
+			:title="`Preview ${item.title}`"
 			:aria-expanded="pinned"
 			:aria-describedby="visible ? tooltipId : undefined"
 			@click.stop.prevent="togglePinned"
 		>
-			<Info :size="15" />
+			<Eye :size="18" aria-hidden="true" />
 		</button>
 		<Teleport to="body">
 			<Transition name="media-preview" appear>
