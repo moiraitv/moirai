@@ -741,6 +741,12 @@ stable across renames and renumbering; existing `tvg-id`, `tvg-chno`, XMLTV iden
 URL generation remain unchanged.
 Guide and Channels share a timeline scale of 112 pixels per elapsed hour and show channel numbers
 centered below their logos, with a TV icon when no logo is set.
+On Channels, the edit button covers the full channel cell while warning badges remain independently
+interactive; keyboard focus outlines the complete edit target.
+The shared guide expands to its full row height and scrolls vertically with the page, while
+retaining horizontal timeline scrolling.
+On both pages, Today centers the now line in the visible timeline when the current guide window
+is already selected, without reloading guide data.
 Individual media entries share Programs' delayed, cached metadata preview on hover and keyboard
 focus, using one preview instance per guide. Clicks retain segment details; guide blocks retain
 their actual-items timeline preview. Gaps and entries without media do not request metadata previews.

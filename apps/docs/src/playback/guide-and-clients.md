@@ -9,6 +9,8 @@ contextual: true
 
 The **![](/icons/calendar-days.svg) Guide** page shows the committed rolling lineup and the addresses an IPTV client needs. Item labels show the source program name, or **Filler** or **Gap** when appropriate.
 
+On Guide and Channels, the guide list expands to show all channels and scrolls vertically with the page. Scroll horizontally within the guide to browse the timeline. Select **Today** to return to the current week, centering the now line within the visible timeline.
+
 Hover over an individual media item, or focus it with the keyboard, to see its details in the same preview used on Programs. Click the item to open its full guide details.
 
 ![The electronic program guide and connection addresses](/screenshots/guide.png)

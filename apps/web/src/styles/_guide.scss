@@ -142,9 +142,8 @@
 }
 
 .guide-scroll {
-	max-height: calc(100vh - 245px);
 	min-height: 280px;
-	overflow: auto;
+	overflow-x: auto;
 	scrollbar-color: #365269 #09131d;
 }
 

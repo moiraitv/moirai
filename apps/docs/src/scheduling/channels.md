@@ -19,7 +19,7 @@ Hover over an individual media item, or focus it with the keyboard, to preview i
 
 ## Open the Channel editor
 
-Choose **New Channel**, or click an existing ![](/icons/tv-minimal.svg) Channel. The editor controls its identity and the video/audio format delivered to viewers.
+Choose **New Channel**, or tap anywhere in an existing channel’s left column, including its logo, number, name, or chevron. Warning badges still open their warning details. The editor controls its identity and the video/audio format delivered to viewers.
 
 ![Channel Broadcast profile editor showing the Lineup configuration](/screenshots/channel-editor.png)
 

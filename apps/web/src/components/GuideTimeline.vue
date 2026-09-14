@@ -41,6 +41,7 @@ defineSlots<{
 }>();
 
 const guideScroll = ref<HTMLElement>();
+const centerNow = ref(false);
 const blockPopover = ref<InstanceType<typeof GuideBlockPopover>>();
 const itemPreview = ref<InstanceType<typeof GuideItemPreview>>();
 const programNames = computed(() => Object.assign({}, ...(props.guide?.channels.map(channel => channel.preview.programNames ?? {}) ?? [])) as Record<string, string>);
@@ -191,6 +192,11 @@ function closeSegment(): void {
 
 /** Reveal the current-time position with leading context, or return to the guide start. */
 function scrollToCurrentTime(): void {
+	if (centerNow.value) {
+		centerCurrentTime();
+		return;
+	}
+
 	const scroller = guideScroll.value;
 	if (!scroller) {
 		return;
@@ -200,9 +206,28 @@ function scrollToCurrentTime(): void {
 	scroller.scrollLeft = target === null ? 0 : Math.max(0, target - scroller.clientWidth * 0.3);
 }
 
+/** Center the now line within the timeline area beside the pinned channel column. */
+function centerCurrentTime(): void {
+	centerNow.value = true;
+	const scroller = guideScroll.value;
+	const target = currentTimeLeft.value;
+	if (!scroller || target === null) {
+		return;
+	}
+
+	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
+	scroller.scrollLeft = Math.max(0, target - (scroller.clientWidth - channelWidth) / 2);
+}
+
+defineExpose({ centerCurrentTime });
+
 watch(
 	() => [props.startDate, props.guide] as const,
-	async () => {
+	async ([startDate], [previousStartDate]) => {
+		if (startDate !== previousStartDate) {
+			centerNow.value = false;
+		}
+
 		detailCache.clear();
 		closeSegment();
 		blockPopover.value?.close();

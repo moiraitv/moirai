@@ -236,20 +236,20 @@
       }
     },
     "playback.guide": {
-      "digest": "b8776ef427fcb4f3fc37d5a77c4708d3a494d5c6d42c1143413de87dcffc28f0",
-      "reviewedAt": "2026-09-14T19:03:10.818Z",
+      "digest": "edd09397a0ff7c1b2064a8320d58230eea88fe5ae2026b6ba7f252427d58628e",
+      "reviewedAt": "2026-09-14T21:48:20.814Z",
       "components": {
         "text": {
-          "digest": "2f44bb6f8a528e1daac4613d5ae826b870286001be40dc63a93ffe20824cea47",
-          "reviewedAt": "2026-09-14T19:03:10.818Z"
+          "digest": "a559443a07e6a1bfef02797a48be32cc5e0d6780949f79af04fb3edd6794a9bd",
+          "reviewedAt": "2026-09-14T21:48:20.814Z"
         },
         "screenshots": {
           "digest": "d251ba032352357240820bf10eded67a50c1d816b50b69e002266cb56d7a9bd6",
-          "reviewedAt": "2026-09-14T19:03:10.818Z"
+          "reviewedAt": "2026-09-14T21:48:20.814Z"
         },
         "icons": {
           "digest": "ae932c322c289595d8bdcd210d6aa29ef9b8f72cab9da767a637df9ecc25dd09",
-          "reviewedAt": "2026-09-14T19:03:10.818Z"
+          "reviewedAt": "2026-09-14T21:48:20.814Z"
         }
       }
     },

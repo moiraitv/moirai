@@ -47,7 +47,10 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 				</TwoStepActionButton>
 			</div>
 			<button type="button" class="toolbar-button" @click="emit('add')"><Plus :size="16" />Add Step</button>
-			<label class="check-row"><input :checked="repeat" type="checkbox" @change="emit('update:repeat', ($event.target as HTMLInputElement).checked)" />Repeat sequence</label>
+			<label class="check">
+				<input :checked="repeat" type="checkbox" @change="emit('update:repeat', ($event.target as HTMLInputElement).checked)" />
+				<span>Repeat sequence</span>
+			</label>
 		</div>
 	</section>
 </template>

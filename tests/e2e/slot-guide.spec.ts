@@ -161,3 +161,59 @@ test('saves a guide block without changing playback and exposes actual items on 
 	await expect(previewItems).toBeHidden();
 	await expect(scheduleBlock).toBeFocused();
 });
+
+test('Today recenters the current guide window on both pages', async ({ page }) => {
+	const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
+	const created = await page.request.post('/api/v1/channels', {
+		headers, data: { number: '99.9', name: 'Today navigation' },
+	});
+	expect(created.ok()).toBe(true);
+	await page.setViewportSize({ width: 1280, height: 720 });
+
+	for (const url of ['/guide', '/channels']) {
+		await page.goto(url);
+		const scroller = page.locator('.guide-scroll');
+		const now = page.locator('.guide-time-header .current-time-line');
+		await expect(now).toBeAttached();
+		await scroller.evaluate(element => {
+			element.scrollLeft = element.scrollWidth;
+		});
+		await page.getByRole('button', { name: 'Today', exact: true }).click();
+		await expect.poll(() => scroller.evaluate(element => {
+			const line = element.querySelector<HTMLElement>('.guide-time-header .current-time-line')!;
+			const column = element.querySelector<HTMLElement>('.guide-corner')!;
+			const target = Number.parseFloat(line.style.left);
+			const expected = Math.max(0, target - (element.clientWidth - column.offsetWidth) / 2);
+			return Math.abs(element.scrollLeft - expected);
+		})).toBeLessThan(1);
+	}
+});
+
+test('opens the channel editor from the full identity cell and keyboard', async ({ page }) => {
+	const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
+	const response = await page.request.post('/api/v1/channels', {
+		headers, data: { number: '99.7', name: 'Full cell edit' },
+	});
+	expect(response.ok()).toBe(true);
+	const channel = await response.json();
+	try {
+		await page.goto('/channels');
+		const cell = page.locator('.guide-channel-cell').filter({ hasText: 'Full cell edit' });
+		const dialog = page.getByRole('dialog', { name: /channel/i });
+		for (const width of [1280, 390]) {
+			await page.setViewportSize({ width, height: 800 });
+			await cell.scrollIntoViewIfNeeded();
+			const bounds = await cell.boundingBox();
+			expect(bounds).not.toBeNull();
+			await page.mouse.click(bounds!.x + 5, bounds!.y + 5);
+			await expect(dialog).toBeVisible();
+			await page.getByRole('button', { name: 'Close channel editor' }).click();
+		}
+		await cell.getByRole('button', { name: 'Edit Full cell edit' }).focus();
+		await page.keyboard.press('Enter');
+		await expect(dialog).toBeVisible();
+	}
+	finally {
+		await page.request.delete(`/api/v1/channels/${channel.id}`, { headers });
+	}
+});

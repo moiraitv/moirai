@@ -22,6 +22,7 @@ import { liveEvents } from '../live-events';
 import { affectsGuide } from '../guide-events';
 import { useChannelsStore } from '../stores/channels';
 
+const guideTimeline = ref<InstanceType<typeof GuideTimeline>>();
 const channelsStore = useChannelsStore();
 const {
 	channels,
@@ -139,9 +140,14 @@ async function moveWindow(direction: -1 | 1): Promise<void> {
 	);
 }
 
-/** Reset the EPG view to the week containing today. */
+/** Return to today’s guide window, or center now when it is already selected. */
 async function showToday(): Promise<void> {
 	const today = dateKey(new Date(), timeZone.value);
+	if (weekStart.value === today) {
+		guideTimeline.value?.centerCurrentTime();
+		return;
+	}
+
 	await channelsStore.loadGuide(today, requestedDaysFor(today));
 	channelsStore.clearGuideNavigationHistory();
 }
@@ -341,6 +347,7 @@ onBeforeUnmount(() => {
 			</p>
 			<GuideTimeline
 				v-if="channels.length"
+				ref="guideTimeline"
 				:channels="channels"
 				:guide="guide"
 				:time-zone="timeZone"

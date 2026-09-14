@@ -58,6 +58,7 @@ import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { channelScheduleSummary } from '../channel-schedule-display';
 
+const guideTimeline = ref<InstanceType<typeof GuideTimeline>>();
 const channelsStore = useChannelsStore();
 const route = useRoute();
 const router = useRouter();
@@ -573,9 +574,14 @@ async function moveWindow(direction: -1 | 1): Promise<void> {
 	);
 }
 
-/** Reset the channel guide to the week containing today. */
+/** Return to today’s guide window, or center now when it is already selected. */
 async function showToday(): Promise<void> {
 	const today = dateKey(new Date(), timeZone.value);
+	if (weekStart.value === today) {
+		guideTimeline.value?.centerCurrentTime();
+		return;
+	}
+
 	await channelsStore.loadGuide(today, requestedDaysFor(today));
 	channelsStore.clearGuideNavigationHistory();
 }
@@ -841,6 +847,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 			</p>
 			<GuideTimeline
 				v-if="channels.length"
+				ref="guideTimeline"
 				:channels="channels"
 				:guide="guide"
 				:time-zone="timeZone"
@@ -854,7 +861,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 				</template>
 				<template #actions="{ channel }">
 					<button
-						class="icon-button"
+						class="icon-button guide-channel-edit"
 						:aria-label="`Edit ${channel.name}`"
 						@click="edit(channel)"
 					>
