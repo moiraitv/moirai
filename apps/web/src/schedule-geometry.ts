@@ -1,4 +1,5 @@
 import {
+	DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
 	SECONDS_PER_SCHEDULING_DAY,
 	type ScheduleBoundary,
 	type ScheduleSlot,
@@ -85,7 +86,7 @@ export function midpointSlotPlacement(
 	return slotPlacementForTime(template, slot.id, slot.startSeconds + (end - slot.startSeconds) / 2);
 }
 
-/** Reconnect outgoing boundaries to match the current contiguous slot order. */
+/** Reconnect outgoing boundaries, preserving saved drift limits and defaulting only missing boundaries. */
 export function rebuildBoundaries(
 	slots: ScheduleSlot[],
 	boundaries: ScheduleBoundary[],
@@ -101,15 +102,15 @@ export function rebuildBoundaries(
 			leftSlotId: slot.id,
 			rightSlotId: right.id,
 			targetSeconds: index === ordered.length - 1 ? SECONDS_PER_SCHEDULING_DAY : right.startSeconds,
-			policy: existing?.policy ?? 'hard',
-			maxDriftSeconds: existing?.maxDriftSeconds ?? 0,
-			fallback: existing?.fallback ?? 'reject-start',
-			earlyStartMaxDriftSeconds: existing?.earlyStartMaxDriftSeconds ?? 0,
+			policy: existing?.policy ?? DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR.policy,
+			maxDriftSeconds: existing ? existing.maxDriftSeconds : DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR.maxDriftSeconds,
+			fallback: existing?.fallback ?? DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR.fallback,
+			earlyStartMaxDriftSeconds: existing?.earlyStartMaxDriftSeconds ?? DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR.earlyStartMaxDriftSeconds,
 		};
 	});
 }
 
-/** Split one slot while preserving a contiguous full-day template. */
+/** Copy a slot and add a default boundary while preserving its former outgoing boundary. */
 export function splitScheduleSlot(
 	template: ScheduleTemplateCreate,
 	slotId: string,
@@ -148,10 +149,7 @@ export function splitScheduleSlot(
 			leftSlotId: slot.id,
 			rightSlotId: right.id,
 			targetSeconds: splitSeconds,
-			policy: 'hard',
-			maxDriftSeconds: 0,
-			fallback: 'reject-start',
-			earlyStartMaxDriftSeconds: 0,
+			...DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
 		});
 	if (outgoing) {
 		preserved.push({ ...outgoing, leftSlotId: right.id });

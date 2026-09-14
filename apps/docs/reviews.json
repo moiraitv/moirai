@@ -182,15 +182,15 @@
       }
     },
     "scheduling.templates": {
-      "digest": "578bf02cafe4bbf39d461469a5e2bd7aa65701969bc225236d3049da9ca1612b",
+      "digest": "cf0c639da269c41dc1c23f8e44f256fcc248792a565b2867fe72cd75dddc8a4c",
       "reviewedAt": "2026-09-14T17:46:34.085Z",
       "components": {
         "text": {
-          "digest": "fd246cbe10f4fcd504eaf47837e7bdfaf6850db01b36471dcc827397f5120178",
+          "digest": "c866122cd704da7db5c44677ec5aec8b29c05b2e7d287f4a9eb5309b99cf6aea",
           "reviewedAt": "2026-09-14T17:46:34.085Z"
         },
         "screenshots": {
-          "digest": "b04918f03530ac0dbaa38150d6b1b4439dc43b738d35920b66b895f8450418d5",
+          "digest": "1181db82ab8885756487ee8ee4238bb61810dd29ee04c573750bfdfb2cbfd3dd",
           "reviewedAt": "2026-09-14T17:46:34.085Z"
         },
         "icons": {

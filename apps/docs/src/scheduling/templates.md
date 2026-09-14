@@ -44,6 +44,8 @@ The Templates list is alphabetical by name, ignoring punctuation and leading “
 
 ## Create a Template and add slots
 
+New templates default to **Allow overrun** for **Item start rule**, **Finish left item** for the outgoing boundary **Policy**, and **No Limit** for **Maximum drift**. This lets the current item finish instead of cutting it at the nominal slot end. Added slots copy the selected slot’s item start rule and use these defaults for the new boundary. Existing templates keep their saved settings.
+
 Create the ![](/icons/list-video.svg) Programs you want to use first, then open ![](/icons/calendar-range.svg) Templates and choose **New Template**. Give it a descriptive name, such as “Evening Cinema Day.” A new ![](/icons/calendar-range.svg) Template starts with one slot covering midnight to midnight. Timeline and slot labels use 12-hour time with AM or PM.
 
 1. Select the initial slot and choose its **Program** in the **Selected slot** panel.

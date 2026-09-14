@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { reactive } from 'vue';
-import { SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplateCreate } from '@moirai/shared';
+import { DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR, SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplateCreate } from '@moirai/shared';
 import {
 	deleteScheduleSlot,
 	midpointSlotPlacement,
 	moveScheduleBoundary,
+	rebuildBoundaries,
 	slotPlacementForTime,
 	splitScheduleSlot,
 	timelineSlotPlacement,
@@ -52,12 +53,35 @@ describe('schedule geometry', () => {
 		expect(result.slots.map((slot) => slot.startSeconds)).toEqual([0, splitAt]);
 		expect(result.boundaries.find((boundary) => boundary.leftSlotId === 'slot-a')).toMatchObject({
 			targetSeconds: splitAt,
-			policy: 'hard',
+			...DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
 		});
 		expect(result.boundaries.find((boundary) => boundary.leftSlotId === 'slot-b')).toMatchObject({
 			targetSeconds: SECONDS_PER_SCHEDULING_DAY,
 			policy: 'finish-left',
+			maxDriftSeconds: 900,
 		});
+	});
+
+	it('preserves unlimited drift through splitting, moving, and deleting slots', () => {
+		const template = initial();
+		template.boundaries[0]!.maxDriftSeconds = null;
+		const split = splitScheduleSlot(template, 'slot-a', SECONDS_PER_SCHEDULING_DAY / 2);
+		const right = split.slots[1]!;
+		const moved = moveScheduleBoundary(split, right.id, SECONDS_PER_SCHEDULING_DAY / 3);
+		const deleted = deleteScheduleSlot(moved, right.id);
+
+		for (const result of [split, moved, deleted]) {
+			expect(result.boundaries.every(boundary => boundary.maxDriftSeconds === null)).toBe(true);
+		}
+		expect(deleted.boundaries[0]!.id).toBe(template.boundaries[0]!.id);
+	});
+
+	it('uses authoring defaults only for missing boundaries', () => {
+		const template = initial();
+		expect(rebuildBoundaries(template.slots, [])[0]).toMatchObject(DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR);
+		template.boundaries[0]!.policy = 'hard';
+		template.boundaries[0]!.maxDriftSeconds = 0;
+		expect(rebuildBoundaries(template.slots, template.boundaries)[0]).toMatchObject(template.boundaries[0]!);
 	});
 
 	it('snaps timeline placement to fifteen minutes within the containing slot', () => {

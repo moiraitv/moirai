@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+	DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR, DEFAULT_TEMPLATE_START_ELIGIBILITY,
 	SECONDS_PER_SCHEDULING_DAY, channelCreateSchema,
 	type Channel, type ChannelSchedule, type ProgramConfig, type QuickChannelSetupCreate,
 	type ScheduleTemplate, type SchedulingProgram,
@@ -74,7 +75,7 @@ export function quickSetupResources(
 			startSeconds: 0,
 			programId: programId!,
 			stateScope: 'persistent',
-			startEligibility: { type: 'allow-overrun' },
+			startEligibility: { ...DEFAULT_TEMPLATE_START_ELIGIBILITY },
 			filler: { mode: 'inherit' },
 		}],
 		boundaries: [{
@@ -82,10 +83,7 @@ export function quickSetupResources(
 			leftSlotId: slotId!,
 			rightSlotId: slotId!,
 			targetSeconds: SECONDS_PER_SCHEDULING_DAY,
-			policy: 'finish-left',
-			maxDriftSeconds: null,
-			fallback: 'reject-start',
-			earlyStartMaxDriftSeconds: 0,
+			...DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
 		}],
 		createdAt: timestamp,
 		updatedAt: timestamp,

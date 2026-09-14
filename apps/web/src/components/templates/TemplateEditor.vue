@@ -14,6 +14,8 @@ import {
 	Trash2,
 } from '@lucide/vue';
 import {
+	DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
+	DEFAULT_TEMPLATE_START_ELIGIBILITY,
 	SECONDS_PER_SCHEDULING_DAY,
 	scheduleTemplateCreateSchema,
 	type ScheduleBoundary,
@@ -244,7 +246,7 @@ function loadDraft(): void {
 					startSeconds: 0,
 					programId: programs.value[0]?.id ?? null,
 					stateScope: 'persistent',
-					startEligibility: { type: 'require-fit' },
+					startEligibility: { ...DEFAULT_TEMPLATE_START_ELIGIBILITY },
 					filler: programs.value[0] ? { mode: 'inherit' } : { mode: 'disabled' },
 				},
 			],
@@ -254,10 +256,7 @@ function loadDraft(): void {
 					leftSlotId: slotId,
 					rightSlotId: slotId,
 					targetSeconds: SECONDS_PER_SCHEDULING_DAY,
-					policy: 'hard',
-					maxDriftSeconds: 0,
-					fallback: 'reject-start',
-					earlyStartMaxDriftSeconds: 0,
+					...DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
 				},
 			],
 		};

@@ -182,6 +182,33 @@ test('sorts Templates by name ignoring leading articles and punctuation', async 
 	]);
 });
 
+test('saves new template defaults with unlimited finish-left boundaries', async ({ page, documentationServer }) => {
+	await seedSchedule(page, documentationServer.directory);
+	await page.goto('/schedules/templates/new');
+	const editor = page.getByRole('dialog', { name: 'Template editor', exact: true });
+	await editor.getByRole('textbox', { name: 'Template name' }).fill('Continuous default');
+	await editor.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
+	await expect(editor.getByRole('combobox', { name: 'Item start rule', exact: true })).toHaveValue('allow-overrun');
+	await expect(editor.getByRole('combobox', { name: 'Policy', exact: true })).toHaveValue('finish-left');
+	await expect(editor.getByRole('button', { name: 'No Limit', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await editor.getByRole('button', { name: 'Add Slot', exact: true }).click();
+	await editor.locator('.template-timeline').press('Enter');
+
+	const saved = page.waitForResponse(response => response.request().method() === 'POST'
+		&& response.url().endsWith('/api/v1/schedule-templates'));
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	const response = await saved;
+	expect(response.ok()).toBe(true);
+	const template = await response.json() as ScheduleTemplate;
+	expect(template.slots).toHaveLength(2);
+	expect(template.slots.every(slot => slot.startEligibility.type === 'allow-overrun')).toBe(true);
+	expect(template.boundaries).toHaveLength(2);
+	expect(template.boundaries.every(boundary => boundary.policy === 'finish-left' && boundary.maxDriftSeconds === null)).toBe(true);
+	await page.goto(`/schedules/templates/${template.id}`);
+	await expect(editor.getByRole('combobox', { name: 'Item start rule', exact: true })).toHaveValue('allow-overrun');
+	await expect(editor.getByRole('button', { name: 'No Limit', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('captures Templates', async ({ page, documentationServer }) => {
 	const { sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/templates');

@@ -12,6 +12,7 @@ import type {
 } from './availability.js';
 
 export * from './scheduling.js';
+export * from './template-defaults.js';
 export * from './guide.js';
 export * from './normalization.js';
 export * from './catalog.js';

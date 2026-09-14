@@ -572,6 +572,10 @@ Programs, ignoring punctuation and leading A, An, or The.
 
 A template describes one nominal local day. Slots allocate time to programs, while explicit
 boundaries describe how adjacent slots resolve against real media durations.
+New editor templates share Quick Setup's allow-overrun item starts and finish-left boundaries with
+unlimited drift. Added slots retain their source slot's settings and default new boundaries to
+finish-left with unlimited drift. Geometry edits preserve explicit unlimited drift. Stored templates
+and omitted-field API parsing retain their existing behavior.
 
 A channel has an always-available base template. Conditional templates stack above it and can use
 nested date, month, weekday, annual-range, and time-range predicates. A no-program slot is transparent:
