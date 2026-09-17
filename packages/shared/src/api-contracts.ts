@@ -635,6 +635,16 @@ export const authenticationReturnQuerySchema = z.object({
 /** Lightweight process-liveness response. */
 export const livenessSchema = z.object({ status: z.literal('ok') });
 
+/** Public database-migration progress shown before the application is fully up. */
+export const startupStatusSchema = z.object({
+	status: z.enum(['migrating', 'ready', 'failed']),
+	applied: z.number().int().min(0),
+	total: z.number().int().min(0),
+	percent: z.number().int().min(0).max(100),
+	currentTag: z.string().optional(),
+	error: z.string().optional(),
+});
+
 /** Detailed service readiness and degraded-state response. */
 export const readinessSchema = z.object({
 	status: z.enum(['ready', 'degraded']),
@@ -649,6 +659,7 @@ export const readinessSchema = z.object({
 			'mediaProbe',
 			'resourcePressure',
 			'mediaSources',
+			'migration',
 		]),
 		status: z.enum(['ready', 'degraded', 'disabled']),
 		essential: z.boolean(),

@@ -13,7 +13,7 @@ import type {
 } from '@moirai/shared';
 import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
-import { addSourceMatch, escapeLike, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
+import { addSourceMatch, escapeLike, ftsMatchQuery, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
 import type {
 	MediaBrowseQuery,
@@ -63,6 +63,7 @@ export class MediaCatalogRepository {
 	private filteredItemScope(
 		libraryId: string,
 		query: CatalogProgramItemQuery,
+		forceLike = false,
 	): FilteredItemScope {
 		const scopeParams: Array<string | number> = [];
 		let scopeCte = '';
@@ -75,7 +76,14 @@ export class MediaCatalogRepository {
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
 		}
 		if (query.search) {
-			const search = itemSearchPredicate(query.search);
+			const libraryType = this.db.$client
+				.prepare('SELECT type_key AS typeKey FROM libraries WHERE id = ?')
+				.get(libraryId) as { typeKey: string } | undefined;
+			const search = itemSearchPredicate(query.search, {
+				libraryId,
+				includeMusic: libraryType?.typeKey === 'music-videos',
+				forceLike,
+			});
 			conditions.push(search.sql);
 			conditionParams.push(...search.params);
 		}
@@ -200,34 +208,48 @@ export class MediaCatalogRepository {
 		}
 
 		// Build a parameterized flattened scope and its requested filters.
-		const { scopeCte, where, params: allParams } = this.filteredItemScope(libraryId, query);
+		let forceLike = false;
+		let scopeCte = '';
+		let where = '';
+		let allParams: Array<string | number> = [];
 		let navigation: MediaBrowseResult['navigation'] = [];
 		let totalEntries = 0;
+		for (;;) {
+			({ scopeCte, where, params: allParams } = this.filteredItemScope(libraryId, query, forceLike));
+			navigation = [];
+			totalEntries = 0;
 
-		// Derive section navigation and total entries from the active sort mode.
-		if (query.sort === 'title') {
-			const rows = this.db.$client
-				.prepare(
-					`${scopeCte}SELECT i.title_bucket AS key, i.title_bucket AS label, COUNT(*) AS count FROM media_items i WHERE ${where} GROUP BY i.title_bucket ORDER BY CASE WHEN i.title_bucket = '#' THEN 0 ELSE 1 END ${query.direction === 'asc' ? 'ASC' : 'DESC'}, i.title_bucket ${query.direction.toUpperCase()}`,
-				)
-				.all(...allParams) as Array<{ key: string; label: string; count: number }>;
-			navigation = this.navigationWithPages(rows, query.pageSize);
-			totalEntries = rows.reduce((sum, row) => sum + row.count, 0);
-		}
-		else if (query.sort === 'genre') {
-			const rows = this.db.$client
-				.prepare(
-					`${scopeCte}SELECT pg.genre_key AS key, pg.genre_name AS label, COUNT(*) AS count FROM media_items i JOIN media_item_genres pg ON pg.item_id = i.id WHERE ${where} GROUP BY pg.genre_key, pg.genre_name ORDER BY pg.genre_name COLLATE NOCASE ${query.direction.toUpperCase()}`,
-				)
-				.all(...allParams) as Array<{ key: string; label: string; count: number }>;
-			navigation = this.navigationWithPages(rows, query.pageSize);
-			totalEntries = rows.reduce((sum, row) => sum + row.count, 0);
-		}
-		else {
-			const row = this.db.$client
-				.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${where}`)
-				.get(...allParams) as { count: number };
-			totalEntries = row.count;
+			// Derive section navigation and total entries from the active sort mode.
+			if (query.sort === 'title' && !query.search) {
+				const rows = this.db.$client
+					.prepare(
+						`${scopeCte}SELECT i.title_bucket AS key, i.title_bucket AS label, COUNT(*) AS count FROM media_items i WHERE ${where} GROUP BY i.title_bucket ORDER BY CASE WHEN i.title_bucket = '#' THEN 0 ELSE 1 END ${query.direction === 'asc' ? 'ASC' : 'DESC'}, i.title_bucket ${query.direction.toUpperCase()}`,
+					)
+					.all(...allParams) as Array<{ key: string; label: string; count: number }>;
+				navigation = this.navigationWithPages(rows, query.pageSize);
+				totalEntries = rows.reduce((sum, row) => sum + row.count, 0);
+			}
+			else if (query.sort === 'genre') {
+				const rows = this.db.$client
+					.prepare(
+						`${scopeCte}SELECT pg.genre_key AS key, pg.genre_name AS label, COUNT(*) AS count FROM media_items i JOIN media_item_genres pg ON pg.item_id = i.id WHERE ${where} GROUP BY pg.genre_key, pg.genre_name ORDER BY pg.genre_name COLLATE NOCASE ${query.direction.toUpperCase()}`,
+					)
+					.all(...allParams) as Array<{ key: string; label: string; count: number }>;
+				navigation = this.navigationWithPages(rows, query.pageSize);
+				totalEntries = rows.reduce((sum, row) => sum + row.count, 0);
+			}
+			else {
+				const row = this.db.$client
+					.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${where}`)
+					.get(...allParams) as { count: number };
+				totalEntries = row.count;
+			}
+			if (!forceLike && query.search && ftsMatchQuery(query.search) && totalEntries === 0) {
+				forceLike = true;
+				continue;
+			}
+
+			break;
 		}
 
 		// Fetch the requested page with stable tie-breaking across duplicate titles.
@@ -306,15 +328,26 @@ export class MediaCatalogRepository {
 		query: CatalogProgramItemQuery,
 		maxItemCount = DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
 	): ProgramItemSelection {
-		const { scopeCte, where, params } = this.filteredItemScope(libraryId, query);
-		const selectionWhere = query.sort === 'genre'
+		let { scopeCte, where, params } = this.filteredItemScope(libraryId, query);
+		let selectionWhere = query.sort === 'genre'
 			? `${where} AND EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id)`
 			: where;
-		const matchedItemCount = (
+		let matchedItemCount = (
 			this.db.$client
 				.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${selectionWhere}`)
 				.get(...params) as { count: number }
 		).count;
+		if (query.search && ftsMatchQuery(query.search) && matchedItemCount === 0) {
+			({ scopeCte, where, params } = this.filteredItemScope(libraryId, query, true));
+			selectionWhere = query.sort === 'genre'
+				? `${where} AND EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id)`
+				: where;
+			matchedItemCount = (
+				this.db.$client
+					.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${selectionWhere}`)
+					.get(...params) as { count: number }
+			).count;
+		}
 		const direction = query.direction.toUpperCase();
 		const genreAggregate = query.direction === 'asc' ? 'MIN' : 'MAX';
 		const order = query.sort === 'date-added'
@@ -336,15 +369,28 @@ export class MediaCatalogRepository {
 		// Build a combined group-and-item scope for one hierarchy level.
 		const groupParent = query.parentId ? 'g.parent_id = ?' : 'g.parent_id IS NULL';
 		const itemParent = query.parentId ? 'i.group_id = ?' : 'i.group_id IS NULL';
+		const match = query.search ? ftsMatchQuery(query.search) : null;
+		const likePattern = query.search ? `%${escapeLike(query.search)}%` : '';
+		const groupSearch = query.search
+			? (match
+				? ' AND g.id IN (SELECT entity_id FROM catalog_search WHERE catalog_search MATCH ? AND entity_kind = \'group\' AND library_id = ?)'
+				: ' AND (g.title LIKE ? ESCAPE \'\\\' COLLATE NOCASE OR COALESCE(g.plot, \'\') LIKE ? ESCAPE \'\\\' COLLATE NOCASE)')
+			: '';
+		const itemSearch = query.search
+			? (match
+				? ' AND i.id IN (SELECT entity_id FROM catalog_search WHERE catalog_search MATCH ? AND entity_kind = \'item\' AND library_id = ?)'
+				: ' AND (i.title LIKE ? ESCAPE \'\\\' COLLATE NOCASE OR COALESCE(i.plot, \'\') LIKE ? ESCAPE \'\\\' COLLATE NOCASE)')
+			: '';
+		const searchParams = match ? [match, libraryId] : query.search ? [likePattern, likePattern] : [];
 		const params = query.parentId
-			? [libraryId, query.parentId, libraryId, query.parentId]
-			: [libraryId, libraryId];
+			? [libraryId, query.parentId, ...searchParams, libraryId, query.parentId, ...searchParams]
+			: [libraryId, ...searchParams, libraryId, ...searchParams];
 		const groupBucket
 			= "CASE WHEN upper(substr(trim(g.sort_title), 1, 1)) BETWEEN 'A' AND 'Z' THEN upper(substr(trim(g.sort_title), 1, 1)) ELSE '#' END";
 		const catalogKeys = `WITH catalog AS (
-      SELECT ${groupBucket} AS titleBucket FROM media_groups g WHERE g.library_id = ? AND ${groupParent}
+      SELECT ${groupBucket} AS titleBucket FROM media_groups g WHERE g.library_id = ? AND ${groupParent}${groupSearch}
       UNION ALL
-      SELECT i.title_bucket AS titleBucket FROM media_items i WHERE i.library_id = ? AND ${itemParent}
+      SELECT i.title_bucket AS titleBucket FROM media_items i WHERE i.library_id = ? AND ${itemParent}${itemSearch}
     )`;
 		const navRows = this.db.$client
 			.prepare(
@@ -371,7 +417,7 @@ export class MediaCatalogRepository {
         (SELECT COUNT(*) FROM media_groups child WHERE child.parent_id = g.id) +
           (SELECT COUNT(*) FROM media_items child_item WHERE child_item.group_id = g.id) AS childCount
       FROM media_groups g LEFT JOIN media_groups parent ON parent.id = g.parent_id AND parent.library_id = g.library_id
-      WHERE g.library_id = ? AND ${groupParent}
+      WHERE g.library_id = ? AND ${groupParent}${groupSearch}
       UNION ALL
       SELECT 'item' AS rowKind, i.id, i.library_id AS libraryId, i.group_id AS groupId,
         i.stable_key AS stableKey, i.kind, i.title, i.sort_title AS sortTitle,
@@ -387,7 +433,7 @@ export class MediaCatalogRepository {
         i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
         i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt,
         0 AS childCount
-      FROM media_items i WHERE i.library_id = ? AND ${itemParent}
+      FROM media_items i WHERE i.library_id = ? AND ${itemParent}${itemSearch}
     )`;
 		const rows = this.db.$client
 			.prepare(
@@ -398,6 +444,23 @@ export class MediaCatalogRepository {
 		>;
 
 		// Restore the distinct public contracts after reading the unified SQL result.
+		const patterns = query.search ? itemSearchPredicate(query.search, { libraryId }) : null;
+		const itemMatches = patterns
+			? itemSourceMatches(
+				this.db,
+				rows.filter((row) => row.rowKind === 'item').map((row) => ({
+					...row,
+					groupTitle: null,
+					groupKind: null,
+					parentTitle: null,
+					parentKind: null,
+				})),
+				patterns.rawPattern,
+				patterns.normalizedPattern,
+				patterns.genrePattern,
+			)
+			: null;
+		const searchText = query.search?.trim().toLocaleLowerCase() ?? '';
 		const entries = rows.map((row) => {
 			if (row.rowKind === 'item') {
 				const item = mappedItem(row);
@@ -409,6 +472,7 @@ export class MediaCatalogRepository {
 					sectionLabel: null,
 					item,
 					group: null,
+					...(itemMatches ? { matches: itemMatches.get(item.id) ?? [] } : {}),
 				};
 			}
 
@@ -425,6 +489,13 @@ export class MediaCatalogRepository {
 				sectionLabel: null,
 				item: null,
 				group,
+				...(searchText
+					? {
+						matches: group.title.toLocaleLowerCase().includes(searchText)
+							? [{ field: group.kind, label: group.title }]
+							: [],
+					}
+					: {}),
 			};
 		});
 		const groups = entries.flatMap((entry) => (entry.group ? [entry.group] : []));
@@ -500,18 +571,36 @@ export class MediaCatalogRepository {
 		if (query.parentId) {
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
 		}
-		const search = itemSearchPredicate(query.search);
-		conditions.push(search.sql);
-		conditionParams.push(...search.params);
-		const where = conditions.join(' AND ');
-		const allParams = [...scopeParams, ...conditionParams];
+		const library = this.db.$client
+			.prepare('SELECT type_key AS typeKey FROM libraries WHERE id = ?')
+			.get(libraryId) as { typeKey: string } | undefined;
 		const joins
 			= 'LEFT JOIN media_groups g ON g.id = i.group_id LEFT JOIN media_groups parent ON parent.id = g.parent_id';
-		const totalEntries = (
+		const applySearch = (forceLike: boolean): { where: string; allParams: Array<string | number> } => {
+			const search = itemSearchPredicate(query.search, {
+				libraryId,
+				includeMusic: library?.typeKey === 'music-videos',
+				forceLike,
+			});
+			return {
+				where: [...conditions, search.sql].join(' AND '),
+				allParams: [...scopeParams, ...conditionParams, ...search.params],
+			};
+		};
+		let { where, allParams } = applySearch(false);
+		let totalEntries = (
 			this.db.$client
 				.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i ${joins} WHERE ${where}`)
 				.get(...allParams) as { count: number }
 		).count;
+		if (ftsMatchQuery(query.search) && totalEntries === 0) {
+			({ where, allParams } = applySearch(true));
+			totalEntries = (
+				this.db.$client
+					.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i ${joins} WHERE ${where}`)
+					.get(...allParams) as { count: number }
+			).count;
+		}
 
 		// Page matching media and retain hierarchy labels for match explanations.
 		const offset = (query.page - 1) * query.pageSize;

@@ -16,6 +16,7 @@ import { ChannelLogoStore } from './artwork/channel-logo-store.js';
 import type { AppConfig } from './config.js';
 import type { MoiraiDatabase } from './db/index.js';
 import { EpgService } from './guide/epg.js';
+import { invalidateCommittedGuideCache } from './guide/schedule-guide.js';
 import { HealthService } from './operations/health-service.js';
 import { LiveEventHub } from './operations/live-events.js';
 import { LogService } from './operations/log-service.js';
@@ -209,6 +210,7 @@ export async function buildApp(
 	const unsubscribeEpg = events.subscribe((event) => {
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed') {
 			epg.invalidate();
+			invalidateCommittedGuideCache();
 		}
 	});
 	const unsubscribePlayout = events.subscribe((event) => playout.handleEvent(event));

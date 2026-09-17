@@ -10,6 +10,7 @@ await build({
 		'auth-reset': path.join(directory, 'src/auth-reset.ts'),
 		main: path.join(directory, 'src/main.ts'),
 		'credit-worker': path.join(directory, 'src/playback/credit-worker.ts'),
+		'migrate-worker': path.join(directory, 'src/db/migrate-worker.ts'),
 		worker: path.join(directory, 'src/scheduling/worker.ts'),
 	},
 	outdir: path.join(directory, 'dist'),

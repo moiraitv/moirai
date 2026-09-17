@@ -971,6 +971,8 @@ describe('Repository scan reconciliation', () => {
 			actor: '',
 			director: '',
 		};
+		expect((await repository.browseMedia(library.id, { ...baseQuery, search: 'lpha' })).items.map(item => item.id))
+			.toEqual([alpha.id]);
 		for (const [search, field] of [['alpHA', 'title'], ['Sci-Fi', 'genre'], ['Performer', 'actor'], ['Director', 'director'], ['UNSTABLE frontier', 'plot']] as const) {
 			const result = await repository.browseMedia(library.id, { ...baseQuery, search });
 			expect(result.items.map(item => item.id)).toEqual([alpha.id]);
@@ -984,7 +986,7 @@ describe('Repository scan reconciliation', () => {
 		const paged = await repository.browseMedia(library.id, { ...baseQuery, search: 'Drama', page: 2 });
 		expect(paged.pagination.totalEntries).toBe(2);
 		expect(paged.items.map(item => item.id)).toEqual([beta.id]);
-		expect(paged.navigation.reduce((sum, entry) => sum + entry.count, 0)).toBe(2);
+		expect(paged.navigation).toEqual([]);
 		expect((await repository.browseMedia(library.id, { ...baseQuery, search: 'Drama', name: 'Beta' })).items.map(item => item.id)).toEqual([beta.id]);
 		expect((await repository.browseMedia(library.id, { ...baseQuery, search: 'Director', genres: ['science-fiction'] })).items.map(item => item.id)).toEqual([alpha.id]);
 		for (const search of ['%', '_', '\\']) {
@@ -1287,6 +1289,29 @@ describe('Repository scan reconciliation', () => {
 				entry.matches.some((match) => match.field === 'genre' && match.label === 'Science Fiction')),
 		).toBe(true);
 
+		const showSearch = await repository.browseMedia(library.id, {
+			parentId: null,
+			page: 1,
+			pageSize: 10,
+			sort: 'title',
+			direction: 'asc',
+			name: '',
+			search: 'Space',
+			releaseYearFrom: null,
+			releaseYearTo: null,
+			minimumRating: null,
+			minimumUserRating: null,
+			addedFrom: null,
+			addedBefore: null,
+			genres: [],
+			excludedGenres: [],
+			genreMatch: 'any',
+			actor: '',
+			director: '',
+		});
+		expect(showSearch.items.map((entry) => entry.title)).toEqual(['First Contact']);
+		expect(showSearch.groups).toEqual([]);
+
 		const inheritedTitle = await repository.browseMediaSourceOptions(library.id, {
 			target: 'items',
 			parentId: null,
@@ -1302,6 +1327,14 @@ describe('Repository scan reconciliation', () => {
 		});
 		expect(browsed.entries.map(entry => entry.matches)).toEqual(inheritedTitle.entries.map(entry => entry.matches));
 
+		database.sqlite.prepare('UPDATE media_groups SET title = ?, sort_title = ? WHERE id = ?')
+			.run('Renamed Station', 'Renamed Station', showId);
+		expect((await repository.browseMedia(library.id, {
+			...catalogProgramItemQuerySchema.parse({ search: 'Space Station' }), page: 1, pageSize: 10,
+		})).items).toEqual([]);
+		expect((await repository.browseMedia(library.id, {
+			...catalogProgramItemQuerySchema.parse({ search: 'Renamed' }), page: 1, pageSize: 10,
+		})).items.map((entry) => entry.title)).toEqual(['First Contact']);
 	});
 });
 

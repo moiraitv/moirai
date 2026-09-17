@@ -18,7 +18,8 @@ export interface ReadinessCheck {
 		| 'playoutSync'
 		| 'mediaProbe'
 		| 'resourcePressure'
-		| 'mediaSources';
+		| 'mediaSources'
+		| 'migration';
 	status: 'ready' | 'degraded' | 'disabled';
 	essential: boolean;
 	detail?: string;

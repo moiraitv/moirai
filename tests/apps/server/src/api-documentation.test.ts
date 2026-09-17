@@ -11,6 +11,7 @@ import {
 const EXPECTED_HTTP_OPERATIONS = [
 	'getResourceUsage',
 	'getMediaAirings',
+	'addLibraryGroupsToProgram',
 	'addLibraryItemsToProgram',
 	'applyChannelMaterialization',
 	'browseLibraryMedia',
@@ -69,6 +70,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'getScheduleGuide',
 	'getScheduleTemplate',
 	'getSchedulingOverview',
+	'getStartup',
 	'getXmltvGuide',
 	'inspectMediaPreview-head',
 	'inspectBundledFallbackFiller-head',

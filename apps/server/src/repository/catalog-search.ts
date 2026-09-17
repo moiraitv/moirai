@@ -123,8 +123,25 @@ export function musicFieldPredicate(field: 'artist' | 'album', text: string): { 
 	};
 }
 
-/** Share literal substring matching across catalog browsing and the source picker. */
-export function itemSearchPredicate(text: string): {
+/** Convert user search text into an FTS5 prefix query, or null when nothing searchable remains. */
+export function ftsMatchQuery(text: string): string | null {
+	const tokens = text
+		.trim()
+		.split(/[\s"*:()^%_\\-]+/u)
+		.map((token) => token.replaceAll('"', ''))
+		.filter((token) => token.length > 0);
+	if (tokens.length === 0) {
+		return null;
+	}
+
+	return tokens.map((token) => `"${token}"*`).join(' AND ');
+}
+
+/** Share indexed text matching across catalog browsing and the source picker. */
+export function itemSearchPredicate(
+	text: string,
+	options: { libraryId: string; includeMusic?: boolean; forceLike?: boolean } = { libraryId: '' },
+): {
 	sql: string;
 	params: string[];
 	rawPattern: string;
@@ -134,19 +151,35 @@ export function itemSearchPredicate(text: string): {
 	const rawPattern = `%${escapeLike(text)}%`;
 	const normalizedPattern = `%${escapeLike(normalizeSearchText(text))}%`;
 	const genrePattern = `%${escapeLike(normalizeGenre(text)?.key ?? normalizeSearchText(text))}%`;
-	const artist = musicFieldPredicate('artist', text);
-	const album = musicFieldPredicate('album', text);
-	return {
-		sql: `(i.title LIKE ? ESCAPE '\\' COLLATE NOCASE
+	const match = ftsMatchQuery(text);
+	const clauses: string[] = [];
+	const params: string[] = [];
+	if (match && options.libraryId && !options.forceLike) {
+		clauses.push(
+			'i.id IN (SELECT entity_id FROM catalog_search WHERE catalog_search MATCH ? AND entity_kind = \'item\' AND library_id = ?)',
+		);
+		params.push(match, options.libraryId);
+	}
+	else {
+		clauses.push(`(i.title LIKE ? ESCAPE '\\' COLLATE NOCASE
 			OR i.plot LIKE ? ESCAPE '\\' COLLATE NOCASE
 			OR EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id
 				AND (sg.genre_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR sg.genre_key LIKE ? ESCAPE '\\' COLLATE NOCASE))
 			OR EXISTS (SELECT 1 FROM media_item_people sp WHERE sp.item_id = i.id AND sp.normalized_name LIKE ? ESCAPE '\\')
 			OR EXISTS (SELECT 1 FROM media_groups sg LEFT JOIN media_groups parent ON parent.id = sg.parent_id
-				WHERE sg.id = i.group_id AND (sg.title LIKE ? ESCAPE '\\' COLLATE NOCASE OR parent.title LIKE ? ESCAPE '\\' COLLATE NOCASE))
-			OR ${artist.sql}
-			OR ${album.sql})`,
-		params: [rawPattern, rawPattern, rawPattern, genrePattern, normalizedPattern, rawPattern, rawPattern, ...artist.params, ...album.params],
+				WHERE sg.id = i.group_id AND (sg.title LIKE ? ESCAPE '\\' COLLATE NOCASE OR parent.title LIKE ? ESCAPE '\\' COLLATE NOCASE)))`);
+		params.push(rawPattern, rawPattern, rawPattern, genrePattern, normalizedPattern, rawPattern, rawPattern);
+	}
+	if (options.includeMusic) {
+		const artist = musicFieldPredicate('artist', text);
+		const album = musicFieldPredicate('album', text);
+		clauses.push(artist.sql, album.sql);
+		params.push(...artist.params, ...album.params);
+	}
+
+	return {
+		sql: `(${clauses.join(' OR ')})`,
+		params,
 		rawPattern,
 		normalizedPattern,
 		genrePattern,

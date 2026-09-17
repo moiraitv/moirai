@@ -14,6 +14,7 @@ import { internalErrorMessage } from '../error-message.js';
 import type { Repository } from '../repository/index.js';
 import type {
 	MaterializedSegmentRecord,
+	OccupiedMediaInterval,
 	TimelineMaterializationRecord,
 } from '../repository/contracts.js';
 import { generateTimelineDetailed } from './engine.js';
@@ -23,7 +24,7 @@ import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
 import { mergeGuideOccurrences, recoverGuideOccurrences } from '../guide/occurrences.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { stableJsonFingerprint } from '../stable-json.js';
-import { currentTimestamp } from '../time.js';
+import { currentTimestamp, yieldToEventLoop } from '../time.js';
 
 /** Delay between background checks of the durable rolling schedule window. */
 const MATERIALIZATION_INTERVAL_MS = 60_000;
@@ -32,14 +33,6 @@ const MATERIALIZATION_INTERVAL_MS = 60_000;
  * today's 14th advertised day, so midnight does not uncover the far edge before the next pass.
  */
 const MATERIALIZED_LOOKAHEAD_DAYS = 1;
-
-/** Cross-channel exact-media interval reserved during one materialization pass. */
-interface OccupiedMediaInterval {
-	channelId: string;
-	mediaItemId: string;
-	start: string;
-	finish: string;
-}
 
 /** Return whether a media group is contained by any selected group. */
 function belongsToGroup(
@@ -465,16 +458,10 @@ export class TimelineMaterializer {
 			today.add({ days: XMLTV_EPG_DAYS + MATERIALIZED_LOOKAHEAD_DAYS + 1 }),
 			this.timeZone,
 		);
-		const occupiedMedia: OccupiedMediaInterval[] = (
-			await this.repository.listMaterializedTimelineSegments(occupancyStart, occupancyEnd)
-		)
-			.filter((record) => Boolean(record.segment.mediaItemId))
-			.map((record) => ({
-				channelId: record.segment.channelId,
-				mediaItemId: record.segment.mediaItemId!,
-				start: record.segment.start,
-				finish: record.segment.finish,
-			}));
+		const occupiedMedia = await this.repository.listOccupiedMediaIntervals(
+			occupancyStart,
+			occupancyEnd,
+		);
 		const orderedSchedules = [...schedules].sort((left, right) =>
 			left.channelId.localeCompare(right.channelId));
 		const priorityDate = today;
@@ -484,29 +471,47 @@ export class TimelineMaterializer {
 			? 0
 			: priorityDay % orderedSchedules.length;
 		orderedSchedules.push(...orderedSchedules.splice(0, rotation));
-		for (const schedule of orderedSchedules) {
-			try {
-				await this.materializeChannel(
-					schedule,
+		let index = 0;
+		let ready: (() => void) | null = null;
+		while (index < orderedSchedules.length || ready) {
+			const upcoming = index < orderedSchedules.length
+				? this.materializeChannel(
+					orderedSchedules[index++]!,
 					templates,
 					programs,
 					catalog,
 					viewingPreferences,
 					occupiedMedia,
-				);
+				)
+				: null;
+			if (ready) {
+				ready();
+			}
+			if (!upcoming) {
+				break;
+			}
+
+			try {
+				ready = await upcoming;
 			}
 			catch (error) {
+				ready = null;
 				const message = internalErrorMessage(error);
-				this.repository.markTimelineFailed(schedule.channelId, message, currentTimestamp());
+				this.repository.markTimelineFailed(
+					orderedSchedules[index - 1]!.channelId,
+					message,
+					currentTimestamp(),
+				);
 				this.events.publish({
 					type: 'timeline.changed',
-					data: { channelId: schedule.channelId, status: 'failed' },
+					data: { channelId: orderedSchedules[index - 1]!.channelId, status: 'failed' },
 				});
 			}
+			await yieldToEventLoop();
 		}
 	}
 
-	/** Extend or replace one channel's committed rolling timeline. */
+	/** Generate one channel's missing window and return a commit that must run in occupancy order. */
 	private async materializeChannel(
 		schedule: ChannelSchedule,
 		templates: ScheduleTemplate[],
@@ -514,11 +519,11 @@ export class TimelineMaterializer {
 		sourceCatalog: SchedulingCatalog,
 		viewingPreferences: ViewingPreferenceScores,
 		occupiedMedia: OccupiedMediaInterval[],
-	): Promise<void> {
+	): Promise<(() => void) | null> {
 		// Resolve the base template and desired rolling guide window.
 		const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
 		if (!template) {
-			return;
+			return null;
 		}
 
 		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' });
@@ -571,7 +576,7 @@ export class TimelineMaterializer {
 			&& current?.applyAfter
 			&& Temporal.Instant.compare(now, current.applyAfter) < 0
 		) {
-			return;
+			return null;
 		}
 
 		// Choose the replacement boundary and reconstruct selection state at that instant.
@@ -616,7 +621,7 @@ export class TimelineMaterializer {
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
 			else {
-				return;
+				return null;
 			}
 		}
 		else {
@@ -625,7 +630,7 @@ export class TimelineMaterializer {
 		}
 
 		if (replaceFrom >= desiredEnd) {
-			return;
+			return null;
 		}
 
 		// Generate only the missing or replaceable part of the rolling window.
@@ -728,34 +733,6 @@ export class TimelineMaterializer {
 			replaceFrom,
 			issueWindowEnd,
 		);
-		this.repository.commitMaterializedTimeline({
-			channelId: schedule.channelId,
-			windowStart: desiredStart,
-			windowEnd: desiredEnd,
-			replaceFrom,
-			continuationAt: generated.continuationAt,
-			inputFingerprint: currentFingerprint,
-			baseState,
-			finalState: persistentState(generated.proposedState),
-			guideOccurrences: mergeGuideOccurrences(
-				current?.guideOccurrences?.length ? current.guideOccurrences
-					: current && current.inputFingerprint === currentFingerprint ? recoverGuideOccurrences(
-						schedule,
-						templates,
-						existing,
-						localDate(current.windowStart, this.timeZone).toString(),
-						XMLTV_EPG_DAYS + MATERIALIZED_LOOKAHEAD_DAYS,
-						this.timeZone,
-					) : [],
-				generated.guideOccurrences,
-				desiredStart,
-				desiredEnd,
-				replaceFrom,
-			),
-			segments,
-			issues,
-			committedAt,
-		});
 		for (let index = occupiedMedia.length - 1; index >= 0; index -= 1) {
 			const entry = occupiedMedia[index]!;
 			if (entry.channelId === schedule.channelId && entry.finish > replaceFrom) {
@@ -770,9 +747,50 @@ export class TimelineMaterializer {
 				start: record.segment.start,
 				finish: record.segment.finish,
 			})));
-		this.events.publish({
-			type: 'timeline.changed',
-			data: { channelId: schedule.channelId, status: 'ready' },
-		});
+		const guideOccurrences = mergeGuideOccurrences(
+			current?.guideOccurrences?.length ? current.guideOccurrences
+				: current && current.inputFingerprint === currentFingerprint ? recoverGuideOccurrences(
+					schedule,
+					templates,
+					existing,
+					localDate(current.windowStart, this.timeZone).toString(),
+					XMLTV_EPG_DAYS + MATERIALIZED_LOOKAHEAD_DAYS,
+					this.timeZone,
+				) : [],
+			generated.guideOccurrences,
+			desiredStart,
+			desiredEnd,
+			replaceFrom,
+		);
+		return () => {
+			try {
+				this.repository.commitMaterializedTimeline({
+					channelId: schedule.channelId,
+					windowStart: desiredStart,
+					windowEnd: desiredEnd,
+					replaceFrom,
+					continuationAt: generated.continuationAt,
+					inputFingerprint: currentFingerprint,
+					baseState,
+					finalState: persistentState(generated.proposedState),
+					guideOccurrences,
+					segments,
+					issues,
+					committedAt,
+				});
+				this.events.publish({
+					type: 'timeline.changed',
+					data: { channelId: schedule.channelId, status: 'ready' },
+				});
+			}
+			catch (error) {
+				const message = internalErrorMessage(error);
+				this.repository.markTimelineFailed(schedule.channelId, message, currentTimestamp());
+				this.events.publish({
+					type: 'timeline.changed',
+					data: { channelId: schedule.channelId, status: 'failed' },
+				});
+			}
+		};
 	}
 }

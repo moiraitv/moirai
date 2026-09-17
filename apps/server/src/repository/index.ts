@@ -59,6 +59,7 @@ import type {
 	TimelineCommit,
 	TimelineMaterializationRecord,
 	MaterializedSegmentRecord,
+	OccupiedMediaInterval,
 } from './contracts.js';
 
 export type {
@@ -76,6 +77,7 @@ export type {
 	ReconciledScan,
 	TimelineCommit,
 	TimelineMaterializationRecord,
+	OccupiedMediaInterval,
 } from './contracts.js';
 
 /**
@@ -450,6 +452,14 @@ export class Repository extends LibraryRepository {
 		return this.scheduling.listCurrentPlaybackSegments(at);
 	}
 
+	/** Read exact-media occupancy without loading snapshot or cursor JSON. */
+	async listOccupiedMediaIntervals(
+		rangeStart: string,
+		rangeEnd: string,
+	): Promise<OccupiedMediaInterval[]> {
+		return this.scheduling.listOccupiedMediaIntervals(rangeStart, rangeEnd);
+	}
+
 	/** Read committed timeline segments overlapping a time range. */
 	async listMaterializedTimelineSegments(
 		rangeStart: string,
@@ -464,8 +474,16 @@ export class Repository extends LibraryRepository {
 		rangeStart: string,
 		rangeEnd: string,
 		limit: number,
+		channelIds?: string[],
+		includeSnapshots = false,
 	): Promise<MaterializedSegmentRecord[]> {
-		return this.scheduling.listMaterializedTimelineSegmentsForGuide(rangeStart, rangeEnd, limit);
+		return this.scheduling.listMaterializedTimelineSegmentsForGuide(
+			rangeStart,
+			rangeEnd,
+			limit,
+			channelIds,
+			includeSnapshots,
+		);
 	}
 
 	/** Return one committed timeline segment scoped to its owning channel. */

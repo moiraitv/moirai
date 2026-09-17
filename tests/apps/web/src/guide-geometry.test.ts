@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	guideDayGeometry,
 	guideInstantPosition,
+	guideProgrammesInPixelRange,
 	guideSegmentPercent,
 	guideSegmentWidth,
+	guideSpanOverlapsRange,
 	guideWindowMilliseconds,
 } from '@web/guide-geometry';
 
@@ -46,5 +48,20 @@ describe('guide geometry', () => {
 			'2026-11-01T10:00:00Z',
 			windowMilliseconds,
 		)).toBe(12);
+	});
+
+	it('keeps programmes that overlap a visible pixel window', () => {
+		const days = guideDayGeometry('2026-08-01', 2, 'UTC', HOUR_WIDTH);
+		const programmes = [
+			{ id: 'before', start: '2026-08-01T00:00:00Z', finish: '2026-08-01T01:00:00Z' },
+			{ id: 'visible', start: '2026-08-01T10:00:00Z', finish: '2026-08-01T12:00:00Z' },
+			{ id: 'after', start: '2026-08-02T12:00:00Z', finish: '2026-08-02T14:00:00Z' },
+		];
+		const start = guideInstantPosition('2026-08-01T09:00:00Z', days, HOUR_WIDTH);
+		const end = guideInstantPosition('2026-08-01T13:00:00Z', days, HOUR_WIDTH);
+
+		expect(guideSpanOverlapsRange(0, 10, 10, 20)).toBe(false);
+		expect(guideProgrammesInPixelRange(programmes, days, HOUR_WIDTH, start, end)
+			.map((programme) => programme.id)).toEqual(['visible']);
 	});
 });

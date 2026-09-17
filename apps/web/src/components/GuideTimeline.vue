@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { TvMinimal } from '@lucide/vue';
 import type { Channel, GuideEntry, GuideSegmentDetail, ScheduleGuide, TimelineSegment } from '@moirai/shared';
 import { api } from '../api';
@@ -10,6 +10,7 @@ import {
 	guideDayGeometry,
 	guideInstantPosition,
 	guideSegmentWidth,
+	guideSpanOverlapsRange,
 } from '../guide-geometry';
 import { channelGuideRows } from '../channel-groups';
 import { guideSourceLabel } from '../guide-source';
@@ -49,6 +50,11 @@ const actualSegments = computed(() => props.guide?.channels.flatMap((channel) =>
 const segmentsById = computed(() => new Map(actualSegments.value.map(segment => [segment.id, segment])));
 const displayedByChannel = computed(() => new Map((props.guide?.channels ?? []).map((channel) =>
 	[channel.channelId, channel.entries ?? channel.preview.segments])));
+/** Extra hours rendered beyond the scrolled viewport so scrolling does not flash empty track. */
+const GUIDE_OVERSCAN_HOURS = 2;
+const viewportStart = ref(0);
+const viewportEnd = ref(Number.POSITIVE_INFINITY);
+const pinnedProgrammeId = ref<string | null>(null);
 const selectedDetail = ref<GuideSegmentDetail | null>(null);
 const selectedLoading = ref(false);
 const selectedError = ref('');
@@ -69,6 +75,79 @@ const guideByChannel = computed(
 );
 
 const guideRows = computed(() => channelGuideRows(props.channels));
+const positionedByChannel = computed(() => {
+	const days = daysGeometry.value;
+	const result = new Map<string, Array<{
+		programme: TimelineSegment | GuideEntry;
+		left: number;
+		right: number;
+	}>>();
+	for (const [channelId, programmes] of displayedByChannel.value) {
+		result.set(channelId, programmes.map((programme) => {
+			const left = guideInstantPosition(programme.start, days, HOUR_WIDTH);
+			return {
+				programme,
+				left,
+				right: left + guideSegmentWidth(programme.start, programme.finish, HOUR_WIDTH),
+			};
+		}));
+	}
+
+	return result;
+});
+const visibleByChannel = computed(() => {
+	const rangeStart = viewportStart.value;
+	const rangeEnd = viewportEnd.value;
+	const pinned = pinnedProgrammeId.value;
+	const result = new Map<string, Array<TimelineSegment | GuideEntry>>();
+	for (const [channelId, programmes] of positionedByChannel.value) {
+		result.set(
+			channelId,
+			programmes
+				.filter((entry) =>
+					entry.programme.id === pinned
+					|| guideSpanOverlapsRange(entry.left, entry.right, rangeStart, rangeEnd))
+				.map((entry) => entry.programme),
+		);
+	}
+
+	return result;
+});
+let viewportFrame = 0;
+let viewportObserver: ResizeObserver | null = null;
+
+/** Read the scrolled timeline window and quantize it to hour-sized buckets. */
+function readViewport(): void {
+	const scroller = guideScroll.value;
+	if (!scroller || scroller.clientWidth === 0) {
+		return;
+	}
+
+	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
+	const overscan = HOUR_WIDTH * GUIDE_OVERSCAN_HOURS;
+	const start = Math.floor((scroller.scrollLeft - channelWidth - overscan) / HOUR_WIDTH) * HOUR_WIDTH;
+	const end = Math.ceil(
+		(scroller.scrollLeft + scroller.clientWidth - channelWidth + overscan) / HOUR_WIDTH,
+	) * HOUR_WIDTH;
+	if (viewportStart.value !== start) {
+		viewportStart.value = start;
+	}
+	if (viewportEnd.value !== end) {
+		viewportEnd.value = end;
+	}
+}
+
+/** Coalesce scroll and resize measurements to one animation frame. */
+function scheduleViewportRead(): void {
+	if (viewportFrame !== 0) {
+		return;
+	}
+
+	viewportFrame = requestAnimationFrame(() => {
+		viewportFrame = 0;
+		readViewport();
+	});
+}
 
 /** Format a wall-clock hour using the viewer's preferred hour cycle. */
 function displayHour(hour: number): string {
@@ -118,6 +197,7 @@ function segmentStyle(segment: Pick<TimelineSegment, 'start' | 'finish' | 'progr
 
 /** Open grouped listings without sending their presentation IDs to the media endpoint. */
 function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): void {
+	pinnedProgrammeId.value = entry.id;
 	if ('kind' in entry && entry.kind === 'block') {
 		itemPreview.value?.close();
 		void blockPopover.value?.show(
@@ -223,19 +303,43 @@ defineExpose({ centerCurrentTime });
 
 watch(
 	() => [props.startDate, props.guide] as const,
-	async ([startDate], [previousStartDate]) => {
-		if (startDate !== previousStartDate) {
+	async ([startDate], previous) => {
+		const startChanged = !previous || previous[0] !== startDate;
+		if (startChanged) {
 			centerNow.value = false;
+			detailCache.clear();
+			closeSegment();
+			blockPopover.value?.close();
 		}
 
-		detailCache.clear();
-		closeSegment();
-		blockPopover.value?.close();
 		await nextTick();
-		scrollToCurrentTime();
+		if (startChanged) {
+			scrollToCurrentTime();
+		}
+
+		readViewport();
 	},
 );
-onMounted(() => scrollToCurrentTime());
+onMounted(() => {
+	scrollToCurrentTime();
+	readViewport();
+	guideScroll.value?.addEventListener('scroll', scheduleViewportRead, { passive: true });
+	viewportObserver = new ResizeObserver(() => {
+		scheduleViewportRead();
+	});
+	if (guideScroll.value) {
+		viewportObserver.observe(guideScroll.value);
+	}
+});
+onBeforeUnmount(() => {
+	guideScroll.value?.removeEventListener('scroll', scheduleViewportRead);
+	viewportObserver?.disconnect();
+	viewportObserver = null;
+	if (viewportFrame !== 0) {
+		cancelAnimationFrame(viewportFrame);
+		viewportFrame = 0;
+	}
+});
 </script>
 
 <template>
@@ -317,7 +421,7 @@ onMounted(() => scrollToCurrentTime());
 								></span>
 								<component
 									:is="'kind' in segment && segment.kind === 'block' ? 'div' : 'button'"
-									v-for="segment in displayedByChannel.get(channel.id) ?? []"
+									v-for="segment in visibleByChannel.get(channel.id) ?? []"
 									:key="segment.id"
 									type="button"
 									class="guide-programme"

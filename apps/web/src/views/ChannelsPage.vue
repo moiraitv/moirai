@@ -73,8 +73,23 @@ const {
 	guideLoaded,
 } = storeToRefs(channelsStore);
 const initialLoading = ref(
-	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 7),
+	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 1),
 );
+
+/** Drop the full-page spinner as soon as a committed day is in the store. */
+function dismissInitialLoadingWhenGuidePaints(): void {
+	if (channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 1) {
+		initialLoading.value = false;
+	}
+}
+
+watch(
+	[channelsLoaded, capabilitiesLoaded, guideLoaded, guideDays],
+	() => {
+		dismissInitialLoadingWhenGuidePaints();
+	},
+);
+
 const editorLinksReady = ref(false);
 const scheduling = useSchedulingStore();
 const editingId = ref<string>();
@@ -534,7 +549,7 @@ async function loadInitial(): Promise<void> {
 		= channelsLoaded.value
 			&& capabilitiesLoaded.value
 			&& guideLoaded.value
-			&& guideDays.value >= requestedWindowDays.value
+			&& guideDays.value >= 1
 			&& Boolean(weekStart.value);
 	if (!hasCachedPage) {
 		initialLoading.value = true;

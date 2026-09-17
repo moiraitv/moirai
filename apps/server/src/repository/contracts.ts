@@ -116,6 +116,14 @@ export interface TimelineMaterializationRecord extends ChannelTimelineMaterializ
 	issues: RecordedTimelineIssue[];
 }
 
+/** Cross-channel exact-media interval reserved during one materialization pass. */
+export interface OccupiedMediaInterval {
+	channelId: string;
+	mediaItemId: string;
+	start: string;
+	finish: string;
+}
+
 /** Timeline segment with the media and cursor state captured at generation time. */
 export interface MaterializedSegmentRecord {
 	segment: TimelineSegment;

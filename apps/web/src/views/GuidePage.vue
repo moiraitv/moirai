@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
 	CalendarDays,
@@ -37,9 +37,24 @@ const {
 	guideDays,
 } = storeToRefs(channelsStore);
 const initialLoading = ref(
-	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 7),
+	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 1),
 );
 const error = ref('');
+
+/** Drop the full-page spinner as soon as a committed day is in the store. */
+function dismissInitialLoadingWhenGuidePaints(): void {
+	if (channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 1) {
+		initialLoading.value = false;
+	}
+}
+
+watch(
+	[channelsLoaded, capabilitiesLoaded, guideLoaded, guideDays],
+	() => {
+		dismissInitialLoadingWhenGuidePaints();
+	},
+);
+
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Public client URL whose copy action owns a transient status notice. */
@@ -101,7 +116,7 @@ async function loadInitial(): Promise<void> {
 		= channelsLoaded.value
 			&& capabilitiesLoaded.value
 			&& guideLoaded.value
-			&& guideDays.value >= 7
+			&& guideDays.value >= 1
 			&& Boolean(weekStart.value);
 	if (!hasCachedPage) {
 		initialLoading.value = true;
@@ -109,8 +124,9 @@ async function loadInitial(): Promise<void> {
 	error.value = '';
 	try {
 		await Promise.all([channelsStore.loadChannels(), channelsStore.loadCapabilities()]);
-		if (!weekStart.value || guideDays.value < requestedWindowDays.value) {
-			weekStart.value = dateKey(new Date(), timeZone.value);
+		const today = dateKey(new Date(), timeZone.value);
+		if (!weekStart.value || weekStart.value < today) {
+			weekStart.value = today;
 		}
 		await loadGuide();
 	}

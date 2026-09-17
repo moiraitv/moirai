@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import type {
 	ChannelTimelineMaterializationStatus,
 	SchedulableMedia,
@@ -20,9 +20,11 @@ import {
 import { indexSchedulingCatalog, schedulingCatalogScope } from '../scheduling/catalog.js';
 import type {
 	MaterializedSegmentRecord,
+	OccupiedMediaInterval,
 	TimelineCommit,
 	TimelineMaterializationRecord,
 } from './contracts.js';
+import { yieldToEventLoop } from '../time.js';
 import {
 	artworkUrl,
 	cacheVersion,
@@ -42,7 +44,18 @@ const UNCOMMITTED_FAILURE_FINGERPRINT = 'uncommitted-failure';
 
 /** Convert a timeline row into its public health representation. */
 function publicMaterializationStatus(
-	row: typeof timelineMaterializations.$inferSelect,
+	row: Pick<
+		typeof timelineMaterializations.$inferSelect,
+		| 'channelId'
+		| 'status'
+		| 'windowStart'
+		| 'windowEnd'
+		| 'committedAt'
+		| 'pendingSince'
+		| 'applyAfter'
+		| 'lastError'
+		| 'inputFingerprint'
+	>,
 ): ChannelTimelineMaterializationStatus {
 	const hasCommit = row.inputFingerprint !== UNCOMMITTED_FAILURE_FINGERPRINT;
 	return {
@@ -57,9 +70,58 @@ function publicMaterializationStatus(
 	};
 }
 
-/** Reconstruct a committed segment with its captured media and cursor snapshots. */
+/** Columns required to reconstruct a public timeline segment without snapshot JSON. */
+const timelineSegmentColumns = {
+	id: materializedTimelineSegments.id,
+	role: materializedTimelineSegments.role,
+	channelId: materializedTimelineSegments.channelId,
+	scheduleLayerId: materializedTimelineSegments.scheduleLayerId,
+	templateId: materializedTimelineSegments.templateId,
+	slotId: materializedTimelineSegments.slotId,
+	programId: materializedTimelineSegments.programId,
+	programAncestry: materializedTimelineSegments.programAncestry,
+	mediaItemId: materializedTimelineSegments.mediaItemId,
+	title: materializedTimelineSegments.title,
+	playbackPath: materializedTimelineSegments.playbackPath,
+	playbackParts: materializedTimelineSegments.playbackParts,
+	startsAt: materializedTimelineSegments.startsAt,
+	finishesAt: materializedTimelineSegments.finishesAt,
+	sourceStartSeconds: materializedTimelineSegments.sourceStartSeconds,
+	sourceFinishSeconds: materializedTimelineSegments.sourceFinishSeconds,
+	truncated: materializedTimelineSegments.truncated,
+};
+
+/** Guide list rows omit playback payloads that the timeline does not render. */
+const guideListSegmentColumns = {
+	id: materializedTimelineSegments.id,
+	role: materializedTimelineSegments.role,
+	channelId: materializedTimelineSegments.channelId,
+	scheduleLayerId: materializedTimelineSegments.scheduleLayerId,
+	templateId: materializedTimelineSegments.templateId,
+	slotId: materializedTimelineSegments.slotId,
+	programId: materializedTimelineSegments.programId,
+	mediaItemId: materializedTimelineSegments.mediaItemId,
+	title: materializedTimelineSegments.title,
+	startsAt: materializedTimelineSegments.startsAt,
+	finishesAt: materializedTimelineSegments.finishesAt,
+	truncated: materializedTimelineSegments.truncated,
+};
+
+/** Reconstruct a committed segment with optional media and cursor snapshots. */
 function materializedSegmentRecord(
-	row: typeof materializedTimelineSegments.$inferSelect,
+	row: Pick<
+		typeof materializedTimelineSegments.$inferSelect,
+		keyof typeof guideListSegmentColumns
+	> & {
+		programAncestry?: typeof materializedTimelineSegments.$inferSelect['programAncestry'];
+		playbackPath?: typeof materializedTimelineSegments.$inferSelect['playbackPath'];
+		playbackParts?: typeof materializedTimelineSegments.$inferSelect['playbackParts'];
+		sourceStartSeconds?: typeof materializedTimelineSegments.$inferSelect['sourceStartSeconds'];
+		sourceFinishSeconds?: typeof materializedTimelineSegments.$inferSelect['sourceFinishSeconds'];
+		mediaSnapshot?: typeof materializedTimelineSegments.$inferSelect['mediaSnapshot'];
+		stateDelta?: typeof materializedTimelineSegments.$inferSelect['stateDelta'];
+		continuation?: typeof materializedTimelineSegments.$inferSelect['continuation'];
+	},
 ): MaterializedSegmentRecord {
 	return {
 		segment: {
@@ -73,8 +135,8 @@ function materializedSegmentRecord(
 			programAncestry: row.programAncestry,
 			mediaItemId: row.mediaItemId,
 			title: row.title,
-			playbackPath: row.playbackPath,
-			playbackParts: row.playbackParts.length > 0
+			playbackPath: row.playbackPath ?? null,
+			playbackParts: row.playbackParts && row.playbackParts.length > 0
 				? row.playbackParts
 				: row.playbackPath
 					? [{
@@ -84,13 +146,13 @@ function materializedSegmentRecord(
 					: [],
 			start: row.startsAt,
 			finish: row.finishesAt,
-			sourceStartSeconds: row.sourceStartSeconds,
-			sourceFinishSeconds: row.sourceFinishSeconds,
+			sourceStartSeconds: row.sourceStartSeconds ?? 0,
+			sourceFinishSeconds: row.sourceFinishSeconds ?? null,
 			truncated: row.truncated,
 		},
-		mediaSnapshot: row.mediaSnapshot as SchedulableMedia | null,
-		stateDelta: row.stateDelta,
-		continuation: row.continuation,
+		mediaSnapshot: (row.mediaSnapshot ?? null) as SchedulableMedia | null,
+		stateDelta: row.stateDelta ?? [],
+		continuation: row.continuation ?? null,
 	};
 }
 
@@ -500,13 +562,39 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 
 	/** List materialization health and pending state for all channels. */
 	async listTimelineMaterializationStatuses(): Promise<ChannelTimelineMaterializationStatus[]> {
-		return (await this.db.select().from(timelineMaterializations)).map(publicMaterializationStatus);
+		const rows = await this.db
+			.select({
+				channelId: timelineMaterializations.channelId,
+				status: timelineMaterializations.status,
+				windowStart: timelineMaterializations.windowStart,
+				windowEnd: timelineMaterializations.windowEnd,
+				committedAt: timelineMaterializations.committedAt,
+				pendingSince: timelineMaterializations.pendingSince,
+				applyAfter: timelineMaterializations.applyAfter,
+				lastError: timelineMaterializations.lastError,
+				inputFingerprint: timelineMaterializations.inputFingerprint,
+			})
+			.from(timelineMaterializations);
+		return rows.map(publicMaterializationStatus);
 	}
 
 	/** List committed timeline windows for all channels. */
 	async listTimelineMaterializations(): Promise<TimelineMaterializationRecord[]> {
 		return (await this.db
-			.select()
+			.select({
+				channelId: timelineMaterializations.channelId,
+				status: timelineMaterializations.status,
+				windowStart: timelineMaterializations.windowStart,
+				windowEnd: timelineMaterializations.windowEnd,
+				continuationAt: timelineMaterializations.continuationAt,
+				inputFingerprint: timelineMaterializations.inputFingerprint,
+				issues: timelineMaterializations.issues,
+				guideOccurrences: timelineMaterializations.guideOccurrences,
+				committedAt: timelineMaterializations.committedAt,
+				pendingSince: timelineMaterializations.pendingSince,
+				applyAfter: timelineMaterializations.applyAfter,
+				lastError: timelineMaterializations.lastError,
+			})
 			.from(timelineMaterializations)
 			.where(ne(timelineMaterializations.inputFingerprint, UNCOMMITTED_FAILURE_FINGERPRINT)))
 			.map((row) => ({
@@ -516,7 +604,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				windowEnd: row.windowEnd,
 				continuationAt: row.continuationAt,
 				inputFingerprint: row.inputFingerprint,
-				baseState: row.baseState,
+				baseState: [],
 				issues: row.issues,
 				guideOccurrences: row.guideOccurrences,
 				committedAt: row.committedAt,
@@ -548,7 +636,35 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		});
 	}
 
-	/** Read a committed range in one query; rows retain metadata after catalog deletion. */
+	/** Read exact-media occupancy without loading snapshot or cursor JSON. */
+	async listOccupiedMediaIntervals(
+		rangeStart: string,
+		rangeEnd: string,
+	): Promise<OccupiedMediaInterval[]> {
+		const rows = await this.db
+			.select({
+				channelId: materializedTimelineSegments.channelId,
+				mediaItemId: materializedTimelineSegments.mediaItemId,
+				start: materializedTimelineSegments.startsAt,
+				finish: materializedTimelineSegments.finishesAt,
+			})
+			.from(materializedTimelineSegments)
+			.where(and(
+				gt(materializedTimelineSegments.finishesAt, rangeStart),
+				lt(materializedTimelineSegments.startsAt, rangeEnd),
+				isNotNull(materializedTimelineSegments.mediaItemId),
+			));
+		return rows
+			.filter((row): row is typeof row & { mediaItemId: string } => Boolean(row.mediaItemId))
+			.map((row) => ({
+				channelId: row.channelId,
+				mediaItemId: row.mediaItemId,
+				start: row.start,
+				finish: row.finish,
+			}));
+	}
+
+	/** Read a committed range in one query; rows retain cursor state after catalog deletion. */
 	async listMaterializedTimelineSegments(
 		rangeStart: string,
 		rangeEnd: string,
@@ -560,7 +676,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			channelId ? eq(materializedTimelineSegments.channelId, channelId) : undefined,
 		);
 		const rows = await this.db
-			.select()
+			.select({
+				...timelineSegmentColumns,
+				stateDelta: materializedTimelineSegments.stateDelta,
+				continuation: materializedTimelineSegments.continuation,
+			})
 			.from(materializedTimelineSegments)
 			.where(range)
 			.orderBy(
@@ -575,19 +695,26 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		rangeStart: string,
 		rangeEnd: string,
 		limit: number,
+		channelIds?: string[],
+		includeSnapshots = false,
 	): Promise<MaterializedSegmentRecord[]> {
+		const columns = includeSnapshots
+			? { ...guideListSegmentColumns, mediaSnapshot: materializedTimelineSegments.mediaSnapshot }
+			: guideListSegmentColumns;
 		const rows = await this.db
-			.select()
+			.select(columns)
 			.from(materializedTimelineSegments)
 			.where(and(
 				gt(materializedTimelineSegments.finishesAt, rangeStart),
 				lt(materializedTimelineSegments.startsAt, rangeEnd),
+				channelIds?.length ? inArray(materializedTimelineSegments.channelId, channelIds) : undefined,
 			))
 			.orderBy(
 				asc(materializedTimelineSegments.startsAt),
 				asc(materializedTimelineSegments.channelId),
 			)
 			.limit(limit);
+		await yieldToEventLoop();
 		return rows.map(materializedSegmentRecord);
 	}
 

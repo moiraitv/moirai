@@ -1,8 +1,79 @@
 import { mkdir } from 'node:fs/promises';
+import type { Server } from 'node:http';
+import Database from 'better-sqlite3';
 import { buildApp } from './app.js';
 import { loadConfig, publicUrlStatus } from './config.js';
+import {
+	startBootstrapServer,
+	stopBootstrapServer,
+	type BootstrapMigrationState,
+} from './db/bootstrap-http.js';
 import { createDatabase } from './db/index.js';
+import {
+	migrationProgressFromSqlite,
+	runMigrationsInWorker,
+	type MigrationProgress,
+} from './db/migrations.js';
 import { listenWithAddressRetry } from './listen.js';
+
+/** Peek journal progress without holding the database open. */
+function peekMigrationProgress(databasePath: string, migrationsDir: string): MigrationProgress {
+	const sqlite = new Database(databasePath);
+	try {
+		return migrationProgressFromSqlite(sqlite, migrationsDir);
+	}
+	finally {
+		sqlite.close();
+	}
+}
+
+/** Serve a public updating page while pending Drizzle files apply in a worker. */
+async function runStartupMigrations(
+	databasePath: string,
+	migrationsDir: string,
+	host: string,
+	port: number,
+): Promise<Server | undefined> {
+	const initial = peekMigrationProgress(databasePath, migrationsDir);
+	if (initial.applied >= initial.total) {
+		return undefined;
+	}
+
+	console.info(
+		`Applying database migrations (${initial.applied} of ${initial.total} files; ${initial.currentTag ?? 'pending'})`,
+	);
+	const bootstrapState: BootstrapMigrationState = {
+		status: 'migrating',
+		progress: initial,
+	};
+	const bootstrap = await startBootstrapServer(host, port, bootstrapState);
+	try {
+		await runMigrationsInWorker(databasePath, migrationsDir, (progress) => {
+			bootstrapState.progress = progress;
+		});
+		const remaining = peekMigrationProgress(databasePath, migrationsDir);
+		if (remaining.applied < remaining.total) {
+			throw new Error(
+				`Migration worker finished with ${remaining.total - remaining.applied} pending files`,
+			);
+		}
+		console.info('Database migrations finished');
+		return bootstrap;
+	}
+	catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		bootstrapState.status = 'failed';
+		bootstrapState.error = message;
+		console.error(`Database migrations failed: ${message}`);
+		console.error('Moirai is parked on the updating page until the process is stopped.');
+		await new Promise<void>((resolve) => {
+			process.once('SIGINT', () => resolve());
+			process.once('SIGTERM', () => resolve());
+		});
+		await stopBootstrapServer(bootstrap);
+		process.exit(1);
+	}
+}
 
 /** Validated process configuration shared by bootstrap services. */
 const config = loadConfig();
@@ -19,6 +90,12 @@ if (developmentWatch) {
 	}
 }
 await mkdir(config.dataDir, { recursive: true });
+const bootstrap = await runStartupMigrations(
+	config.databasePath,
+	config.migrationsDir,
+	config.host,
+	config.port,
+);
 /** SQLite connection owned for the lifetime of this server process. */
 const database = createDatabase(config.databasePath, config.migrationsDir);
 const { app, services } = await buildApp(config, database.db);
@@ -58,21 +135,19 @@ if (!developmentWatch) {
 
 /** Bind the configured listener and normalize Fastify's resolved address value. */
 const listen = () => app.listen({ host: config.host, port: config.port }).then(() => undefined);
-if (developmentWatch) {
-	await listenWithAddressRetry(listen, {
-		attempts: 40,
-		delayMs: 250,
-		onRetry: (attempt) => {
-			app.log.warn(
-				{ port: config.port, attempt },
-				'API port is still held by the prior development process; retrying',
-			);
-		},
-	});
+if (bootstrap) {
+	await stopBootstrapServer(bootstrap);
 }
-else {
-	await listen();
-}
+await listenWithAddressRetry(listen, {
+	attempts: developmentWatch ? 40 : 20,
+	delayMs: 250,
+	onRetry: (attempt) => {
+		app.log.warn(
+			{ port: config.port, attempt },
+			'API port is still held by the prior process; retrying',
+		);
+	},
+});
 if (developmentWatch && process.send) {
 	process.send({ type: 'ready' });
 }

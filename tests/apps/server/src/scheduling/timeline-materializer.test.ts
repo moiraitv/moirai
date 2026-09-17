@@ -129,6 +129,20 @@ function fixture() {
 						&& entry.segment.start < finish,
 				),
 		),
+		listOccupiedMediaIntervals: vi.fn(
+			async (start: string, finish: string) =>
+				segments
+					.filter((entry) =>
+						Boolean(entry.segment.mediaItemId)
+						&& entry.segment.finish > start
+						&& entry.segment.start < finish)
+					.map((entry) => ({
+						channelId: entry.segment.channelId,
+						mediaItemId: entry.segment.mediaItemId!,
+						start: entry.segment.start,
+						finish: entry.segment.finish,
+					})),
+		),
 		getSelectionState: vi.fn(async () => state),
 		markTimelinePending: vi.fn((channelIds: string[], applyAfter: string, pendingSince: string) => {
 			if (materialization && channelIds.includes(materialization.channelId)) {
@@ -229,7 +243,7 @@ afterEach(() => {
 
 describe('durable timeline materializer', () => {
 	it('retains displacement beyond the original window through a restart and roll', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const long = test.programs[0]!;
@@ -268,7 +282,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('repairs an older commit with a short continuation instead of trusting its advertised window', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		await new TimelineMaterializer(test.repository, test.events, 'UTC').runNow();
@@ -280,7 +294,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('commits full early-midnight windows and resumes an incoming occurrence across daily rolls', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const outgoing = test.programs[0]!;
@@ -326,7 +340,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('restores an early favor-right handoff from committed segments after restart', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const outgoing = test.programs[0]!;
@@ -479,7 +493,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('commits measured media and retains diagnostics for skipped unprobed items', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		test.clearFirstDuration();
@@ -566,7 +580,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('keeps authored changes pending while recovering catalog-caused dead air', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		for (const media of test.catalog.media) {
@@ -629,7 +643,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('rechecks a failed committed timeline even when its rolling window is already full', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -668,7 +682,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('runs a recovery recheck queued during an active materialization without waiting', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		let releaseCatalog!: (catalog: SchedulingCatalog) => void;
@@ -715,7 +729,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('preserves the overlapping window and continues sequential state after a restart', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const first = new TimelineMaterializer(
@@ -746,7 +760,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('extends from retained catalog data during a temporary source outage', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -767,7 +781,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('marks disabled-library output pending and excludes it from the replacement window', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -793,7 +807,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('applies pending configuration after the current item without replacing it', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:30:00Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -823,7 +837,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('rebuilds unlocked future rows after a healthy catalog deletion', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -849,7 +863,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('keeps the advertised XMLTV window covered across local midnight without an intervening pass', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -870,7 +884,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('skips a recent pass on the same local date and runs after midnight', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-08-23T06:59:30Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -890,7 +904,7 @@ describe('durable timeline materializer', () => {
 	});
 
 	it('loads occupancy through the stored local window plus one extra local day', async () => {
-		vi.useFakeTimers();
+		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-10-18T07:00:01Z'));
 		const test = fixture();
 		const materializer = new TimelineMaterializer(
@@ -901,14 +915,14 @@ describe('durable timeline materializer', () => {
 		await materializer.runNow();
 
 		expect(test.materialization()?.windowEnd).toBe('2026-11-02T08:00:00Z');
-		expect(test.repository.listMaterializedTimelineSegments.mock.calls[0]?.slice(0, 2))
+		expect(vi.mocked(test.repository.listOccupiedMediaIntervals).mock.calls[0]?.slice(0, 2))
 			.toEqual(['2026-10-18T07:00:01.000Z', '2026-11-03T08:00:00Z']);
 	});
 });
 
 
 it('keeps committed playback and selection state unchanged after a guide-only edit', async () => {
-	vi.useFakeTimers();
+	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-08-23T12:00:00Z'));
 	const test = fixture();
 	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');

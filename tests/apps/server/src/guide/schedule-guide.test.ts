@@ -7,6 +7,7 @@ import { recordTimelineIssue, type RecordedTimelineIssue } from '@server/schedul
 import {
 	boundedGuideWindow,
 	CommittedGuideUnavailableError,
+	invalidateCommittedGuideCache,
 	readCommittedChannelScheduleGuide,
 	readCommittedGuideAfterMaterializing,
 	readCommittedScheduleGuide,
@@ -105,6 +106,61 @@ describe('readCommittedScheduleGuide', () => {
 		expect(result.guide.channels[0]!.preview.programNames).toEqual({ [item.programId]: 'Rock Collection' });
 		expect(result.guide.channels[0]!.preview.segments).toEqual([item]);
 		expect(repository.listPrograms).toHaveBeenCalledTimes(1);
+		expect(result.catalog.media).toEqual([]);
+	});
+
+	it('overlays committed snapshots when XMLTV asks for catalog media', async () => {
+		const channel = schedule();
+		const item = { ...segment(channel.channelId), role: 'primary' as const, mediaItemId: randomUUID() };
+		const snapshot = {
+			id: item.mediaItemId!,
+			libraryId: randomUUID(),
+			kind: 'episode',
+			title: 'Pilot',
+			sortTitle: 'Pilot',
+			playbackPath: '/media/pilot.mkv',
+			durationSeconds: 1800,
+			availability: 'available',
+			seriesTitle: 'Seinfeld',
+		};
+		const repository = repositoryFixture([channel], [item], [{
+			channelId: channel.channelId, health: 'ready', committedAt: RANGE_START,
+		}]);
+		vi.mocked(repository.listMaterializedTimelineSegmentsForGuide).mockResolvedValue([
+			{ segment: item, mediaSnapshot: snapshot, stateDelta: [] },
+		]);
+
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1, {
+			includeMediaCatalog: true,
+		});
+		expect(result.catalog.media).toEqual([snapshot]);
+		expect(repository.listMaterializedTimelineSegmentsForGuide).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.any(String),
+			expect.any(Number),
+			[channel.channelId],
+			true,
+		);
+	});
+
+	it('does not recache a guide after invalidation during the segment query', async () => {
+		const channel = schedule();
+		const first = { ...segment(channel.channelId), title: 'First' };
+		const second = { ...segment(channel.channelId), title: 'Second' };
+		const repository = repositoryFixture([channel], [first], [{
+			channelId: channel.channelId, health: 'ready', committedAt: RANGE_START,
+		}]);
+		vi.mocked(repository.listMaterializedTimelineSegmentsForGuide)
+			.mockImplementationOnce(async () => {
+				invalidateCommittedGuideCache();
+				return [{ segment: first, mediaSnapshot: null, stateDelta: [] }];
+			})
+			.mockResolvedValueOnce([{ segment: second, mediaSnapshot: null, stateDelta: [] }]);
+
+		await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+		expect(result.guide.channels[0]!.preview.segments[0]!.title).toBe('Second');
+		expect(repository.listMaterializedTimelineSegmentsForGuide).toHaveBeenCalledTimes(2);
 	});
 
 	beforeEach(() => {

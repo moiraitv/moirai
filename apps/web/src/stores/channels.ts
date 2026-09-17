@@ -29,6 +29,7 @@ export const useChannelsStore = defineStore('channels', () => {
 	const guideLoading = ref(false);
 	const guideLoaded = ref(false);
 	const guideStartHistory = ref<string[]>([]);
+	const guidePendingWindowDays = ref<number | null>(null);
 	const error = ref('');
 
 	// Ignore responses superseded by a newer request in the same data domain.
@@ -118,14 +119,26 @@ export const useChannelsStore = defineStore('channels', () => {
 		}
 		const sequence = ++guideSequence;
 		const previousStart = guideWeekStart.value;
-		if (
-			!guideLoaded.value
-			|| guideWeekStart.value !== startDate
-			|| guideDays.value !== days
-		) {
+		if (!guideLoaded.value || guideWeekStart.value !== startDate) {
 			guideLoading.value = true;
 		}
 		try {
+			if (days > 1 && (guideWeekStart.value !== startDate || guideDays.value < 1)) {
+				const first = await api.scheduleGuide(startDate, 1);
+				if (sequence !== guideSequence) {
+					return;
+				}
+
+				guideStartHistory.value = guideStartHistory.value.filter(date => date >= today);
+				guide.value = first;
+				guideWeekStart.value = startDate;
+				guideDays.value = first.days;
+				guidePendingWindowDays.value = days;
+				guideLoaded.value = true;
+				guideLoading.value = false;
+				error.value = '';
+			}
+
 			const result = await api.scheduleGuide(startDate, days);
 			if (sequence !== guideSequence) {
 				return;
@@ -135,6 +148,7 @@ export const useChannelsStore = defineStore('channels', () => {
 			guide.value = result;
 			guideWeekStart.value = startDate;
 			guideDays.value = days;
+			guidePendingWindowDays.value = null;
 			guideLoaded.value = true;
 			if (navigation === 'forward' && previousStart >= today && previousStart !== startDate) {
 				if (guideStartHistory.value.at(-1) !== previousStart) {
@@ -153,6 +167,7 @@ export const useChannelsStore = defineStore('channels', () => {
 			if (sequence !== guideSequence) {
 				return;
 			}
+			guidePendingWindowDays.value = null;
 			error.value = errorMessage(cause);
 			throw cause;
 		}
@@ -170,7 +185,8 @@ export const useChannelsStore = defineStore('channels', () => {
 		}
 
 		if (direction === 'forward') {
-			const target = shiftDateKey(guideWeekStart.value, guide.value.days);
+			const step = guidePendingWindowDays.value ?? guide.value.days;
+			const target = shiftDateKey(guideWeekStart.value, step);
 			return guide.value.committedEndDate && target >= guide.value.committedEndDate
 				? null
 				: target;
@@ -188,7 +204,10 @@ export const useChannelsStore = defineStore('channels', () => {
 			return remembered;
 		}
 
-		const fallback = shiftDateKey(guideWeekStart.value, -guide.value.days);
+		const fallback = shiftDateKey(
+			guideWeekStart.value,
+			-(guidePendingWindowDays.value ?? guide.value.days),
+		);
 		return committedStart && fallback < committedStart ? committedStart : fallback;
 	}
 

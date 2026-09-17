@@ -35,6 +35,10 @@ describe('channel guide navigation', () => {
 		const store = useChannelsStore();
 
 		await store.loadGuide('2026-08-01', 7);
+		expect(vi.mocked(api.scheduleGuide).mock.calls.slice(0, 2)).toEqual([
+			['2026-08-01', 1],
+			['2026-08-01', 7],
+		]);
 		expect(store.guideNavigationTarget('forward')).toBe('2026-08-04');
 
 		await store.loadGuide('2026-08-04', 7, 'forward');
@@ -42,6 +46,29 @@ describe('channel guide navigation', () => {
 
 		await store.loadGuide('2026-08-01', 7, 'backward');
 		expect(store.guideNavigationTarget('backward')).toBeNull();
+	});
+
+	it('exposes a one-day guide before the remainder of the week arrives', async () => {
+		let releaseWeek: (() => void) | undefined;
+		vi.spyOn(api, 'scheduleGuide').mockImplementation(async (startDate, requestedDays) => {
+			if ((requestedDays ?? 7) > 1) {
+				await new Promise<void>((resolve) => {
+					releaseWeek = resolve;
+				});
+			}
+
+			return guide(startDate, requestedDays ?? 7, requestedDays ?? 7);
+		});
+		const store = useChannelsStore();
+		const pending = store.loadGuide('2026-08-01', 7);
+		await vi.waitFor(() => {
+			expect(store.guideLoaded).toBe(true);
+			expect(store.guideDays).toBe(1);
+		});
+		expect(store.guideNavigationTarget('forward')).toBe('2026-08-08');
+		releaseWeek?.();
+		await pending;
+		expect(store.guideDays).toBe(7);
 	});
 
 	it('clamps backward navigation when no in-memory history is available', async () => {

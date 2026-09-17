@@ -190,6 +190,13 @@
       "when": 1789106400000,
       "tag": "0026_slot_guide",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1789610400000,
+      "tag": "0027_catalog_search",
+      "breakpoints": true
     }
   ]
 }

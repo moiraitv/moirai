@@ -105,6 +105,35 @@ export function guideSegmentWidth(
 	return Math.max(minimumWidth, elapsedHours * hourWidth);
 }
 
+/** Return whether an absolutely positioned programme overlaps a pixel window on the guide axis. */
+export function guideSpanOverlapsRange(
+	left: number,
+	right: number,
+	rangeStart: number,
+	rangeEnd: number,
+): boolean {
+	return left < rangeEnd && right > rangeStart;
+}
+
+/** Keep programmes whose elapsed-time span intersects a visible pixel window. */
+export function guideProgrammesInPixelRange<T extends { start: string; finish: string }>(
+	programmes: readonly T[],
+	days: GuideDayGeometry[],
+	hourWidth: number,
+	rangeStart: number,
+	rangeEnd: number,
+): T[] {
+	if (programmes.length === 0 || rangeEnd <= rangeStart) {
+		return [];
+	}
+
+	return programmes.filter((programme) => {
+		const left = guideInstantPosition(programme.start, days, hourWidth);
+		const right = left + guideSegmentWidth(programme.start, programme.finish, hourWidth);
+		return guideSpanOverlapsRange(left, right, rangeStart, rangeEnd);
+	});
+}
+
 /** Size one resolved-preview segment against its actual local-day window. */
 export function guideSegmentPercent(
 	start: string,

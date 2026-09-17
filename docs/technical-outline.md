@@ -487,8 +487,12 @@ A program separates content eligibility from selection behavior. Content sources
 - a counted, repeating sequence of other programs.
 
 Library search uses a separate optional `search` parameter; the existing `name` filter remains
-title-only. Catalog and source-picker item searches share literal substring predicates for titles,
-plots/descriptions, genres, normalized people, hierarchy labels, music artist credits, and album metadata. Search
+title-only. Catalog search uses an FTS5 prefix index of titles, plots, genres, people, and group labels,
+kept in sync from catalog writes, and flattens to matching items so a shows-library query can return
+every matching episode. When prefix matching finds nothing, the same filters fall back to substring
+`LIKE` so queries such as `ein` still match `Seinfeld`. Music-video libraries keep credit and album matching, including
+Unicode folding. Search results skip A–Z navigation aggregation. Catalog and source-picker item
+searches share those predicates. Search
 results carry optional match reasons, resolved in page-bounded batches only while searching;
 cards share the same formatter and virtualized rows account for the extra explanation line.
 Recursive Add All selection applies the same search and filters as browsing. Music-video Artist
@@ -659,7 +663,10 @@ stores:
 - per-segment selection-state transitions;
 - the continuation cursor at the end of the window.
 
-Window rolls preserve overlapping advertised entries and generate only the uncovered tail. A restart
+Window rolls preserve overlapping advertised entries and generate only the uncovered tail. Occupancy
+and existing-window reads omit media snapshots. Channel generation is pipelined across the scheduling
+worker pool so one channel can generate while the previous channel commits, while occupancy from
+earlier channels in the same pass still constrains later ones. A restart
 therefore does not reset sequential playback or reshuffle established programming.
 Recovery or explicit application during dead air retains the elapsed gap up to the replacement
 instant, keeping the historical guide contiguous while future programming resumes.
@@ -759,7 +766,13 @@ centered below their logos, with a TV icon when no logo is set.
 On Channels, the edit button covers the full channel cell while warning badges remain independently
 interactive; keyboard focus outlines the complete edit target.
 The shared guide expands to its full row height and scrolls vertically with the page, while
-retaining horizontal timeline scrolling.
+retaining horizontal timeline scrolling. Programme nodes are mounted only for the scrolled elapsed-time
+window plus two hours of overscan, so a dense week does not create a DOM node for every listing.
+Guide and Channels request one committed day first, then the remainder of the seven-day window,
+so the visible range paints before the rest of the week arrives. Combined guide reads select
+timeline-segment columns without snapshot, cursor, or playback JSON, omit duplicate `entries` when
+the timeline is item-mode, use one time-ordered `starts_at`/`channel_id` limit query, and cache the
+assembled guide in-process until timeline, channel, or scheduling events invalidate it.
 On both pages, Today centers the now line in the visible timeline when the current guide window
 is already selected, without reloading guide data.
 Individual media entries share Programs' delayed, cached metadata preview on hover and keyboard
@@ -1002,14 +1015,24 @@ writes JSON, YAML, and self-contained HTML to the ignored `dist/api-docs/` direc
 inert service dependencies, so it does not open SQLite, scan media, or start playback. Documentation
 is a development artifact and is not mounted as a production server route.
 
+The HTTP listener binds before SQLite migrations run. A public bootstrap page reports migration
+progress while a worker applies pending Drizzle files so the Node event loop can still answer health
+probes. `/api/v1/health/ready` returns 200 during that window with a non-essential `migration` check
+so Docker health does not unroute the container. After migrations finish, the full application
+replaces the bootstrap listener.
+
 Health endpoints have separate meanings:
 
 - `/api/v1/health` and `/api/v1/health/live` are dependency-free liveness checks.
+- `/api/v1/health/startup` reports public migration progress (`migrating`, `ready`, or `failed`).
 - `/api/v1/health/ready` checks SQLite and the playback engine as essential, and reports scanner,
   media probe, maintenance, timeline, playout sync, media sources, and resource pressure as
   non-blocking context.
 - Readiness returns `503` only when SQLite or the playback engine cannot serve. Background and
   per-channel schedule problems stay in the JSON as degraded, non-essential checks.
+
+Readiness timeline status selects only window and health columns. Long catalog, guide, and
+materialization work yields to the event loop so the 3-second Docker probe can run.
 
 Docker uses readiness for its container health check.
 

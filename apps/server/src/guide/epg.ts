@@ -311,7 +311,13 @@ export class EpgService {
 		const [channels, materialized] = await Promise.all([
 			this.repository.listChannels(),
 			readCommittedGuideAfterMaterializing(
-				() => readCommittedScheduleGuide(this.repository, this.timeZone, startDate, XMLTV_EPG_DAYS),
+				() => readCommittedScheduleGuide(
+					this.repository,
+					this.timeZone,
+					startDate,
+					XMLTV_EPG_DAYS,
+					{ includeMediaCatalog: true },
+				),
 				this.ensureMaterialized,
 			),
 		]);

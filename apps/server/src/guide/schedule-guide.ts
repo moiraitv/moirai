@@ -192,12 +192,23 @@ export async function materializeScheduleGuide(
 	};
 }
 
-/** Read the durable guide without advancing selection state or regenerating overlapping rows. */
+let committedGuideGeneration = 0;
+const committedGuideCache = new WeakMap<Repository, { generation: number; key: string; value: MaterializedGuide }>();
+
+/** Drop cached committed-guide responses after timeline or channel presentation changes. */
+export function invalidateCommittedGuideCache(): void {
+	committedGuideGeneration += 1;
+}
+
+/** Read the durable guide without advancing selection state or regenerating overlapping rows.
+ * Pass `includeMediaCatalog` when XMLTV needs committed media snapshots in `catalog.media`.
+ */
 export async function readCommittedScheduleGuide(
 	repository: Repository,
 	timeZone: string,
 	startDate: string,
 	days: number,
+	options: { includeMediaCatalog?: boolean } = {},
 ): Promise<MaterializedGuide> {
 	// Restrict reads to the durable rolling window maintained by the materializer.
 	const requestedStart = Temporal.PlainDate.from(startDate);
@@ -211,21 +222,35 @@ export async function readCommittedScheduleGuide(
 		throw new CommittedGuideRangeError(today.toString(), committedEndDate.toString());
 	}
 
+	const generation = committedGuideGeneration;
 	const rangeStart = requestedStart.toZonedDateTime(timeZone).toInstant().toString();
 	const requestedRangeEnd = requestedEnd.toZonedDateTime(timeZone).toInstant().toString();
 
-	// Load schedules, committed segments, snapshots, and health in one bounded batch.
-	const [schedules, requestedRows, catalog, statuses, templates] = await Promise.all([
+	const [schedules, catalog, statuses, templates] = await Promise.all([
 		repository.listChannelSchedules(),
-		repository.listMaterializedTimelineSegmentsForGuide(
-			rangeStart,
-			requestedRangeEnd,
-			MAX_GUIDE_TIMELINE_SEGMENTS + 1,
-		),
 		repository.getSchedulingCatalog([]),
 		repository.listTimelineMaterializations(),
 		repository.listScheduleTemplates(),
 	]);
+	const cacheKey = [
+		timeZone,
+		startDate,
+		String(days),
+		...templates.map((template) => `${template.id}:${template.updatedAt}:${JSON.stringify(template.slots.map((slot) => slot.guide))}`),
+		...statuses.map((status) => `${status.channelId}:${status.committedAt}:${status.health}:${status.pendingSince ?? ''}`),
+		options.includeMediaCatalog ? 'media' : 'guide',
+	].join('|');
+	const cached = committedGuideCache.get(repository);
+	if (cached && cached.generation === generation && cached.key === cacheKey) {
+		return cached.value;
+	}
+	const requestedRows = await repository.listMaterializedTimelineSegmentsForGuide(
+		rangeStart,
+		requestedRangeEnd,
+		MAX_GUIDE_TIMELINE_SEGMENTS + 1,
+		schedules.map((schedule) => schedule.channelId),
+		Boolean(options.includeMediaCatalog),
+	);
 	// Resolve source labels and unnamed block titles in one lookup when needed.
 	const needsProgramNames = requestedRows.some(row => row.segment.role === 'primary' && row.segment.programId !== null) || templates.some((template) => template.slots.some((slot) =>
 		slot.programId && slot.guide?.mode === 'block' && !slot.guide.title.trim()));
@@ -237,7 +262,7 @@ export async function readCommittedScheduleGuide(
 	const rangeEnd = bounded.endDate.toZonedDateTime(timeZone).toInstant().toString();
 	const rows = bounded.rows;
 
-	// Group segments by channel and overlay committed media snapshots on the live catalog.
+	// Group segments by channel. XMLTV overlays committed snapshots when the caller asks for catalog media.
 	const byChannel = new Map<string, TimelinePreview['segments']>();
 	const snapshots = new Map(catalog.media.map((media) => [media.id, media]));
 	for (const row of rows) {
@@ -273,41 +298,49 @@ export async function readCommittedScheduleGuide(
 		throw new CommittedGuideUnavailableError(unavailableChannels.length);
 	}
 
-	const channels: ScheduleGuide['channels'] = schedules.map((schedule) => ({
-		channelId: schedule.channelId,
-		entries: projectGuideEntries(
-			schedule.channelId,
-			byChannel.get(schedule.channelId) ?? [],
-			materializationByChannel.get(schedule.channelId)?.guideOccurrences?.length
-				? materializationByChannel.get(schedule.channelId)!.guideOccurrences!
-				: materializationByChannel.get(schedule.channelId)?.pendingSince ? [] : recoverGuideOccurrences(
-					schedule,
-					templates,
-					rows.filter((row) => row.segment.channelId === schedule.channelId),
-					startDate,
-					bounded.days,
-					timeZone,
-				),
-			templates,
-			rangeStart,
-			rangeEnd,
-			programNames,
-		),
-		preview: {
-			channelId: schedule.channelId,
-			timeZone,
-			startDate,
-			days: bounded.days,
-			programNames: guideProgramNames(byChannel.get(schedule.channelId) ?? [], programNames),
-			segments: byChannel.get(schedule.channelId) ?? [],
-			issues: timelineIssuesInRange(
-				materializationByChannel.get(schedule.channelId)?.issues ?? [],
+	const projectBlocks = templates.some((template) =>
+		template.slots.some((slot) => slot.guide?.mode === 'block'));
+	const channels: ScheduleGuide['channels'] = schedules.map((schedule) => {
+		const segments = byChannel.get(schedule.channelId) ?? [];
+		const entries = projectBlocks
+			? projectGuideEntries(
+				schedule.channelId,
+				segments,
+				materializationByChannel.get(schedule.channelId)?.guideOccurrences?.length
+					? materializationByChannel.get(schedule.channelId)!.guideOccurrences!
+					: materializationByChannel.get(schedule.channelId)?.pendingSince ? [] : recoverGuideOccurrences(
+						schedule,
+						templates,
+						rows.filter((row) => row.segment.channelId === schedule.channelId),
+						startDate,
+						bounded.days,
+						timeZone,
+					),
+				templates,
 				rangeStart,
 				rangeEnd,
-			),
-			proposedState: [],
-		},
-	}));
+				programNames,
+			)
+			: [];
+		return {
+			channelId: schedule.channelId,
+			...(entries.some((entry) => entry.kind === 'block') ? { entries } : {}),
+			preview: {
+				channelId: schedule.channelId,
+				timeZone,
+				startDate,
+				days: bounded.days,
+				programNames: guideProgramNames(segments, programNames),
+				segments,
+				issues: timelineIssuesInRange(
+					materializationByChannel.get(schedule.channelId)?.issues ?? [],
+					rangeStart,
+					rangeEnd,
+				),
+				proposedState: [],
+			},
+		};
+	});
 	// Projection can split raw items; apply the same complete-day budget to the displayed entries.
 	const projectedWindow = boundedProjectedWindow(
 		requestedStart,
@@ -329,7 +362,7 @@ export async function readCommittedScheduleGuide(
 	}
 
 	// Rebuild the public guide shape without exposing persistent selection state.
-	return {
+	const result = {
 		guide: {
 			timeZone,
 			startDate,
@@ -343,6 +376,15 @@ export async function readCommittedScheduleGuide(
 		},
 		catalog: { ...catalog, media: [...snapshots.values()] },
 	};
+	if (committedGuideGeneration === generation) {
+		committedGuideCache.set(repository, {
+			generation,
+			key: cacheKey,
+			value: result,
+		});
+	}
+
+	return result;
 }
 
 /** Read one channel's committed guide without allowing other channels to block playback. */

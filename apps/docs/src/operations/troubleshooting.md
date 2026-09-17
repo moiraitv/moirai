@@ -29,6 +29,10 @@ Check that the source is mounted and readable before confirming removals. Restor
 
 Open the channel schedule and generate a preview. Check program eligibility, media duration, template boundaries, and filler. A fallback video keeps the stream valid but does not make the schedule warning go away.
 
+## The browser shows “Updating the database”
+
+The first start after an upgrade can take several minutes while Moirai updates its database. Leave that page open; it reloads when the application is ready. This screen does not require a sign-in. If it stays for much longer than a typical upgrade or reports a failure, check container logs and restart Moirai.
+
 ## A change is not visible yet
 
 Saved schedule changes normally begin at the next local midnight. Use **Apply after current item** when available. Refresh the page after the server reconnects, and check Logs if generation failed.

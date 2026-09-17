@@ -9,6 +9,7 @@ import {
 	logFileSchema,
 	logPageSchema,
 	readinessSchema,
+	startupStatusSchema,
 } from '@moirai/shared/api-contracts';
 import type { AppConfig } from '../config.js';
 import { authenticatedSession } from '../auth/http.js';
@@ -88,6 +89,24 @@ export function registerSystemRoutes(
 			response: { 200: responseContent('Process is alive', 'application/json', livenessSchema) },
 		}),
 	}, async () => ({ status: 'ok' }));
+	app.get('/api/v1/health/startup', {
+		config: { authentication: 'public' },
+		schema: apiOperation({
+			operationId: 'getStartup',
+			tags: ['System'],
+			summary: 'Check database migration startup',
+			authentication: 'public',
+			description: 'Reports migration progress during bootstrap and ready after the application is up.',
+			response: {
+				200: responseContent('Startup or migration status', 'application/json', startupStatusSchema),
+			},
+		}),
+	}, async () => ({
+		status: 'ready' as const,
+		applied: 0,
+		total: 0,
+		percent: 100,
+	}));
 	app.get('/api/v1/health/ready', {
 		config: { authentication: 'public' },
 		schema: apiOperation({
