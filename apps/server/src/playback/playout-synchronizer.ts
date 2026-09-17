@@ -10,7 +10,10 @@ import { buildEtvPlayoutFiles } from './playout-output.js';
 import type { FallbackFillerStore } from './fallback-filler-store.js';
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
-import { readCommittedChannelScheduleGuide } from '../guide/schedule-guide.js';
+import {
+	readCommittedChannelScheduleGuide,
+	readCommittedGuideAfterMaterializing,
+} from '../guide/schedule-guide.js';
 import { currentTimestamp } from '../time.js';
 
 /** File names accepted inside Moirai's private playout directories. */
@@ -182,7 +185,6 @@ export class PlayoutSynchronizer {
 
 	/** Synchronize every channel while isolating channel-specific failures. */
 	async syncAll(): Promise<void> {
-		await this.ensureMaterialized().catch(() => undefined);
 		const channels = await this.repository.listChannels();
 		const channelIds = new Set(channels.map((channel) => channel.id));
 		for (const entry of await readdir(this.root, { withFileTypes: true }).catch(() => [])) {
@@ -270,19 +272,21 @@ export class PlayoutSynchronizer {
 
 	/** Build and atomically replace one channel's complete daily document set. */
 	private async performChannelSync(channelId: string): Promise<string> {
-		await this.ensureMaterialized();
 		const channel = await this.repository.getChannel(channelId);
 		if (!channel) {
 			throw new Error('Channel not found');
 		}
 
 		const startDate = Temporal.Now.plainDateISO(this.timeZone).toString();
-		const guide = await readCommittedChannelScheduleGuide(
-			this.repository,
-			this.timeZone,
-			channel.id,
-			startDate,
-			XMLTV_EPG_DAYS,
+		const guide = await readCommittedGuideAfterMaterializing(
+			() => readCommittedChannelScheduleGuide(
+				this.repository,
+				this.timeZone,
+				channel.id,
+				startDate,
+				XMLTV_EPG_DAYS,
+			),
+			this.ensureMaterialized,
 		);
 		const fallback = await this.fallbackFillers.resolve(channel.id);
 		await mkdir(this.root, { recursive: true });

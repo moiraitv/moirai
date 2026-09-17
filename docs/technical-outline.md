@@ -648,7 +648,10 @@ boundary failures.
 
 ### Materialization and determinism
 
-Saved channel schedules become durable rolling 14-day timelines in SQLite. Each commit atomically
+Saved channel schedules become durable rolling timelines in SQLite. The advertised XMLTV and playout
+window is 14 local days. The stored window keeps one extra local day so that window still covers the
+advertised 14 days after local midnight, before the next materialization pass replenishes the
+lookahead day. Each commit atomically
 stores:
 
 - concrete timestamped segments;
@@ -1002,9 +1005,11 @@ is a development artifact and is not mounted as a production server route.
 Health endpoints have separate meanings:
 
 - `/api/v1/health` and `/api/v1/health/live` are dependency-free liveness checks.
-- `/api/v1/health/ready` checks SQLite and essential background services.
-- Readiness reports non-blocking source warnings but returns `503` when authoritative operation is
-  degraded.
+- `/api/v1/health/ready` checks SQLite and the playback engine as essential, and reports scanner,
+  media probe, maintenance, timeline, playout sync, media sources, and resource pressure as
+  non-blocking context.
+- Readiness returns `503` only when SQLite or the playback engine cannot serve. Background and
+  per-channel schedule problems stay in the JSON as degraded, non-essential checks.
 
 Docker uses readiness for its container health check.
 

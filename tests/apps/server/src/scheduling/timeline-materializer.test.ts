@@ -260,7 +260,7 @@ describe('durable timeline materializer', () => {
 		const rolled = test.materialization()!;
 		expect(timelineIssuesInRange(rolled.issues, first.windowEnd, first.continuationAt)).toEqual(deferred);
 		const whole = generateTimelineDetailed({
-			channelId: test.channelId, startDate: '2026-08-22', days: XMLTV_EPG_DAYS + 1, timeZone: 'UTC',
+			channelId: test.channelId, startDate: '2026-08-22', days: XMLTV_EPG_DAYS + 2, timeZone: 'UTC',
 			schedule: test.schedule, template: test.template, programs: test.programs, catalog: test.catalog, state: [],
 		});
 		expect(timelineIssuesInRange(rolled.issues, rolled.windowStart, rolled.continuationAt))
@@ -317,7 +317,7 @@ describe('durable timeline materializer', () => {
 			await new TimelineMaterializer(test.repository, test.events, 'UTC').runNow();
 		}
 		const uninterrupted = generateTimelineDetailed({
-			channelId: test.channelId, startDate: '2026-08-22', days: XMLTV_EPG_DAYS + 2, timeZone: 'UTC',
+			channelId: test.channelId, startDate: '2026-08-22', days: XMLTV_EPG_DAYS + 3, timeZone: 'UTC',
 			schedule: test.schedule, template: test.template, programs: test.programs, catalog: test.catalog, state: [],
 		});
 		const retained = uninterrupted.segments.filter((segment) => segment.finish > test.materialization()!.windowStart);
@@ -496,7 +496,7 @@ describe('durable timeline materializer', () => {
 		expect(test.materialization()?.issues).toEqual(expect.arrayContaining([
 			expect.objectContaining({ code: 'media-duration-missing', mediaItemId: test.catalog.media[0]!.id }),
 		]));
-		expect(test.segments()).toHaveLength(XMLTV_EPG_DAYS * 24);
+		expect(test.segments()).toHaveLength((XMLTV_EPG_DAYS + 1) * 24);
 		expect(test.segments().every(({ segment }) =>
 			segment.role === 'primary' && segment.mediaItemId !== test.catalog.media[0]!.id)).toBe(true);
 	});
@@ -608,7 +608,7 @@ describe('durable timeline materializer', () => {
 			const materializer = new TimelineMaterializer(test.repository, test.events, 'America/Los_Angeles', workers);
 			await materializer.runNow();
 			expect(test.repository.markTimelineFailed).not.toHaveBeenCalled();
-			expect(test.segments()).toHaveLength(XMLTV_EPG_DAYS * 24);
+			expect(test.segments()).toHaveLength((XMLTV_EPG_DAYS + 1) * 24);
 			expect(test.segments().every(({ segment }) => segment.role === 'primary')).toBe(true);
 			expect(test.materialization()?.issues.some((issue) => issue.code === 'source-unavailable')).toBe(false);
 
@@ -726,7 +726,7 @@ describe('durable timeline materializer', () => {
 		await first.runNow();
 		const initial = structuredClone(test.segments());
 		const initialEnd = test.materialization()!.windowEnd;
-		expect(initial).toHaveLength(XMLTV_EPG_DAYS * 24);
+		expect(initial).toHaveLength((XMLTV_EPG_DAYS + 1) * 24);
 
 		vi.setSystemTime(new Date('2026-08-23T12:00:00Z'));
 		const restarted = new TimelineMaterializer(
@@ -740,7 +740,9 @@ describe('durable timeline materializer', () => {
 		const originalOverlap = initial.filter((entry) => entry.segment.start >= '2026-08-23T07:00:00Z');
 		const rolledIds = new Set(rolled.map((entry) => entry.segment.id));
 		expect(originalOverlap.every((entry) => rolledIds.has(entry.segment.id))).toBe(true);
-		expect(rolled.find((entry) => entry.segment.start === initialEnd)?.segment.title).toBe('Film 2');
+		const lastTitle = initial.at(-1)?.segment.title ?? '';
+		const nextTitle = lastTitle.replace(/\d+$/, (value) => String(Number(value) % 5 + 1));
+		expect(rolled.find((entry) => entry.segment.start === initialEnd)?.segment.title).toBe(nextTitle);
 	});
 
 	it('extends from retained catalog data during a temporary source outage', async () => {
@@ -844,6 +846,63 @@ describe('durable timeline materializer', () => {
 				.filter((entry) => entry.segment.start >= '2026-08-23T07:00:00Z')
 				.some((entry) => entry.segment.mediaItemId === removedId),
 		).toBe(false);
+	});
+
+	it('keeps the advertised XMLTV window covered across local midnight without an intervening pass', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+		const test = fixture();
+		const materializer = new TimelineMaterializer(
+			test.repository,
+			test.events,
+			'America/Los_Angeles',
+		);
+		await materializer.runNow();
+		const committed = test.materialization()!;
+		expect(committed.windowEnd).toBe('2026-09-06T07:00:00Z');
+
+		vi.setSystemTime(new Date('2026-08-23T07:00:01Z'));
+		expect(committed.windowEnd).toBe('2026-09-06T07:00:00Z');
+
+		await materializer.runNow();
+		expect(test.materialization()?.windowStart).toBe('2026-08-23T07:00:00Z');
+		expect(test.materialization()?.windowEnd).toBe('2026-09-07T07:00:00Z');
+	});
+
+	it('skips a recent pass on the same local date and runs after midnight', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-08-23T06:59:30Z'));
+		const test = fixture();
+		const materializer = new TimelineMaterializer(
+			test.repository,
+			test.events,
+			'America/Los_Angeles',
+		);
+		await materializer.runNow();
+		expect(test.repository.listChannelSchedules).toHaveBeenCalledTimes(1);
+
+		await materializer.runNow();
+		expect(test.repository.listChannelSchedules).toHaveBeenCalledTimes(1);
+
+		vi.setSystemTime(new Date('2026-08-23T07:00:01Z'));
+		await materializer.runNow();
+		expect(test.repository.listChannelSchedules).toHaveBeenCalledTimes(2);
+	});
+
+	it('loads occupancy through the stored local window plus one extra local day', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-10-18T07:00:01Z'));
+		const test = fixture();
+		const materializer = new TimelineMaterializer(
+			test.repository,
+			test.events,
+			'America/Los_Angeles',
+		);
+		await materializer.runNow();
+
+		expect(test.materialization()?.windowEnd).toBe('2026-11-02T08:00:00Z');
+		expect(test.repository.listMaterializedTimelineSegments.mock.calls[0]?.slice(0, 2))
+			.toEqual(['2026-10-18T07:00:01.000Z', '2026-11-03T08:00:00Z']);
 	});
 });
 

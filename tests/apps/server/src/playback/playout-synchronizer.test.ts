@@ -143,6 +143,102 @@ describe('playout synchronizer', () => {
 		await expect(queued).resolves.toBe('/playout/second');
 		expect(perform).toHaveBeenCalledTimes(2);
 	});
+
+	it('does not materialize when committed playout coverage is already available', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-ready-'));
+		const channelId = randomUUID();
+		const channel = {
+			...channelCreateSchema.parse({ number: '1', name: 'Ready' }),
+			id: channelId,
+			createdAt: '',
+			updatedAt: '',
+		};
+		const ensureMaterialized = vi.fn(async () => undefined);
+		const synchronizer = new PlayoutSynchronizer(
+			{
+				getChannel: async () => channel,
+				listPrograms: async () => [],
+			} as unknown as Repository,
+			root,
+			'UTC',
+			60,
+			ensureMaterialized,
+			{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
+			{ publish: vi.fn() } as LiveEventPublisher,
+			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+		);
+		const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue({
+			timeZone: 'UTC',
+			startDate: '2026-08-23',
+			requestedDays: 1,
+			days: 1,
+			segmentLimitApplied: false,
+			channels: [],
+		} as ScheduleGuide);
+		vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
+		vi.spyOn(
+			synchronizer as unknown as { channelFiles(): Map<string, string> },
+			'channelFiles',
+		).mockReturnValue(new Map());
+		try {
+			await synchronizer.syncChannel(channelId);
+			expect(ensureMaterialized).not.toHaveBeenCalled();
+			expect(synchronizer.channelFailure(channelId)).toBeNull();
+		}
+		finally {
+			guide.mockRestore();
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it('materializes once when committed coverage is initially unavailable', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-retry-'));
+		const channelId = randomUUID();
+		const channel = {
+			...channelCreateSchema.parse({ number: '1', name: 'Retry' }),
+			id: channelId,
+			createdAt: '',
+			updatedAt: '',
+		};
+		const ensureMaterialized = vi.fn(async () => undefined);
+		const synchronizer = new PlayoutSynchronizer(
+			{
+				getChannel: async () => channel,
+				listPrograms: async () => [],
+			} as unknown as Repository,
+			root,
+			'UTC',
+			60,
+			ensureMaterialized,
+			{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
+			{ publish: vi.fn() } as LiveEventPublisher,
+			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+		);
+		const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide')
+			.mockRejectedValueOnce(new scheduleGuide.CommittedGuideUnavailableError(1))
+			.mockResolvedValueOnce({
+				timeZone: 'UTC',
+				startDate: '2026-08-23',
+				requestedDays: 1,
+				days: 1,
+				segmentLimitApplied: false,
+				channels: [],
+			} as ScheduleGuide);
+		vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
+		vi.spyOn(
+			synchronizer as unknown as { channelFiles(): Map<string, string> },
+			'channelFiles',
+		).mockReturnValue(new Map());
+		try {
+			await synchronizer.syncChannel(channelId);
+			expect(ensureMaterialized).toHaveBeenCalledOnce();
+			expect(synchronizer.channelFailure(channelId)).toBeNull();
+		}
+		finally {
+			guide.mockRestore();
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 });
 
 it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playback root and tolerates cleanup failures', async (extension) => {

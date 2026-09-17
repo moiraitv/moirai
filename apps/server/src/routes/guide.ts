@@ -14,6 +14,7 @@ import {
 	CommittedGuideRangeError,
 	CommittedGuideUnavailableError,
 	GuideMaterializationLimitError,
+	readCommittedGuideAfterMaterializing,
 	readCommittedScheduleGuide,
 } from '../guide/schedule-guide.js';
 import type { TimelineMaterializer } from '../scheduling/timeline-materializer.js';
@@ -62,9 +63,10 @@ export function registerGuideRoutes(
 		const query = guideRangeQuerySchema.parse(request.query);
 		const startDate = query.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString();
 		try {
-			await timelineMaterializer.runNow();
-			return (await readCommittedScheduleGuide(repository, config.timeZone, startDate, query.days))
-				.guide;
+			return (await readCommittedGuideAfterMaterializing(
+				() => readCommittedScheduleGuide(repository, config.timeZone, startDate, query.days),
+				() => timelineMaterializer.runNow(),
+			)).guide;
 		}
 		catch (error) {
 			if (

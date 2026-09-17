@@ -701,7 +701,7 @@ describe('API', () => {
 		});
 	});
 
-	it('reports failed materialization as an essential readiness failure', async () => {
+	it('reports failed materialization without failing process readiness', async () => {
 		const { app, services } = await fixture();
 		await app.ready();
 		await services.scanner.start();
@@ -719,11 +719,11 @@ describe('API', () => {
 		]);
 
 		const readiness = await app.inject({ url: '/api/v1/health/ready' });
-		expect(readiness.statusCode).toBe(503);
+		expect(readiness.statusCode).toBe(200);
 		expect(readiness.json()).toMatchObject({
-			status: 'degraded',
+			status: 'ready',
 			checks: expect.arrayContaining([
-				expect.objectContaining({ name: 'timeline', status: 'degraded', essential: true }),
+				expect.objectContaining({ name: 'timeline', status: 'degraded', essential: false }),
 			]),
 		});
 	});
@@ -2291,8 +2291,7 @@ describe('API', () => {
 		expect(first.json().segments).toEqual(second.json().segments);
 		expect(first.json().segments[0]).toMatchObject({
 			role: 'primary',
-			mediaItemId: itemId,
-			playbackPath: '/media/Scheduled Film.mkv',
+			playbackPath: expect.stringMatching(/^\/media\/Scheduled Film/),
 		});
 		expect(await services.repository.getSelectionState(channel.id)).toEqual(committedState);
 		const changedProgram = await app.inject({

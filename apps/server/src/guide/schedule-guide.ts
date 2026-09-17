@@ -45,6 +45,27 @@ export class CommittedGuideUnavailableError extends Error {
 	}
 }
 
+/**
+ * Read committed coverage first and materialize only when the stored window is short. Successful
+ * reads do not wait for lookahead replenishment.
+ */
+export async function readCommittedGuideAfterMaterializing<T>(
+	read: () => Promise<T>,
+	ensureMaterialized: () => Promise<void>,
+): Promise<T> {
+	try {
+		return await read();
+	}
+	catch (error) {
+		if (!(error instanceof CommittedGuideUnavailableError)) {
+			throw error;
+		}
+
+		await ensureMaterialized();
+		return await read();
+	}
+}
+
 /** Determine whether committed segments continuously cover the requested instant range. */
 function coversRange(
 	segments: TimelinePreview['segments'],

@@ -95,7 +95,7 @@ export function registerSystemRoutes(
 			tags: ['System'],
 			summary: 'Check service readiness',
 			authentication: 'public',
-			description: 'Reports essential failures separately from non-blocking degraded services.',
+			description: 'Returns 503 only when SQLite or the playback engine cannot serve. Background services report as non-blocking degraded checks.',
 			response: {
 				200: responseContent('Essential services are ready', 'application/json', readinessSchema),
 				503: responseContent('An essential service is degraded', 'application/json', readinessSchema),

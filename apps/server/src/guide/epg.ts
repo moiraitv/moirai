@@ -15,7 +15,10 @@ import {
 import { publicChannelLogoUrl } from '../artwork/channel-logo-url.js';
 import { versionedPublicUrl } from '../routes/public-url.js';
 import type { Repository } from '../repository/index.js';
-import { readCommittedScheduleGuide } from './schedule-guide.js';
+import {
+	readCommittedGuideAfterMaterializing,
+	readCommittedScheduleGuide,
+} from './schedule-guide.js';
 import { currentTimestamp } from '../time.js';
 
 /** XMLTV document with its covered time window and channel count. */
@@ -280,7 +283,6 @@ export class EpgService {
 
 	/** Return the current XMLTV document, coalescing concurrent regeneration. */
 	async document(): Promise<EpgDocument> {
-		await this.ensureMaterialized();
 		const startDate = Temporal.Now.plainDateISO(this.timeZone).toString();
 		if (this.cache?.startDate === startDate) {
 			return this.cache;
@@ -308,7 +310,10 @@ export class EpgService {
 	private async generate(startDate: string): Promise<EpgDocument> {
 		const [channels, materialized] = await Promise.all([
 			this.repository.listChannels(),
-			readCommittedScheduleGuide(this.repository, this.timeZone, startDate, XMLTV_EPG_DAYS),
+			readCommittedGuideAfterMaterializing(
+				() => readCommittedScheduleGuide(this.repository, this.timeZone, startDate, XMLTV_EPG_DAYS),
+				this.ensureMaterialized,
+			),
 		]);
 		const body = buildXmltv(channels, materialized.guide, materialized.catalog, this.publicUrl);
 		return {

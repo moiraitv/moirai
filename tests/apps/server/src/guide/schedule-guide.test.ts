@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Temporal } from '@js-temporal/polyfill';
-import { SECONDS_PER_SCHEDULING_DAY, scheduleTemplateCreateSchema, type ChannelSchedule, type TimelineIssue, type TimelineSegment } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, XMLTV_EPG_DAYS, scheduleTemplateCreateSchema, type ChannelSchedule, type TimelineIssue, type TimelineSegment } from '@moirai/shared';
 import type { Repository } from '@server/repository/index.js';
 import { recordTimelineIssue, type RecordedTimelineIssue } from '@server/scheduling/timeline-issues.js';
 import {
 	boundedGuideWindow,
 	CommittedGuideUnavailableError,
+	readCommittedChannelScheduleGuide,
+	readCommittedGuideAfterMaterializing,
 	readCommittedScheduleGuide,
 } from '@server/guide/schedule-guide.js';
 
@@ -304,5 +306,62 @@ describe('readCommittedScheduleGuide', () => {
 		await expect(readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1)).rejects.toBeInstanceOf(
 			CommittedGuideUnavailableError,
 		);
+	});
+
+	it('accepts a lookahead commit that still covers the advertised window after midnight', async () => {
+		vi.setSystemTime(new Date('2026-08-23T00:00:01Z'));
+		const configured = schedule();
+		const advertisedEnd = '2026-09-06T00:00:00Z';
+		const covering = segment(configured.channelId, '2026-08-22T00:00:00Z', advertisedEnd);
+		const repository = {
+			getChannelSchedule: vi.fn().mockResolvedValue(configured),
+			getTimelineMaterialization: vi.fn().mockResolvedValue({
+				channelId: configured.channelId,
+				health: 'ready',
+				windowStart: '2026-08-22T00:00:00Z',
+				windowEnd: advertisedEnd,
+				continuationAt: advertisedEnd,
+				committedAt: '2026-08-22T12:00:00Z',
+				issues: [],
+			}),
+			listMaterializedTimelineSegments: vi.fn().mockResolvedValue([
+				{ segment: covering, mediaSnapshot: null, stateDelta: [] },
+			]),
+		} as unknown as Repository;
+
+		await expect(readCommittedChannelScheduleGuide(
+			repository,
+			'UTC',
+			configured.channelId,
+			'2026-08-23',
+			XMLTV_EPG_DAYS,
+		)).resolves.toMatchObject({
+			startDate: '2026-08-23',
+			days: XMLTV_EPG_DAYS,
+			channels: [{ channelId: configured.channelId }],
+		});
+	});
+});
+
+describe('readCommittedGuideAfterMaterializing', () => {
+	it('returns committed coverage without materializing when the window is complete', async () => {
+		const ensureMaterialized = vi.fn(async () => undefined);
+		const guide = { startDate: START_DATE };
+
+		await expect(readCommittedGuideAfterMaterializing(async () => guide, ensureMaterialized))
+			.resolves.toBe(guide);
+		expect(ensureMaterialized).not.toHaveBeenCalled();
+	});
+
+	it('materializes once and retries when committed coverage is initially unavailable', async () => {
+		const ensureMaterialized = vi.fn(async () => undefined);
+		const guide = { startDate: START_DATE };
+		const read = vi.fn()
+			.mockRejectedValueOnce(new CommittedGuideUnavailableError(1))
+			.mockResolvedValueOnce(guide);
+
+		await expect(readCommittedGuideAfterMaterializing(read, ensureMaterialized)).resolves.toBe(guide);
+		expect(ensureMaterialized).toHaveBeenCalledOnce();
+		expect(read).toHaveBeenCalledTimes(2);
 	});
 });

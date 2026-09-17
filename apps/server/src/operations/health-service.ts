@@ -7,7 +7,7 @@ import type { TimelineMaterializer } from '../scheduling/timeline-materializer.j
 import type { MediaProbe } from '../media/media-probe.js';
 import type { ResourcePressureCoordinator } from './resource-pressure.js';
 
-/** One readiness dependency and whether it can block authoritative output. */
+/** One readiness dependency and whether it can make the instance unusable. */
 export interface ReadinessCheck {
 	name:
 		| 'database'
@@ -32,8 +32,8 @@ export interface ReadinessStatus {
 
 /**
  * Build operational readiness from lightweight process and persisted service state. The aggregator
- * avoids traversing source file trees and distinguishes failures that block authoritative output from
- * degraded context that operators should still see.
+ * avoids traversing source file trees and distinguishes failures that make the instance unusable
+ * (SQLite and the playback engine) from degraded background work that operators should still see.
  */
 export class HealthService {
 	constructor(
@@ -47,7 +47,7 @@ export class HealthService {
 		private readonly resourcePressure?: ResourcePressureCoordinator,
 	) {}
 
-	/** Evaluate the database, essential workers, committed timelines, and source warnings. */
+	/** Evaluate SQLite, the playback engine, and background service warnings. */
 	async readiness(): Promise<ReadinessStatus> {
 		// Verify SQLite first because later checks may need persisted status.
 		const checks: ReadinessCheck[] = [];
@@ -66,12 +66,12 @@ export class HealthService {
 			});
 		}
 
-		// Check active ingestion and resource-pressure services.
+		// Report background ingestion, probing, and resource-pressure without failing readiness.
 		const scanner = this.scanner.health();
 		checks.push({
 			name: 'scanner',
 			status: scanner.status === 'ready' ? 'ready' : 'degraded',
-			essential: true,
+			essential: false,
 			...(scanner.status === 'ready'
 				? {}
 				: { detail: scanner.detail ?? `Scanner is ${scanner.status}` }),
@@ -81,7 +81,7 @@ export class HealthService {
 			checks.push({
 				name: 'mediaProbe',
 				status: mediaProbe.status === 'ready' ? 'ready' : 'degraded',
-				essential: true,
+				essential: false,
 				...(mediaProbe.status === 'ready'
 					? {}
 					: { detail: mediaProbe.detail ?? `Media probe is ${mediaProbe.status}` }),
@@ -102,7 +102,7 @@ export class HealthService {
 		let timelineCheck: ReadinessCheck = {
 			name: 'timeline',
 			status: timeline.status,
-			essential: true,
+			essential: false,
 			...(timeline.detail ? { detail: timeline.detail } : {}),
 		};
 		if (databaseReady && timelineCheck.status === 'ready') {
@@ -127,11 +127,11 @@ export class HealthService {
 		}
 		checks.push(timelineCheck);
 
-		// Check the remaining essential background and playback services.
+		// Remaining background and playback services. Only the playback engine can fail readiness.
 		const maintenance = this.maintenance.health();
-		checks.push({ name: 'maintenance', essential: true, ...maintenance });
+		checks.push({ name: 'maintenance', essential: false, ...maintenance });
 		checks.push({ name: 'playbackEngine', essential: true, ...this.playbackEngine.health() });
-		checks.push({ name: 'playoutSync', essential: true, ...this.playoutSync.health() });
+		checks.push({ name: 'playoutSync', essential: false, ...this.playoutSync.health() });
 
 		// Report media-source problems as degraded context rather than failed readiness.
 		if (databaseReady) {
