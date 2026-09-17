@@ -33,9 +33,11 @@ import { activeHelpTopic, closeHelp } from './help';
 import { confirmSignOut } from './draft-protection';
 import { liveEvents } from './live-events';
 import { clearMediaCardPreviewCache } from './media-card-preview';
+import { applicationError, clearApplicationError } from './application-error';
 import { useLibrariesStore } from './stores/libraries';
 import { useChannelsStore } from './stores/channels';
 import { useAuthenticationStore } from './stores/authentication';
+import ApplicationErrorPage from './views/ApplicationErrorPage.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -148,6 +150,7 @@ watch(
 		closeDrawer();
 		closeHelp();
 		cancelConfirmations();
+		clearApplicationError();
 	},
 );
 onMounted(() => {
@@ -334,7 +337,8 @@ onUnmounted(() => {
 					Set <code>MOIRAI_PUBLIC_URL</code> to an address your IPTV clients can reach.
 				</span>
 			</div>
-			<RouterView />
+			<ApplicationErrorPage v-if="applicationError" />
+			<RouterView v-else />
 		</main>
 	</div>
 	<HelpDrawer v-if="activeHelpTopic" :topic-id="activeHelpTopic" @close="closeHelp" />

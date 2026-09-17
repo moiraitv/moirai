@@ -15,6 +15,7 @@ import LogsPage from './views/LogsPage.vue';
 import AuthenticationPage from './views/AuthenticationPage.vue';
 import AccountPage from './views/AccountPage.vue';
 import QuickSetupPage from './views/QuickSetupPage.vue';
+import NotFoundPage from './views/NotFoundPage.vue';
 
 /** Module-level router value for router. */
 export const router = createRouter({
@@ -47,5 +48,6 @@ export const router = createRouter({
 		{ path: '/settings', component: SettingsPage },
 		{ path: '/account', component: AccountPage },
 		{ path: '/logs', component: LogsPage },
+		{ path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundPage },
 	],
 });

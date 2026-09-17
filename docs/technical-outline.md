@@ -1055,7 +1055,9 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 
 The primary Status navigation item also carries the live IPTV readiness state and active channel
 count without a separate sidebar card. Navigation scrolls within the available viewport while the
-account and sign-out controls remain accessible in the sidebar footer.
+account and sign-out controls remain accessible in the sidebar footer. Unmatched management paths
+render an in-app missing-page view inside the shell. Uncaught Vue render failures use the same
+empty-state pattern, with reload and Status actions, without putting the error in the URL.
 
 Status conflicts link directly to the affected program or template, with catalog destinations when
 no resource ID is available. Account credential updates use the shared dismissible success toast;

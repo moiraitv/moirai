@@ -6,12 +6,17 @@ import { api, onApiUnauthorized } from './api';
 import { authenticationNavigationRedirect } from './authentication-navigation';
 import { liveEvents } from './live-events';
 import { router } from './router';
+import { recordApplicationError } from './application-error';
 import { useAuthenticationStore } from './stores/authentication';
 import './styles/main.scss';
 
 const pinia = createPinia();
 const application = createApp(App).use(pinia).use(router);
 application.directive('modal-focus', modalFocus);
+application.config.errorHandler = (error) => {
+	console.error(error);
+	recordApplicationError(error);
+};
 const authentication = useAuthenticationStore(pinia);
 
 /** Leave the protected shell when HTTP or live-event traffic reveals an invalid session. */
