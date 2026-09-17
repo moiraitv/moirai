@@ -2,7 +2,7 @@
 import { onBeforeRouteLeave } from 'vue-router';
 import { useDraftProtection } from '../draft-protection';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
-import { Copy, RefreshCw, Save, Trash2 } from '@lucide/vue';
+import { Copy, RefreshCw, Save } from '@lucide/vue';
 import type {
 	PlaybackEngineStatus,
 	PlaybackSettings,
@@ -20,6 +20,7 @@ import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
 import TransientToast from '../components/TransientToast.vue';
 import TwoStepActionButton from '../components/TwoStepActionButton.vue';
+import ViewingPreferenceScoresModal from '../components/ViewingPreferenceScoresModal.vue';
 import { liveEvents } from '../live-events';
 
 const settings = reactive<PlaybackSettings>({
@@ -40,8 +41,9 @@ const historyError = ref('');
 const capacityValidation = useFieldValidation(() => playbackSettingsSchema.safeParse(settings));
 const capacityAttributes = numericInputAttributes(playbackSettingsSchema.shape.maxActiveSessions.removeDefault());
 const preferences = ref<ViewingPreferenceSummary[]>([]);
-const preferencesLoading = ref(true);
+const preferencesLoading = ref(false);
 const preferencesError = ref('');
+const scoresOpen = ref(false);
 const clearingPreferences = ref(false);
 const fallbackStatus = ref<FallbackFillerStatus | null>(null);
 const fallbackFile = ref<File | null>(null);
@@ -58,7 +60,7 @@ const viewingPreferenceSettingsDirty = computed(() => savedSettings.value !== nu
 const fallbackDirty = computed(() => fallbackFile.value !== null || removeFallbackOnSave.value);
 const refreshingStatus = ref(false);
 let loadingSettings = false;
-let loadingPreferences = false;
+let preferenceLoadSequence = 0;
 let fallbackLoadSequence = 0;
 let statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
 /** Polling interval that keeps client activity current without following every segment request. */
@@ -87,23 +89,40 @@ async function loadSettings(): Promise<void> {
 	}
 }
 
+/** Open the ranked scores dialog and load the current history. */
+function openScores(): void {
+	scoresOpen.value = true;
+	void loadPreferences();
+}
+
 /** Load learned history independently of the editable playback settings. */
-async function loadPreferences(): Promise<void> {
-	if (loadingPreferences || clearingPreferences.value) {
+async function loadPreferences(title = ''): Promise<void> {
+	if (clearingPreferences.value) {
 		return;
 	}
-	loadingPreferences = true;
+
+	const sequence = ++preferenceLoadSequence;
 	preferencesLoading.value = true;
 	try {
-		preferences.value = await api.viewingPreferences();
+		const loaded = await api.viewingPreferences(20, title);
+		if (sequence !== preferenceLoadSequence) {
+			return;
+		}
+
+		preferences.value = loaded;
 		preferencesError.value = '';
 	}
 	catch (cause) {
+		if (sequence !== preferenceLoadSequence) {
+			return;
+		}
+
 		preferencesError.value = errorMessage(cause);
 	}
 	finally {
-		preferencesLoading.value = false;
-		loadingPreferences = false;
+		if (sequence === preferenceLoadSequence) {
+			preferencesLoading.value = false;
+		}
 	}
 }
 
@@ -168,15 +187,9 @@ async function saveFallback(): Promise<void> {
 	}
 }
 
-/** Clear local anonymous viewing history after styled modal confirmation. */
+/** Permanently remove learned viewing history after the two-step scores-dialog control. */
 async function clearViewingPreferences(): Promise<void> {
-	if (clearingPreferences.value || !(await requestConfirmation({
-		key: 'clear-viewing-history',
-		title: 'Clear Viewing History?',
-		message: 'Permanently remove all learned viewing preferences? This cannot be undone.',
-		confirmLabel: 'Clear History',
-		destructive: true,
-	}))) {
+	if (clearingPreferences.value) {
 		return;
 	}
 
@@ -186,6 +199,7 @@ async function clearViewingPreferences(): Promise<void> {
 	try {
 		await api.clearViewingPreferences();
 		preferences.value = [];
+		preferencesError.value = '';
 		message.value = 'Viewing history cleared.';
 	}
 	catch (cause) {
@@ -194,11 +208,6 @@ async function clearViewingPreferences(): Promise<void> {
 	finally {
 		clearingPreferences.value = false;
 	}
-}
-
-/** Format one decayed preference score for an understandable compact ranking. */
-function preferenceScore(value: number): string {
-	return value.toFixed(value >= 10 ? 1 : 2);
 }
 
 /** Refresh engine state without replacing an edited capacity value. */
@@ -302,7 +311,6 @@ const unsubscribe = liveEvents.subscribe((event) => {
 onMounted(() => {
 	void loadSettings();
 	void refreshStatus();
-	void loadPreferences();
 	void refreshFallback(true);
 	statusRefreshTimer = setInterval(() => void refreshStatus(), STATUS_REFRESH_INTERVAL_MS);
 });
@@ -443,24 +451,24 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 					<span>Learn from channel viewing and apply it to Weighted Random programs</span>
 				</label>
 				<p v-if="saveErrors['viewing-preferences']" class="notice error" role="alert">{{ saveErrors['viewing-preferences'] }}</p>
-				<div v-if="savedSettings" class="form-actions"><button type="button" class="button" :disabled="savingSection !== null || !viewingPreferenceSettingsDirty" @click="save('viewing-preferences')"><Save :size="17" />Save Settings</button></div>
-				<p v-if="preferencesLoading">Loading learned preferences…</p>
-				<div v-else-if="preferencesError"><p class="notice error" role="alert">{{ preferencesError }}</p><button type="button" class="button secondary" :disabled="clearingPreferences" @click="loadPreferences">Retry History</button></div>
-				<p v-else-if="preferences.length === 0" class="muted">No qualified viewing has been recorded yet.</p>
-				<ol v-else class="viewing-preference-list">
-					<li v-for="preference in preferences" :key="`${preference.kind}:${preference.id}`">
-						<span><strong>{{ preference.title }}</strong><small>{{ preference.kind === 'show' ? 'Show' : 'Item' }} · Last viewed {{ new Date(preference.lastViewedAt).toLocaleDateString() }}</small></span>
-						<output>{{ preferenceScore(preference.score) }}</output>
-					</li>
-				</ol>
-				<p v-if="historyError" class="notice error" role="alert">{{ historyError }}</p>
-				<div class="viewing-preference-danger">
-					<strong>Clear all viewing history</strong>
-					<p>This permanently removes every learned preference.</p>
-					<button type="button" class="button secondary" :disabled="clearingPreferences || preferencesLoading" @click="clearViewingPreferences"><Trash2 :size="17" />{{ clearingPreferences ? 'Clearing…' : 'Clear History' }}</button>
+				<div v-if="savedSettings" class="form-actions viewing-preference-actions">
+					<button type="button" class="button secondary" @click="openScores">View Current Scores</button>
+					<button type="button" class="button" :disabled="savingSection !== null || !viewingPreferenceSettingsDirty" @click="save('viewing-preferences')"><Save :size="17" />Save Settings</button>
 				</div>
+				<p v-if="historyError" class="notice error" role="alert">{{ historyError }}</p>
 			</section>
 		</div>
+		<ViewingPreferenceScoresModal
+			v-if="scoresOpen"
+			:preferences="preferences"
+			:loading="preferencesLoading"
+			:clearing="clearingPreferences"
+			:error="preferencesError"
+			:clear-error="historyError"
+			@close="scoresOpen = false"
+			@search="loadPreferences"
+			@clear="clearViewingPreferences"
+		/>
 		<TransientToast v-if="message" :message="message" @close="message = ''" />
 	</section>
 </template>

@@ -507,9 +507,15 @@ export const api = {
 			method: 'PUT',
 			body: JSON.stringify(body),
 		}),
-	viewingPreferences: (limit = 20) => request<ViewingPreferenceSummary[]>(
-		`/api/v1/viewing-preferences?${new URLSearchParams({ limit: String(limit) })}`,
-	),
+	viewingPreferences: (limit = 20, title = '') => {
+		const query = new URLSearchParams({ limit: String(limit) });
+		const trimmed = title.trim();
+		if (trimmed) {
+			query.set('title', trimmed);
+		}
+
+		return request<ViewingPreferenceSummary[]>(`/api/v1/viewing-preferences?${query}`);
+	},
 	clearViewingPreferences: () => request<void>('/api/v1/viewing-preferences/clear', {
 		method: 'POST',
 		body: JSON.stringify({ confirmation: 'CLEAR VIEWING HISTORY' }),

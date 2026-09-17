@@ -510,6 +510,11 @@ export const viewingPreferenceSummarySchema = z.object({
 	title: z.string(),
 	score: z.number().nonnegative(),
 	lastViewedAt: z.iso.datetime({ offset: true }),
+	artworkUrl: z.string().nullable(),
+	year: z.number().int().nullable(),
+	subtitle: z.string(),
+	parentTitle: z.string().nullable(),
+	previewItemId: idSchema,
 });
 
 /** Bounded viewing-preference list response. */

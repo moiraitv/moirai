@@ -71,11 +71,15 @@ test('recovers Settings resources independently and preserves drafts and save fa
 	await expect(playback).toContainText('Capacity save failed');
 	await page.locator('.fallback-filler-panel input[type="file"]').setInputFiles({ name: 'draft.mp4', mimeType: 'video/mp4', buffer: Buffer.from('unsaved fixture') });
 	fallbackFailed = false;
-	historyFailed = false;
 	await page.getByRole('button', { name: 'Retry Fallback' }).click();
-	await page.getByRole('button', { name: 'Retry History' }).click();
 	await expect(page.getByText('Fallback unavailable', { exact: true })).toBeHidden();
+	await page.getByRole('button', { name: 'View Current Scores' }).click();
+	await expect(page.getByRole('heading', { name: 'Current scores' })).toBeVisible();
+	await expect(page.getByText('History unavailable', { exact: true })).toBeVisible();
+	historyFailed = false;
+	await page.getByRole('button', { name: 'Retry History' }).click();
 	await expect(page.getByText('History unavailable', { exact: true })).toBeHidden();
+	await page.getByRole('button', { name: 'Close current scores' }).click();
 	await expect(page.locator('.fallback-filler-panel')).toContainText('draft.mp4');
 	await expect(capacity).toHaveValue('9');
 	saveFailed = false;

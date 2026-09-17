@@ -546,6 +546,11 @@ export interface ViewingPreferenceSummary {
 	title: string;
 	score: number;
 	lastViewedAt: string;
+	artworkUrl: string | null;
+	year: number | null;
+	subtitle: string;
+	parentTitle: string | null;
+	previewItemId: string;
 }
 
 /** Decayed item and show scores consumed by deterministic timeline generation. */

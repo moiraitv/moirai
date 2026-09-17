@@ -539,9 +539,9 @@ export class Repository extends LibraryRepository {
 		return this.viewingPreferences.viewingPreferenceScores(asOf);
 	}
 
-	/** List the strongest current learned preferences. */
-	listViewingPreferences(asOf: string, limit: number): ViewingPreferenceSummary[] {
-		return this.viewingPreferences.listViewingPreferences(asOf, limit);
+	/** List the strongest current learned preferences, optionally restricted to matching titles. */
+	listViewingPreferences(asOf: string, limit: number, title = ''): ViewingPreferenceSummary[] {
+		return this.viewingPreferences.listViewingPreferences(asOf, limit, title);
 	}
 
 	/** Remove all learned viewing preferences. */

@@ -942,9 +942,10 @@ active for two minutes before it is recorded. The initial item in a tune session
 points and later items contribute one. Only media and show references, encounter type, points, and
 time are persisted; network addresses and User-Agents are not. Effective scores use a 180-day
 half-life, and negligible events are pruned after two years. Administrators can inspect the strongest
-decayed preferences, disable both collection and application, or permanently clear the history from
-Settings. Preference changes affect only timeline days subsequently appended to the committed
-14-day window.
+decayed preferences from a Current scores dialog on Settings, with artwork, hierarchy labels, and
+the catalog plot hover, disable both collection and application, or permanently clear the history
+from a two-step control in that dialog. Preference changes affect only timeline days subsequently
+appended to the committed 14-day window.
 
 ### Audio stream preferences
 

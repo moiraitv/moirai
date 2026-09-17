@@ -41,6 +41,7 @@ const sessionFileParamsSchema = z.object({
 /** Bounded preference-summary query. */
 const viewingPreferenceQuerySchema = z.object({
 	limit: z.coerce.number().int().min(1).max(100).default(20),
+	title: z.string().trim().max(120).optional(),
 });
 
 /** Dependencies used by playback management and public IPTV delivery. */
@@ -157,7 +158,7 @@ export function registerPlaybackRoutes(
 		}),
 	}, async (request) => {
 		const query = viewingPreferenceQuerySchema.parse(request.query);
-		return repository.listViewingPreferences(new Date().toISOString(), query.limit);
+		return repository.listViewingPreferences(new Date().toISOString(), query.limit, query.title);
 	});
 	app.post('/api/v1/viewing-preferences/clear', {
 		schema: apiOperation({
