@@ -34,7 +34,7 @@ contextual: true
 >   Use the same template across channels, rotations, and seasons.
 
 
-In a saved template, **Used by** lists channel schedules that assign it as a base or conditional template. Direct references do not include every indirectly affected channel.
+In a saved template, **Used by** in the editor title bar lists channel schedules that assign it as a base or conditional template. Direct references do not include every indirectly affected channel.
 
 A ![](/icons/calendar-range.svg) Template divides a nominal day into slots. Each slot starts at an authored time and normally uses one ![](/icons/list-video.svg) Program. ![](/icons/tv-minimal-play.svg) Channel Schedules can reuse the same ![](/icons/calendar-range.svg) Template on many dates or layers.
 

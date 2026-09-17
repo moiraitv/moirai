@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
 			</article>
 			<article class="panel quick-review-row">
 				<h3>Programming</h3><div class="quick-review-content">
-					<strong>{{ preview?.program.name ?? request.programName }}</strong>
+					<strong>{{ request.programName }}</strong>
 					<small>{{ request.source.type === 'library-query' ? 'Library query' : request.source.type === 'collection' ? 'Specific items' : 'Shows or seasons' }} · {{ request.strategy.type }}</small>
 					<small>{{ quickSourceSummary(request.source) }}</small>
 					<QuickQueryPreview

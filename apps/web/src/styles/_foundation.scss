@@ -924,6 +924,23 @@ a.nav-link.router-link-exact-active {
 	overflow: auto;
 }
 
+.resource-editor-header-trailing {
+	display: flex;
+	align-items: center;
+	align-self: center;
+	gap: 12px;
+	flex-shrink: 0;
+}
+
+.resource-editor-usage-slot:empty {
+	display: none;
+}
+
+.resource-editor-usage-slot:not(:empty) {
+	padding-right: 12px;
+	border-right: 1px solid var(--line);
+}
+
 .resource-editor-heading-copy {
 	min-width: 0;
 }

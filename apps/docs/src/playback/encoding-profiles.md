@@ -9,7 +9,7 @@ contextual: true
 
 Open **Playback → Encoding profiles** to manage reusable audio and video settings. **Credit templates** also live under Playback; scheduling pages continue to control what plays and when.
 
-Expand **Used by** in a saved profile to see channels explicitly linked to it. Open a channel from that list to inspect its settings.
+Open **Used by** in the editor title bar of a saved profile to see channels explicitly linked to it. Open a channel from that list to inspect its settings.
 
 ## Create a profile
 

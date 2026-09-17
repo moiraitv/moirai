@@ -9,7 +9,7 @@ contextual: true
 
 Credit templates show song information over music videos. Open **Playback → Credit templates**, choose **New template**, and start with the included design. Templates are reusable: choose a default in a Channel’s **Subtitles and music video credits** settings, or select an override in a Program.
 
-Expand **Used by** in a saved credit template to see its explicit channel and program assignments. These are direct references, not a complete list of channels that may inherit the template through their programs.
+Open **Used by** in the editor title bar of a saved credit template to see its explicit channel and program assignments. These are direct references, not a complete list of channels that may inherit the template through their programs.
 
 ## Built-in template
 

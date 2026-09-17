@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, nextTick, useId } from 'vue';
-import { ChevronLeft, ChevronRight, Link, Info, CalendarDays, FileText, ListVideo, Tv } from '@lucide/vue';
+import { computed, ref, watch, onBeforeUnmount, nextTick, useId, useTemplateRef } from 'vue';
+import { ChevronLeft, ChevronRight, GitBranch, Info, CalendarDays, FileText, ListVideo, Tv, X } from '@lucide/vue';
 import type { ResourceUsage, ResourceUsageKind } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
@@ -13,17 +13,37 @@ const page = ref(1);
 const result = ref<ResourceUsage | null>(null);
 const loading = ref(false);
 const error = ref('');
+const layout = useTemplateRef<HTMLElement>('layout');
 const sidebar = ref<HTMLElement>();
+const headerToggle = ref<HTMLButtonElement>();
 const contentId = useId();
 let animations: Animation[] = [];
 let sequence = 0;
+const headered = computed(() => props.kind !== 'media');
+const usageIcon = computed(() => props.kind === 'media' ? Tv : GitBranch);
+const headerSlot = computed(() => {
+	if (!headered.value) {
+		return null;
+	}
+
+	const slot = layout.value?.closest('[role="dialog"]')?.querySelector('.resource-editor-usage-slot');
+	return slot instanceof HTMLElement ? slot : null;
+});
+const headerToggleName = computed(() => (
+	result.value ? `Used by ${result.value.total}` : 'Used by'
+));
+
 /** Resize the content through the contained CSS transition without scaling text or controls. */
 async function toggleOpen(): Promise<void> {
 	for (const animation of animations) {
 		animation.cancel();
 	}
+	const closing = open.value;
 	open.value = !open.value;
 	await nextTick();
+	if (closing && headered.value) {
+		headerToggle.value?.focus({ preventScroll: true });
+	}
 	if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !sidebar.value) {
 		return;
 	}
@@ -71,11 +91,16 @@ function destination(item: ResourceUsage['items'][number]): string {
 	}
 	return `/schedules/${item.kind === 'channel-schedule' ? 'channels' : item.kind + 's'}/${item.id}`;
 }
-watch(() => [props.kind, props.resourceId, open.value, props.revision], () => {
+watch(() => `${props.kind}:${props.resourceId ?? ''}:${props.revision ?? ''}`, () => {
 	sequence++;
 	result.value = null;
 	page.value = 1;
-	if (open.value) {
+	if (props.resourceId && (open.value || props.kind !== 'media')) {
+		void load();
+	}
+}, { immediate: true });
+watch(open, (isOpen) => {
+	if (isOpen && props.resourceId && !result.value) {
 		void load();
 	}
 });
@@ -91,13 +116,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="resource-usage-layout" :class="{ 'has-usage': resourceId, 'usage-open': open && resourceId }">
+	<div ref="layout" class="resource-usage-layout" :class="{ 'has-usage': resourceId, 'usage-open': open && resourceId, 'usage-header': headered }">
 		<div class="resource-usage-main"><slot /></div>
-		<aside v-if="resourceId" ref="sidebar" class="resource-usage" aria-label="Resource usage">
-			<button class="resource-usage-toggle" type="button" aria-label="Used by" :title="open ? 'Collapse Used by' : 'Expand Used by'" :aria-expanded="open" :aria-controls="contentId" @click="toggleOpen">
-				<component :is="kind === 'media' ? Tv : Link" :size="20" aria-hidden="true" /><strong v-if="open">Used by</strong><component :is="open ? ChevronRight : ChevronLeft" :size="16" aria-hidden="true" />
+		<Teleport v-if="headerSlot && resourceId" :to="headerSlot">
+			<button ref="headerToggle" class="resource-usage-header-toggle" type="button" :title="open ? 'Collapse Used by' : 'Expand Used by'" :aria-expanded="open" :aria-controls="contentId" @click="toggleOpen">
+				<GitBranch :size="18" aria-hidden="true" /><strong>{{ headerToggleName }}</strong><ChevronRight v-if="!open" :size="16" aria-hidden="true" />
+			</button>
+		</Teleport>
+		<aside v-if="resourceId && (!headered || open)" ref="sidebar" class="resource-usage" aria-label="Resource usage">
+			<button v-if="!headered" class="resource-usage-toggle" type="button" aria-label="Used by" :title="open ? 'Collapse Used by' : 'Expand Used by'" :aria-expanded="open" :aria-controls="contentId" @click="toggleOpen">
+				<component :is="usageIcon" :size="20" aria-hidden="true" /><strong v-if="open">Used by</strong><component :is="open ? ChevronRight : ChevronLeft" :size="16" aria-hidden="true" />
 			</button>
 			<div v-show="open" :id="contentId" class="resource-usage-content">
+				<div v-if="headered" class="resource-usage-panel-header">
+					<GitBranch :size="18" aria-hidden="true" /><strong>Used by</strong>
+					<button class="icon-button" type="button" aria-label="Collapse Used by" @click="toggleOpen">
+						<X :size="18" aria-hidden="true" />
+					</button>
+				</div>
 				<LoadingState v-if="loading" label="Loading references…" />
 				<div v-else-if="error"><p class="notice error" role="alert">{{ error }}</p><button class="button secondary" type="button" @click="load">Retry</button></div>
 				<template v-else-if="result">

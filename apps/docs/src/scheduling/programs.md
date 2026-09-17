@@ -40,7 +40,7 @@ contextual: true
 >   Random from any collection or library query
 
 
-In a saved program, expand **Used by** to see direct sequence, template, and schedule references.
+In a saved program, open **Used by** in the editor title bar to see direct sequence, template, and schedule references.
 
 A ![](/icons/list-video.svg) Program is a reusable rule that tells Moirai what content to play and in what order. ![](/icons/calendar-range.svg) Templates use ![](/icons/list-video.svg) Programs in their time slots, so one ![](/icons/list-video.svg) Program can appear on several ![](/icons/tv-minimal.svg) Channels or days.
 

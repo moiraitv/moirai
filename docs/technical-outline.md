@@ -1091,17 +1091,19 @@ Program, template, and channel-schedule introductions live in their correspondin
 Restricted Markdown callouts preserve their icon and card presentation in both the guide and Help
 drawer. Internal management links use ordinary guarded routes.
 
-Saved programs, templates, encoding profiles, and credit templates expose an on-demand Used by
-right-side disclosure that narrows the editor content, with an icon-and-chevron edge pill that does
-not displace content when closed. On narrow screens the open panel replaces the form visually
-without unmounting its draft. The sidebar animates a contained grid-width transition so controls
-reflow without scaling; reduced motion skips the animation. Continuous resizing is an intentional
-UX tradeoff to avoid an abrupt width change. The authenticated resource-usage
-endpoint groups direct authored occurrences by owner, with role labels and bounded pagination (50
-resources by default, at most 100). For reusable resources, three scoped queries check existence, count owners, and retrieve
-a page in one read transaction; neither catalog requests nor playback acquire additional queries.
-Media detail pages reuse this disclosure for direct item selections, ancestor-group membership, and
-current library-query matches. Query matching shares the scheduling catalog, filters, ordering, and
+Saved programs, templates, encoding profiles, and credit templates expose Used by in the editor
+title bar, left of the close control, with a GitBranch icon and a live reference count. Expanding
+it opens a right-side panel that narrows the editor content and can be closed from the panel or
+the title-bar control. On narrow screens the open panel replaces the form visually without
+unmounting its draft. The closed title-bar control does not displace the form. The sidebar animates
+a contained grid-width transition so controls reflow without scaling; reduced motion skips the
+animation. Continuous resizing is an intentional UX tradeoff to avoid an abrupt width change. The
+authenticated resource-usage endpoint groups direct authored occurrences by owner, with role labels
+and bounded pagination (50 resources by default, at most 100). For reusable resources, three scoped
+queries check existence, count owners, and retrieve a page in one read transaction; neither catalog
+requests nor playback acquire additional queries. Media detail pages keep a right-edge Used by tab
+with the TV icon for direct item selections, ancestor-group membership, and current library-query
+matches. Query matching shares the scheduling catalog, filters, ordering, and
 item limits; one library catalog serves all relevant queries without per-program database reads.
 Membership includes unavailable items and does not guarantee playback. Adding an item to a program
 refreshes an open disclosure. A separately paginated Playing at section reads current and upcoming

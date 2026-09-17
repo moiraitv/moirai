@@ -68,7 +68,7 @@ test('presents catalog introductions as styled guide content in Help', async ({ 
 	}
 });
 
-test('loads direct references only on demand, retries, and guards navigation between programs', async ({ page, documentationServer }) => {
+test('loads usage for the header count, retries, and guards navigation between programs', async ({ page, documentationServer }) => {
 	const { program } = await seedSchedule(page, documentationServer.directory);
 	const csrf = await authenticateAdministrator(page);
 	const response = await page.request.post('/api/v1/programs', { headers: { 'x-moirai-csrf': csrf }, data: { name: 'Owner sequence', config: { type: 'sequence', entries: [{ id: randomUUID(), programId: program.id, count: 1 }] } } });
@@ -83,8 +83,9 @@ test('loads direct references only on demand, retries, and guards navigation bet
 	await page.goto(`/schedules/programs/${program.id}`);
 	const dialog = page.getByRole('dialog').last();
 	await expect(dialog.getByRole('textbox', { name: /^Name/ })).toBeVisible();
-	expect(requests).toBe(0);
-	await dialog.getByRole('button', { name: 'Used by', exact: true }).click();
+	await expect(dialog.getByRole('button', { name: /^Used by/ })).toBeVisible();
+	await dialog.getByRole('button', { name: /^Used by/ }).click();
+	await expect.poll(() => requests).toBeGreaterThan(0);
 	await expect(dialog.locator('.resource-usage')).toContainText('Usage unavailable');
 	fail = false;
 	await dialog.locator('.resource-usage').getByRole('button', { name: 'Retry' }).click();
@@ -114,7 +115,7 @@ test('opens linked channels directly and rejects invalid usage requests', async 
 	const channel = await response.json();
 	await page.goto('/playback/encoding-profiles');
 	await page.getByRole('button', { name: 'View', exact: true }).first().click();
-	await page.getByRole('button', { name: 'Used by', exact: true }).click();
+	await page.getByRole('button', { name: /^Used by/ }).click();
 	await page.getByRole('link', { name: 'Linked channel' }).click();
 	await expect(page).toHaveURL(new RegExp(`edit=${channel.id}`));
 	await expect(page.getByRole('dialog', { name: 'Edit Channel' }).getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Linked channel');
@@ -154,7 +155,7 @@ for (const dirtyOwner of ['template', 'channel schedule'] as const) {
 			await schedule.getByRole('button', { name: 'Edit Midnight Feature Collection', exact: true }).click();
 			editor = page.locator('.schedule-editor-modal');
 		}
-		await editor.getByRole('button', { name: 'Used by', exact: true }).click();
+		await editor.getByRole('button', { name: /^Used by/ }).click();
 		await editor.getByRole('link', { name: 'Other channel', exact: true }).click();
 		const confirmation = page.getByRole('alertdialog');
 		await expect(confirmation).toContainText(`Leave this ${dirtyOwner} without saving`);
@@ -195,7 +196,7 @@ test('dismisses the nested program after accepted usage navigation between templ
 	await page.locator('.template-slot-fields').getByRole('button', { name: /^Edit / }).first().click();
 	const program = page.locator('.schedule-editor-modal');
 	await program.getByRole('textbox', { name: /^Name/ }).fill('Unsaved nested program');
-	await program.getByRole('button', { name: 'Used by', exact: true }).click();
+	await program.getByRole('button', { name: /^Used by/ }).click();
 	await program.getByRole('link', { name: 'Destination template', exact: true }).click();
 	const confirmation = page.getByRole('alertdialog');
 	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -223,32 +224,31 @@ for (const nested of [false, true]) {
 		await expect(editor.getByRole('textbox', { name: /^Name/ })).toBeVisible();
 		for (const expanded of [false, true]) {
 			if (expanded) {
-				const control = (await editor.locator('.resource-usage').boundingBox())!;
-				await page.mouse.click(control.x + control.width - 3, control.y + 3);
-				await expect(editor.getByRole('button', { name: 'Used by', exact: true })).toHaveAttribute('aria-expanded', 'true');
+				await editor.getByRole('button', { name: /^Used by/ }).click();
+				await expect(editor.getByRole('button', { name: /^Used by/ })).toHaveAttribute('aria-expanded', 'true');
 				await expect(editor.locator('.resource-usage')).toContainText('Evening Cinema Day');
 			}
 			await expect.poll(() => editor.evaluate(element => element.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running').length)).toBe(0);
 			const rail = (await editor.locator('.program-editor-rail').boundingBox())!;
 			const main = (await editor.locator('.program-editor-main').boundingBox())!;
-			const usage = (await editor.locator('.resource-usage').boundingBox())!;
 			expect(main.x).toBeGreaterThanOrEqual(rail.x + rail.width - 1);
 			expect(Math.abs(main.y - rail.y)).toBeLessThan(1);
 			expect(main.width).toBeGreaterThan(rail.width * 2);
 			if (expanded) {
+				const usage = (await editor.locator('.resource-usage').boundingBox())!;
 				expect(usage.x).toBeGreaterThanOrEqual(main.x + main.width - 1);
+				expect(usage.width).toBeLessThan(main.width);
 			}
 			else {
 				const content = (await editor.locator('.resource-usage-layout').boundingBox())!;
 				expect(Math.abs(main.x + main.width - content.x - content.width)).toBeLessThan(1);
 				await page.screenshot({ path: `test-results/program-layout-closed-${nested ? 'nested' : 'standalone'}.png` });
 			}
-			expect(usage.width).toBeLessThan(main.width);
 		}
 		await page.screenshot({ path: `test-results/program-layout-${nested ? 'nested' : 'standalone'}.png` });
 		await page.setViewportSize({ width: 390, height: 600 });
 		await expect(editor.getByRole('textbox', { name: /^Name/ })).toBeHidden();
-		await editor.getByRole('button', { name: 'Used by', exact: true }).click();
+		await editor.getByRole('button', { name: /^Used by/ }).click();
 		await expect(editor.getByRole('textbox', { name: /^Name/ })).toBeVisible();
 		const mobileRail = (await editor.locator('.program-editor-rail').boundingBox())!;
 		const mobileMain = (await editor.locator('.program-editor-main').boundingBox())!;
@@ -260,7 +260,8 @@ for (const nested of [false, true]) {
 		const motion = await editor.evaluate(async element => {
 			const content = element.querySelector('.program-editor-main')!;
 			const before = content.getBoundingClientRect().width;
-			(element.querySelector('.resource-usage-toggle') as HTMLButtonElement).click();
+			const toggle = element.querySelector('.resource-usage-header-toggle, .resource-usage-toggle') as HTMLButtonElement;
+			toggle.click();
 			await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 			const animations = element.getAnimations({ subtree: true }).filter(animation => {
 				const target = (animation.effect as KeyframeEffect).target;
@@ -301,7 +302,7 @@ test('keeps template start time within its tablet row', async ({ page, documenta
 	for (const width of [768, 1024]) {
 		await page.setViewportSize({ width, height: 1024 });
 		for (const expanded of [false, true]) {
-			const toggle = page.getByRole('button', { name: 'Used by', exact: true });
+			const toggle = page.getByRole('button', { name: /^Used by/ });
 			if (await toggle.getAttribute('aria-expanded') !== String(expanded)) {
 				await toggle.click();
 			}
@@ -416,7 +417,7 @@ for (const cached of [false, true]) {
 			: page.getByRole('heading', { name: 'No channels configured', exact: true })).toBeVisible();
 		await page.locator('.primary-nav a[href="/playback/encoding-profiles"]').click();
 		await page.getByRole('button', { name: 'View', exact: true }).first().click();
-		await page.getByRole('button', { name: 'Used by', exact: true }).click();
+		await page.getByRole('button', { name: /^Used by/ }).click();
 		refreshing = true;
 		try {
 			await page.getByRole('link', { name: 'Current channel', exact: true }).click();
