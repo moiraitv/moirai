@@ -104,6 +104,29 @@ describe('XMLTV EPG', () => {
 		);
 	});
 
+	it('keeps a still-playing programme that started before the guide day', () => {
+		const channel = {
+			...channelCreateSchema.parse({ number: '4', name: 'Overnight' }),
+			id: randomUUID(),
+			createdAt: '2026-11-01T00:00:00Z',
+			updatedAt: '2026-11-01T00:00:00Z',
+		};
+		const source = catalog();
+		const output = guide(channel.id, source.media[0]!.id);
+		const start = '2026-10-31T23:00:00Z';
+		const finish = '2026-11-01T01:30:00Z';
+		output.channels[0]!.preview.segments[0] = {
+			...output.channels[0]!.preview.segments[0]!,
+			start,
+			finish,
+		};
+		const xml = buildXmltv([channel], output, source, 'https://moirai.example.test');
+
+		expect(xml).toContain(`start="${xmltvTimestamp(start, output.timeZone)}"`);
+		expect(xml).toContain(`stop="${xmltvTimestamp(finish, output.timeZone)}"`);
+		expect(xml).toContain('<title>Example Show</title>');
+	});
+
 	it('emits rich episode metadata, proxied artwork, and explicit no-programming entries', () => {
 		const channel = {
 			...channelCreateSchema.parse({

@@ -60,7 +60,7 @@ function playbackCapacity(): string {
 		return 'Loading playback engine';
 	}
 
-	const noun = playback.value.activeSessionCount === 1 ? 'channel' : 'channels';
+	const noun = playback.value.activeSessionCount === 1 ? 'stream' : 'streams';
 	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} ${noun} active`;
 }
 /** Return whether any configured library currently has an active scan. */

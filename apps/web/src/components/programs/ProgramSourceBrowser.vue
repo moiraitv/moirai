@@ -113,7 +113,7 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 					<button
 						v-if="entry.group && entry.group.childCount > 0"
 						type="button"
-						class="text-button"
+						class="button secondary contextual"
 						@click="emit('browse', entry)"
 					>
 						Browse</button

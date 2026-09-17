@@ -419,6 +419,12 @@ const channelLogoSchema = z
 		'Channel logos must be credential-free HTTP(S) URLs or managed Moirai logo references',
 	);
 
+/**
+ * Channel-number character class for HTML `pattern` attributes and schema checks.
+ * The hyphen is escaped so the class remains valid under the HTML `v` Unicode Sets flag.
+ */
+export const CHANNEL_NUMBER_PATTERN = '[A-Za-z0-9._\\-]+';
+
 /** Validate the channel create contract at runtime. */
 export const channelCreateSchema = z.object({
 	number: z
@@ -426,7 +432,7 @@ export const channelCreateSchema = z.object({
 		.trim()
 		.min(1)
 		.max(32)
-		.regex(/^[A-Za-z0-9._-]+$/)
+		.regex(new RegExp(`^${CHANNEL_NUMBER_PATTERN}$`))
 		.refine((value) => value !== '.' && value !== '..', {
 			message: 'Channel number cannot be a relative path segment',
 		}),

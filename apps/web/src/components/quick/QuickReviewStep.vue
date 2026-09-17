@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
 			</article>
 			<article class="panel quick-review-row">
 				<h3>Programming</h3><div class="quick-review-content">
-					<strong>{{ request.programName }}</strong>
+					<strong>{{ preview?.program.name ?? request.programName }}</strong>
 					<small>{{ request.source.type === 'library-query' ? 'Library query' : request.source.type === 'collection' ? 'Specific items' : 'Shows or seasons' }} · {{ request.strategy.type }}</small>
 					<small>{{ quickSourceSummary(request.source) }}</small>
 					<QuickQueryPreview
@@ -110,8 +110,8 @@ onBeforeUnmount(() => {
 			</article>
 		</div>
 		<p v-if="previewError" class="notice error">{{ previewError }} Preview failure does not prevent creation.</p>
-		<p v-if="error" class="notice error">{{ error }}</p>
 		<QuickStepActions>
+			<p v-if="error" class="notice error" role="alert">{{ error }}</p>
 			<button class="button secondary" type="button" :disabled="busy" @click="emit('back')">Back</button>
 			<button class="button" type="button" :disabled="busy" @click="emit('finish')">{{ busy ? 'Creating channel…' : 'Create Channel' }}</button>
 		</QuickStepActions>

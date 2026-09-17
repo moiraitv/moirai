@@ -28,6 +28,7 @@ import {
 import {
 	CHANNEL_LOGO_MAX_BYTES,
 	CHANNEL_LOGO_MAX_DIMENSION,
+	CHANNEL_NUMBER_PATTERN,
 	channelCreateSchema,
 	managedChannelLogoId,
 	type Channel,
@@ -912,7 +913,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<div class="channel-identity-fields">
 						<label
 						><span>Number</span
-							><input v-model="form.number" aria-label="Number" inputmode="decimal" required pattern="[A-Za-z0-9._-]+" :aria-invalid="Boolean(numberSuggestions.duplicate)" aria-describedby="channel-number-feedback" />
+							><input v-model="form.number" aria-label="Number" inputmode="decimal" required :pattern="CHANNEL_NUMBER_PATTERN" :aria-invalid="Boolean(numberSuggestions.duplicate)" aria-describedby="channel-number-feedback" />
 							<div id="channel-number-feedback" class="channel-number-feedback" aria-live="polite">
 								<small v-if="numberSuggestions.duplicate" class="field-error">This number is already used by {{ numberSuggestions.duplicate.name }}.</small>
 								<template v-if="numberSuggestions.matches.length">

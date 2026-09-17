@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	CHANNEL_EXTERNAL_LOGO_MAX_LENGTH,
+	CHANNEL_NUMBER_PATTERN,
 	channelCreateSchema,
 	channelUpdateSchema,
 	effectiveChannelTvgId,
@@ -56,6 +57,11 @@ describe('channel external contracts', () => {
 			tvgId: 'custom.id',
 		}).success).toBe(false);
 		expect(channelUpdateSchema.safeParse({ tvgId: 'custom.id' }).success).toBe(false);
+	});
+
+	it('uses a Unicode Sets-safe HTML pattern for channel numbers', () => {
+		expect(() => new RegExp(`^${CHANNEL_NUMBER_PATTERN}$`, 'v')).not.toThrow();
+		expect(channelCreateSchema.safeParse({ number: '100.2-a_1', name: 'Safe' }).success).toBe(true);
 	});
 
 	it('rejects channel numbers that are relative path segments', () => {

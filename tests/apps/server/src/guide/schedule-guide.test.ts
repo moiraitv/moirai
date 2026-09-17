@@ -59,6 +59,7 @@ function repositoryFixture(
 		health: 'ready' | 'pending' | 'failed';
 		committedAt: string | null;
 		issues?: TimelineIssue[];
+		windowStart?: string;
 		windowEnd?: string;
 	}>,
 ): Repository {
@@ -82,7 +83,7 @@ function repositoryFixture(
 		listTimelineMaterializations: vi.fn().mockResolvedValue(
 			statuses.map((status) => ({
 				...status,
-				windowStart: RANGE_START,
+				windowStart: status.windowStart ?? RANGE_START,
 				windowEnd: status.windowEnd ?? RANGE_END,
 				continuationAt: RANGE_END,
 				inputFingerprint: 'fixture',
@@ -141,6 +142,28 @@ describe('readCommittedScheduleGuide', () => {
 			[channel.channelId],
 			true,
 		);
+	});
+
+	it('keeps a still-playing item that started before the requested local day', async () => {
+		const channel = schedule();
+		const playing = {
+			...segment(channel.channelId, '2026-08-22T22:00:00Z', '2026-08-23T02:00:00Z'),
+			role: 'primary' as const,
+			title: 'Overnight film',
+		};
+		const rest = segment(channel.channelId, '2026-08-23T02:00:00Z', RANGE_END);
+		const repository = repositoryFixture([channel], [playing, rest], [{
+			channelId: channel.channelId,
+			health: 'ready',
+			committedAt: RANGE_START,
+			windowStart: '2026-08-22T00:00:00Z',
+		}]);
+
+		invalidateCommittedGuideCache();
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+
+		expect(result.guide.channels[0]!.preview.segments).toEqual([playing, rest]);
+		expect(result.guide.channels[0]!.preview.segments[0]!.start).toBe(playing.start);
 	});
 
 	it('does not recache a guide after invalidation during the segment query', async () => {

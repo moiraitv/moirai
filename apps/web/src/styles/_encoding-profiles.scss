@@ -121,7 +121,6 @@
 .encoding-profile-editor {
 	width: min(64rem, 96vw);
 
-
 	.resource-editor-scroll {
 		display: grid;
 		gap: 1rem;
@@ -152,7 +151,7 @@
 	align-items: center;
 	gap: .65rem;
 	padding: .6325rem 1.035rem;
-	margin: .5rem auto;
+	margin: 0 auto 1rem;
 	border: 1px solid #294453;
 	border-radius: 999px;
 	background: #0b1e29;

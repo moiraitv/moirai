@@ -43,7 +43,7 @@ const libraryStore = useLibrariesStore();
 const channelsStore = useChannelsStore();
 const authentication = useAuthenticationStore();
 const { libraries, loaded } = storeToRefs(libraryStore);
-const { publicUrlStatus } = storeToRefs(channelsStore);
+const { channels, loaded: channelsLoaded, publicUrlStatus } = storeToRefs(channelsStore);
 const drawerOpen = ref(false);
 const mobileViewport = window.matchMedia('(max-width: 900px)');
 const isMobile = ref(mobileViewport.matches);
@@ -74,9 +74,10 @@ const playbackDetail = computed(() => {
 		return 'Loading status';
 	}
 
-	const noun = playback.value.activeSessionCount === 1 ? 'channel' : 'channels';
+	const noun = playback.value.activeSessionCount === 1 ? 'stream' : 'streams';
 	return `${playback.value.activeSessionCount}/${playback.value.maxActiveSessions} ${noun} active`;
 });
+const highlightQuickSetup = computed(() => channelsLoaded.value && channels.value.length === 0);
 
 /** Load integrated playback state from the authoritative source. */
 async function loadPlaybackState(): Promise<void> {
@@ -96,6 +97,7 @@ function closeDrawer(): void {
 /** Load authenticated shell data only after an administrator session exists. */
 function loadAdministrativeState(): void {
 	void libraryStore.load();
+	void channelsStore.loadChannels().catch(() => undefined);
 	void channelsStore.loadCapabilities().catch(() => undefined);
 	void loadPlaybackState();
 }
@@ -134,6 +136,9 @@ const unsubscribe = liveEvents.subscribe((event) => {
 		|| event.type === 'playback.changed'
 	) {
 		void loadPlaybackState();
+	}
+	if (event.type === 'system.ready') {
+		void channelsStore.loadChannels().catch(() => undefined);
 	}
 });
 
@@ -212,15 +217,17 @@ onUnmounted(() => {
 				<RouterLink class="nav-link status-nav-link" :class="`playback-${playback?.status ?? 'loading'}`" to="/" aria-live="polite">
 					<CircleGauge :size="18" /><span><strong>Status</strong><small>{{ playbackLabel }}</small><small>{{ playbackDetail }}</small></span>
 				</RouterLink>
+				<div class="nav-spacer" aria-hidden="true"></div>
+				<RouterLink class="nav-link" :class="{ 'quick-setup-nav-highlight': highlightQuickSetup }" to="/quick">
+					<WandSparkles :size="18" /><span>Quick Setup</span>
+				</RouterLink>
+				<div class="nav-spacer" aria-hidden="true"></div>
 				<RouterLink class="nav-link" to="/guide">
 					<CalendarDays :size="18" /><span>Guide</span>
 				</RouterLink>
 				<RouterLink class="nav-link" to="/channels"
 				><TvMinimal :size="18" /><span>Channels</span></RouterLink
 				>
-				<RouterLink class="nav-link" to="/quick">
-					<WandSparkles :size="18" /><span>Quick Setup</span>
-				</RouterLink>
 				<div class="nav-section">
 					<div class="nav-section-heading">
 						<RouterLink class="nav-link nav-section-link" to="/schedules/channels">

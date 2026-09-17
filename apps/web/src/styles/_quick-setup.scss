@@ -404,10 +404,17 @@
 
 .quick-step-actions {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: space-between;
 	gap: 12px;
 	border-top: 1px solid var(--line);
 	padding-top: 18px;
+}
+
+.quick-step-actions .notice {
+	flex: 1 0 100%;
+	order: -1;
+	margin: 0;
 }
 
 .quick-review-grid {
@@ -572,8 +579,41 @@
 	text-align: center;
 }
 
-.quick-success > svg {
+.quick-success > svg,
+.quick-success-hero > svg,
+.quick-success-branding > svg {
 	color: var(--accent);
+}
+
+.quick-success-hero {
+	position: relative;
+	display: grid;
+	justify-items: center;
+	justify-self: stretch;
+	width: 100%;
+	min-width: 0;
+	gap: inherit;
+}
+
+.quick-success-branding {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	margin: 0;
+	display: grid;
+	justify-items: center;
+	align-content: start;
+	gap: inherit;
+	background: #091722;
+}
+
+.quick-success-branding .eyebrow {
+	max-width: 100%;
+	padding-inline: 12px;
+}
+
+.quick-success-branding > svg {
+	animation: loading-spin 0.8s linear infinite;
 }
 
 .quick-success h2,
@@ -630,7 +670,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.quick-scan-badge {
+	.quick-scan-badge,
+	.quick-success-branding > svg {
 		animation: none;
 	}
 

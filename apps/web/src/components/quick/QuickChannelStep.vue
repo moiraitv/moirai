@@ -7,6 +7,7 @@ import { ImagePlus, Trash2 } from '@lucide/vue';
 import {
 	CHANNEL_LOGO_MAX_BYTES,
 	CHANNEL_LOGO_MAX_DIMENSION,
+	CHANNEL_NUMBER_PATTERN,
 	channelCreateSchema,
 } from '@moirai/shared';
 import { errorMessage } from '../../error-message';
@@ -79,7 +80,7 @@ function removeLogo(): void {
 			<p>Audio and video settings use the default encoding profile selected under Playback.</p>
 		</div>
 		<div class="panel form-grid">
-			<label><span>Channel number</span><input v-model="draft.number" aria-label="Channel number" :aria-invalid="Boolean(numberSuggestions.duplicate)" aria-describedby="quick-channel-number-feedback" inputmode="decimal" required pattern="[A-Za-z0-9._-]+" />
+			<label><span>Channel number</span><input v-model="draft.number" aria-label="Channel number" :aria-invalid="Boolean(numberSuggestions.duplicate)" aria-describedby="quick-channel-number-feedback" inputmode="decimal" required :pattern="CHANNEL_NUMBER_PATTERN" />
 				<div id="quick-channel-number-feedback" class="channel-number-feedback" aria-live="polite">
 					<small v-if="numberSuggestions.duplicate" class="field-error">This number is already used by {{ numberSuggestions.duplicate.name }}.</small>
 					<template v-if="numberSuggestions.matches.length">

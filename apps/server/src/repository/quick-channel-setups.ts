@@ -24,25 +24,54 @@ import { SchedulingValidationError } from '../scheduling/validation.js';
 import { libraryTypeMediaKind, quickSetupResources } from '../scheduling/quick-setup-resources.js';
 import { ResourceIdentityConflictError } from './resource-identity.js';
 
-/** Find a readable unused template name while preserving the requested base when possible. */
-function availableTemplateName(
-	transaction: Pick<MoiraiDatabase, 'select'>,
-	channelName: string,
+/** Find a readable unused identity name while preserving the requested base when possible. */
+function availableIdentityName(
+	lookup: (nameKey: string) => { id: string } | undefined,
+	candidateFor: (suffix: number) => string,
 ): string {
 	let suffix = 1;
 	while (true) {
-		const ending = suffix === 1 ? ' Daily' : ` Daily (${suffix})`;
-		const candidate = `${channelName.slice(0, 120 - ending.length).trimEnd()}${ending}`;
-		const existing = transaction.select({ id: scheduleTemplates.id })
-			.from(scheduleTemplates)
-			.where(eq(scheduleTemplates.nameKey, canonicalIdentityKey(candidate)))
-			.get();
-		if (!existing) {
+		const candidate = candidateFor(suffix);
+		if (!lookup(canonicalIdentityKey(candidate))) {
 			return candidate;
 		}
 
 		suffix += 1;
 	}
+}
+
+/** Find a readable unused program name while preserving the requested base when possible. */
+function availableProgramName(
+	transaction: Pick<MoiraiDatabase, 'select'>,
+	requested: string,
+): string {
+	return availableIdentityName(
+		(nameKey) => transaction.select({ id: schedulingPrograms.id })
+			.from(schedulingPrograms)
+			.where(eq(schedulingPrograms.nameKey, nameKey))
+			.get(),
+		(suffix) => {
+			const ending = suffix === 1 ? '' : ` (${suffix})`;
+			return `${requested.slice(0, 120 - ending.length).trimEnd()}${ending}`;
+		},
+	);
+}
+
+/** Find a readable unused template name while preserving the requested base when possible. */
+function availableTemplateName(
+	transaction: Pick<MoiraiDatabase, 'select'>,
+	channelName: string,
+): string {
+	return availableIdentityName(
+		(nameKey) => transaction.select({ id: scheduleTemplates.id })
+			.from(scheduleTemplates)
+			.where(eq(scheduleTemplates.nameKey, nameKey))
+			.get(),
+		(suffix) => {
+			const ending = suffix === 1 ? ' Daily' : ` Daily (${suffix})`;
+			return `${channelName.slice(0, 120 - ending.length).trimEnd()}${ending}`;
+		},
+	);
 }
 
 /** Own the atomic cross-domain persistence required by the Quick Setup workflow. */
@@ -54,7 +83,7 @@ export class QuickChannelSetupRepository {
 		this.validateSource(input, maxExplicitMediaItems, this.db);
 		let identity = 0;
 		const result = quickSetupResources(
-			input,
+			{ ...input, programName: availableProgramName(this.db, input.programName) },
 			availableTemplateName(this.db, input.channel.name),
 			() => `00000000-0000-4000-8000-${String(++identity).padStart(12, '0')}`,
 		);
@@ -124,15 +153,6 @@ export class QuickChannelSetupRepository {
 	create(input: QuickChannelSetupCreate, maxExplicitMediaItems: number): QuickChannelSetupResult {
 		return this.db.transaction((transaction) => {
 			this.validateSource(input, maxExplicitMediaItems, transaction);
-			const programNameKey = canonicalIdentityKey(input.programName);
-			const programConflict = transaction.select({ id: schedulingPrograms.id })
-				.from(schedulingPrograms)
-				.where(eq(schedulingPrograms.nameKey, programNameKey))
-				.get();
-			if (programConflict) {
-				throw new ResourceIdentityConflictError('program');
-			}
-
 			const channelNumberKey = canonicalChannelNumberKey(input.channel.number);
 			const channelConflict = transaction.select({ id: channels.id })
 				.from(channels)
@@ -142,15 +162,22 @@ export class QuickChannelSetupRepository {
 				throw new ResourceIdentityConflictError('channel-number');
 			}
 
+			const programName = availableProgramName(transaction, input.programName);
 			const templateName = availableTemplateName(transaction, input.channel.name);
-			const { program, template, channel, schedule } = quickSetupResources(input, templateName);
+			const { program, template, channel, schedule } = quickSetupResources(
+				{ ...input, programName },
+				templateName,
+			);
 			const templateId = template.id;
 			const channelId = channel.id;
 			const timestamp = program.createdAt;
 			const channelConfig = applyDefaultEncodingProfile(transaction, channelCreateSchema.strip().parse(channel));
 			Object.assign(channel, channelConfig);
 
-			transaction.insert(schedulingPrograms).values({ ...program, nameKey: programNameKey }).run();
+			transaction.insert(schedulingPrograms).values({
+				...program,
+				nameKey: canonicalIdentityKey(program.name),
+			}).run();
 			transaction.insert(scheduleTemplates).values({
 				id: template.id,
 				name: template.name,

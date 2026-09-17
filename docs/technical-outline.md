@@ -1196,7 +1196,9 @@ the dialog surface to a compact content-sized layout without scaling text, with 
 reduced motion. Both logo preparation paths and server PNG normalization preserve alpha transparency.
 Final submission atomically creates a content program, a
 single-slot daily template with a persistent cursor and unlimited finish-left midnight boundary, a
-channel using the saved default encoding profile, and its base assignment. A new library remains
+channel using the saved default encoding profile, and its base assignment. Program and generated
+template names keep the requested base when free and otherwise take the next unused numeric suffix,
+matching the case-insensitive uniqueness keys; a taken channel number still fails the transaction. A new library remains
 independent of that transaction because scanning may already be active. Optional local artwork is
 fitted without cropping and uploaded afterward; a failed upload leaves the playable core setup
 intact and can be retried from the completion screen.

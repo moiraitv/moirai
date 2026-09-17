@@ -55,6 +55,7 @@ describe('quick channel setup repository', () => {
 		expect(created.program.config).toEqual(preview.program.config);
 		expect(created.template.boundaries[0]).toMatchObject({ policy: 'finish-left', maxDriftSeconds: null });
 		expect(() => subject.previewQuickChannelSetup(request, 5_000)).not.toThrow();
+		expect(subject.previewQuickChannelSetup(request, 5_000).program.name).toBe(`${request.programName} (2)`);
 		expect(await subject.listPrograms()).toHaveLength(1);
 	});
 
@@ -89,21 +90,27 @@ describe('quick channel setup repository', () => {
 		expect(await subject.listChannelSchedules()).toHaveLength(1);
 	});
 
-	it('suffixes generated template names and leaves no partial bundle on conflict', async () => {
+	it('suffixes generated program and template names and leaves no partial bundle on conflict', async () => {
 		const subject = repository();
 		subject.createQuickChannelSetup(await fixture(subject, '1'), 5_000);
 		const second = subject.createQuickChannelSetup(await fixture(subject, '2'), 5_000);
 		expect(second.template.name).toBe('Movie Channel Daily (2)');
 
-		const conflicting = await fixture(subject, '3');
-		conflicting.programName = second.program.name;
+		const renamed = await fixture(subject, '3');
+		renamed.programName = second.program.name;
+		const third = subject.createQuickChannelSetup(renamed, 5_000);
+		expect(third.program.name).toBe(`${second.program.name} (2)`);
+		expect(await subject.listPrograms()).toHaveLength(3);
+
+		const conflicting = await fixture(subject, '4');
+		conflicting.channel.number = second.channel.number;
 		expect(() => subject.createQuickChannelSetup(conflicting, 5_000)).toThrow(
-			'That program name is already in use',
+			'That channel number is already in use',
 		);
-		expect(await subject.listPrograms()).toHaveLength(2);
-		expect(await subject.listScheduleTemplates()).toHaveLength(2);
-		expect(await subject.listChannels()).toHaveLength(2);
-		expect(await subject.listChannelSchedules()).toHaveLength(2);
+		expect(await subject.listPrograms()).toHaveLength(3);
+		expect(await subject.listScheduleTemplates()).toHaveLength(3);
+		expect(await subject.listChannels()).toHaveLength(3);
+		expect(await subject.listChannelSchedules()).toHaveLength(3);
 	});
 
 	it('rejects an incompatible library and missing explicit media', async () => {

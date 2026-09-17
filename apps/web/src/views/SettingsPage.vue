@@ -389,7 +389,7 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 					<StatusPill :value="status.status" />
 					<h2>
 						{{ status?.activeSessionCount ?? 0 }}/{{ status?.maxActiveSessions ?? settings.maxActiveSessions }}
-						{{ (status?.activeSessionCount ?? 0) === 1 ? 'channel' : 'channels' }} active
+						{{ (status?.activeSessionCount ?? 0) === 1 ? 'stream' : 'streams' }} active
 					</h2>
 					<p v-if="status?.engineVersion">{{ status.engineVersion }}</p>
 					<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>

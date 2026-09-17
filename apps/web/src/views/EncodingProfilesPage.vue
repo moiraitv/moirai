@@ -225,17 +225,17 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 				<ResourceEditorHeader close-label="Close encoding profile" :disabled="busy" @close="close"><div class="encoding-editor-title"><div class="resource-editor-title-with-help"><h2 id="encoding-editor-title">{{ readonlyPreset ? 'View' : id ? 'Edit' : 'New' }} Encoding Profile</h2><PageHelpButton label="Encoding profiles" topic-id="playback.encoding-profiles" /></div><span v-if="readonlyPreset" class="encoding-profile-badge builtin-badge">Built-in</span></div></ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<ResourceUsage kind="encoding-profile" :resource-id="id ?? undefined">
+						<p v-if="readonlyPreset" class="encoding-profile-info"><Info :size="22" aria-hidden="true" /><span>Built-in presets are read-only. Duplicate this preset to customize its settings.</span></p>
 						<div class="encoding-profile-metadata"><label class="resource-primary-field"><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="readonlyPreset" required maxlength="120" /></label>
 							<label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyPreset" maxlength="500" placeholder="Describe when to use this profile" /></label></div>
-						<p v-if="readonlyPreset" class="encoding-profile-info"><Info :size="22" aria-hidden="true" /><span>Built-in presets are read-only. Duplicate this preset to customize its settings.</span></p>
-						<p v-else-if="id" class="encoding-profile-usage-note">Saving changes updates every channel using this profile. Choose Custom on a channel to keep its settings independent.</p>
+						<p v-if="!readonlyPreset && id" class="encoding-profile-usage-note">Saving changes updates every channel using this profile. Choose Custom on a channel to keep its settings independent.</p>
 						<p v-if="!readonlyPreset && isCurrentDefault">Choose another default before deleting this profile.</p>
 						<EncodingSettingsEditor v-model:audio="form.audio" v-model:video="form.video" :disabled="busy || readonlyPreset" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
 						<p v-if="editorError" class="notice error">{{ editorError }}</p>
 					</ResourceUsage>
 				</div>
 				<ResourceEditorActionBar v-if="!readonlyPreset" :validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''" resource-type="Encoding Profile" :show-delete="Boolean(id) && !isCurrentDefault" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @reset="Object.assign(form, JSON.parse(baseline))" @delete="remove" />
-				<footer v-if="readonlyPreset" class="resource-editor-action-bar encoding-profile-view-actions"><button class="button secondary" type="button" @click="close">Close</button><button class="button secondary" type="button" @click="duplicateViewedProfile"><Copy :size="20" aria-hidden="true" />Duplicate</button></footer>
+				<footer v-if="readonlyPreset" class="resource-editor-action-bar encoding-profile-view-actions"><button class="button secondary" type="button" @click="close"><span>Close</span></button><button class="button secondary" type="button" @click="duplicateViewedProfile"><Copy :size="20" aria-hidden="true" /><span>Duplicate</span></button></footer>
 			</form>
 		</div>
 	</div>

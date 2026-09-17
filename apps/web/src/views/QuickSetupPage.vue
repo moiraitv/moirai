@@ -4,7 +4,7 @@ import PageHelpButton from '../components/PageHelpButton.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { CheckCircle2, RotateCcw, WandSparkles } from '@lucide/vue';
+import { CheckCircle2, Loader2, RotateCcw, WandSparkles } from '@lucide/vue';
 import {
 	DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES,
 	type Library,
@@ -449,11 +449,20 @@ useDraftProtection(() => modalOpen.value && dirty.value);
 							<QuickChannelStep v-else-if="stage === 3" v-model="channel" v-model:logo="logo" @back="stage = 2" @next="stage = 4" />
 							<QuickReviewStep v-else-if="stage === 4 && request && selectedLibrary" :request="request" :library="selectedLibrary" :logo="logo" :busy="setupBusy" :error="setupError" :template-name="templateName" @back="stage = 3" @finish="finish" />
 							<section v-else-if="stage === 5 && result" class="quick-step quick-success" aria-labelledby="quick-success-title">
-								<CheckCircle2 :size="48" />
-								<p class="eyebrow">Channel ready</p>
+								<div class="quick-success-hero">
+									<CheckCircle2 :size="48" />
+									<p class="eyebrow">Channel ready</p>
+									<div
+										v-show="setupBusy && logo && !logoError"
+										class="quick-success-branding"
+										role="status"
+									>
+										<Loader2 :size="48" aria-hidden="true" />
+										<p class="eyebrow">Finishing channel branding</p>
+									</div>
+								</div>
 								<h2 id="quick-success-title">{{ result.channel.number }} · {{ result.channel.name }}</h2>
 								<p>The program, continuous daily template, channel, and schedule are ready to use.</p>
-								<p v-if="setupBusy && logo && !logoError" role="status">Finishing channel branding…</p>
 								<p v-if="logoError" class="notice warning">The channel is ready, but its logo could not be uploaded: {{ logoError }} <button class="button secondary" type="button" @click="uploadLogo">Retry Logo Upload</button></p>
 								<div class="quick-success-actions">
 									<RouterLink class="button" :to="`/schedules/channels/${result.channel.id}`">Open Schedule</RouterLink>

@@ -861,6 +861,17 @@
 		}
 	}
 
+	.encoding-profile-view-actions.resource-editor-action-bar .button {
+		flex: 0 1 auto;
+		width: auto;
+		min-width: 0;
+		padding: 0 12px;
+
+		> span {
+			display: inline;
+		}
+	}
+
 	.resource-editor-action-icon {
 		display: block;
 	}

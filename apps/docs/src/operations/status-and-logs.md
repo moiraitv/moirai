@@ -7,7 +7,7 @@ contextual: true
 
 # Status and logs
 
-The dashboard is the first place to check when viewers report a problem. It summarizes playback readiness, active channels, library health, and data conflicts.
+The dashboard is the first place to check when viewers report a problem. It summarizes playback readiness, active streams, library health, and data conflicts.
 
 Select a program or template conflict to open the affected resource. If the conflict does not identify a specific resource, Moirai opens its catalog instead.
 
