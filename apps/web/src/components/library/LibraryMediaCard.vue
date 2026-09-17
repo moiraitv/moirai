@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { AlertTriangle, Asterisk, Check, CircleHelp, MoreHorizontal } from '@lucide/vue';
-import type { MediaBrowseEntry, MediaGroup } from '@moirai/shared';
+import { AlertTriangle, Asterisk, Check, CircleHelp, MoreHorizontal, Plus } from '@lucide/vue';
+import type { MediaBrowseEntry, MediaGroup, ProgramGroupAddition, ProgramItemAddition } from '@moirai/shared';
 import { computed, useAttrs } from 'vue';
 import { RouterLink } from 'vue-router';
 import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
@@ -24,6 +24,7 @@ const matchText = computed(() => mediaSearchMatchText(props.entry.matches));
 const emit = defineEmits<{
 	enter: [group: MediaGroup];
 	toggle: [itemId: string];
+	add: [selection: ProgramItemAddition['selection'] | ProgramGroupAddition['selection']];
 }>();
 
 /** Navigate into a media group. */
@@ -38,6 +39,18 @@ function toggleSelection(): void {
 	const id = props.entry.item?.id ?? props.entry.group?.id;
 	if (id) {
 		emit('toggle', id);
+	}
+}
+
+/** Open the program destination dialog for this card alone. */
+function addToProgram(): void {
+	if (props.entry.group) {
+		emit('add', { type: 'groups', groupIds: [props.entry.group.id] });
+		return;
+	}
+
+	if (props.entry.item) {
+		emit('add', { type: 'items', itemIds: [props.entry.item.id] });
 	}
 }
 
@@ -84,7 +97,7 @@ function statusLabel(): string {
 			<span v-if="matchText" class="media-card-match" :title="`Matched ${matchText}`">Matched {{ matchText }}</span>
 		</component>
 		<button
-			v-if="selectable"
+			v-if="selectable && selectionMode"
 			type="button"
 			class="media-selection-control"
 			:aria-pressed="selected"
@@ -92,6 +105,15 @@ function statusLabel(): string {
 			@click="toggleSelection"
 		>
 			<span class="media-selection-check"><Check v-if="selected" :size="16" /></span>
+		</button>
+		<button
+			v-else-if="!selectionMode"
+			type="button"
+			class="media-add-control"
+			:aria-label="`Add ${entry.item?.title ?? entry.group?.title} to a program`"
+			@click="addToProgram"
+		>
+			<Plus :size="16" aria-hidden="true" />
 		</button>
 	</component>
 </template>

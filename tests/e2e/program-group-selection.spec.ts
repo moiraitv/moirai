@@ -23,6 +23,9 @@ test('selects seasons into a sequential program and appends without duplicates',
 		libraryId = (await response.json()).id;
 		await waitForLibraryScan(page, libraryId!);
 		await page.goto(`/libraries/${libraryId}`);
+		await page.getByRole('button', { name: 'Add Example Show to a program', exact: true }).click();
+		await expect(page.getByRole('dialog', { name: 'Add to program' })).toBeVisible();
+		await page.getByRole('dialog', { name: 'Add to program' }).getByRole('button', { name: 'Cancel', exact: true }).click();
 		await page.locator('.media-card').filter({ hasText: 'Example Show' }).click();
 		await page.getByRole('button', { name: 'Select groups', exact: true }).click();
 		await page.getByRole('button', { name: 'Add All Items', exact: true }).click();

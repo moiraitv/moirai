@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MediaGroup } from '@moirai/shared';
+import type { MediaGroup, ProgramGroupAddition, ProgramItemAddition } from '@moirai/shared';
 import { useWindowVirtualizer } from '@tanstack/vue-virtual';
 import { computed, nextTick, watch, type ComponentPublicInstance } from 'vue';
 import {
@@ -25,6 +25,7 @@ const props = defineProps<{
 const emit = defineEmits<{
 	enter: [group: MediaGroup];
 	toggle: [itemId: string];
+	add: [selection: ProgramItemAddition['selection'] | ProgramGroupAddition['selection']];
 }>();
 
 /** Estimate one row until TanStack Virtual can measure its rendered height. */
@@ -135,6 +136,7 @@ defineExpose({ anchorPositions, scrollToRow });
 					:selected="selectedItemIds.has(card.entry.item?.id ?? card.entry.group?.id ?? '')"
 					@enter="emit('enter', $event)"
 					@toggle="emit('toggle', $event)"
+					@add="emit('add', $event)"
 				/>
 			</div>
 		</div>

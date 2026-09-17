@@ -1397,8 +1397,7 @@ onUnmounted(() => {
 				:selection-kind="selectionKind"
 				:library-id="library.id"
 				:library-type="library.typeKey"
-				@enter="enter"
-				@toggle="toggleSelectedEntry"
+				@enter="enter" @toggle="toggleSelectedEntry" @add="programSelection = $event"
 			/>
 			<div v-else class="empty-state"><h3>No matching media</h3><p>Try changing the search or filters, or scan the library again.</p></div>
 		</section>

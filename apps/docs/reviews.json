@@ -128,20 +128,20 @@
       }
     },
     "libraries.browse": {
-      "digest": "dfb32321983ff0bea704acdd2dba92790937ff26ddba36fcdacc201a626b8e84",
-      "reviewedAt": "2026-09-14T21:48:20.814Z",
+      "digest": "a5ac513111a5cd508c49088d0faf9fddbab305b59c85dcb3780ec15fd83ccf3e",
+      "reviewedAt": "2026-09-17T22:01:38.418Z",
       "components": {
         "text": {
-          "digest": "82ac6fc045ca6eb7a39b9c968c0e0df2df0bc6286b0e1dd7dc61724b4cf0167d",
-          "reviewedAt": "2026-09-14T21:48:20.814Z"
+          "digest": "13849e34a0ad4e8aa844d984176313914f1573734aadf48e4421eecab3c62376",
+          "reviewedAt": "2026-09-17T22:01:38.418Z"
         },
         "screenshots": {
           "digest": "3a173a1fe1adc4af5f8fd8868eab9ba4a1e66ddde5d3b4cd25b1dd95999a3832",
-          "reviewedAt": "2026-09-14T21:48:20.814Z"
+          "reviewedAt": "2026-09-17T22:01:38.418Z"
         },
         "icons": {
           "digest": "3079781336ef3296ee88b0a293c4b8b0375eb3a70b0fb77fb3b2841f6da63982",
-          "reviewedAt": "2026-09-14T21:48:20.814Z"
+          "reviewedAt": "2026-09-17T22:01:38.418Z"
         }
       }
     },

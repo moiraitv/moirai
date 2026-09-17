@@ -918,6 +918,24 @@ a.media-card {
 	background: var(--accent);
 }
 
+.media-add-control {
+	position: absolute;
+	top: 9px;
+	right: 9px;
+	z-index: 3;
+	width: 25px;
+	height: 25px;
+	padding: 0;
+	display: grid;
+	place-items: center;
+	border: 2px solid #d5e0e8;
+	border-radius: 7px;
+	color: #d5e0e8;
+	background: rgba(6, 16, 26, 0.84);
+	box-shadow: 0 3px 10px rgba(0, 0, 0, 0.38);
+	cursor: pointer;
+}
+
 .poster {
 	position: relative;
 	aspect-ratio: 2 / 3;

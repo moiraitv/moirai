@@ -503,7 +503,9 @@ Absent filters preserve saved selection state;
 these additions need no database migration or rescan.
 
 Library catalog pages can add one page-local selection or every recursively matching filtered item
-to a selected-items program. The same action is available from media details. A destination can be
+to a selected-items program. Catalog cards also expose a single-item or single-group add control
+that opens the same destination dialog without entering selection mode. The same action is
+available from media details. A destination can be
 an existing selected-items program for that library or a newly named program with sequential,
 shuffle, random, or viewing-weighted random ordering. The server canonicalizes and deduplicates item
 references, appends them

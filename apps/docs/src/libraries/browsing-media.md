@@ -41,6 +41,8 @@ Open **Used by** at the right edge of the item page to see programs that select 
 
 ![Media usage and realized showings](/screenshots/media-item-usage.png)
 
+Each catalog card has a **+** control that adds that one item or group to a program without entering selection mode. It uses the same destination dialog as **Add Selected**.
+
 Selection mode lets you choose shows, seasons, artists, or albums and add them to a new or existing selected-groups program. For example, open a show, choose **Select groups**, select seasons 1–8, then choose **Add Selected**. Name a new program and leave **Playback order** set to **Sequential** to play only those seasons in episode order. Newly indexed episodes within the selected seasons join automatically.
 
 **Select Page** selects the groups or items on the current page. If a page contains both groups and individual items, choose **Groups** or **Items** in the selection toolbar; changing the kind clears the current selection. The destination dialog only offers compatible programs from the same library, and skips references already selected.
