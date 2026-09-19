@@ -362,7 +362,7 @@ async function loadInitial(): Promise<void> {
 }
 
 const unsubscribe = liveEvents.subscribe((event) => {
-	if (event.type === 'library.changed' || event.type === 'scan.changed') {
+	if (event.type === 'library.changed' || (event.type === 'scan.changed' && event.data.status !== 'running')) {
 		librariesStore.scheduleRefresh();
 		if (event.data.libraryId === libraryId.value && event.data.affectsProgramming) {
 			scanRevision.value += 1;

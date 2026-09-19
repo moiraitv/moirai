@@ -7,9 +7,9 @@ contextual: true
 
 # Encoding profiles
 
-Open **Playback → Encoding profiles** to manage reusable audio and video settings. **Credit templates** also live under Playback; scheduling pages continue to control what plays and when.
+Open **Playback → Encoding profiles** to manage reusable audio and video settings. **Guide templates** and **Credit templates** also live under Playback; scheduling pages continue to control what plays and when.
 
-Open **Used by** in the editor title bar of a saved profile to see channels explicitly linked to it. Open a channel from that list to inspect its settings.
+Open **Used by** in the editor title bar of a saved profile to see channels linked to it. Channels created with the current default store that profile, so they appear here. Custom encoding is independent of the default. Open a channel from that list to inspect its settings.
 
 ## Create a profile
 

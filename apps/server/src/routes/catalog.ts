@@ -109,6 +109,7 @@ const artworkParamsSchema = z.object({ kind: z.enum(['items', 'groups']), id: z.
 const artworkQuerySchema = z.object({
 	variant: z.enum(['thumb', 'card', 'detail', 'compat']).default('card'),
 	dpr: z.coerce.number().int().min(1).max(3).default(1),
+	role: z.enum(['poster', 'landscape', 'fanart']).optional(),
 });
 
 /** Services required by catalog and media-preview routes. */
@@ -383,15 +384,22 @@ export function registerCatalogRoutes(
 		const artworkQuery = artworkQuerySchema.parse(request.query) as {
 			variant: ArtworkVariant;
 			dpr: ArtworkDensity;
+			role?: 'poster' | 'landscape' | 'fanart';
 		};
-		const owner = await repository.getArtworkOwner(params.kind, params.id);
+		const owner = await repository.getArtworkOwner(params.kind, params.id, artworkQuery.role);
 		const relativePath = owner?.relativePath;
 		if (!owner || !relativePath) {
 			throw app.httpErrors.notFound('Artwork not found');
 		}
 
 		// Serve an exact current cache hit without touching source storage.
-		const cacheOwner = { ...owner, relativePath, kind: params.kind, id: params.id };
+		const cacheOwner = {
+			...owner,
+			relativePath,
+			kind: params.kind,
+			id: params.id,
+			...(artworkQuery.role ? { role: artworkQuery.role } : {}),
+		};
 		const cached = await artworkCache.get(cacheOwner, artworkQuery.variant, artworkQuery.dpr);
 		if (cached) {
 			return reply

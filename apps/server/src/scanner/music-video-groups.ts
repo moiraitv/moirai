@@ -72,5 +72,8 @@ function metadataGroup(
 		plot: null,
 		metadata: {},
 		artworkRelativePath: null,
+		posterRelativePath: null,
+		landscapeRelativePath: null,
+		fanartRelativePath: null,
 	};
 }

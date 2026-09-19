@@ -7,6 +7,7 @@ import { audioMetadata } from './audio-metadata.js';
 import { EncodingProfileRepository } from './encoding-profiles.js';
 import { sql } from 'drizzle-orm';
 import { CreditTemplateRepository } from './credit-templates.js';
+import { GuideTemplateRepository } from './guide-templates.js';
 import type {
 	Channel,
 	ChannelCreate,
@@ -107,6 +108,8 @@ export class Repository extends LibraryRepository {
 	readonly encodingProfiles: EncodingProfileRepository;
 	/** Reusable credit templates and subtitle playback metadata. */
 	readonly creditTemplates: CreditTemplateRepository;
+	/** Reusable XMLTV templates and the default assignment. */
+	readonly guideTemplates: GuideTemplateRepository;
 	/** Authentication persistence exposed to the cross-cutting authentication service. */
 	readonly authentication: AuthenticationRepository;
 	private readonly catalog: MediaCatalogRepository;
@@ -121,6 +124,7 @@ export class Repository extends LibraryRepository {
 		this.authentication = new AuthenticationRepository(database);
 		this.encodingProfiles = new EncodingProfileRepository(database);
 		this.creditTemplates = new CreditTemplateRepository(database);
+		this.guideTemplates = new GuideTemplateRepository(database);
 		this.catalog = new MediaCatalogRepository(database);
 		this.channels = new ChannelRepository(database);
 		this.scheduling = new SchedulingRepository(database);
@@ -223,8 +227,8 @@ export class Repository extends LibraryRepository {
 	}
 
 	/** Return the source artwork location for a catalog item or group. */
-	async getArtworkOwner(kind: 'items' | 'groups', id: string) {
-		return this.catalog.getArtworkOwner(kind, id);
+	async getArtworkOwner(kind: 'items' | 'groups', id: string, role?: 'poster' | 'landscape' | 'fanart') {
+		return this.catalog.getArtworkOwner(kind, id, role);
 	}
 
 	/** List channels in channel-number order. */
@@ -402,6 +406,11 @@ export class Repository extends LibraryRepository {
 		rootProgramIds?: Iterable<string>,
 	): Promise<SchedulingCatalog> {
 		return this.scheduling.getSchedulingCatalog(programs, rootProgramIds);
+	}
+
+	/** Load current artwork URLs for explicit media identifiers. */
+	async getSchedulingCatalogForItems(itemIds: string[]): Promise<SchedulingCatalog> {
+		return this.scheduling.getSchedulingCatalogForItems(itemIds);
 	}
 
 	/** Load persistent program cursors for one channel. */

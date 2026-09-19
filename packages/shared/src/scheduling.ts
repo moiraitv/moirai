@@ -906,6 +906,9 @@ export interface SchedulableMedia {
 	actors?: string[];
 	directors?: string[];
 	artworkUrl: string | null;
+	posterUrl?: string | null;
+	landscapeUrl?: string | null;
+	fanartUrl?: string | null;
 	availability: MediaAvailability;
 }
 
@@ -999,6 +1002,7 @@ export interface TimelineSegment {
 	programId: string | null;
 	mediaItemId: string | null;
 	title: string;
+	subtitle?: string | undefined;
 	playbackPath: string | null;
 	playbackParts?: Array<{ playbackPath: string; durationSeconds: number }>;
 	start: string;
@@ -1006,6 +1010,9 @@ export interface TimelineSegment {
 	sourceStartSeconds: number;
 	sourceFinishSeconds: number | null;
 	truncated: boolean;
+	posterUrl?: string | null | undefined;
+	landscapeUrl?: string | null | undefined;
+	fanartUrl?: string | null | undefined;
 }
 
 /** Shared wire contract for timeline issue. */

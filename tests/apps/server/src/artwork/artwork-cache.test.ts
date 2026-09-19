@@ -56,6 +56,43 @@ describe('ArtworkCache', () => {
 		expect((await sharp(await readFile(cached!)).metadata()).format).toBe('jpeg');
 	});
 
+	it('isolates artwork roles across concurrent fills, stale fallback, and replacement cleanup', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-artwork-roles-'));
+		roots.push(root);
+		const cache = new ArtworkCache(path.join(root, 'cache'), 1024 * 1024, 1024 * 1024);
+		const owners: ArtworkCacheOwner[] = [
+			owner,
+			...(['poster', 'landscape', 'fanart'] as const).map((role) => ({ ...owner, role })),
+		];
+		const sources = await Promise.all(owners.map(async (_, index) => {
+			const source = path.join(root, `source-${index}.png`);
+			await writeFile(source, await image('#ff0000', 32 + index));
+			return source;
+		}));
+		const cached = await Promise.all(owners.map((entry, index) => store(cache, root, entry, sources[index]!)));
+		expect(new Set(cached).size).toBe(owners.length);
+		for (const [index, entry] of owners.entries()) {
+			expect(await cache.get(entry)).toBe(cached[index]);
+			expect((await sharp(cached[index]!).metadata()).width).toBe(32 + index);
+		}
+
+		// Reopen the cache to exercise stale lookup from its persisted inventory.
+		const reopened = new ArtworkCache(path.join(root, 'cache'), 1024 * 1024, 1024 * 1024);
+		const replacement = { ...owners[3]!, cacheVersion: 'replacement' };
+		expect(await reopened.getStale(replacement)).toBe(cached[3]);
+		await store(reopened, root, replacement, sources[3]!);
+		expect(await reopened.get(owners[3]!)).toBeNull();
+		expect(await reopened.getStale(replacement)).toBeNull();
+		for (const [index, entry] of owners.slice(0, 3).entries()) {
+			expect(await reopened.get(entry)).toBe(cached[index]);
+		}
+
+		await reopened.purgeOwner(owner.libraryId, owner.kind, owner.id);
+		for (const entry of [...owners, replacement]) {
+			expect(await reopened.get(entry)).toBeNull();
+		}
+	});
+
 	it('builds separate high-DPI variants without enlarging small source images', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-artwork-cache-'));
 		roots.push(root);

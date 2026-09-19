@@ -11,7 +11,7 @@ To build a channel and its linked programming in one workflow, use [Quick Setup]
 
 A ![](/icons/tv-minimal.svg) Channel combines a viewer-facing number and name with playback settings. Open **![](/icons/tv-minimal.svg) Channels** to create or edit one and to review its resolved seven-day timeline.
 
-Each row shows the channel number centered below its logo, or a TV icon when no logo is set. The timeline uses the same zoom as the Guide page; scroll horizontally to see later programming.
+Each row shows the channel number centered below its logo, or a TV icon when no logo is set. The timeline uses the same zoom as the Guide page, showing six hours at a time; scroll horizontally to see later programming.
 
 Hover over an individual media item, or focus it with the keyboard, to preview its details. Click it for full guide details.
 
@@ -145,6 +145,12 @@ Expand **Additional subtitle settings** to configure credits, presentation, and 
 - **Subtitle fonts folder:** optionally supply a folder containing fonts for subtitles in ASS format, including generated credits. Leave it blank to use installed system fonts. The path must be readable by the playback process; in Docker, use the path inside the container and mount the font files there. The folder supplies fonts, while the subtitle file or credit template determines which font to request.
 
 Music video credits on the Channel or a Program in its prepared schedule automatically force **Burn** for the whole Channel, including ordinary subtitles on other videos. Your saved Convert preference is retained and restored when credits are no longer enabled in that schedule. A running stream restarts when the effective mode changes, so enabling or disabling credits can briefly interrupt viewing.
+
+## Guide template override
+
+Expand **Guide template override** to use a specific XMLTV layout for this ![](/icons/tv-minimal.svg) Channel. Leave it on **Default** to follow **Default for XMLTV** under [Guide templates](/playback/guide-templates). Unset channels pick up default changes immediately. Use **Manage guide templates** to view, duplicate, or customize a layout.
+
+![Guide template override with the Default XMLTV layout selected](/screenshots/channel-editor-guide-template.png)
 
 ### Check the result
 

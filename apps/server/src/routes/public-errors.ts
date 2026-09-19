@@ -1,5 +1,6 @@
 import { EncodingProfileError } from '../repository/encoding-profiles.js';
 import { CreditTemplateError } from '../repository/credit-templates.js';
+import { GuideTemplateError } from '../repository/guide-templates.js';
 import { ZodError } from 'zod';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import type { ApiErrorBody } from '@moirai/shared';
@@ -111,7 +112,11 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
-	if (error instanceof CreditTemplateError || error instanceof EncodingProfileError) {
+	if (
+		error instanceof CreditTemplateError
+		|| error instanceof EncodingProfileError
+		|| error instanceof GuideTemplateError
+	) {
 		return response(requestId, error.statusCode, 'request_failed', error.message, true);
 	}
 

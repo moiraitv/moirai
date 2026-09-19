@@ -1,6 +1,7 @@
 import { registerResourceUsageRoutes } from './resource-usage.js';
 import { registerEncodingProfileRoutes } from './encoding-profiles.js';
 import { registerCreditTemplateRoutes } from './credit-templates.js';
+import { registerGuideTemplateRoutes } from './guide-templates.js';
 import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
 import type { FastifyInstance } from 'fastify';
 import type { ArtworkCache } from '../artwork/artwork-cache.js';
@@ -56,6 +57,7 @@ export function registerHttpRoutes(
 	registerSystemRoutes(app, dependencies);
 	registerResourceUsageRoutes(app, dependencies);
 	registerCreditTemplateRoutes(app, dependencies);
+	registerGuideTemplateRoutes(app, dependencies);
 	registerEncodingProfileRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);

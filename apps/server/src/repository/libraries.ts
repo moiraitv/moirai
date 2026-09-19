@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { asc, count, eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import type {
 	Library,
 	LibraryCreate,
@@ -27,13 +27,8 @@ export abstract class LibraryRepository extends ScanRepository {
 
 	/** List configured media libraries in creation order. */
 	async listLibraries(): Promise<Library[]> {
-		const rows = await this.db
-			.select({ library: libraries, itemCount: count(mediaItems.id) })
-			.from(libraries)
-			.leftJoin(mediaItems, eq(mediaItems.libraryId, libraries.id))
-			.groupBy(libraries.id)
-			.orderBy(asc(libraries.name));
-		return rows.map(({ library, itemCount }) => this.publicLibrary(library, itemCount));
+		const rows = await this.db.select().from(libraries).orderBy(asc(libraries.name));
+		return rows.map((library) => this.publicLibrary(library));
 	}
 
 	/** Resolve only requested libraries' trusted playback roots in bounded batches. */
@@ -52,17 +47,12 @@ export abstract class LibraryRepository extends ScanRepository {
 
 	/** Return one configured media library. */
 	async getLibrary(id: string): Promise<Library | null> {
-		const [row] = await this.db
-			.select({ library: libraries, itemCount: count(mediaItems.id) })
-			.from(libraries)
-			.leftJoin(mediaItems, eq(mediaItems.libraryId, libraries.id))
-			.where(eq(libraries.id, id))
-			.groupBy(libraries.id);
-		return row ? this.publicLibrary(row.library, row.itemCount) : null;
+		const [row] = await this.db.select().from(libraries).where(eq(libraries.id, id));
+		return row ? this.publicLibrary(row) : null;
 	}
 
-	/** Remove reconciliation-only fields and attach the current indexed-item count. */
-	private publicLibrary(row: typeof libraries.$inferSelect, itemCount: number): Library {
+	/** Remove reconciliation-only fields from a stored library row. */
+	private publicLibrary(row: typeof libraries.$inferSelect): Library {
 		const library = { ...row } as Partial<typeof row> & Record<string, unknown>;
 		for (const privateField of [
 			'nameKey',
@@ -75,7 +65,7 @@ export abstract class LibraryRepository extends ScanRepository {
 		]) {
 			delete library[privateField];
 		}
-		return { ...library, itemCount } as Library;
+		return library as Library;
 	}
 
 	/** Return the source configuration and prior identity needed for scanning. */

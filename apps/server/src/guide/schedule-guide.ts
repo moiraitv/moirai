@@ -273,6 +273,24 @@ export async function readCommittedScheduleGuide(
 			snapshots.set(row.mediaSnapshot.id, row.mediaSnapshot);
 		}
 	}
+	// Overlay live artwork URLs so listings can show fanart added after a snapshot was committed.
+	if (options.includeMediaCatalog) {
+		const live = await repository.getSchedulingCatalogForItems(
+			[...new Set(rows.flatMap((row) => row.segment.mediaItemId ? [row.segment.mediaItemId] : []))],
+		);
+		for (const item of live.media) {
+			const snapshot = snapshots.get(item.id);
+			snapshots.set(item.id, snapshot
+				? {
+					...snapshot,
+					artworkUrl: item.artworkUrl ?? snapshot.artworkUrl,
+					posterUrl: item.posterUrl ?? snapshot.posterUrl ?? null,
+					landscapeUrl: item.landscapeUrl ?? snapshot.landscapeUrl ?? null,
+					fanartUrl: item.fanartUrl ?? snapshot.fanartUrl ?? null,
+				}
+				: item);
+		}
+	}
 	const committedAt = statuses
 		.filter((status) => schedules.some((schedule) => schedule.channelId === status.channelId))
 		.map((status) => status.committedAt)

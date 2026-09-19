@@ -28,6 +28,7 @@ import { yieldToEventLoop } from '../time.js';
 import {
 	artworkUrl,
 	cacheVersion,
+	inheritedGroupArtworkUrl,
 	decodedMetadata,
 	metadataNumber,
 	metadataPersonNames,
@@ -38,6 +39,19 @@ import { SchedulingConfigurationRepository } from './scheduling-config.js';
 
 /** Bound multi-row timeline writes below SQLite statement parameter limits. */
 const TIMELINE_COMMIT_BATCH_SIZE = 500;
+
+/** Group row used to inherit poster, landscape, and fanart onto catalog items. */
+type SchedulingGroupArtworkRow = {
+	id: string;
+	parentId: string | null;
+	title: string;
+	kind: string;
+	artworkRelativePath: string | null;
+	posterRelativePath: string | null;
+	landscapeRelativePath: string | null;
+	fanartRelativePath: string | null;
+	metadata: Record<string, unknown> | string | null;
+};
 
 /** Internal marker for a failed channel that has never committed a timeline. */
 const UNCOMMITTED_FAILURE_FINGERPRINT = 'uncommitted-failure';
@@ -178,6 +192,60 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		this.schedulingCatalogCache.clear();
 	}
 
+	/** Load a group together with its descendants and ancestors for artwork inheritance. */
+	private loadRelatedMediaGroups(groupIds: string[]): SchedulingGroupArtworkRow[] {
+		if (groupIds.length === 0) {
+			return [];
+		}
+
+		return this.db.$client.prepare(
+			`WITH RECURSIVE
+                selected(id) AS (SELECT value FROM json_each(?)),
+                descendants(id) AS (
+                  SELECT id FROM selected
+                  UNION
+                  SELECT media_groups.id FROM media_groups
+                  JOIN descendants ON media_groups.parent_id = descendants.id
+                ),
+                related(id) AS (
+                  SELECT id FROM descendants
+                  UNION
+                  SELECT media_groups.parent_id FROM media_groups
+                  JOIN related ON related.id = media_groups.id
+                  WHERE media_groups.parent_id IS NOT NULL
+                )
+              SELECT DISTINCT media_groups.id, media_groups.parent_id AS parentId,
+                media_groups.title, media_groups.kind,
+                media_groups.artwork_relative_path AS artworkRelativePath,
+                media_groups.poster_relative_path AS posterRelativePath,
+                media_groups.landscape_relative_path AS landscapeRelativePath,
+                media_groups.fanart_relative_path AS fanartRelativePath,
+                media_groups.metadata AS metadata
+              FROM media_groups JOIN related ON related.id = media_groups.id`,
+		).all(JSON.stringify(groupIds)) as SchedulingGroupArtworkRow[];
+	}
+
+	/** Load catalog rows for explicit media identifiers, including current artwork URLs. */
+	async getSchedulingCatalogForItems(itemIds: string[]): Promise<SchedulingCatalog> {
+		const unique = [...new Set(itemIds)];
+		if (unique.length === 0) {
+			return {
+				media: [],
+				groupParents: {},
+				libraryAvailability: {},
+				groupTitles: {},
+				libraryNames: {},
+			};
+		}
+
+		return this.loadSchedulingCatalog({
+			itemIds: unique,
+			groupIds: [],
+			sourceLibraryIds: [],
+			libraryIds: [],
+		});
+	}
+
 	/** Load and cache the catalog subset referenced by the supplied programs. */
 	async getSchedulingCatalog(
 		programs?: SchedulingProgram[],
@@ -239,36 +307,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		]);
 
 		// Load selected group descendants and their ancestors for source matching and labels.
-		const relatedGroupRows
-			= scope.groupIds.length > 0
-				? (this.db.$client
-					.prepare(
-						`WITH RECURSIVE
-                selected(id) AS (SELECT value FROM json_each(?)),
-                descendants(id) AS (
-                  SELECT id FROM selected
-                  UNION
-                  SELECT media_groups.id FROM media_groups
-                  JOIN descendants ON media_groups.parent_id = descendants.id
-                ),
-                related(id) AS (
-                  SELECT id FROM descendants
-                  UNION
-                  SELECT media_groups.parent_id FROM media_groups
-                  JOIN related ON media_groups.id = related.id
-                  WHERE media_groups.parent_id IS NOT NULL
-                )
-              SELECT DISTINCT media_groups.id, media_groups.parent_id AS parentId,
-                media_groups.title, media_groups.kind
-              FROM media_groups JOIN related ON related.id = media_groups.id`,
-					)
-					.all(JSON.stringify(scope.groupIds)) as Array<{
-					id: string;
-					parentId: string | null;
-					title: string;
-					kind: string;
-				}>)
-				: [];
+		const relatedGroupRows = this.loadRelatedMediaGroups(scope.groupIds);
 		const relatedGroupIds = relatedGroupRows.map((group) => group.id);
 
 		// Build one bounded media query across full libraries, explicit items, and group trees.
@@ -312,6 +351,9 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						year: mediaItems.year,
 						metadata: mediaItems.metadata,
 						artworkRelativePath: mediaItems.artworkRelativePath,
+						posterRelativePath: mediaItems.posterRelativePath,
+						landscapeRelativePath: mediaItems.landscapeRelativePath,
+						fanartRelativePath: mediaItems.fanartRelativePath,
 						fingerprint: mediaItems.fingerprint,
 						availability: mediaItems.availability,
 						dateAddedAt: mediaItems.dateAddedAt,
@@ -324,6 +366,12 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			scopedLibraryIds.add(item.libraryId);
 		}
 
+		const inheritedGroupRows = relatedGroupRows.length === 0
+			? this.loadRelatedMediaGroups([
+				...new Set(items.flatMap((item) => item.groupId ? [item.groupId] : [])),
+			])
+			: [];
+
 		// Load hierarchy for full-library sources and merge it with explicitly related groups.
 		const libraryGroups
 			= fullMediaLibraryIds.size > 0
@@ -333,6 +381,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						parentId: mediaGroups.parentId,
 						title: mediaGroups.title,
 						kind: mediaGroups.kind,
+						artworkRelativePath: mediaGroups.artworkRelativePath,
+						posterRelativePath: mediaGroups.posterRelativePath,
+						landscapeRelativePath: mediaGroups.landscapeRelativePath,
+						fanartRelativePath: mediaGroups.fanartRelativePath,
+						metadata: mediaGroups.metadata,
 					})
 					.from(mediaGroups)
 					.where(
@@ -341,10 +394,16 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				: [];
 		const groups = [
 			...new Map(
-				[...libraryGroups, ...relatedGroupRows].map((group) => [group.id, group]),
+				[...libraryGroups, ...relatedGroupRows, ...inheritedGroupRows].map((group) => [group.id, group]),
 			).values(),
 		];
-		const groupsById = new Map(groups.map((group) => [group.id, group]));
+		const groupsById = new Map(groups.map((group) => [group.id, {
+			...group,
+			artworkVersion: cacheVersion(
+				decodedMetadata(group.metadata ?? {}),
+				group.artworkRelativePath ?? group.id,
+			),
+		}]));
 		/** Collect music labels from the existing catalog hierarchy without extra reads. */
 		const musicLabels = (groupId: string | null, kind: 'artist' | 'album'): string[] => {
 			const labels: string[] = [];
@@ -461,6 +520,12 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						item.artworkRelativePath,
 						cacheVersion(metadata, item.fingerprint),
 					),
+					posterUrl: artworkUrl('items', item.id, item.posterRelativePath ?? item.artworkRelativePath, cacheVersion(metadata, item.fingerprint), 'poster')
+						?? inheritedGroupArtworkUrl(item.groupId, groupsById, 'poster'),
+					landscapeUrl: artworkUrl('items', item.id, item.landscapeRelativePath, cacheVersion(metadata, item.fingerprint), 'landscape')
+						?? inheritedGroupArtworkUrl(item.groupId, groupsById, 'landscape'),
+					fanartUrl: artworkUrl('items', item.id, item.fanartRelativePath, cacheVersion(metadata, item.fingerprint), 'fanart')
+						?? inheritedGroupArtworkUrl(item.groupId, groupsById, 'fanart'),
 					availability: item.availability,
 				};
 			}),

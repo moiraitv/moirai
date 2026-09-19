@@ -12,7 +12,7 @@ const audio = defineModel<ChannelCreate['audio']>('audio', { required: true });
 const video = defineModel<ChannelCreate['video']>('video', { required: true });
 const expanded = props.creating ? ref(false) : useDisclosureState('channel-encoding', !props.profileId);
 watch(() => props.profileId, () => {
-	if (!props.creating && !props.profileId) {
+	if (!props.profileId) {
 		expanded.value = true;
 	}
 });

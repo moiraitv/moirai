@@ -4,6 +4,7 @@ import type {
 	GuideOccurrence,
 	ChannelCreate,
 	EncodingProfileCreate,
+	GuideTemplateSources,
 	ChannelScheduleLayer,
 	ChannelScheduleConfig,
 	FillerConfig,
@@ -80,6 +81,7 @@ export const libraries = sqliteTable('libraries', {
 		.default('idle'),
 	reconciliationRevision: text('reconciliation_revision'),
 	pendingRemovalCount: integer('pending_removal_count').notNull().default(0),
+	itemCount: integer('item_count').notNull().default(0),
 	lastScanStartedAt: text('last_scan_started_at'),
 	lastScanCompletedAt: text('last_scan_completed_at'),
 	lastChangeDetectedAt: text('last_change_detected_at'),
@@ -110,6 +112,9 @@ export const mediaGroups = sqliteTable(
 		plot: text('plot'),
 		metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
 		artworkRelativePath: text('artwork_relative_path'),
+		posterRelativePath: text('poster_relative_path'),
+		landscapeRelativePath: text('landscape_relative_path'),
+		fanartRelativePath: text('fanart_relative_path'),
 		...timestamps,
 	},
 	(table) => [
@@ -205,6 +210,9 @@ export const mediaItems = sqliteTable(
 		lastObservedAt: text('last_observed_at'),
 		metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
 		artworkRelativePath: text('artwork_relative_path'),
+		posterRelativePath: text('poster_relative_path'),
+		landscapeRelativePath: text('landscape_relative_path'),
+		fanartRelativePath: text('fanart_relative_path'),
 		fingerprint: text('fingerprint').notNull(),
 		fileModifiedAt: text('file_modified_at'),
 		dateAddedAt: text('date_added_at').notNull(),
@@ -763,3 +771,18 @@ export const encodingProfiles = sqliteTable('encoding_profiles', {
 	config: text('config', { mode: 'json' }).$type<EncodingProfileCreate>().notNull(),
 	...timestamps,
 }, (table) => [uniqueIndex('encoding_profiles_name_key_unique').on(table.nameKey), uniqueIndex('encoding_profiles_one_default').on(table.isDefault).where(sql`${table.isDefault} = 1`)]);
+
+/** Reusable Liquid templates for XMLTV channel and programme fragments. */
+export const guideTemplates = sqliteTable('guide_templates', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	nameKey: text('name_key').notNull(),
+	description: text('description').notNull().default(''),
+	sources: text('sources', { mode: 'json' }).$type<GuideTemplateSources>().notNull(),
+	isBuiltin: integer('is_builtin', { mode: 'boolean' }).notNull().default(false),
+	isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+	...timestamps,
+}, (table) => [
+	uniqueIndex('guide_templates_name_key_unique').on(table.nameKey),
+	uniqueIndex('guide_templates_one_default').on(table.isDefault).where(sql`${table.isDefault} = 1`),
+]);

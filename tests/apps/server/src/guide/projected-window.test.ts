@@ -36,6 +36,7 @@ it.each([false, true])('bounds projected splits across channels (first-day overf
 		listChannelSchedules: vi.fn().mockResolvedValue(channels.map((channelId) => ({ channelId, defaultTemplateId: template.id }))),
 		listMaterializedTimelineSegmentsForGuide: vi.fn().mockResolvedValue(segments.map((segment) => ({ segment, mediaSnapshot: null }))),
 		getSchedulingCatalog: vi.fn().mockResolvedValue({ media: [] }),
+		getSchedulingCatalogForItems: vi.fn().mockResolvedValue({ media: [] }),
 		listScheduleTemplates: vi.fn().mockResolvedValue([template]),
 		listTimelineMaterializations: vi.fn().mockResolvedValue(channels.map((channelId) => ({
 			channelId, health: 'ready', committedAt: start, windowStart: start, windowEnd: finish,

@@ -487,13 +487,16 @@ export class CatalogAssetsRepository {
 	}
 
 	/** Return the source artwork location for a catalog item or group. */
-	async getArtworkOwner(kind: 'items' | 'groups', id: string) {
+	async getArtworkOwner(kind: 'items' | 'groups', id: string, role?: 'poster' | 'landscape' | 'fanart') {
 		if (kind === 'items') {
 			const canonicalId = await this.canonicalItemId(id);
 			const [row] = await this.db
 				.select({
 					libraryId: mediaItems.libraryId,
 					relativePath: mediaItems.artworkRelativePath,
+					posterRelativePath: mediaItems.posterRelativePath,
+					landscapeRelativePath: mediaItems.landscapeRelativePath,
+					fanartRelativePath: mediaItems.fanartRelativePath,
 					metadata: mediaItems.metadata,
 					fallbackVersion: mediaItems.fingerprint,
 				})
@@ -502,7 +505,13 @@ export class CatalogAssetsRepository {
 			return row
 				? {
 					libraryId: row.libraryId,
-					relativePath: row.relativePath,
+					relativePath: role === 'poster'
+						? row.posterRelativePath ?? row.relativePath
+						: role === 'landscape'
+							? row.landscapeRelativePath
+							: role === 'fanart'
+								? row.fanartRelativePath
+								: row.relativePath,
 					cacheVersion: cacheVersion(row.metadata, row.fallbackVersion),
 				}
 				: null;
@@ -512,6 +521,9 @@ export class CatalogAssetsRepository {
 			.select({
 				libraryId: mediaGroups.libraryId,
 				relativePath: mediaGroups.artworkRelativePath,
+				posterRelativePath: mediaGroups.posterRelativePath,
+				landscapeRelativePath: mediaGroups.landscapeRelativePath,
+				fanartRelativePath: mediaGroups.fanartRelativePath,
 				metadata: mediaGroups.metadata,
 			})
 			.from(mediaGroups)
@@ -519,7 +531,13 @@ export class CatalogAssetsRepository {
 		return row
 			? {
 				libraryId: row.libraryId,
-				relativePath: row.relativePath,
+				relativePath: role === 'poster'
+					? row.posterRelativePath ?? row.relativePath
+					: role === 'landscape'
+						? row.landscapeRelativePath
+						: role === 'fanart'
+							? row.fanartRelativePath
+							: row.relativePath,
 				cacheVersion: cacheVersion(row.metadata, row.relativePath ?? id),
 			}
 			: null;

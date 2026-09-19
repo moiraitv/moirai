@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstat, opendir, realpath, stat } from 'node:fs/promises';
+import { opendir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
 	MAX_NFO_BYTES,
@@ -15,8 +15,12 @@ import { deterministicId } from './catalog-identity.js';
 import { inheritMusicArtistArtwork } from './music-video-artwork.js';
 import { groupLooseMusicVideos } from './music-video-groups.js';
 import { internalErrorMessage } from '../error-message.js';
-import { ARTWORK_EXTENSIONS } from '../artwork/artwork-formats.js';
-import { isPathWithinRoot } from '../media/path-boundary.js';
+import {
+	existingArtworkRoles,
+	existingFile,
+	itemArtworkStems,
+	referencedArtwork,
+} from './on-disk-artwork.js';
 import type {
 	CatalogConflictObservation,
 	DiscoveredGroup,
@@ -143,30 +147,6 @@ export async function checkOnDiskPresence(
 	}
 
 	return { sourceIdentity, observations };
-}
-
-/** Return the first readable non-symlink file from the candidates. */
-async function existingFile(candidates: string[], signal?: AbortSignal): Promise<string | null> {
-	for (const candidate of candidates) {
-		throwIfCancelled(signal);
-		try {
-			if ((await lstat(candidate)).isFile()) {
-				return candidate;
-			}
-		}
-		catch {
-			// Missing artwork is expected and handled by the SPA placeholder.
-		}
-	}
-	return null;
-}
-
-/** Resolve conventional artwork without crossing the library boundary. */
-async function existingArtwork(stems: string[], signal?: AbortSignal): Promise<string | null> {
-	return existingFile(
-		stems.flatMap((stem) => ARTWORK_EXTENSIONS.map((extension) => `${stem}${extension}`)),
-		signal,
-	);
 }
 
 /** Traverse the library tree without following symlinks. */
@@ -377,28 +357,6 @@ function taggedArtists(value: string | undefined): string[] {
 	return value
 		? [...new Set(value.split(/\s*;\s*/).map((artist) => artist.trim()).filter(Boolean))]
 		: [];
-}
-
-/** Resolve a safe local primary-artwork reference relative to its owning NFO. */
-async function referencedArtwork(
-	scanRoot: string,
-	nfoPath: string | null,
-	references: string[],
-	signal?: AbortSignal,
-): Promise<string | null> {
-	if (!nfoPath) {
-		return null;
-	}
-
-	const candidates = references.flatMap((reference) => {
-		if (/^[a-z][a-z0-9+.-]*:/i.test(reference) || path.isAbsolute(reference)) {
-			return [];
-		}
-
-		const candidate = path.resolve(path.dirname(nfoPath), reference);
-		return isPathWithinRoot(scanRoot, candidate) ? [candidate] : [];
-	});
-	return existingFile(candidates, signal);
 }
 
 /** Compute a stable identity used to compare scheduling inputs. */
@@ -636,28 +594,18 @@ export async function discoverOnDisk(
 			signal,
 		);
 
-		// Resolve conventional artwork names for the item.
-		const artwork = nfoArtwork ?? await existingArtwork(
-			[
-				`${logicalStem}-poster`,
-				`${logicalStem}-cover`,
-				`${logicalStem}-default`,
-				...(library.typeKey === 'shows' ? [] : [`${logicalStem}-movie`]),
-				logicalStem,
-				`${stem}-poster`,
-				`${stem}-thumb`,
-				path.join(path.dirname(file), 'poster'),
-				path.join(path.dirname(file), 'folder'),
-				path.join(path.dirname(file), 'cover'),
-				path.join(path.dirname(file), 'default'),
-				...(library.typeKey === 'movies'
-					? [path.join(path.dirname(file), 'movie')]
-					: []),
-				path.join(path.dirname(file), 'thumb'),
-				path.join(path.dirname(file), 'fanart'),
-			],
+		const itemDirectory = path.dirname(file);
+		const itemStems = itemArtworkStems(logicalStem, stem, itemDirectory, library.typeKey);
+		const itemArtworkRoles = await existingArtworkRoles(
+			itemStems.poster,
+			itemStems.landscape,
+			itemStems.fanart,
 			signal,
 		);
+		const artwork = nfoArtwork
+			?? itemArtworkRoles.poster
+			?? itemArtworkRoles.landscape
+			?? itemArtworkRoles.fanart;
 
 		let groupId: string | null = null;
 		const seasonNumber = nfo.parsed?.seasonNumber ?? filename.seasonNumber;
@@ -687,7 +635,7 @@ export async function discoverOnDisk(
 					signal,
 				);
 				const showNameStem = path.join(showDirectory, showFolder);
-				const showArt = referencedShowArt ?? await existingArtwork(
+				const showRoles = await existingArtworkRoles(
 					[
 						showNameStem,
 						`${showNameStem}-poster`,
@@ -699,10 +647,12 @@ export async function discoverOnDisk(
 						path.join(showDirectory, 'cover'),
 						path.join(showDirectory, 'default'),
 						path.join(showDirectory, 'show'),
-						path.join(showDirectory, 'fanart'),
 					],
+					[`${showNameStem}-landscape`, path.join(showDirectory, 'landscape')],
+					[`${showNameStem}-fanart`, path.join(showDirectory, 'fanart')],
 					signal,
 				);
+				const showArt = referencedShowArt ?? showRoles.poster ?? showRoles.landscape ?? showRoles.fanart;
 				const showArtworkFingerprint = await artworkFingerprint(scanRoot, showArt);
 				groupsByKey.set(showKey, {
 					id: showId,
@@ -726,6 +676,9 @@ export async function discoverOnDisk(
 						...(showArtworkFingerprint ? { artworkFingerprint: showArtworkFingerprint } : {}),
 					},
 					artworkRelativePath: showArt ? normalizeRelative(scanRoot, showArt) : null,
+					posterRelativePath: showRoles.poster ? normalizeRelative(scanRoot, showRoles.poster) : null,
+					landscapeRelativePath: showRoles.landscape ? normalizeRelative(scanRoot, showRoles.landscape) : null,
+					fanartRelativePath: showRoles.fanart ? normalizeRelative(scanRoot, showRoles.fanart) : null,
 				});
 			}
 			const seasonKey = `${showKey}:season:${seasonNumber ?? 0}`;
@@ -746,7 +699,7 @@ export async function discoverOnDisk(
 					seasonNfo?.primaryArtworkPaths ?? [],
 					signal,
 				);
-				const seasonArt = referencedSeasonArt ?? await existingArtwork(
+				const seasonRoles = await existingArtworkRoles(
 					[
 						path.join(showDirectory, `season${String(seasonNumber ?? 0).padStart(2, '0')}-poster`),
 						path.join(seasonDirectory, 'poster'),
@@ -754,8 +707,11 @@ export async function discoverOnDisk(
 						path.join(seasonDirectory, 'cover'),
 						path.join(seasonDirectory, 'default'),
 					],
+					[path.join(seasonDirectory, 'landscape')],
+					[path.join(seasonDirectory, 'fanart')],
 					signal,
 				);
+				const seasonArt = referencedSeasonArt ?? seasonRoles.poster ?? seasonRoles.landscape ?? seasonRoles.fanart;
 				const seasonArtworkFingerprint = await artworkFingerprint(scanRoot, seasonArt);
 				groupsByKey.set(seasonKey, {
 					id: groupId,
@@ -775,6 +731,9 @@ export async function discoverOnDisk(
 						...(seasonArtworkFingerprint ? { artworkFingerprint: seasonArtworkFingerprint } : {}),
 					},
 					artworkRelativePath: seasonArt ? normalizeRelative(scanRoot, seasonArt) : null,
+					posterRelativePath: seasonRoles.poster ? normalizeRelative(scanRoot, seasonRoles.poster) : null,
+					landscapeRelativePath: seasonRoles.landscape ? normalizeRelative(scanRoot, seasonRoles.landscape) : null,
+					fanartRelativePath: seasonRoles.fanart ? normalizeRelative(scanRoot, seasonRoles.fanart) : null,
 				});
 			}
 		}
@@ -787,12 +746,18 @@ export async function discoverOnDisk(
 				const artistId = deterministicId(library.id, artistKey);
 				if (!groupsByKey.has(artistKey)) {
 					const artistDirectory = path.join(scanRoot, artistFolder);
-					const artistArt = await existingArtwork([
-						path.join(artistDirectory, 'folder'),
-						path.join(artistDirectory, 'poster'),
-						path.join(artistDirectory, 'cover'),
-						path.join(artistDirectory, 'default'),
-					], signal);
+					const artistRoles = await existingArtworkRoles(
+						[
+							path.join(artistDirectory, 'folder'),
+							path.join(artistDirectory, 'poster'),
+							path.join(artistDirectory, 'cover'),
+							path.join(artistDirectory, 'default'),
+						],
+						[path.join(artistDirectory, 'landscape')],
+						[path.join(artistDirectory, 'fanart')],
+						signal,
+					);
+					const artistArt = artistRoles.poster ?? artistRoles.landscape ?? artistRoles.fanart;
 					const artistArtworkFingerprint = await artworkFingerprint(scanRoot, artistArt);
 					groupsByKey.set(artistKey, {
 						id: artistId,
@@ -808,6 +773,9 @@ export async function discoverOnDisk(
 							? { artworkFingerprint: artistArtworkFingerprint }
 							: {},
 						artworkRelativePath: artistArt ? normalizeRelative(scanRoot, artistArt) : null,
+						posterRelativePath: artistRoles.poster ? normalizeRelative(scanRoot, artistRoles.poster) : null,
+						landscapeRelativePath: artistRoles.landscape ? normalizeRelative(scanRoot, artistRoles.landscape) : null,
+						fanartRelativePath: artistRoles.fanart ? normalizeRelative(scanRoot, artistRoles.fanart) : null,
 					});
 				}
 
@@ -829,12 +797,18 @@ export async function discoverOnDisk(
 						albumNfo?.primaryArtworkPaths ?? [],
 						signal,
 					);
-					const albumArt = referencedAlbumArt ?? await existingArtwork([
-						path.join(albumDirectory, 'folder'),
-						path.join(albumDirectory, 'poster'),
-						path.join(albumDirectory, 'cover'),
-						path.join(albumDirectory, 'default'),
-					], signal);
+					const albumRoles = await existingArtworkRoles(
+						[
+							path.join(albumDirectory, 'folder'),
+							path.join(albumDirectory, 'poster'),
+							path.join(albumDirectory, 'cover'),
+							path.join(albumDirectory, 'default'),
+						],
+						[path.join(albumDirectory, 'landscape')],
+						[path.join(albumDirectory, 'fanart')],
+						signal,
+					);
+					const albumArt = referencedAlbumArt ?? albumRoles.poster ?? albumRoles.landscape ?? albumRoles.fanart;
 					const albumArtworkFingerprint = await artworkFingerprint(scanRoot, albumArt);
 					groupsByKey.set(albumKey, {
 						id: groupId,
@@ -855,6 +829,9 @@ export async function discoverOnDisk(
 							...(albumArtworkFingerprint ? { artworkFingerprint: albumArtworkFingerprint } : {}),
 						},
 						artworkRelativePath: albumArt ? normalizeRelative(scanRoot, albumArt) : null,
+						posterRelativePath: albumRoles.poster ? normalizeRelative(scanRoot, albumRoles.poster) : null,
+						landscapeRelativePath: albumRoles.landscape ? normalizeRelative(scanRoot, albumRoles.landscape) : null,
+						fanartRelativePath: albumRoles.fanart ? normalizeRelative(scanRoot, albumRoles.fanart) : null,
 					});
 				}
 			}
@@ -966,9 +943,12 @@ export async function discoverOnDisk(
 				...(itemArtworkFingerprint ? { artworkFingerprint: itemArtworkFingerprint } : {}),
 			},
 			artworkRelativePath: artwork ? normalizeRelative(scanRoot, artwork) : null,
+			posterRelativePath: itemArtworkRoles.poster ? normalizeRelative(scanRoot, itemArtworkRoles.poster) : null,
+			landscapeRelativePath: itemArtworkRoles.landscape ? normalizeRelative(scanRoot, itemArtworkRoles.landscape) : null,
+			fanartRelativePath: itemArtworkRoles.fanart ? normalizeRelative(scanRoot, itemArtworkRoles.fanart) : null,
 			fingerprint: await fingerprint(
 				scanRoot,
-				[file, nfo.path, artwork, ...locatedSidecars.flatMap((entry) => entry.absolutePaths)],
+				[file, nfo.path, artwork, itemArtworkRoles.landscape, itemArtworkRoles.fanart, ...locatedSidecars.flatMap((entry) => entry.absolutePaths)],
 				file,
 				mediaInfo,
 				signal,

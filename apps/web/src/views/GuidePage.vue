@@ -369,6 +369,9 @@ onBeforeUnmount(() => {
 				:time-zone="timeZone"
 				:start-date="weekStart"
 				:days="displayedDays"
+				use-entry-titles
+				subtitle-mode="listing"
+				listing-presentation="guide"
 			/>
 			<ResourceEmptyState
 				v-else-if="!error"

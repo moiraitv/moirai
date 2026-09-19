@@ -22,12 +22,16 @@ export const guideEntrySchema = z.object({
 	start: z.iso.datetime({ offset: true }),
 	finish: z.iso.datetime({ offset: true }),
 	title: z.string(),
+	subtitle: z.string().optional(),
 	description: z.string(),
 	programId: z.uuid().nullable(),
 	segmentId: z.uuid().nullable(),
 	occurrenceId: z.string().nullable(),
 	role: z.enum(['primary', 'filler', 'dead-air']),
 	truncated: z.boolean(),
+	posterUrl: z.string().nullable().optional(),
+	landscapeUrl: z.string().nullable().optional(),
+	fanartUrl: z.string().nullable().optional(),
 });
 
 /** A display interval that never changes its source playback segment. */

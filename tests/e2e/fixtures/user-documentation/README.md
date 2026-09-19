@@ -21,5 +21,6 @@ Place the generated portrait poster fixtures in this directory as:
 - `winter-archive-poster.png`
 
 The documentation screenshot scenario copies them to the deterministic media library using Moirai's
-title-specific artwork naming convention. Until a fixture exists, it uses the Moirai logo as a
-bootstrap fallback.
+title-specific artwork naming convention, and writes matching `-landscape.png` and `-fanart.png`
+sidecars plus NFO `thumb`/`fanart` tags so Guide listings can show square thumbs, timespans, and a
+fanart wash. Until a fixture exists, it uses the Moirai logo as a bootstrap fallback.

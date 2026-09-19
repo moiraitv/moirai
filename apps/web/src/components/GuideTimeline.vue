@@ -15,6 +15,13 @@ import {
 import { channelGuideRows } from '../channel-groups';
 import { guideSourceLabel } from '../guide-source';
 import { programColorStyle } from '../program-colors';
+import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
+import {
+	guideListingThumb,
+	guideListingTimespan,
+	guideListingVisualWidth,
+	guideListingWashUrl,
+} from '../guide-listing-layout';
 import GuideSegmentPreviewModal from './GuideSegmentPreviewModal.vue';
 import ScheduleWarningBadge from './ScheduleWarningBadge.vue';
 import GuideBlockPopover from './GuideBlockPopover.vue';
@@ -29,9 +36,29 @@ const props = withDefaults(
 		days?: number;
 		emptyMessage?: string;
 		showTechnicalDetails?: boolean;
+		hourWidth?: number | null;
+		visibleHours?: number;
+		useEntryTitles?: boolean;
+		inspectListings?: boolean;
+		subtitleMode?: 'source' | 'listing';
+		listingPresentation?: 'default' | 'guide';
 	}>(),
-	{ days: 7, emptyMessage: 'No schedule assigned', showTechnicalDetails: false },
+	{
+		days: 7,
+		emptyMessage: 'No schedule assigned',
+		showTechnicalDetails: false,
+		hourWidth: null,
+		visibleHours: 6,
+		useEntryTitles: false,
+		inspectListings: false,
+		subtitleMode: 'source',
+		listingPresentation: 'default',
+	},
 );
+
+const emit = defineEmits<{
+	inspect: [payload: { id: string; target: HTMLElement }];
+}>();
 
 defineSlots<{
 	detail(props: {
@@ -60,10 +87,16 @@ const selectedLoading = ref(false);
 const selectedError = ref('');
 const detailCache = new Map<string, GuideSegmentDetail>();
 let detailRequest = 0;
-/** Pixels per elapsed hour shared by the Guide and Channels timelines. */
-const HOUR_WIDTH = 112;
+const trackWidth = ref(0);
+const hourWidth = computed(() => {
+	if (props.hourWidth != null) {
+		return props.hourWidth;
+	}
+
+	return trackWidth.value > 0 ? Math.max(48, trackWidth.value / props.visibleHours) : 112;
+});
 const daysGeometry = computed(() =>
-	guideDayGeometry(props.startDate, props.days, props.timeZone, HOUR_WIDTH));
+	guideDayGeometry(props.startDate, props.days, props.timeZone, hourWidth.value));
 const timelineWidth = computed(() => {
 	const finalDay = daysGeometry.value.at(-1);
 	return finalDay ? finalDay.left + finalDay.width : 0;
@@ -84,11 +117,11 @@ const positionedByChannel = computed(() => {
 	}>>();
 	for (const [channelId, programmes] of displayedByChannel.value) {
 		result.set(channelId, programmes.map((programme) => {
-			const left = guideInstantPosition(programme.start, days, HOUR_WIDTH);
+			const left = guideInstantPosition(programme.start, days, hourWidth.value);
 			return {
 				programme,
 				left,
-				right: left + guideSegmentWidth(programme.start, programme.finish, HOUR_WIDTH),
+				right: left + guideSegmentWidth(programme.start, programme.finish, hourWidth.value),
 			};
 		}));
 	}
@@ -124,16 +157,31 @@ function readViewport(): void {
 	}
 
 	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
-	const overscan = HOUR_WIDTH * GUIDE_OVERSCAN_HOURS;
-	const start = Math.floor((scroller.scrollLeft - channelWidth - overscan) / HOUR_WIDTH) * HOUR_WIDTH;
+	const unit = hourWidth.value;
+	const overscan = unit * GUIDE_OVERSCAN_HOURS;
+	const start = Math.floor((scroller.scrollLeft - channelWidth - overscan) / unit) * unit;
 	const end = Math.ceil(
-		(scroller.scrollLeft + scroller.clientWidth - channelWidth + overscan) / HOUR_WIDTH,
-	) * HOUR_WIDTH;
+		(scroller.scrollLeft + scroller.clientWidth - channelWidth + overscan) / unit,
+	) * unit;
 	if (viewportStart.value !== start) {
 		viewportStart.value = start;
 	}
 	if (viewportEnd.value !== end) {
 		viewportEnd.value = end;
+	}
+}
+
+/** Size the elapsed-hour scale so the requested period fills the visible track. */
+function measureTrack(): void {
+	const scroller = guideScroll.value;
+	if (!scroller) {
+		return;
+	}
+
+	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
+	const next = Math.max(0, scroller.clientWidth - channelWidth);
+	if (trackWidth.value !== next) {
+		trackWidth.value = next;
 	}
 }
 
@@ -145,6 +193,7 @@ function scheduleViewportRead(): void {
 
 	viewportFrame = requestAnimationFrame(() => {
 		viewportFrame = 0;
+		measureTrack();
 		readViewport();
 	});
 }
@@ -178,25 +227,70 @@ const currentTimeLeft = computed(() => {
 		return null;
 	}
 
-	return guideInstantPosition(now.toISOString(), daysGeometry.value, HOUR_WIDTH);
+	return guideInstantPosition(now.toISOString(), daysGeometry.value, hourWidth.value);
 });
 
 /** Convert an instant to its horizontal position on the elapsed-time guide axis. */
 function localTimelinePosition(value: string): number {
-	return guideInstantPosition(value, daysGeometry.value, HOUR_WIDTH);
+	return guideInstantPosition(value, daysGeometry.value, hourWidth.value);
 }
 
 /** Position and color a guide segment from its absolute playback interval and program identity. */
 function segmentStyle(segment: Pick<TimelineSegment, 'start' | 'finish' | 'programId'>): Record<string, string> {
+	const span = guideSegmentWidth(segment.start, segment.finish, hourWidth.value);
+	const visual = props.listingPresentation === 'guide' ? guideListingVisualWidth(span) : span;
+
 	return {
-		left: `${localTimelinePosition(segment.start)}px`,
-		width: `${guideSegmentWidth(segment.start, segment.finish, HOUR_WIDTH)}px`,
+		left: `${localTimelinePosition(segment.start) + (span - visual) / 2}px`,
+		width: `${visual}px`,
 		...programColorStyle(segment.programId),
 	};
 }
 
+/** Read a template-rendered subtitle when the listing was presented from XMLTV. */
+function listingSubtitle(segment: TimelineSegment | GuideEntry): string {
+	return 'subtitle' in segment && typeof segment.subtitle === 'string' ? segment.subtitle : '';
+}
+
+/** Choose a left thumbnail that leaves enough room for listing text. */
+function listingThumb(segment: TimelineSegment | GuideEntry): ReturnType<typeof guideListingThumb> {
+	if (props.listingPresentation !== 'guide' || ('kind' in segment && segment.kind === 'block')) {
+		return null;
+	}
+
+	return guideListingThumb(
+		guideListingVisualWidth(guideSegmentWidth(segment.start, segment.finish, hourWidth.value)),
+		segment.landscapeUrl,
+		segment.posterUrl,
+	);
+}
+
+/** Choose right-side wash art, using landscape when the item has no fanart file. */
+function listingWash(segment: TimelineSegment | GuideEntry): string | null {
+	if (props.listingPresentation !== 'guide' || ('kind' in segment && segment.kind === 'block')) {
+		return null;
+	}
+
+	return guideListingWashUrl(segment.fanartUrl, segment.landscapeUrl);
+}
+
+/** Open the Liquid-value inspector from a preview channel cell. */
+function inspectChannel(event: MouseEvent): void {
+	if (props.inspectListings && event.currentTarget instanceof HTMLElement) {
+		emit('inspect', { id: 'channel', target: event.currentTarget });
+	}
+}
+
 /** Open grouped listings without sending their presentation IDs to the media endpoint. */
 function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): void {
+	if (props.inspectListings) {
+		if (event.type === 'click' && event.currentTarget instanceof HTMLElement) {
+			pinnedProgrammeId.value = entry.id;
+			emit('inspect', { id: entry.id, target: event.currentTarget });
+		}
+		return;
+	}
+
 	pinnedProgrammeId.value = entry.id;
 	if ('kind' in entry && entry.kind === 'block') {
 		itemPreview.value?.close();
@@ -302,9 +396,10 @@ function centerCurrentTime(): void {
 defineExpose({ centerCurrentTime });
 
 watch(
-	() => [props.startDate, props.guide] as const,
-	async ([startDate], previous) => {
+	() => [props.startDate, props.guide, hourWidth.value] as const,
+	async ([startDate, , width], previous) => {
 		const startChanged = !previous || previous[0] !== startDate;
+		const zoomChanged = Boolean(previous) && previous[2] !== width;
 		if (startChanged) {
 			centerNow.value = false;
 			detailCache.clear();
@@ -313,7 +408,7 @@ watch(
 		}
 
 		await nextTick();
-		if (startChanged) {
+		if (startChanged || zoomChanged) {
 			scrollToCurrentTime();
 		}
 
@@ -321,6 +416,7 @@ watch(
 	},
 );
 onMounted(() => {
+	measureTrack();
 	scrollToCurrentTime();
 	readViewport();
 	guideScroll.value?.addEventListener('scroll', scheduleViewportRead, { passive: true });
@@ -343,12 +439,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="guide-frame">
+	<div class="guide-frame" :class="{ 'guide-frame-page': listingPresentation === 'guide' }">
 		<div ref="guideScroll" class="guide-scroll" :aria-label="accessibleLabel">
 			<div
 				class="guide-canvas"
 				:style="{
-					'--guide-hour-width': `${HOUR_WIDTH}px`,
+					'--guide-hour-width': `${hourWidth}px`,
 					'--guide-timeline-width': `${timelineWidth}px`,
 				}"
 			>
@@ -383,8 +479,22 @@ onBeforeUnmount(() => {
 					</template>
 					<template v-else>
 						<template v-for="channel in [row.channel]" :key="channel.id">
-							<article class="guide-channel-cell">
-								<div class="guide-channel-identity">
+							<article
+								class="guide-channel-cell"
+								:class="{ 'guide-channel-inspect': inspectListings, 'guide-channel-cell-page': listingPresentation === 'guide' }"
+								@click="inspectChannel($event)"
+							>
+								<template v-if="listingPresentation === 'guide'">
+									<span class="channel-number">{{ channel.number }}</span>
+									<img
+										v-if="channelLogoUrl(channel)"
+										class="guide-channel-logo"
+										:src="channelLogoUrl(channel) ?? undefined"
+										alt=""
+									/>
+									<span v-else class="guide-channel-logo"><TvMinimal :size="36" aria-hidden="true" /></span>
+								</template>
+								<div v-else class="guide-channel-identity">
 									<img
 										v-if="channelLogoUrl(channel)"
 										class="guide-channel-logo"
@@ -436,16 +546,45 @@ onBeforeUnmount(() => {
 									@pointerleave="leaveEntry"
 									@focusout="leaveEntry"
 								>
+									<img
+										v-if="listingWash(segment)"
+										class="guide-programme-fanart"
+										:src="artworkVariantUrl(listingWash(segment), 'card')"
+										:srcset="artworkSrcset(listingWash(segment), 'card')"
+										alt=""
+										loading="lazy"
+										decoding="async"
+									/>
+									<img
+										v-if="listingThumb(segment)"
+										class="guide-programme-thumb"
+										:class="`guide-programme-thumb-${listingThumb(segment)!.kind}`"
+										:src="artworkVariantUrl(listingThumb(segment)!.url, 'card')"
+										:srcset="artworkSrcset(listingThumb(segment)!.url, 'card')"
+										alt=""
+										loading="lazy"
+										decoding="async"
+									/>
 									<component
 										:is="'kind' in segment && segment.kind === 'block' ? 'button' : 'span'"
+										class="guide-programme-copy"
 										:class="{ 'guide-block-copy': 'kind' in segment && segment.kind === 'block' }">
 										<strong>{{
-											segment.role === 'dead-air' ? 'No programming' : segment.title
+											useEntryTitles || segment.role !== 'dead-air' ? segment.title : 'No programming'
 										}}</strong>
 										<small
-										>{{ 'kind' in segment && segment.kind === 'block' ? 'Slot' : guideSourceLabel(segment, programNames)
-										}}<template v-if="segment.truncated"> · truncated</template></small
+											v-if="subtitleMode === 'source' || listingSubtitle(segment) || segment.truncated"
+										>{{
+											subtitleMode === 'source'
+												? ('kind' in segment && segment.kind === 'block' ? 'Slot' : guideSourceLabel(segment, programNames))
+												: listingSubtitle(segment)
+										}}<template v-if="segment.truncated">{{
+											subtitleMode === 'source' || listingSubtitle(segment) ? ' · truncated' : 'truncated'
+										}}</template></small
 										>
+										<small v-if="listingPresentation === 'guide'" class="guide-programme-timespan">{{
+											guideListingTimespan(segment.start, segment.finish, timeZone)
+										}}</small>
 									</component>
 								</component>
 								<div

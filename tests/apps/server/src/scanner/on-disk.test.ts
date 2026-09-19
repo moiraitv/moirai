@@ -326,6 +326,37 @@ describe('discoverOnDisk', () => {
 			playbackPath: `/media/Film/Film${extension}`,
 			metadataStatus: 'complete',
 			artworkRelativePath: 'Film/poster.jpg',
+			posterRelativePath: 'Film/poster.jpg',
+		});
+	});
+
+	it('uses a thumb image as poster when no poster file exists', async () => {
+		const fixture = await library();
+		const folder = path.join(fixture.sourceConfig.scanRoot, 'Film');
+		await mkdir(folder);
+		await writeFile(path.join(folder, 'Film.mkv'), 'video');
+		await writeFile(path.join(folder, 'thumb.jpg'), 'image');
+		const result = await discoverOnDisk(fixture);
+		expect(result.items[0]).toMatchObject({
+			artworkRelativePath: 'Film/thumb.jpg',
+			posterRelativePath: 'Film/thumb.jpg',
+		});
+	});
+
+	it('stores landscape and fanart separately from the poster', async () => {
+		const fixture = await library();
+		const folder = path.join(fixture.sourceConfig.scanRoot, 'Film');
+		await mkdir(folder);
+		await writeFile(path.join(folder, 'Film.mkv'), 'video');
+		await writeFile(path.join(folder, 'poster.jpg'), 'poster');
+		await writeFile(path.join(folder, 'landscape.jpg'), 'landscape');
+		await writeFile(path.join(folder, 'fanart.jpg'), 'fanart');
+		const result = await discoverOnDisk(fixture);
+		expect(result.items[0]).toMatchObject({
+			artworkRelativePath: 'Film/poster.jpg',
+			posterRelativePath: 'Film/poster.jpg',
+			landscapeRelativePath: 'Film/landscape.jpg',
+			fanartRelativePath: 'Film/fanart.jpg',
 		});
 	});
 

@@ -2,6 +2,7 @@ import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/s
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
 import type { EncodingProfile, EncodingProfileCreate } from '@moirai/shared';
 import type { CreditTemplate, CreditTemplateCreate, CreditPreview, CreditPreviewResult } from '@moirai/shared';
+import type { GuideTemplate, GuideTemplateCreate, GuideTemplatePreview, GuideTemplatePreviewResult } from '@moirai/shared';
 import type {
 	ApiErrorBody,
 	AppCapabilities,
@@ -259,6 +260,12 @@ export const api = {
 	deleteCreditTemplate: (id: string) => request<void>(`/api/v1/credit-templates/${id}`, { method: 'DELETE' }),
 	creditPreviewVideos: () => request<MediaItem[]>('/api/v1/credit-templates/preview-videos'),
 	previewCreditTemplate: (body: CreditPreview) => request<CreditPreviewResult>('/api/v1/credit-templates/preview', { method: 'POST', body: JSON.stringify(body) }),
+	setDefaultGuideTemplate: (id: string) => request<GuideTemplate>(`/api/v1/guide-templates/${id}/default`, { method: 'PUT' }),
+	guideTemplates: () => request<GuideTemplate[]>('/api/v1/guide-templates'),
+	createGuideTemplate: (body: GuideTemplateCreate) => request<GuideTemplate>('/api/v1/guide-templates', { method: 'POST', body: JSON.stringify(body) }),
+	updateGuideTemplate: (id: string, body: GuideTemplateCreate) => request<GuideTemplate>(`/api/v1/guide-templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+	deleteGuideTemplate: (id: string) => request<void>(`/api/v1/guide-templates/${id}`, { method: 'DELETE' }),
+	previewGuideTemplate: (body: GuideTemplatePreview) => request<GuideTemplatePreviewResult>('/api/v1/guide-templates/preview', { method: 'POST', body: JSON.stringify(body) }),
 	subtitleIssues: (id: string) => request<string[]>(`/api/v1/channels/${id}/subtitle-issues`),
 	authenticationState: (signal?: AbortSignal) => request<AuthenticationState>(
 		'/api/v1/auth/session',

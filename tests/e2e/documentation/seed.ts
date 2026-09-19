@@ -174,13 +174,16 @@ export async function seedLibrary(page: Page, directory: string, throughUI = fal
 	await mkdir(mediaRoot, { recursive: true });
 	await Promise.all(mediaFixtures.map(async (fixture) => {
 		const poster = await readFile(path.join(posterFixtureRoot, fixture.poster));
+		const stem = fixture.title;
 		await Promise.all([
-			writeFile(path.join(mediaRoot, `${fixture.title}.mp4`), 'documentation fixture'),
+			writeFile(path.join(mediaRoot, `${stem}.mp4`), 'documentation fixture'),
 			writeFile(
-				path.join(mediaRoot, `${fixture.title}.nfo`),
-				`<movie><title>${fixture.title}</title><year>${fixture.year}</year><plot>${fixture.plot}</plot><rating>${fixture.rating}</rating><genre>${fixture.genre}</genre><director>Sam Rivera</director><actor><name>Alex Morgan</name><role>Host</role></actor></movie>`,
+				path.join(mediaRoot, `${stem}.nfo`),
+				`<movie><title>${stem}</title><year>${fixture.year}</year><plot>${fixture.plot}</plot><rating>${fixture.rating}</rating><genre>${fixture.genre}</genre><director>Sam Rivera</director><actor><name>Alex Morgan</name><role>Host</role></actor><thumb aspect="poster">${stem}-poster.png</thumb><thumb aspect="landscape">${stem}-landscape.png</thumb><fanart><thumb>${stem}-fanart.png</thumb></fanart></movie>`,
 			),
-			writeFile(path.join(mediaRoot, `${fixture.title}-poster.png`), poster),
+			writeFile(path.join(mediaRoot, `${stem}-poster.png`), poster),
+			writeFile(path.join(mediaRoot, `${stem}-landscape.png`), poster),
+			writeFile(path.join(mediaRoot, `${stem}-fanart.png`), poster),
 		]);
 	}));
 

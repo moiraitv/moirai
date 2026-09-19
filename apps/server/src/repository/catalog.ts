@@ -32,6 +32,7 @@ import type { RawGroupRow, RawItemRow } from './catalog-records.js';
 
 export {
 	artworkUrl,
+	inheritedGroupArtworkUrl,
 	cacheVersion,
 	decodedMetadata,
 	metadataNumber,
@@ -876,7 +877,7 @@ export class MediaCatalogRepository {
 	}
 
 	/** Return the source artwork location for a catalog item or group. */
-	async getArtworkOwner(kind: 'items' | 'groups', id: string) {
-		return this.assets.getArtworkOwner(kind, id);
+	async getArtworkOwner(kind: 'items' | 'groups', id: string, role?: 'poster' | 'landscape' | 'fanart') {
+		return this.assets.getArtworkOwner(kind, id, role);
 	}
 }

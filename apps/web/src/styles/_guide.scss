@@ -188,6 +188,16 @@
 
 .guide-channel-track {
 	position: relative;
+	z-index: 1;
+}
+
+.guide-frame-page .guide-canvas {
+	--guide-channel-width: 13.53rem;
+}
+
+.guide-frame-page .guide-channel-cell,
+.guide-frame-page .guide-channel-track {
+	min-height: 108px;
 }
 
 .guide-programme {
@@ -210,7 +220,7 @@
 
 .guide-programme:hover,
 .guide-programme:focus-visible {
-	z-index: 3;
+	z-index: 2;
 	border-color: color-mix(in srgb, var(--program-color) 46%, white 54%);
 	box-shadow: 0 0 0 2px var(--program-color-glow);
 	outline: none;
@@ -246,6 +256,83 @@
 
 .guide-programme strong {
 	font-size: 0.72rem;
+}
+
+.guide-frame-page .guide-programme {
+	top: 10px;
+	bottom: 10px;
+	padding: 0;
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	border-radius: 10px;
+	isolation: isolate;
+}
+
+.guide-programme-thumb {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	height: 100%;
+	object-fit: cover;
+	border-radius: 0;
+}
+
+.guide-programme-thumb-landscape {
+	aspect-ratio: 1 / 1;
+}
+
+.guide-programme-thumb-poster {
+	aspect-ratio: 2 / 3;
+}
+
+.guide-programme-fanart {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	object-fit: cover;
+	object-position: center right;
+	pointer-events: none;
+	opacity: 0.32;
+	mask-image: linear-gradient(to right, transparent 28%, #000 70%);
+	-webkit-mask-image: linear-gradient(to right, transparent 28%, #000 70%);
+}
+
+.guide-programme-copy {
+	position: relative;
+	z-index: 1;
+	min-width: 0;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 2px;
+}
+
+.guide-frame-page .guide-programme-copy {
+	padding: 8px 12px;
+}
+
+.guide-frame-page .guide-programme-copy strong {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	white-space: normal;
+	font-size: 0.8rem;
+	font-weight: 700;
+	line-height: 1.25;
+	text-overflow: unset;
+}
+
+.guide-programme-timespan {
+	flex-shrink: 0;
+	opacity: 0.72;
+	font-size: 0.64rem;
 }
 
 .guide-programme small,

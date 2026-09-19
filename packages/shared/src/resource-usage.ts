@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /** Saved resources whose authored references or current media membership can be inspected. */
 export const resourceUsageParamsSchema = z.object({
-	kind: z.enum(['program', 'template', 'encoding-profile', 'credit-template', 'media']),
+	kind: z.enum(['program', 'template', 'encoding-profile', 'credit-template', 'guide-template', 'media']),
 	id: z.uuid(),
 });
 /** Bounded pages for resource owners or realized showings. */

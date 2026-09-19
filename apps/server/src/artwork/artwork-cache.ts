@@ -13,6 +13,7 @@ export interface ArtworkCacheOwner {
 	id: string;
 	relativePath: string;
 	cacheVersion: string;
+	role?: 'poster' | 'landscape' | 'fanart';
 }
 
 /** Logical UI size generated from source artwork. */
@@ -64,7 +65,7 @@ export class ArtworkCache {
 		return this.maxEntryBytes;
 	}
 
-	/** Resolve the cache path for one owner, variant, and density. */
+	/** Resolve a role-specific cache path while preserving legacy primary-artwork paths. */
 	pathFor(
 		owner: ArtworkCacheOwner,
 		variant: ArtworkVariant = 'card',
@@ -77,7 +78,7 @@ export class ArtworkCache {
 			owner.kind,
 			owner.id,
 			version,
-			`${variant}@${density}x.jpg`,
+			`${owner.role ? `${owner.role}-` : ''}${variant}@${density}x.jpg`,
 		);
 	}
 

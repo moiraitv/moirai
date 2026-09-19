@@ -6,6 +6,7 @@ import type { MoiraiDatabase } from '../db/index.js';
 const tables: Record<Exclude<ResourceUsageKind, 'media'>, string> = {
 	program: 'scheduling_programs', template: 'schedule_templates',
 	'encoding-profile': 'encoding_profiles', 'credit-template': 'credit_templates',
+	'guide-template': 'guide_templates',
 };
 
 /** Select only direct authored references, retaining repeated occurrences for their owner count. */
@@ -36,6 +37,15 @@ function references(kind: Exclude<ResourceUsageKind, 'media'>, id: string): SQL 
 	if (kind === 'encoding-profile') {
 		return sql`SELECT 'channel' AS kind, id, name, 'Encoding profile' AS role FROM channels
 			WHERE json_extract(config, '$.encodingProfileId') = ${id}`;
+	}
+	if (kind === 'guide-template') {
+		return sql`
+			SELECT 'channel' AS kind, id, name, 'Guide template' AS role FROM channels
+			WHERE json_extract(config, '$.guideTemplateId') = ${id}
+			UNION ALL SELECT 'channel', id, name, 'Default'
+			FROM channels
+			WHERE json_extract(config, '$.guideTemplateId') IS NULL
+			AND EXISTS (SELECT 1 FROM guide_templates WHERE id = ${id} AND is_default = 1)`;
 	}
 	return sql`
 		SELECT 'channel' AS kind, id, name, 'Music video credits' AS role FROM channels

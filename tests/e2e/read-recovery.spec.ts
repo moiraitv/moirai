@@ -5,6 +5,7 @@ import { authenticateAdministrator } from './authentication';
 for (const resource of [
 	{ path: 'encoding-profiles', add: 'New Profile', name: 'Recovered profile' },
 	{ path: 'credit-templates', add: 'New template', name: 'Recovered credits' },
+	{ path: 'guide-templates', add: 'New template', name: 'Recovered guide' },
 ]) {
 	test(`recovers ${resource.path} after the initial list request fails and a new resource is saved`, async ({ page }) => {
 		const csrf = await authenticateAdministrator(page);
@@ -239,4 +240,38 @@ test('ignores an older credit sample failure after a newer refresh succeeds', as
 	await obsolete;
 	await expect(preview.getByText('Obsolete failure')).toHaveCount(0);
 	await expect(preview.getByRole('button', { name: 'Selected video' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('distinguishes loading, failure, and empty channels in guide-template preview', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.goto('/playback/guide-templates');
+	let release: () => void = () => {};
+	const pending = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let attempts = 0;
+	await page.route('**/api/v1/channels', async (route) => {
+		attempts++;
+		if (attempts === 1) {
+			await pending;
+			await route.fulfill({ status: 503, json: { message: 'Preview channels unavailable' } });
+		}
+		else {
+			await route.fulfill({ json: [] });
+		}
+	});
+	await page.getByRole('button', { name: 'New template', exact: true }).click();
+	const editor = page.getByRole('dialog');
+	await expect(editor.getByText('Loading channels…')).toBeVisible();
+	await expect(editor.getByText('Create a channel to preview one local day.')).toBeHidden();
+	await expect(editor.getByLabel('Channel', { exact: true })).toBeHidden();
+	release();
+	await expect(editor.getByText('Preview channels unavailable')).toBeVisible();
+	await expect(editor.getByText('Create a channel to preview one local day.')).toBeHidden();
+	await editor.getByLabel('Name', { exact: true }).fill('Retained draft');
+	await editor.getByRole('button', { name: 'Retry channels' }).click();
+	await expect(editor.getByText('Preview channels unavailable')).toBeHidden();
+	await expect(editor.getByText('Create a channel to preview one local day.')).toBeVisible();
+	await expect(editor.getByLabel('Name', { exact: true })).toHaveValue('Retained draft');
+	expect(attempts).toBe(2);
 });

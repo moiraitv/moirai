@@ -4,6 +4,10 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { foldMusicSearchText } from '../media/music-search.js';
+import {
+	endCatalogSearchDefer,
+	ensureCatalogSearchDeferTable,
+} from '../repository/catalog-search-sql.js';
 import * as schema from './schema.js';
 
 /** Database handle to the SQLite connection. */
@@ -26,5 +30,7 @@ export function createDatabase(databasePath: string, migrationsDir: string) {
 
 	const db = drizzle(sqlite, { schema });
 	migrate(db, { migrationsFolder: migrationsDir });
+	ensureCatalogSearchDeferTable(sqlite);
+	endCatalogSearchDefer(sqlite);
 	return { db, sqlite, close: () => sqlite.close() };
 }

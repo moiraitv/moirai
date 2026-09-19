@@ -78,6 +78,13 @@ function repositoryFixture(
 			groupTitles: {},
 			libraryNames: {},
 		}),
+		getSchedulingCatalogForItems: vi.fn().mockResolvedValue({
+			media: [],
+			groupParents: {},
+			libraryAvailability: {},
+			groupTitles: {},
+			libraryNames: {},
+		}),
 		listPrograms: vi.fn().mockResolvedValue([]),
 		listScheduleTemplates: vi.fn().mockResolvedValue([]),
 		listTimelineMaterializations: vi.fn().mockResolvedValue(
@@ -114,15 +121,23 @@ describe('readCommittedScheduleGuide', () => {
 		const channel = schedule();
 		const item = { ...segment(channel.channelId), role: 'primary' as const, mediaItemId: randomUUID() };
 		const snapshot = {
+			groupId: null,
+			seasonNumber: null,
+			episodeNumber: null,
+			genres: [],
+			genreNames: [],
+			plot: null,
+			year: null,
 			id: item.mediaItemId!,
 			libraryId: randomUUID(),
-			kind: 'episode',
+			kind: 'episode' as const,
 			title: 'Pilot',
 			sortTitle: 'Pilot',
 			playbackPath: '/media/pilot.mkv',
 			durationSeconds: 1800,
-			availability: 'available',
+			availability: 'available' as const,
 			seriesTitle: 'Seinfeld',
+			artworkUrl: null,
 		};
 		const repository = repositoryFixture([channel], [item], [{
 			channelId: channel.channelId, health: 'ready', committedAt: RANGE_START,
@@ -142,6 +157,58 @@ describe('readCommittedScheduleGuide', () => {
 			[channel.channelId],
 			true,
 		);
+	});
+
+	it('overlays live fanart onto committed snapshots that predate role URLs', async () => {
+		const channel = schedule();
+		const item = { ...segment(channel.channelId), role: 'primary' as const, mediaItemId: randomUUID() };
+		const snapshot = {
+			groupId: null,
+			seasonNumber: null,
+			episodeNumber: null,
+			genres: [],
+			genreNames: [],
+			plot: null,
+			year: null,
+			id: item.mediaItemId!,
+			libraryId: randomUUID(),
+			kind: 'movie' as const,
+			title: 'Alien Resurrection',
+			sortTitle: 'Alien Resurrection',
+			playbackPath: '/media/alien.mkv',
+			durationSeconds: 7000,
+			availability: 'available' as const,
+			artworkUrl: '/api/v1/artwork/items/old?v=poster',
+		};
+		const repository = repositoryFixture([channel], [item], [{
+			channelId: channel.channelId, health: 'ready', committedAt: RANGE_START,
+		}]);
+		vi.mocked(repository.listMaterializedTimelineSegmentsForGuide).mockResolvedValue([
+			{ segment: item, mediaSnapshot: snapshot, stateDelta: [] },
+		]);
+		vi.mocked(repository.getSchedulingCatalogForItems).mockResolvedValue({
+			media: [{
+				...snapshot,
+				fanartUrl: '/api/v1/artwork/items/live?v=fanart&role=fanart',
+				landscapeUrl: '/api/v1/artwork/items/live?v=land&role=landscape',
+				posterUrl: '/api/v1/artwork/items/live?v=poster&role=poster',
+			}],
+			groupParents: {},
+			libraryAvailability: {},
+			groupTitles: {},
+			libraryNames: {},
+		});
+
+		invalidateCommittedGuideCache();
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1, {
+			includeMediaCatalog: true,
+		});
+		expect(result.catalog.media[0]).toMatchObject({
+			title: 'Alien Resurrection',
+			artworkUrl: snapshot.artworkUrl,
+			fanartUrl: '/api/v1/artwork/items/live?v=fanart&role=fanart',
+			landscapeUrl: '/api/v1/artwork/items/live?v=land&role=landscape',
+		});
 	});
 
 	it('keeps a still-playing item that started before the requested local day', async () => {

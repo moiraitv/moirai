@@ -172,14 +172,72 @@ export function cacheVersion(metadata: Record<string, unknown>, fallback: string
 	return typeof metadata.artworkFingerprint === 'string' ? metadata.artworkFingerprint : fallback;
 }
 
+/** Artwork file role served by the public artwork endpoint. */
+export type ArtworkRole = 'poster' | 'landscape' | 'fanart';
+
 /** Return a cache-versioned artwork proxy URL when the catalog record has source artwork. */
 export function artworkUrl(
 	kind: 'items' | 'groups',
 	id: string,
 	relativePath: string | null,
 	version: string,
+	role?: ArtworkRole,
 ): string | null {
-	return relativePath ? `/api/v1/artwork/${kind}/${id}?v=${encodeURIComponent(version)}` : null;
+	if (!relativePath) {
+		return null;
+	}
+
+	const query = new URLSearchParams({ v: version });
+	if (role) {
+		query.set('role', role);
+	}
+
+	return `/api/v1/artwork/${kind}/${id}?${query.toString()}`;
+}
+
+/** Walk parent groups until a stored artwork file exists for the requested role. */
+export function inheritedGroupArtworkUrl(
+	groupId: string | null,
+	groupsById: ReadonlyMap<string, {
+		id: string;
+		parentId: string | null;
+		artworkRelativePath: string | null;
+		posterRelativePath: string | null;
+		landscapeRelativePath: string | null;
+		fanartRelativePath: string | null;
+		artworkVersion?: string;
+	}>,
+	role: ArtworkRole,
+): string | null {
+	const visited = new Set<string>();
+	let current = groupId;
+	while (current && !visited.has(current)) {
+		visited.add(current);
+		const group = groupsById.get(current);
+		if (!group) {
+			break;
+		}
+
+		const relativePath = role === 'poster'
+			? group.posterRelativePath ?? group.artworkRelativePath
+			: role === 'landscape'
+				? group.landscapeRelativePath
+				: group.fanartRelativePath;
+		const url = artworkUrl(
+			'groups',
+			group.id,
+			relativePath,
+			group.artworkVersion ?? relativePath ?? group.id,
+			role,
+		);
+		if (url) {
+			return url;
+		}
+
+		current = group.parentId;
+	}
+
+	return null;
 }
 
 /** Build an API media item from a stored catalog row. */

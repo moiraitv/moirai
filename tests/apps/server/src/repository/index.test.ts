@@ -54,6 +54,9 @@ function item(index: number): DiscoveredItem {
 		metadataStatus: 'incomplete',
 		metadata: {},
 		artworkRelativePath: null,
+		posterRelativePath: null,
+		landscapeRelativePath: null,
+		fanartRelativePath: null,
 		fingerprint: `fingerprint-${index}`,
 		fileModifiedAt: new Date(2025, 0, index + 1).toISOString(),
 		titleBucket: 'M',
@@ -1192,6 +1195,9 @@ describe('Repository scan reconciliation', () => {
 				plot: null,
 				metadata: { yearEnd: 2022 },
 				artworkRelativePath: null,
+				posterRelativePath: null,
+				landscapeRelativePath: null,
+				fanartRelativePath: null,
 			},
 			{
 				id: seasonId,
@@ -1204,6 +1210,9 @@ describe('Repository scan reconciliation', () => {
 				plot: null,
 				metadata: { seasonNumber: 1 },
 				artworkRelativePath: null,
+				posterRelativePath: null,
+				landscapeRelativePath: null,
+				fanartRelativePath: null,
 			},
 		];
 		const episode = {

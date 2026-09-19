@@ -1,4 +1,5 @@
 import { applyDefaultEncodingProfile, applyEncodingProfile } from './encoding-profiles.js';
+import { validateGuideTemplateReference } from './guide-templates.js';
 import { validateCreditReference } from './subtitle-validation.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, sql } from 'drizzle-orm';
@@ -50,6 +51,7 @@ export class ChannelRepository {
 	/** Create a channel with its stable Moirai XMLTV identifier. */
 	async createChannel(input: ChannelCreate, useDefaultProfile = false): Promise<Channel> {
 		validateCreditReference(this.db, input.subtitlePreferences);
+		validateGuideTemplateReference(this.db, input);
 		const timestamp = currentTimestamp();
 		const id = randomUUID();
 		const effectiveTvgId = effectiveChannelTvgId({ id, number: input.number });
@@ -97,6 +99,7 @@ export class ChannelRepository {
 		if (input.subtitlePreferences !== undefined) {
 			validateCreditReference(this.db, input.subtitlePreferences);
 		}
+		validateGuideTemplateReference(this.db, config);
 		const effectiveTvgId = effectiveChannelTvgId({ id, number: config.number });
 		const numberKey = canonicalChannelNumberKey(config.number);
 

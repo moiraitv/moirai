@@ -203,8 +203,13 @@ export async function buildApp(
 
 	// Connect maintenance, guide generation, and live-event invalidation.
 	const maintenance = new MaintenanceService(repository, artworkCache, logs, config, logs.logger);
-	const epg = new EpgService(repository, config.timeZone, config.publicUrl, () =>
-		timelineMaterializer.runNow());
+	const epg = new EpgService(
+		repository,
+		config.timeZone,
+		config.publicUrl,
+		() => timelineMaterializer.runNow(),
+		(message, extra) => logs.logger.warn(extra ?? {}, message),
+	);
 	const unsubscribeMaterializer = events.subscribe((event) =>
 		timelineMaterializer.handleEvent(event));
 	const unsubscribeEpg = events.subscribe((event) => {

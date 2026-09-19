@@ -3,23 +3,40 @@ import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import {
 	XMLTV_EPG_DAYS,
-	MAX_XMLTV_DESCRIPTION_LENGTH,
 	effectiveChannelTvgId,
-	type GuideEntry,
 	type Channel,
+	type GuideEntry,
+	type GuideTemplatePreviewValue,
+	type GuideTemplateSources,
 	type ScheduleGuide,
 	type SchedulableMedia,
 	type SchedulingCatalog,
 	type TimelineSegment,
 } from '@moirai/shared';
-import { publicChannelLogoUrl } from '../artwork/channel-logo-url.js';
-import { versionedPublicUrl } from '../routes/public-url.js';
 import type { Repository } from '../repository/index.js';
 import {
 	readCommittedGuideAfterMaterializing,
 	readCommittedScheduleGuide,
 } from './schedule-guide.js';
 import { currentTimestamp } from '../time.js';
+import {
+	channelContext,
+	compileGuideTemplate,
+	flattenLiquidPreviewValues,
+	listingTitle,
+	mediaItemContext,
+	minifyXmltv,
+	programmeContext,
+	programmeKind,
+	renderChannelFragment,
+	renderProgrammeFragment,
+	xmlChildText,
+	xmltvTimestamp,
+	type CompiledGuideTemplate,
+	type GuideTemplateWarn,
+} from './xmltv-template.js';
+
+export { xmltvTimestamp, minifyXmltv };
 
 /** XMLTV document with its covered time window and channel count. */
 export interface EpgDocument {
@@ -37,65 +54,9 @@ export class DuplicateTvgIdError extends Error {
 	}
 }
 
-/** Escape text for safe inclusion in XML content or attributes. */
-function xmlText(value: string): string {
-	return value
-		.replaceAll('&', '&amp;')
-		.replaceAll('<', '&lt;')
-		.replaceAll('>', '&gt;')
-		.replaceAll('"', '&quot;')
-		.replaceAll("'", '&apos;');
-}
-
-/** Serialize one simple XML element with optional attributes. */
-function element(name: string, value: string, attributes = ''): string {
-	return `    <${name}${attributes}>${xmlText(value)}</${name}>`;
-}
-
 /** Return the Moirai-owned identifier shared by XMLTV and the M3U playlist. */
 export function effectiveTvgId(channel: Channel): string {
 	return effectiveChannelTvgId(channel);
-}
-
-/** Format an instant using XMLTV local time and its per-instant UTC offset. */
-export function xmltvTimestamp(value: string, timeZone: string): string {
-	const zoned = Temporal.Instant.from(value).toZonedDateTimeISO(timeZone);
-	const dateTime = [
-		zoned.year.toString().padStart(4, '0'),
-		zoned.month.toString().padStart(2, '0'),
-		zoned.day.toString().padStart(2, '0'),
-		zoned.hour.toString().padStart(2, '0'),
-		zoned.minute.toString().padStart(2, '0'),
-		zoned.second.toString().padStart(2, '0'),
-	].join('');
-	const offset = zoned.offset === '+00:00' ? '+0000' : zoned.offset.replace(':', '');
-	return `${dateTime} ${offset}`;
-}
-
-/** Read a series title from the bounded segment metadata snapshot. */
-function seriesTitle(media: SchedulableMedia, catalog: SchedulingCatalog): string | null {
-	const snapshotTitle = (media as SchedulableMedia & { seriesTitle?: string }).seriesTitle;
-	if (snapshotTitle) {
-		return snapshotTitle;
-	}
-
-	if (media.kind !== 'episode' || !media.groupId) {
-		return null;
-	}
-
-	const parentId = catalog.groupParents[media.groupId];
-	return catalog.groupTitles[parentId ?? media.groupId] ?? null;
-}
-
-/** Serialize season and episode coordinates using XMLTV numbering. */
-function episodeNumber(media: SchedulableMedia): string | null {
-	if (media.seasonNumber === null && media.episodeNumber === null) {
-		return null;
-	}
-
-	const season = media.seasonNumber === null ? '' : String(Math.max(0, media.seasonNumber - 1));
-	const episode = media.episodeNumber === null ? '' : String(Math.max(0, media.episodeNumber - 1));
-	return `${season}.${episode}.`;
 }
 
 /** Create a bounded placeholder programme for an explicit guide gap. */
@@ -130,87 +91,109 @@ function noProgrammingSegment(
 	};
 }
 
-/** Serialize one committed timeline segment as an XMLTV programme. */
-function programmeXml(
-	segment: TimelineSegment,
-	channelId: string,
-	mediaById: Map<string, SchedulableMedia>,
-	catalog: SchedulingCatalog,
-	publicUrl: string,
-	timeZone: string,
-): string[] {
-	const media = segment.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
-	const showTitle = media ? seriesTitle(media, catalog) : null;
-	const title = segment.role === 'dead-air' ? 'No programming' : showTitle || segment.title;
-	const lines = [
-		`  <programme start="${xmltvTimestamp(segment.start, timeZone)}" stop="${xmltvTimestamp(segment.finish, timeZone)}" channel="${xmlText(channelId)}">`,
-		element('title', title),
-	];
-	if (showTitle && media) {
-		lines.push(element('sub-title', media.title));
-	}
-	if (media?.plot) {
-		lines.push(element('desc', media.plot.slice(0, MAX_XMLTV_DESCRIPTION_LENGTH)));
-	}
-	if (media?.year) {
-		lines.push(element('date', String(media.year)));
-	}
-	for (const genre of media?.genreNames ?? []) {
-		lines.push(element('category', genre));
-	}
-	if (segment.role === 'filler') {
-		lines.push(element('category', 'Filler'));
-	}
-	if (segment.role === 'dead-air') {
-		lines.push(element('category', 'No programming'));
-	}
-	if (media) {
-		const number = episodeNumber(media);
-		if (number) {
-			lines.push(element('episode-num', number, ' system="xmltv_ns"'));
-		}
-		const sourceArtwork = media.artworkUrl
-			? new URL(media.artworkUrl, `${publicUrl}/`)
-			: null;
-		const artworkVersion = sourceArtwork?.searchParams.get('v') ?? media.id;
-		if (sourceArtwork) {
-			sourceArtwork.searchParams.set('variant', 'compat');
-			sourceArtwork.searchParams.set('dpr', '3');
-		}
-		const artwork = versionedPublicUrl(
-			publicUrl,
-			sourceArtwork?.toString() ?? null,
-			artworkVersion,
-		);
-		if (artwork) {
-			lines.push(`    <icon src="${xmlText(artwork)}" />`);
-		}
-	}
-	lines.push('  </programme>');
-	return lines;
+/** Options that select compiled sources and whether to minify the published document. */
+export interface BuildXmltvOptions {
+	sourcesForChannel: (channel: Channel) => GuideTemplateSources;
+	minify?: boolean;
+	fallback?: boolean;
+	warn?: GuideTemplateWarn;
 }
 
-/** Publish authored block metadata without borrowing a selected video's metadata. */
-function blockProgrammeXml(entry: GuideEntry, channelId: string, timeZone: string): string[] {
-	return [
-		`  <programme start="${xmltvTimestamp(entry.start, timeZone)}" stop="${xmltvTimestamp(entry.finish, timeZone)}" channel="${xmlText(channelId)}">`,
-		element('title', entry.title),
-		...(entry.description ? [element('desc', entry.description)] : []),
-		'  </programme>',
-	];
+/** Compile a template once and reuse it for every listing that shares those sources. */
+function compiledForSources(
+	cache: Map<string, CompiledGuideTemplate>,
+	sources: GuideTemplateSources,
+	options: { fallback: boolean; warn?: GuideTemplateWarn },
+): CompiledGuideTemplate {
+	const cacheKey = JSON.stringify(sources);
+	const existing = cache.get(cacheKey);
+	if (existing) {
+		return existing;
+	}
+
+	const compiled = compileGuideTemplate(sources, options.warn
+		? { fallback: options.fallback, warn: options.warn }
+		: { fallback: options.fallback });
+	cache.set(cacheKey, compiled);
+	return compiled;
+}
+
+/** Render one channel's listings with the compiled template for each programme kind. */
+async function renderChannelListings(
+	channel: Channel,
+	guide: ScheduleGuide,
+	catalog: SchedulingCatalog,
+	publicUrl: string,
+	compiled: CompiledGuideTemplate,
+	mediaById: Map<string, SchedulingCatalog['media'][number]>,
+	renderOptions: { fallback: boolean; warn?: GuideTemplateWarn },
+): Promise<Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }>> {
+	const id = effectiveTvgId(channel);
+	const channelGuide = new Map(guide.channels.map((entry) => [entry.channelId, entry])).get(channel.id);
+	const configuredSegments = channelGuide?.preview.segments;
+	const segments = configuredSegments?.length
+		? [...configuredSegments]
+		: [noProgrammingSegment(channel.id, guide.startDate, guide.days, guide.timeZone)];
+	segments.sort((left, right) => left.start.localeCompare(right.start));
+	const byId = new Map(segments.map((segment) => [segment.id, segment]));
+	const contextChannel = channelContext(channel, publicUrl, id);
+	const listings: Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }> = [];
+	for (const entry of channelGuide?.entries ?? segments.map(itemGuideEntry)) {
+		const segment = entry.segmentId ? byId.get(entry.segmentId) : undefined;
+		const timedSegment = segment
+			? { ...segment, start: entry.start, finish: entry.finish }
+			: undefined;
+		const media = timedSegment?.mediaItemId ? mediaById.get(timedSegment.mediaItemId) : undefined;
+		const kind = programmeKind(entry, timedSegment, media);
+		if (kind !== 'block' && !timedSegment) {
+			continue;
+		}
+
+		const start = timedSegment?.start ?? entry.start;
+		const finish = timedSegment?.finish ?? entry.finish;
+		const context = programmeContext({
+			kind,
+			title: listingTitle(kind, entry, timedSegment, media, catalog),
+			start,
+			finish,
+			timeZone: guide.timeZone,
+			channel: contextChannel,
+			item: mediaItemContext(media, catalog, publicUrl),
+			slot: {
+				start,
+				finish,
+				role: timedSegment?.role ?? entry.role,
+				title: timedSegment?.title ?? entry.title,
+				program_id: timedSegment?.programId ?? entry.programId,
+				truncated: timedSegment?.truncated ?? entry.truncated,
+			},
+			block: kind === 'block'
+				? { title: entry.title, description: entry.description }
+				: null,
+		});
+		const xml = await renderProgrammeFragment(compiled, kind, context, renderOptions);
+		listings.push({ entry, xml, context });
+	}
+
+	return listings;
 }
 
 /** Serialize committed channel timelines as an XMLTV document. */
-export function buildXmltv(
+export async function buildXmltv(
 	channels: Channel[],
 	guide: ScheduleGuide,
 	catalog: SchedulingCatalog,
 	publicUrl: string,
-): string {
+	options: BuildXmltvOptions,
+): Promise<string> {
 	const sortedChannels = [...channels].sort((left, right) =>
 		left.number.localeCompare(right.number, undefined, { numeric: true, sensitivity: 'base' }));
 	const ids = new Set<string>();
 	const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv generator-info-name="Moirai">'];
+	const compiledBySources = new Map<string, CompiledGuideTemplate>();
+	const fallback = options.fallback ?? false;
+	const renderOptions = options.warn ? { fallback, warn: options.warn } : { fallback };
+
 	for (const channel of sortedChannels) {
 		const id = effectiveTvgId(channel);
 		if (ids.has(id)) {
@@ -218,44 +201,207 @@ export function buildXmltv(
 		}
 
 		ids.add(id);
-		lines.push(`  <channel id="${xmlText(id)}">`);
-		lines.push(element('display-name', `${channel.number} ${channel.name}`));
-		lines.push(element('display-name', channel.number));
-		lines.push(element('display-name', channel.name));
-		const logo = publicChannelLogoUrl(channel, publicUrl);
-		if (logo) {
-			lines.push(`    <icon src="${xmlText(logo)}" />`);
+		const compiled = compiledForSources(
+			compiledBySources,
+			options.sourcesForChannel(channel),
+			renderOptions,
+		);
+		const fragment = await renderChannelFragment(
+			compiled,
+			{ channel: channelContext(channel, publicUrl, id) },
+			renderOptions,
+		);
+		if (fragment) {
+			lines.push(fragment);
 		}
-		lines.push('  </channel>');
 	}
 
-	const guideByChannel = new Map(
-		guide.channels.map((entry) => [entry.channelId, entry]),
-	);
 	const mediaById = new Map(catalog.media.map((media) => [media.id, media]));
 	for (const channel of sortedChannels) {
-		const id = effectiveTvgId(channel);
-		const channelGuide = guideByChannel.get(channel.id);
-		const configuredSegments = channelGuide?.preview.segments;
-		const segments = configuredSegments?.length
-			? [...configuredSegments]
-			: [noProgrammingSegment(channel.id, guide.startDate, guide.days, guide.timeZone)];
-		segments.sort((left, right) => left.start.localeCompare(right.start));
-		const byId = new Map(segments.map((segment) => [segment.id, segment]));
-		for (const entry of channelGuide?.entries ?? segments.map(itemGuideEntry)) {
-			if (entry.kind === 'block') {
-				lines.push(...blockProgrammeXml(entry, id, guide.timeZone));
-			}
-			else {
-				const segment = byId.get(entry.segmentId!);
-				if (segment) {
-					lines.push(...programmeXml({ ...segment, start: entry.start, finish: entry.finish }, id, mediaById, catalog, publicUrl, guide.timeZone));
-				}
+		const compiled = compiledForSources(
+			compiledBySources,
+			options.sourcesForChannel(channel),
+			renderOptions,
+		);
+		for (const listing of await renderChannelListings(
+			channel,
+			guide,
+			catalog,
+			publicUrl,
+			compiled,
+			mediaById,
+			renderOptions,
+		)) {
+			if (listing.xml) {
+				lines.push(listing.xml);
 			}
 		}
 	}
 	lines.push('</tv>', '');
-	return lines.join('\n');
+	const body = lines.join('\n');
+	return options.minify ? minifyXmltv(body) : body;
+}
+
+/** Render one formatted local day using unpublished template sources. */
+export async function previewGuideXmltv(
+	channel: Channel,
+	guide: ScheduleGuide,
+	catalog: SchedulingCatalog,
+	publicUrl: string,
+	sources: GuideTemplateSources,
+): Promise<string> {
+	return buildXmltv([channel], guide, catalog, publicUrl, {
+		sourcesForChannel: () => sources,
+		minify: false,
+		fallback: false,
+	});
+}
+
+/** Copy catalog artwork onto a listing, using primary artwork when role URLs are absent. */
+function listingArtwork(media?: SchedulableMedia): {
+	posterUrl: string | null;
+	landscapeUrl: string | null;
+	fanartUrl: string | null;
+} {
+	return {
+		posterUrl: media?.posterUrl ?? media?.artworkUrl ?? null,
+		landscapeUrl: media?.landscapeUrl ?? null,
+		fanartUrl: media?.fanartUrl ?? null,
+	};
+}
+
+/** Copy XMLTV title and description onto a guide listing without mutating the source entry. */
+function presentedEntry(entry: GuideEntry, xml: string, media?: SchedulableMedia): GuideEntry {
+	return {
+		...entry,
+		title: xmlChildText(xml, 'title') || entry.title,
+		subtitle: xmlChildText(xml, 'sub-title'),
+		description: xmlChildText(xml, 'desc') || entry.description,
+		...listingArtwork(media),
+	};
+}
+
+/**
+ * Replace displayed listing titles with the XMLTV output of each channel's guide template.
+ * Returns a new guide object so the committed-guide cache is not mutated.
+ */
+export async function presentGuideListings(
+	channels: Channel[],
+	guide: ScheduleGuide,
+	catalog: SchedulingCatalog,
+	publicUrl: string,
+	options: BuildXmltvOptions,
+): Promise<ScheduleGuide> {
+	const compiledBySources = new Map<string, CompiledGuideTemplate>();
+	const mediaById = new Map(catalog.media.map((media) => [media.id, media]));
+	const channelsById = new Map(channels.map((channel) => [channel.id, channel]));
+	const fallback = options.fallback ?? false;
+	const renderOptions = options.warn ? { fallback, warn: options.warn } : { fallback };
+	const presented = await Promise.all(guide.channels.map(async (channelGuide) => {
+		const channel = channelsById.get(channelGuide.channelId);
+		if (!channel) {
+			return channelGuide;
+		}
+
+		const listings = await renderChannelListings(
+			channel,
+			guide,
+			catalog,
+			publicUrl,
+			compiledForSources(
+				compiledBySources,
+				options.sourcesForChannel(channel),
+				renderOptions,
+			),
+			mediaById,
+			renderOptions,
+		);
+		const byEntryId = new Map(listings.map((listing) => [listing.entry.id, listing]));
+		const bySegmentId = new Map(
+			listings.flatMap((listing) => listing.entry.segmentId
+				? [[listing.entry.segmentId, listing] as const]
+				: []),
+		);
+		const mediaForSegment = (segment: TimelineSegment | undefined): SchedulableMedia | undefined => (
+			segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined
+		);
+		const segmentById = new Map(channelGuide.preview.segments.map((segment) => [segment.id, segment]));
+		const entries = channelGuide.entries?.map((entry) => {
+			const listing = byEntryId.get(entry.id);
+			const segment = entry.segmentId ? segmentById.get(entry.segmentId) : undefined;
+			return listing ? presentedEntry(entry, listing.xml, mediaForSegment(segment)) : entry;
+		});
+		return {
+			...channelGuide,
+			...(entries ? { entries } : {}),
+			preview: {
+				...channelGuide.preview,
+				segments: channelGuide.preview.segments.map((segment) => {
+					const listing = bySegmentId.get(segment.id) ?? byEntryId.get(segment.id);
+					if (!listing) {
+						return segment;
+					}
+
+					const media = mediaForSegment(segment);
+					return {
+						...segment,
+						title: xmlChildText(listing.xml, 'title') || segment.title,
+						subtitle: xmlChildText(listing.xml, 'sub-title'),
+						...listingArtwork(media),
+					};
+				}),
+			},
+		};
+	}));
+
+	return { ...guide, channels: presented };
+}
+
+/** Overlay XMLTV titles onto one channel day and expose resolved Liquid values. */
+export async function previewGuideListings(
+	channel: Channel,
+	guide: ScheduleGuide,
+	catalog: SchedulingCatalog,
+	publicUrl: string,
+	sources: GuideTemplateSources,
+): Promise<{
+	entries: GuideEntry[];
+	channelValues: GuideTemplatePreviewValue[];
+	listingValues: Record<string, GuideTemplatePreviewValue[]>;
+}> {
+	const compiled = compileGuideTemplate(sources, { fallback: false });
+	const mediaById = new Map(catalog.media.map((media) => [media.id, media]));
+	const listings = await renderChannelListings(
+		channel,
+		guide,
+		catalog,
+		publicUrl,
+		compiled,
+		mediaById,
+		{ fallback: false },
+	);
+	const listingValues: Record<string, GuideTemplatePreviewValue[]> = {};
+	const segmentsById = new Map(
+		(guide.channels.find((entry) => entry.channelId === channel.id)?.preview.segments ?? [])
+			.map((segment) => [segment.id, segment]),
+	);
+	const entries = listings.map(({ entry, xml, context }) => {
+		const segment = entry.segmentId ? segmentsById.get(entry.segmentId) : undefined;
+		const media = segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
+		const previewEntry = {
+			...presentedEntry(entry, xml, media),
+			segmentId: entry.segmentId && /^[0-9a-f-]{36}$/iu.test(entry.segmentId) ? entry.segmentId : null,
+		};
+		listingValues[previewEntry.id] = flattenLiquidPreviewValues(context);
+		return previewEntry;
+	});
+	return {
+		entries,
+		channelValues: flattenLiquidPreviewValues({
+			channel: channelContext(channel, publicUrl, effectiveTvgId(channel)),
+		}),
+		listingValues,
+	};
 }
 
 /**
@@ -273,6 +419,7 @@ export class EpgService {
 		private readonly timeZone: string,
 		private readonly publicUrl: string,
 		private readonly ensureMaterialized: () => Promise<void> = async () => undefined,
+		private readonly warn: GuideTemplateWarn = () => undefined,
 	) {}
 
 	/** Discard the cached XMLTV document after programming changes. */
@@ -321,7 +468,23 @@ export class EpgService {
 				this.ensureMaterialized,
 			),
 		]);
-		const body = buildXmltv(channels, materialized.guide, materialized.catalog, this.publicUrl);
+		const templates = await this.repository.guideTemplates.sourcesById();
+		const body = await buildXmltv(
+			channels,
+			materialized.guide,
+			materialized.catalog,
+			this.publicUrl,
+			{
+				sourcesForChannel: (channel) => (
+					channel.guideTemplateId
+						? templates.byId.get(channel.guideTemplateId) ?? templates.defaultSources
+						: templates.defaultSources
+				),
+				minify: true,
+				fallback: true,
+				warn: this.warn,
+			},
+		);
 		return {
 			body,
 			etag: `"${createHash('sha256').update(body).digest('hex')}"`,

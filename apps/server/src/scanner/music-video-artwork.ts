@@ -26,6 +26,9 @@ export function inheritMusicArtistArtwork(groups: DiscoveredGroup[], items: Disc
 			continue;
 		}
 		artist.artworkRelativePath = source.artworkRelativePath;
+		artist.posterRelativePath = source.posterRelativePath;
+		artist.landscapeRelativePath = source.landscapeRelativePath;
+		artist.fanartRelativePath = source.fanartRelativePath;
 		artist.metadata = { ...artist.metadata, artworkFingerprint: source.metadata.artworkFingerprint ?? source.artworkRelativePath };
 	}
 }

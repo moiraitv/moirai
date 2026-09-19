@@ -27,6 +27,7 @@ it('uses the parent poster for groups without their own artwork across browsing 
 		await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), discovery.groups, discovery.items, [], true);
 		const parent = (await repository.listMediaGroupsByIds(library.id, [show.id]))[0]!;
 		expect(parent.artworkUrl).toContain(`/groups/${show.id}?`);
+		expect((await repository.getArtworkOwner('groups', show.id, 'poster'))?.relativePath).toBe('Show/poster.jpg');
 		const query = { ...catalogProgramItemQuerySchema.parse({}), parentId: show.id, page: 1, pageSize: 50, sort: 'title' as const, direction: 'asc' as const };
 		const browsed = (await repository.browseMedia(library.id, query)).groups;
 		const selected = await repository.listMediaGroupsByIds(library.id, seasons.map(group => group.id));
@@ -38,6 +39,51 @@ it('uses the parent poster for groups without their own artwork across browsing 
 		show.artworkRelativePath = null;
 		await repository.reconcileScan(await repository.beginScan(library.id, 'manual'), discovery.groups, discovery.items, [], true);
 		expect((await repository.listMediaGroupsByIds(library.id, [seasons[0]!.id]))[0]!.artworkUrl).toBeNull();
+	}
+	finally {
+		database.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+it('inherits show fanart onto episodes in the item scheduling catalog', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-schedule-fanart-'));
+	const database = createDatabase(path.join(root, 'test.sqlite'), path.resolve('drizzle'));
+	try {
+		const repository = new Repository(database.db);
+		const library = await repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Shows',
+			typeKey: 'shows',
+			sourceType: 'on-disk',
+			sourceConfig: { scanRoot: root },
+		}));
+		const directory = path.join(root, 'Show', 'Season 01');
+		await mkdir(directory, { recursive: true });
+		await writeFile(path.join(directory, 'Show S01E01.mp4'), 'fixture');
+		const discovery = await discoverOnDisk(library, {
+			probeMedia: async () => ({
+				durationMilliseconds: 60_000,
+				fileSizeBytes: 7,
+				container: 'mp4',
+				streams: [],
+				resolution: null,
+				tags: {},
+			}),
+		});
+		const show = discovery.groups.find((group) => group.kind === 'show')!;
+		show.fanartRelativePath = 'Show/fanart.jpg';
+		show.metadata = { ...show.metadata, artworkFingerprint: 'show-fanart-v1' };
+		await repository.reconcileScan(
+			await repository.beginScan(library.id, 'initial'),
+			discovery.groups,
+			discovery.items,
+			[],
+			true,
+		);
+		const catalog = await repository.getSchedulingCatalogForItems([discovery.items[0]!.id]);
+		expect(catalog.media[0]?.fanartUrl).toBe(
+			`/api/v1/artwork/groups/${show.id}?v=show-fanart-v1&role=fanart`,
+		);
 	}
 	finally {
 		database.close();

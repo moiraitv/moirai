@@ -957,6 +957,10 @@
 		--guide-channel-width: 225px;
 	}
 
+	.guide-frame-page .guide-canvas {
+		--guide-channel-width: 9.46rem;
+	}
+
 	.guide-channel-cell {
 		grid-template-columns: 40px minmax(0, 1fr) auto;
 		gap: 7px;
@@ -965,6 +969,22 @@
 	.guide-channel-cell .guide-channel-logo {
 		width: 40px;
 		height: 40px;
+	}
+
+	.guide-channel-cell-page {
+		padding-right: 4px;
+		grid-template-columns: 1.9rem minmax(0, 1fr);
+		column-gap: 4px;
+		row-gap: 3px;
+
+		.channel-number {
+			width: 1.9rem;
+		}
+
+		.guide-channel-logo {
+			width: 36px;
+			height: 36px;
+		}
 	}
 
 	.guide-channel-actions {

@@ -197,6 +197,27 @@
       "when": 1789610400000,
       "tag": "0027_catalog_search",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1789696800000,
+      "tag": "0028_guide_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1789783200000,
+      "tag": "0029_artwork_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1789783300000,
+      "tag": "0030_scan_fts",
+      "breakpoints": true
     }
   ]
 }

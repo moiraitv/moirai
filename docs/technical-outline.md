@@ -176,7 +176,8 @@ VobSub sidecars are probed once per track during preparation so language and dis
 passes a concrete stream index to the worker. Failed VobSub probes exclude only that sidecar,
 leaving other subtitle candidates available. Image subtitles remain burned. Logical and part-scoped sidecar offsets follow multipart clipping.
 
-The Playback management group owns reusable encoding profiles and credit templates. Credit templates
+The Playback management group owns reusable encoding profiles, credit templates, and XMLTV
+guide templates. Credit templates
 include descriptions and a seeded, read-only music video design protected from edits and deletion
 by the server. Users can duplicate it; upgrades preserve existing templates and resolve name conflicts. Profiles
 include optional descriptions, copied when duplicated from the collection or built-in viewer;
@@ -212,6 +213,15 @@ immediately and invalidate older catalog requests; lineup and guide refreshes ru
 resource-editor footers retain accessible action names and reset confirmation with icon controls.
 Successful template and channel-schedule saves close their editors, including saves requested
 through the unsaved-changes dialog; failed saves preserve the open draft.
+
+Reusable XMLTV guide templates use Liquid to generate `<channel>` and `<programme>` fragments, with
+a tab per listing kind. Interpolated values are XML-escaped and file-loading tags are disabled.
+Blank tabs and invalid live sources fall back to the built-in Standard XMLTV layout for that kind.
+A single default applies to channels without an explicit assignment. Used by includes channels that
+inherit the current default as well as channels that assign the template explicitly. Editor preview
+shows one local day as a guide at four-hour zoom from unpublished sources; published XMLTV is
+minified. Completely empty tabs fall back to the built-in layout for that kind; a tab that still
+contains comments or other Liquid is used as written.
 
 Reusable music video credit templates use Liquid to generate subtitles in ASS format. They expose
 bounded catalog metadata, source duration converted from persisted milliseconds, and channel resolution. Isolated, resource-limited
@@ -311,9 +321,16 @@ indexed with filename-derived metadata.
 ### Artwork
 
 The scanner recognizes conventional poster, cover, default, movie, show, folder, thumbnail, fanart,
-and season artwork aliases in AVIF, BMP, GIF, JPEG variants, PNG, TIFF, and WebP. Safe local primary
-artwork references in NFO files take precedence over those aliases. SVG is not served because it can
-contain active content. Missing artwork uses a UI placeholder.
+landscape, and season artwork aliases in AVIF, BMP, GIF, JPEG variants, PNG, TIFF, and WebP. `thumb`
+and `-thumb` remain last-resort poster aliases. Poster, landscape, and fanart files are stored
+independently; the primary artwork path remains poster, then landscape, then fanart. Safe local
+primary artwork references in NFO files take precedence over those aliases. SVG is not served because
+it can contain active content. Missing artwork uses a UI placeholder. The public artwork endpoint
+accepts an optional `role` of poster, landscape, or fanart. Group poster requests fall back to the
+primary artwork path when the dedicated poster column is empty. Guide listings use that poster URL,
+or the primary `artworkUrl` on older media snapshots that predate role fields.
+Artwork cache entries isolate each role, including stale fallback and replacement cleanup;
+requests without a role retain the existing primary-artwork cache paths.
 
 Artwork is transformed on demand into metadata-free JPEG variants:
 
@@ -439,6 +456,7 @@ SQLite stores:
   subtitle inventory, and technical probes;
 - channels, reusable encoding profiles, and effective normalization settings;
 - reusable music video credit templates;
+- reusable XMLTV guide templates and the single default assignment;
 - programs, templates, slots, boundaries, and channel template stacks;
 - playback-selection state and committed timeline segments;
 - playback settings.
@@ -489,7 +507,11 @@ A program separates content eligibility from selection behavior. Content sources
 Library search uses a separate optional `search` parameter; the existing `name` filter remains
 title-only. Catalog search uses an FTS5 prefix index of titles, plots, genres, people, and group labels,
 kept in sync from catalog writes, and flattens to matching items so a shows-library query can return
-every matching episode. When prefix matching finds nothing, the same filters fall back to substring
+every matching episode. Live FTS triggers skip artwork-only item updates and group updates that do not
+change searchable text; scan persist defers those triggers and rebuilds `catalog_search` once for the
+library. Library listings read a stored `item_count` updated at scan commit instead of counting media
+rows on every request. The web shell ignores in-progress `scan.changed` events when refreshing the
+library list. When prefix matching finds nothing, the same filters fall back to substring
 `LIKE` so queries such as `ein` still match `Seinfeld`. Music-video libraries keep credit and album matching, including
 Unicode folding. Search results skip A–Z navigation aggregation. Catalog and source-picker item
 searches share those predicates. Search
@@ -763,8 +785,12 @@ M3U entries include Channels DVR's `channel-id` from the persistent channel UUID
 `channel-number` from the configured number, using the existing M3U escaping. The UUID remains
 stable across renames and renumbering; existing `tvg-id`, `tvg-chno`, XMLTV identifiers, and stream
 URL generation remain unchanged.
-Guide and Channels share a timeline scale of 112 pixels per elapsed hour and show channel numbers
-centered below their logos, with a TV icon when no logo is set.
+Guide and Channels share a timeline scale that fits six elapsed hours in the visible track. The Guide
+page channel column uses fixed-width number, unbezeled icon, and name tracks. Guide listings may show
+a landscape or poster thumbnail when width allows, using the card artwork variant so stills stay
+sharp at listing height. Landscape thumbs are cropped to a square. Listings show vertically centered
+title and timespan copy, a 24-hour timespan, and a dimmed fanart wash. Adjacent listings leave a small gutter.
+Channels keeps the compact logo-above-number cell.
 On Channels, the edit button covers the full channel cell while warning badges remain independently
 interactive; keyboard focus outlines the complete edit target.
 The shared guide expands to its full row height and scrolls vertically with the page, while
@@ -818,7 +844,13 @@ the requested window, including early-started content crossing its final boundar
 
 The XMLTV document comes only from the committed rolling timeline. It includes every configured
 channel, explicit no-programming intervals, bounded metadata snapshots, episode data, and proxied
-artwork where available.
+artwork where available. Each channel uses its assigned Liquid guide template, or the saved default
+when none is assigned. Templates have a built-in read-only Standard XMLTV layout and per-type
+sources for channel, episode, movie, music video, other, filler, no-programming, and block listings.
+Published XMLTV is minified after a successful render. The Guide timeline uses the same per-channel
+templates for listing titles and optional subtitles. The Channels timeline keeps program-source
+labels. The template editor preview renders the unpublished draft. Invalid live sources fall back to
+the built-in layout for that type.
 
 Channel identifiers use this stable format:
 
@@ -830,7 +862,8 @@ For example: `C601.1.a1b2c3d4.moirai.tv`.
 
 Every XMLTV icon URL contains a source or channel version query parameter so clients can refresh
 changed artwork without disabling caching. Conditional requests use ETags. Only committed timeline
-or channel-presentation changes invalidate the cached XMLTV document.
+or channel-presentation, guide-template, or default-template changes invalidate the cached XMLTV
+document.
 
 A scheduled channel must have a healthy, contiguous committed window before its guide and playback
 are authoritative. Incomplete output returns a retryable unavailable response instead of pretending
@@ -1048,7 +1081,7 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
   appearances and production jobs from Stars, preserving unknown or mixed acting roles as cast, with
   independently remembered More disclosures;
 - channel normalization and artwork;
-- a Playback group for reusable encoding profiles and music video credit templates;
+- a Playback group for reusable encoding profiles, XMLTV guide templates, and music video credit templates;
 - guided Quick Setup for movie, show, and music video channels;
 - reusable Programs and daily Templates;
 - layered Channel Schedules;
@@ -1094,7 +1127,7 @@ Program, template, and channel-schedule introductions live in their correspondin
 Restricted Markdown callouts preserve their icon and card presentation in both the guide and Help
 drawer. Internal management links use ordinary guarded routes.
 
-Saved programs, templates, encoding profiles, and credit templates expose Used by in the editor
+Saved programs, templates, encoding profiles, credit templates, and guide templates expose Used by in the editor
 title bar, left of the close control, with a GitBranch icon and a live reference count. Expanding
 it opens a right-side panel that narrows the editor content and can be closed from the panel or
 the title-bar control. On narrow screens the open panel replaces the form visually without
@@ -1102,7 +1135,9 @@ unmounting its draft. The closed title-bar control does not displace the form. T
 a contained grid-width transition so controls reflow without scaling; reduced motion skips the
 animation. Continuous resizing is an intentional UX tradeoff to avoid an abrupt width change. The
 authenticated resource-usage endpoint groups direct authored occurrences by owner, with role labels
-and bounded pagination (50 resources by default, at most 100). For reusable resources, three scoped
+and bounded pagination (50 resources by default, at most 100). Guide-template usage includes channels
+that inherit the current default because they have no assignment. Encoding-profile usage remains the
+saved profile id; Custom channels are independent of the encoding default. For reusable resources, three scoped
 queries check existence, count owners, and retrieve a page in one read transaction; neither catalog
 requests nor playback acquire additional queries. Media detail pages keep a right-edge Used by tab
 with the TV icon for direct item selections, ancestor-group membership, and current library-query

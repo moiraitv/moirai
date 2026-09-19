@@ -7,6 +7,9 @@ export function itemGuideEntry(segment: TimelineSegment): GuideEntry {
 		start: segment.start, finish: segment.finish, title: segment.title, description: '',
 		programId: segment.programId, segmentId: segment.id, occurrenceId: null,
 		role: segment.role, truncated: segment.truncated,
+		posterUrl: segment.posterUrl ?? null,
+		landscapeUrl: segment.landscapeUrl ?? null,
+		fanartUrl: segment.fanartUrl ?? null,
 	};
 }
 

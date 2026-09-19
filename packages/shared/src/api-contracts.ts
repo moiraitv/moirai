@@ -366,6 +366,7 @@ export const timelineSegmentSchema = z.object({
 	programId: idSchema.nullable(),
 	mediaItemId: idSchema.nullable(),
 	title: z.string(),
+	subtitle: z.string().optional(),
 	playbackPath: z.string().nullable(),
 	programAncestry: z.array(z.uuid()).optional(),
 	playbackParts: z.array(z.object({
@@ -377,6 +378,9 @@ export const timelineSegmentSchema = z.object({
 	sourceStartSeconds: z.number().nonnegative(),
 	sourceFinishSeconds: z.number().nonnegative().nullable(),
 	truncated: z.boolean(),
+	posterUrl: z.string().nullable().optional(),
+	landscapeUrl: z.string().nullable().optional(),
+	fanartUrl: z.string().nullable().optional(),
 });
 
 /** Runtime selection cursor persisted separately from authored schedules. */

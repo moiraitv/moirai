@@ -5,6 +5,7 @@ import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
 import EncodingProfileSelector from '../components/EncodingProfileSelector.vue';
+import GuideTemplateSelector from '../components/GuideTemplateSelector.vue';
 import FormDisclosure from '../components/FormDisclosure.vue';
 import ChannelEncodingSettings from '../components/ChannelEncodingSettings.vue';
 import AudioPreferencesEditor from '../components/AudioPreferencesEditor.vue';
@@ -18,6 +19,7 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Clock3,
+	FileCode,
 	Plus,
 	ImagePlus,
 	RadioTower,
@@ -104,6 +106,7 @@ const removeLogoOnSave = ref(false);
 const fallbackStatus = ref<FallbackFillerStatus | null>(null);
 const fallbackFile = ref<File | null>(null);
 const fallbackExpanded = useDisclosureState('channel-fallback', false);
+const guideTemplateExpanded = useDisclosureState('channel-guide-template', false);
 const removeFallbackOnSave = ref(false);
 const fallbackLoading = ref(false);
 const saving = ref(false);
@@ -137,6 +140,7 @@ const LOGO_CROP_MAX_WIDTH = 240;
 const LOGO_CROP_MAX_HEIGHT = 260;
 const defaults = (): ChannelCreate => ({
 	encodingProfileId: null,
+	guideTemplateId: null,
 	number: '',
 	name: '',
 	logo: null,
@@ -871,6 +875,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 				:days="displayedDays"
 				empty-message="No template assigned"
 				show-technical-details
+				use-entry-titles
 			>
 				<template #detail="{ channel }">
 					<small class="channel-schedule-summary">{{ scheduleSummary(channel.id) }}</small>
@@ -1033,14 +1038,22 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 
 					</div>
 
-					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
-						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :creating="!editingId" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
-					</EncodingProfileSelector>
-					<AudioPreferencesEditor v-model="form.audioPreferences" />
 					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">
 						<label><span>Subtitle mode</span><select v-model="form.subtitleMode"><option value="burn">Burn</option><option value="convert">Convert</option></select></label>
 						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>
 					</SubtitlePreferencesEditor>
+					<AudioPreferencesEditor v-model="form.audioPreferences" />
+					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
+						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :creating="!editingId" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
+					</EncodingProfileSelector>
+					<FormDisclosure v-model:open="guideTemplateExpanded" class="channel-guide-template-disclosure">
+						<template #summary>
+							<span class="form-disclosure-icon" aria-hidden="true"><FileCode :size="26" /></span>
+							<span class="form-disclosure-copy"><strong>Guide template override</strong><small>Use a specific XMLTV template for this channel</small></span>
+							<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
+						</template>
+						<GuideTemplateSelector v-model="form.guideTemplateId" />
+					</FormDisclosure>
 					<FormDisclosure v-model:open="fallbackExpanded" class="channel-fallback-disclosure">
 						<template #summary>
 							<span class="form-disclosure-icon" aria-hidden="true"><Video :size="26" /></span>

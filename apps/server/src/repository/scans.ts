@@ -38,10 +38,24 @@ import type {
 	ReconciledPresenceCheck,
 } from './contracts.js';
 import type { MissingItemPresenceObservation } from '../scanner/contracts.js';
+import {
+	rebuildCatalogSearchForLibrary,
+	withCatalogSearchDefer,
+} from './catalog-search-sql.js';
 import { preserveGroupIdentities } from './scan-identities.js';
 
 /** Keep variable-size scan inserts below SQLite statement parameter limits. */
 const SCAN_INSERT_BATCH_SIZE = 500;
+
+/** Store the current indexed-item total on the library row. */
+function persistLibraryItemCount(
+	tx: { run: (query: ReturnType<typeof sql>) => unknown },
+	libraryId: string,
+): void {
+	tx.run(sql`UPDATE libraries SET item_count = (
+		SELECT count(*) FROM media_items WHERE library_id = ${libraryId}
+	) WHERE id = ${libraryId}`);
+}
 
 /**
  * Own persisted scan lifecycle, source-health, tombstone, and reconciliation state. This repository
@@ -408,158 +422,160 @@ export abstract class ScanRepository {
 			? 'available'
 			: 'degraded';
 
-		this.db.transaction((tx) => {
-			// Replace source conflicts only after a complete traversal.
-			if (traversalComplete) {
-				tx.delete(catalogConflicts).where(eq(catalogConflicts.libraryId, run.libraryId)).run();
-				for (let offset = 0; offset < conflicts.length; offset += SCAN_INSERT_BATCH_SIZE) {
-					tx.insert(catalogConflicts)
-						.values(conflicts.slice(offset, offset + SCAN_INSERT_BATCH_SIZE).map((conflict) => ({
-							...conflict,
+		const sqlite = this.db.$client;
+		withCatalogSearchDefer(sqlite, () => {
+			this.db.transaction((tx) => {
+				// Replace source conflicts only after a complete traversal.
+				if (traversalComplete) {
+					tx.delete(catalogConflicts).where(eq(catalogConflicts.libraryId, run.libraryId)).run();
+					for (let offset = 0; offset < conflicts.length; offset += SCAN_INSERT_BATCH_SIZE) {
+						tx.insert(catalogConflicts)
+							.values(conflicts.slice(offset, offset + SCAN_INSERT_BATCH_SIZE).map((conflict) => ({
+								...conflict,
+								libraryId: run.libraryId,
+								observedAt: completedAt,
+							})))
+							.run();
+					}
+				}
+
+				// Upsert the discovered hierarchy before assigning media items to its groups.
+				for (const group of groups) {
+					const sourceKey = group.sourceKey ?? group.stableKey;
+					tx.insert(mediaGroups)
+						.values({
+							...group,
+							sourceKey,
 							libraryId: run.libraryId,
-							observedAt: completedAt,
-						})))
+							createdAt: completedAt,
+							updatedAt: completedAt,
+						})
+						.onConflictDoUpdate({
+							target: mediaGroups.id,
+							set: { ...group, sourceKey, updatedAt: completedAt },
+						})
 						.run();
 				}
-			}
 
-			// Upsert the discovered hierarchy before assigning media items to its groups.
-			for (const group of groups) {
-				const sourceKey = group.sourceKey ?? group.stableKey;
-				tx.insert(mediaGroups)
-					.values({
-						...group,
-						sourceKey,
-						libraryId: run.libraryId,
-						createdAt: completedAt,
-						updatedAt: completedAt,
-					})
-					.onConflictDoUpdate({
-						target: mediaGroups.id,
-						set: { ...group, sourceKey, updatedAt: completedAt },
-					})
-					.run();
-			}
-
-			// Upsert media rows and replace normalized metadata only when an item changed.
-			for (const item of items) {
-				const { genres, people, aliasIds, ...indexedItem } = item;
-				void aliasIds;
-				tx.delete(mediaItemAliases).where(eq(mediaItemAliases.aliasId, item.id)).run();
-				const prior = previous.get(item.relativePath);
-				const firstIndexedAt = prior?.createdAt ?? completedAt;
-				const dateAddedAt
-					= item.fileModifiedAt < firstIndexedAt ? item.fileModifiedAt : firstIndexedAt;
-				tx.insert(mediaItems)
-					.values({
-						...indexedItem,
-						durationSeconds: null,
-						libraryId: run.libraryId,
-						availability: 'available',
-						lastObservedAt: completedAt,
-						dateAddedAt,
-						createdAt: completedAt,
-						updatedAt: completedAt,
-					})
-					.onConflictDoUpdate({
-						target: [mediaItems.libraryId, mediaItems.relativePath],
-						set: {
+				// Upsert media rows and replace normalized metadata only when an item changed.
+				for (const item of items) {
+					const { genres, people, aliasIds, ...indexedItem } = item;
+					void aliasIds;
+					tx.delete(mediaItemAliases).where(eq(mediaItemAliases.aliasId, item.id)).run();
+					const prior = previous.get(item.relativePath);
+					const firstIndexedAt = prior?.createdAt ?? completedAt;
+					const dateAddedAt
+						= item.fileModifiedAt < firstIndexedAt ? item.fileModifiedAt : firstIndexedAt;
+					tx.insert(mediaItems)
+						.values({
 							...indexedItem,
 							durationSeconds: null,
+							libraryId: run.libraryId,
 							availability: 'available',
 							lastObservedAt: completedAt,
 							dateAddedAt,
+							createdAt: completedAt,
 							updatedAt: completedAt,
-						},
-					})
-					.run();
-				if (prior?.fingerprint !== item.fingerprint) {
-					tx.delete(mediaItemGenres).where(eq(mediaItemGenres.itemId, item.id)).run();
-					tx.delete(mediaItemPeople).where(eq(mediaItemPeople.itemId, item.id)).run();
-					if (genres.length > 0) {
-						tx.insert(mediaItemGenres)
-							.values(
-								genres.map((genre) => ({
-									itemId: item.id,
-									libraryId: run.libraryId,
-									genreKey: genre.key,
-									genreName: genre.name,
-								})),
-							)
-							.run();
+						})
+						.onConflictDoUpdate({
+							target: [mediaItems.libraryId, mediaItems.relativePath],
+							set: {
+								...indexedItem,
+								durationSeconds: null,
+								availability: 'available',
+								lastObservedAt: completedAt,
+								dateAddedAt,
+								updatedAt: completedAt,
+							},
+						})
+						.run();
+					if (prior?.fingerprint !== item.fingerprint) {
+						tx.delete(mediaItemGenres).where(eq(mediaItemGenres.itemId, item.id)).run();
+						tx.delete(mediaItemPeople).where(eq(mediaItemPeople.itemId, item.id)).run();
+						if (genres.length > 0) {
+							tx.insert(mediaItemGenres)
+								.values(
+									genres.map((genre) => ({
+										itemId: item.id,
+										libraryId: run.libraryId,
+										genreKey: genre.key,
+										genreName: genre.name,
+									})),
+								)
+								.run();
+						}
+						if (people.length > 0) {
+							tx.insert(mediaItemPeople)
+								.values(
+									people.map((person) => ({
+										itemId: item.id,
+										libraryId: run.libraryId,
+										...person,
+									})),
+								)
+								.onConflictDoNothing({
+									target: [
+										mediaItemPeople.itemId,
+										mediaItemPeople.personType,
+										mediaItemPeople.normalizedName,
+									],
+								})
+								.run();
+						}
 					}
-					if (people.length > 0) {
-						tx.insert(mediaItemPeople)
-							.values(
-								people.map((person) => ({
-									itemId: item.id,
+					tx.delete(mediaRemovalTombstones).where(eq(mediaRemovalTombstones.itemId, item.id)).run();
+				}
+
+				// Replace absorbed physical rows with compatibility aliases to the logical item.
+				if (absorbedItemIds.size > 0) {
+					tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify([...absorbedItemIds])}))`).run();
+					for (const item of items) {
+						if (item.aliasIds.length === 0) {
+							continue;
+						}
+
+						for (let offset = 0; offset < item.aliasIds.length; offset += SCAN_INSERT_BATCH_SIZE) {
+							tx.insert(mediaItemAliases)
+								.values(item.aliasIds.slice(offset, offset + SCAN_INSERT_BATCH_SIZE).map((aliasId) => ({
+									aliasId,
 									libraryId: run.libraryId,
-									...person,
-								})),
-							)
-							.onConflictDoNothing({
-								target: [
-									mediaItemPeople.itemId,
-									mediaItemPeople.personType,
-									mediaItemPeople.normalizedName,
-								],
-							})
-							.run();
+									itemId: item.id,
+									createdAt: completedAt,
+								})))
+								.onConflictDoUpdate({
+									target: mediaItemAliases.aliasId,
+									set: { itemId: item.id, libraryId: run.libraryId },
+								})
+								.run();
+						}
 					}
 				}
-				tx.delete(mediaRemovalTombstones).where(eq(mediaRemovalTombstones.itemId, item.id)).run();
-			}
 
-			// Replace absorbed physical rows with compatibility aliases to the logical item.
-			if (absorbedItemIds.size > 0) {
-				tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify([...absorbedItemIds])}))`).run();
-				for (const item of items) {
-					if (item.aliasIds.length === 0) {
-						continue;
-					}
-
-					for (let offset = 0; offset < item.aliasIds.length; offset += SCAN_INSERT_BATCH_SIZE) {
-						tx.insert(mediaItemAliases)
-							.values(item.aliasIds.slice(offset, offset + SCAN_INSERT_BATCH_SIZE).map((aliasId) => ({
-								aliasId,
-								libraryId: run.libraryId,
-								itemId: item.id,
-								createdAt: completedAt,
-							})))
-							.onConflictDoUpdate({
-								target: mediaItemAliases.aliasId,
-								set: { itemId: item.id, libraryId: run.libraryId },
-							})
-							.run();
-					}
+				// Persist missing-item observations for the next healthy reconciliation pass.
+				for (const tombstone of nextTombstones.values()) {
+					tx.insert(mediaRemovalTombstones)
+						.values(tombstone)
+						.onConflictDoUpdate({
+							target: mediaRemovalTombstones.itemId,
+							set: tombstone,
+						})
+						.run();
 				}
-			}
 
-			// Persist missing-item observations for the next healthy reconciliation pass.
-			for (const tombstone of nextTombstones.values()) {
-				tx.insert(mediaRemovalTombstones)
-					.values(tombstone)
-					.onConflictDoUpdate({
-						target: mediaRemovalTombstones.itemId,
-						set: tombstone,
-					})
-					.run();
-			}
+				// Flag missing media items while their removal awaits confirmation.
+				if (missingItems.length > 0) {
+					tx.update(mediaItems)
+						.set({ availability: 'unconfirmed' })
+						.where(
+							sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(missingItems.map((item) => item.id))}))`,
+						)
+						.run();
+				}
 
-			// Flag missing media items while their removal awaits confirmation.
-			if (missingItems.length > 0) {
-				tx.update(mediaItems)
-					.set({ availability: 'unconfirmed' })
-					.where(
-						sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(missingItems.map((item) => item.id))}))`,
-					)
-					.run();
-			}
-
-			// Delete confirmed removals and prune groups that no longer contain media.
-			if (removableIds.length > 0) {
-				tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(removableIds)}))`).run();
-				tx.run(sql`DELETE FROM media_groups
+				// Delete confirmed removals and prune groups that no longer contain media.
+				if (removableIds.length > 0) {
+					tx.delete(mediaItems).where(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(removableIds)}))`).run();
+					tx.run(sql`DELETE FROM media_groups
           WHERE library_id = ${run.libraryId}
           AND NOT EXISTS (
             SELECT 1 FROM media_items WHERE media_items.group_id = media_groups.id
@@ -569,68 +585,72 @@ export abstract class ScanRepository {
             JOIN media_items AS child_items ON child_items.group_id = child_groups.id
             WHERE child_groups.parent_id = media_groups.id
           )`);
-			}
+				}
 
-			// Finalize scan history and publish the library's resulting health state.
-			const status = traversalComplete
-				? reconciledIssues.some((issue) => issue.severity === 'error')
-					? 'partial'
-					: 'complete'
-				: 'partial';
-			tx.update(scanRuns)
-				.set({
-					status,
-					completedAt,
-					discoveredCount: items.length,
-					changedCount,
-					removedCount,
-					issues: reconciledIssues,
-				})
-				.where(eq(scanRuns.id, run.id))
-				.run();
-			tx.update(libraries)
-				.set({
-					...(acceptingSource
-						? {
-							typeKey: libraryState.pendingSourceDefinition?.typeKey ?? libraryState.typeKey,
-							sourceType: libraryState.pendingSourceDefinition?.sourceType
-								?? libraryState.sourceType,
-							sourceConfig: libraryState.pendingSourceDefinition?.sourceConfig
-								?? libraryState.sourceConfig,
-							acceptedSourceIdentity: observedSourceIdentity,
-							pendingSourceDefinition: null,
-							candidateSourceIdentity: null,
-							candidateManifest: null,
-							candidateSummary: null,
-						}
-						: qualifiedObservation
-							? { acceptedSourceIdentity: observedSourceIdentity }
+				// Finalize scan history and publish the library's resulting health state.
+				const status = traversalComplete
+					? reconciledIssues.some((issue) => issue.severity === 'error')
+						? 'partial'
+						: 'complete'
+					: 'partial';
+				tx.update(scanRuns)
+					.set({
+						status,
+						completedAt,
+						discoveredCount: items.length,
+						changedCount,
+						removedCount,
+						issues: reconciledIssues,
+					})
+					.where(eq(scanRuns.id, run.id))
+					.run();
+				tx.update(libraries)
+					.set({
+						...(acceptingSource
+							? {
+								typeKey: libraryState.pendingSourceDefinition?.typeKey ?? libraryState.typeKey,
+								sourceType: libraryState.pendingSourceDefinition?.sourceType
+									?? libraryState.sourceType,
+								sourceConfig: libraryState.pendingSourceDefinition?.sourceConfig
+									?? libraryState.sourceConfig,
+								acceptedSourceIdentity: observedSourceIdentity,
+								pendingSourceDefinition: null,
+								candidateSourceIdentity: null,
+								candidateManifest: null,
+								candidateSummary: null,
+							}
+							: qualifiedObservation
+								? { acceptedSourceIdentity: observedSourceIdentity }
+								: {}),
+						...(!candidateMode && libraryState.candidateSourceIdentity
+							? {
+								candidateSourceIdentity: null,
+								candidateManifest: null,
+								candidateSummary: null,
+							}
 							: {}),
-					...(!candidateMode && libraryState.candidateSourceIdentity
-						? {
-							candidateSourceIdentity: null,
-							candidateManifest: null,
-							candidateSummary: null,
-						}
-						: {}),
-					lastScanCompletedAt: completedAt,
-					lastIndexedChangeAt: changedCount > 0 || removedCount > 0 || missingItems.length > 0
-						? completedAt
-						: undefined,
-					warningCount: reconciledIssues.length,
-					sourceAvailability,
-					sourceAvailabilityUpdatedAt: completedAt,
-					reconciliationStatus: pendingRemovalCount === 0
-						? 'idle'
-						: majorRemoval
-							? 'removal-approval-required'
-							: 'observing-removals',
-					reconciliationRevision: pendingRemovalCount > 0 ? randomUUID() : null,
-					pendingRemovalCount,
-					updatedAt: completedAt,
-				})
-				.where(eq(libraries.id, run.libraryId))
-				.run();
+						lastScanCompletedAt: completedAt,
+						lastIndexedChangeAt: changedCount > 0 || removedCount > 0 || missingItems.length > 0
+							? completedAt
+							: undefined,
+						warningCount: reconciledIssues.length,
+						sourceAvailability,
+						sourceAvailabilityUpdatedAt: completedAt,
+						reconciliationStatus: pendingRemovalCount === 0
+							? 'idle'
+							: majorRemoval
+								? 'removal-approval-required'
+								: 'observing-removals',
+						reconciliationRevision: pendingRemovalCount > 0 ? randomUUID() : null,
+						pendingRemovalCount,
+						updatedAt: completedAt,
+					})
+					.where(eq(libraries.id, run.libraryId))
+					.run();
+
+				rebuildCatalogSearchForLibrary(sqlite, run.libraryId);
+				persistLibraryItemCount(tx, run.libraryId);
+			});
 		});
 
 		return {
@@ -861,6 +881,9 @@ export abstract class ScanRepository {
 					})
 					.where(and(eq(libraries.id, libraryId), eq(libraries.reconciliationRevision, revision)))
 					.run();
+				if (removableIds.length > 0) {
+					persistLibraryItemCount(tx, libraryId);
+				}
 			}
 
 			return {
@@ -934,6 +957,7 @@ export abstract class ScanRepository {
 				})
 				.where(and(eq(libraries.id, libraryId), eq(libraries.reconciliationRevision, revision)))
 				.run();
+			persistLibraryItemCount(tx, libraryId);
 		});
 		this.catalogChanged();
 		return true;

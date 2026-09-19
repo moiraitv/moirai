@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { subtitlePreferencesSchema } from './subtitles.js';
 export * from './subtitles.js';
 export * from './credit-template-starter.js';
+export * from './guide-templates.js';
 import type {
 	ReconciliationStatus,
 	SourceAvailability,
@@ -300,7 +301,7 @@ export const playbackEventDataSchema = z.object({
 });
 /** Validate the scheduling event data contract at runtime. */
 export const schedulingEventDataSchema = z.object({
-	entity: z.enum(['program', 'template', 'assignment', 'credit-template']),
+	entity: z.enum(['program', 'template', 'assignment', 'credit-template', 'guide-template']),
 	change: z.enum(['created', 'updated', 'deleted']),
 	id: idSchema,
 });
@@ -438,6 +439,7 @@ export const channelCreateSchema = z.object({
 		}),
 	name: z.string().trim().min(1).max(120),
 	encodingProfileId: z.uuid().nullable().optional(),
+	guideTemplateId: z.uuid().nullable().optional(),
 	logo: channelLogoSchema.nullable().default(null),
 	group: z.string().trim().max(120).nullable().default(null),
 	audio: audioNormalizationSchema.default({

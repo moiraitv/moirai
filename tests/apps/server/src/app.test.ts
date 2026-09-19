@@ -2095,6 +2095,9 @@ describe('API', () => {
 					metadataStatus: 'complete' as const,
 					metadata: {},
 					artworkRelativePath: null,
+					posterRelativePath: null,
+					landscapeRelativePath: null,
+					fanartRelativePath: null,
 					fingerprint: `scheduled-film-${number}-v1`,
 					fileModifiedAt: '2026-01-01T00:00:00.000Z',
 					titleBucket: 'S',
@@ -2399,3 +2402,70 @@ it('applies the configured encoding default only to new channels without manual 
 		await app.inject({ method: 'DELETE', url: `/api/v1/channels/${result.json().id}` });
 	}
 }, 15_000);
+
+describe('guide template API', () => {
+	it('validates sources, assigns per channel, and previews draft XMLTV', async () => {
+		const { BUILTIN_GUIDE_TEMPLATE } = await import('@moirai/shared');
+		const { app } = await fixture();
+		const builtin = (await app.inject('/api/v1/guide-templates')).json()
+			.find((entry: { isBuiltin: boolean }) => entry.isBuiltin);
+		expect(builtin.sources.episode).toBe(BUILTIN_GUIDE_TEMPLATE.sources.episode);
+		expect((await app.inject({ method: 'DELETE', url: `/api/v1/guide-templates/${builtin.id}` })).statusCode).toBe(409);
+		expect((await app.inject({
+			method: 'PUT',
+			url: `/api/v1/guide-templates/${builtin.id}`,
+			payload: { name: builtin.name, sources: builtin.sources },
+		})).statusCode).toBe(409);
+		const created = await app.inject({
+			method: 'POST',
+			url: '/api/v1/guide-templates',
+			payload: {
+				name: 'Client XMLTV',
+				sources: { ...BUILTIN_GUIDE_TEMPLATE.sources, episode: '<programme>{{ title }}</programme>' },
+			},
+		});
+		expect(created.statusCode).toBe(201);
+		const template = created.json();
+		expect((await app.inject({
+			method: 'POST',
+			url: '/api/v1/guide-templates',
+			payload: { name: 'CLIENT XMLTV', sources: BUILTIN_GUIDE_TEMPLATE.sources },
+		})).statusCode).toBe(409);
+		expect((await app.inject({
+			method: 'PUT',
+			url: `/api/v1/guide-templates/${template.id}`,
+			payload: { name: 'Client XMLTV', sources: { episode: '{{ missing }}' } },
+		})).statusCode).toBe(400);
+		const channel = await app.inject({
+			method: 'POST',
+			url: '/api/v1/channels',
+			payload: { number: '91', name: 'Guide', guideTemplateId: template.id },
+		});
+		expect(channel.statusCode).toBe(201);
+		expect(channel.json().guideTemplateId).toBe(template.id);
+		expect((await app.inject({ method: 'DELETE', url: `/api/v1/guide-templates/${template.id}` })).statusCode).toBe(409);
+		const preview = await app.inject({
+			method: 'POST',
+			url: '/api/v1/guide-templates/preview',
+			payload: {
+				channelId: channel.json().id,
+				sources: {
+					...BUILTIN_GUIDE_TEMPLATE.sources,
+					'dead-air': '  <programme start="{{ start }}" stop="{{ stop }}" channel="{{ channel.id }}"><title>Draft gap</title></programme>',
+				},
+			},
+		});
+		expect(preview.statusCode).toBe(200);
+		expect(preview.json().entries).toEqual(expect.arrayContaining([
+			expect.objectContaining({ title: 'Draft gap', role: 'dead-air' }),
+		]));
+		expect(preview.json().channelValues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ name: 'channel.number', value: '91' }),
+		]));
+		await app.inject({ method: 'PATCH', url: `/api/v1/channels/${channel.json().id}`, payload: { guideTemplateId: null } });
+		expect((await app.inject({ method: 'PUT', url: `/api/v1/guide-templates/${template.id}/default` })).statusCode).toBe(200);
+		expect((await app.inject({ method: 'DELETE', url: `/api/v1/guide-templates/${template.id}` })).statusCode).toBe(409);
+		await app.inject({ method: 'PUT', url: `/api/v1/guide-templates/${builtin.id}/default` });
+		expect((await app.inject({ method: 'DELETE', url: `/api/v1/guide-templates/${template.id}` })).statusCode).toBe(204);
+	}, 15_000);
+});

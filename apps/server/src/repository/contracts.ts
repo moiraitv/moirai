@@ -161,6 +161,9 @@ export interface DiscoveredGroup {
 	plot: string | null;
 	metadata: Record<string, unknown>;
 	artworkRelativePath: string | null;
+	posterRelativePath: string | null;
+	landscapeRelativePath: string | null;
+	fanartRelativePath: string | null;
 }
 
 /** Source-level identity conflict observed during a healthy catalog scan. */
@@ -207,6 +210,9 @@ export interface DiscoveredItem {
 	metadataStatus: 'complete' | 'incomplete' | 'invalid';
 	metadata: Record<string, unknown>;
 	artworkRelativePath: string | null;
+	posterRelativePath: string | null;
+	landscapeRelativePath: string | null;
+	fanartRelativePath: string | null;
 	fingerprint: string;
 	fileModifiedAt: string;
 	titleBucket: string;

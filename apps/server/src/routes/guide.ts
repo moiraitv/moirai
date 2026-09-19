@@ -8,7 +8,7 @@ import {
 	timelineMaterializationStatusSchema,
 } from '@moirai/shared/api-contracts';
 import type { AppConfig } from '../config.js';
-import { DuplicateTvgIdError, type EpgService } from '../guide/epg.js';
+import { DuplicateTvgIdError, presentGuideListings, type EpgService } from '../guide/epg.js';
 import type { Repository } from '../repository/index.js';
 import {
 	CommittedGuideRangeError,
@@ -63,10 +63,34 @@ export function registerGuideRoutes(
 		const query = guideRangeQuerySchema.parse(request.query);
 		const startDate = query.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString();
 		try {
-			return (await readCommittedGuideAfterMaterializing(
-				() => readCommittedScheduleGuide(repository, config.timeZone, startDate, query.days),
+			const materialized = await readCommittedGuideAfterMaterializing(
+				() => readCommittedScheduleGuide(
+					repository,
+					config.timeZone,
+					startDate,
+					query.days,
+					{ includeMediaCatalog: true },
+				),
 				() => timelineMaterializer.runNow(),
-			)).guide;
+			);
+			const [channels, templates] = await Promise.all([
+				repository.listChannels(),
+				repository.guideTemplates.sourcesById(),
+			]);
+			return await presentGuideListings(
+				channels,
+				materialized.guide,
+				materialized.catalog,
+				config.publicUrl,
+				{
+					sourcesForChannel: (channel) => (
+						channel.guideTemplateId
+							? templates.byId.get(channel.guideTemplateId) ?? templates.defaultSources
+							: templates.defaultSources
+					),
+					fallback: true,
+				},
+			);
 		}
 		catch (error) {
 			if (

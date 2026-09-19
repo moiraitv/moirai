@@ -4,7 +4,8 @@ import type { DiscoveredGroup } from '@server/repository/contracts.js';
 
 function group(id: string, overrides: Partial<DiscoveredGroup> = {}): DiscoveredGroup {
 	return { id, stableKey: id, sourceKey: id, kind: 'artist', parentId: null,
-		title: 'Artist', sortTitle: 'artist', year: null, plot: null, metadata: {}, artworkRelativePath: null, ...overrides };
+		title: 'Artist', sortTitle: 'artist', year: null, plot: null, metadata: {}, artworkRelativePath: null,
+		posterRelativePath: null, landscapeRelativePath: null, fanartRelativePath: null, ...overrides };
 }
 
 function stored(value: DiscoveredGroup): Parameters<typeof preserveMusicGroupIdentities>[2][number] {

@@ -45,6 +45,9 @@ function item(id: string, groupId: string, relativePath: string): DiscoveredItem
 		metadataStatus: 'complete',
 		metadata: {},
 		artworkRelativePath: null,
+		posterRelativePath: null,
+		landscapeRelativePath: null,
+		fanartRelativePath: null,
 		fingerprint: `metadata:${relativePath}`,
 		fileModifiedAt: '2026-08-23T00:00:00Z',
 		titleBucket: 'E',
@@ -88,6 +91,9 @@ describe('media group pruning', () => {
 				plot: null,
 				metadata: {},
 				artworkRelativePath: null,
+				posterRelativePath: null,
+				landscapeRelativePath: null,
+				fanartRelativePath: null,
 			},
 			{
 				id: seasonId,
@@ -101,6 +107,9 @@ describe('media group pruning', () => {
 				plot: null,
 				metadata: { seasonNumber: 1 },
 				artworkRelativePath: null,
+				posterRelativePath: null,
+				landscapeRelativePath: null,
+				fanartRelativePath: null,
 			},
 		];
 		const removedId = crypto.randomUUID();

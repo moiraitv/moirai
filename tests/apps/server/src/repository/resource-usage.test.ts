@@ -2,6 +2,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
+import { BUILTIN_GUIDE_TEMPLATE } from '@moirai/shared';
 import { createDatabase } from '@server/db/index.js';
 import { resourceUsage } from '@server/repository/resource-usage.js';
 
@@ -70,4 +71,32 @@ it('counts explicit encoding and credit references, including disabled authored 
 	insert('scheduling_programs', { id: program, name: 'Program', config: { type: 'sequence', entries: [], subtitlePreferences } });
 	expect(resourceUsage(db, 'encoding-profile', encoding, 1, 50)).toMatchObject({ total: 1, items: [{ id: channel }] });
 	expect(resourceUsage(db, 'credit-template', credit, 1, 50)?.items.map(item => item.id).sort()).toEqual([channel, program].sort());
+});
+
+it('counts explicit guide template channel assignments', () => {
+	const { db, insert } = fixture();
+	const template = randomUUID(), channel = randomUUID();
+	insert('guide_templates', { id: template, name: 'Guide', name_key: 'guide', sources: '{}' });
+	insert('channels', { id: channel, number: '1', name: 'Channel', config: { guideTemplateId: template } });
+	expect(resourceUsage(db, 'guide-template', template, 1, 50)).toMatchObject({
+		total: 1,
+		items: [{ id: channel, roles: ['Guide template'] }],
+	});
+});
+
+it('counts channels that inherit a default guide template', () => {
+	const { db, insert } = fixture();
+	const fallback = BUILTIN_GUIDE_TEMPLATE.id, assigned = randomUUID(), inherited = randomUUID(), explicit = randomUUID();
+	insert('guide_templates', { id: assigned, name: 'Assigned', name_key: 'assigned', sources: '{}' });
+	insert('channels', { id: inherited, number: '1', name: 'Inherits default', config: {} });
+	insert('channels', { id: explicit, number: '2', name: 'Explicit default', config: { guideTemplateId: fallback } });
+	insert('channels', { id: randomUUID(), number: '3', name: 'Other template', config: { guideTemplateId: assigned } });
+	expect(resourceUsage(db, 'guide-template', fallback, 1, 50)).toMatchObject({
+		total: 2,
+		items: [
+			{ id: explicit, name: 'Explicit default', roles: ['Guide template'] },
+			{ id: inherited, name: 'Inherits default', roles: ['Default'] },
+		],
+	});
+	expect(resourceUsage(db, 'guide-template', assigned, 1, 50)?.total).toBe(1);
 });
