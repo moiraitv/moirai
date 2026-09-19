@@ -1156,7 +1156,9 @@ changes preserve dirty-editor guards.
 
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
-returns to a page; initial empty collections have explicit loading states.
+returns to a page; initial empty collections have explicit loading states. Library navigation shows
+compact scan-status icons derived from shared library metadata and updated directly by scan events,
+without fetching a separate scan history for each library or refreshing on every progress event.
 
 Disclosure and navigation-section expansion preferences are stored per section in browser local storage;
 storage failures leave controls usable. Choosing Custom encoding still opens its controls.

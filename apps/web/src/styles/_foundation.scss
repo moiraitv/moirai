@@ -433,7 +433,9 @@ a.nav-link.router-link-exact-active {
 	font-size: 0.84rem;
 }
 
-.library-nav-link > span:last-child {
+.library-nav-name {
+	min-width: 0;
+	flex: 1;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1199,4 +1201,39 @@ input[type='date']::-webkit-datetime-edit {
 
 .resource-editor-action-icon {
 	display: none;
+}
+
+.library-nav-scan-status {
+	margin-left: auto;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	color: var(--muted);
+}
+
+.library-nav-idle-dot {
+	width: 7px;
+	height: 7px;
+	margin: 4px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+
+.library-nav-scan-status[data-status='Scanning'] {
+	color: var(--accent);
+}
+
+.library-nav-scan-status[data-status='Scanning'] svg {
+	animation: loading-spin 1.4s linear infinite;
+}
+
+.library-nav-scan-status[data-status='Warnings'],
+.library-nav-scan-status[data-status='Offline'] {
+	color: var(--orange);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.library-nav-scan-status svg {
+		animation: none;
+	}
 }

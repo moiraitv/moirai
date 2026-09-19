@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Asterisk, ChevronDown, Layers3, Plus, X } from '@lucide/vue';
+import { ArrowLeft, Asterisk, ChevronDown, Layers3, Plus, X } from '@lucide/vue';
 import type { ContentSource, MediaGroup, MediaItem, MediaSourcePickerEntry } from '@moirai/shared';
 import { mediaSearchMatchText } from '../../media-search-matches';
 import LoadingState from '../LoadingState.vue';
@@ -69,10 +69,10 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 		<button
 			v-if="sourceParentId"
 			type="button"
-			class="text-button"
+			class="button secondary source-browser-back"
 			@click="emit('root')"
 		>
-			Back to Library Root
+			<ArrowLeft :size="18" aria-hidden="true" />Back to Library Root
 		</button>
 		<LoadingState v-if="sourceLoading" label="Loading source media…" />
 		<div v-else-if="sourceEntries.length" class="source-picker-list">

@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { useLibrariesStore } from '@web/stores/libraries';
+import { api } from '@web/api';
+import { describe, expect, it, vi } from 'vitest';
 import { libraryCreateSchema, type Library } from '@moirai/shared';
-import { isLibrarySourceUnavailable, libraryStatusValue } from '@web/library-health';
+import { isLibrarySourceUnavailable, libraryStatusValue, libraryScanStatus } from '@web/library-health';
 
 /** Build one library status fixture from public contract defaults. */
 function library(sourceAvailability: Library['sourceAvailability']): Library {
@@ -41,4 +44,44 @@ describe('library source health presentation', () => {
 		expect(libraryStatusValue(available, false)).toBe('ready');
 		expect(libraryStatusValue(available, true)).toBe('running');
 	});
+});
+
+it('reports initial, running, idle, warning, and offline scan states', () => {
+	const entry = library('available');
+	expect(libraryScanStatus(entry)).toBe('Not scanned');
+	entry.lastScanStartedAt = '2026-09-19T10:00:00Z';
+	expect(libraryScanStatus(entry)).toBe('Scanning');
+	entry.lastScanCompletedAt = '2026-09-19T10:01:00Z';
+	expect(libraryScanStatus(entry)).toBe('Idle');
+	entry.warningCount = 1;
+	expect(libraryScanStatus(entry)).toBe('Warnings');
+	entry.sourceAvailability = 'unavailable';
+	expect(libraryScanStatus(entry)).toBe('Offline');
+	entry.lastScanStartedAt = '2026-09-19T10:02:00Z';
+	expect(libraryScanStatus(entry)).toBe('Scanning');
+});
+
+it('updates shared scan status from live events without fetching on progress', () => {
+	setActivePinia(createPinia());
+	const store = useLibrariesStore();
+	const entry = library('available');
+	store.libraries = [entry];
+	const request = vi.spyOn(api, 'libraries');
+	const event = {
+		libraryId: entry.id, scanId: crypto.randomUUID(), trigger: 'manual' as const,
+		status: 'running' as const, startedAt: '2026-09-19T10:00:00Z', completedAt: null,
+		discoveredCount: 0, changedCount: 0, removedCount: 0, issueCount: 0,
+		affectsProgramming: false,
+	};
+	try {
+		store.applyScanEvent(event);
+		expect(libraryScanStatus(store.libraries[0]!)).toBe('Scanning');
+		store.applyScanEvent({ ...event, discoveredCount: 5 });
+		store.applyScanEvent({ ...event, status: 'complete', completedAt: '2026-09-19T10:01:00Z' });
+		expect(libraryScanStatus(store.libraries[0]!)).toBe('Idle');
+		expect(request).not.toHaveBeenCalled();
+	}
+	finally {
+		request.mockRestore();
+	}
 });

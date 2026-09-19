@@ -17,7 +17,7 @@ import MediaCardPreview from '../components/MediaCardPreview.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import StatusPill from '../components/StatusPill.vue';
-import { isLibrarySourceUnavailable, libraryStatusValue } from '../library-health';
+import { isLibraryScanning as isScanning, isLibrarySourceUnavailable, libraryStatusValue } from '../library-health';
 import { useLibrariesStore } from '../stores/libraries';
 
 const librariesStore = useLibrariesStore();
@@ -29,13 +29,6 @@ const previewsLoaded = ref(false);
 const previewsError = ref('');
 let previewLoadSequence = 0;
 let previewRefreshTimer: number | undefined;
-/** Return whether the library has a scan that has not completed. */
-function isScanning(library: Library): boolean {
-	return Boolean(
-		library.lastScanStartedAt
-		&& (!library.lastScanCompletedAt || library.lastScanStartedAt > library.lastScanCompletedAt),
-	);
-}
 /** Choose the navigation icon associated with a library type. */
 function libraryIcon(typeKey: string) {
 	if (typeKey === 'movies') {

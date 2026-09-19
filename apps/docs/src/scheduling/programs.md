@@ -60,6 +60,8 @@ Use an explicit selection when you want to control which items are eligible. Rev
 
 You can also select shows, seasons, artists, or albums directly in the library browser and choose **Add Selected**. Create a new program or add to a selected-groups program from the same library. For example, select seasons 1–8 of a show and use **Sequential** to play their episodes in order, excluding later seasons. Group selections include newly indexed content within those groups; individual-item selections retain specific items.
 
+When browsing inside a show, season, artist, or album in the media picker, use **← Back to Library Root** to return to the top of that library.
+
 ### Use a library query
 
 Library queries share the catalog filters: title, release year, indexed date, rating, actors, directors, and included or excluded genres. Music-video queries also support Artist and Album. Choose **Configure Filters** to refine the matches. Order the query by title/episode, indexed date, or release date, in either direction, and optionally limit the ordered set. The media carousel updates as scanning adds or changes matching items.

@@ -38,6 +38,7 @@ import { applicationError, clearApplicationError } from './application-error';
 import { useLibrariesStore } from './stores/libraries';
 import { useChannelsStore } from './stores/channels';
 import { useAuthenticationStore } from './stores/authentication';
+import LibraryNavScanStatus from './components/library/LibraryNavScanStatus.vue';
 import ApplicationErrorPage from './views/ApplicationErrorPage.vue';
 
 const route = useRoute();
@@ -127,6 +128,9 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 const unsubscribe = liveEvents.subscribe((event) => {
+	if (event.type === 'scan.changed') {
+		libraryStore.applyScanEvent(event.data);
+	}
 	if (
 		event.type === 'system.ready'
 		|| event.type === 'library.changed'
@@ -288,7 +292,8 @@ onUnmounted(() => {
 								class="library-nav-link"
 							>
 								<span class="library-nav-icon"><LayoutGrid :size="16" /></span>
-								<span>{{ library.name }}</span>
+								<span class="library-nav-name">{{ library.name }}</span>
+								<LibraryNavScanStatus :library="library" />
 							</RouterLink>
 							<span v-if="!loaded" class="library-nav-empty">Loading libraries…</span>
 						</div>

@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import type { Library } from '@moirai/shared';
+import type { Library, LiveEvent } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
 
@@ -43,11 +43,24 @@ export const useLibrariesStore = defineStore('libraries', () => {
 		}
 	}
 
+	/** Apply scan activity immediately without fetching the collection for each progress event. */
+	function applyScanEvent(data: Extract<LiveEvent, { type: 'scan.changed' }>['data']): void {
+		const library = libraries.value.find((entry) => entry.id === data.libraryId);
+		if (!library) {
+			return;
+		}
+		library.lastScanStartedAt = data.startedAt;
+		if (data.completedAt) {
+			library.lastScanCompletedAt = data.completedAt;
+			library.warningCount = data.issueCount;
+		}
+	}
+
 	/** Queue refresh without duplicating pending work in the shared UI store. */
 	function scheduleRefresh(): void {
 		window.clearTimeout(refreshTimer);
 		refreshTimer = window.setTimeout(() => void load(), 100);
 	}
 
-	return { libraries, loading, loaded, error, load, scheduleRefresh };
+	return { libraries, loading, loaded, error, load, scheduleRefresh, applyScanEvent };
 });
