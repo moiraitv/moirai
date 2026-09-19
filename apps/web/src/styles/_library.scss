@@ -2,6 +2,8 @@
 	--app-header-offset: 0px;
 	--library-header-height: 0px;
 	--catalog-controls-height: 0px;
+	--catalog-footer-height: 68px;
+	padding-bottom: calc(var(--catalog-footer-height) + env(safe-area-inset-bottom));
 }
 
 .library-page-header {
@@ -1031,13 +1033,14 @@ a.media-card {
 }
 
 .catalog-footer {
-	position: sticky;
+	position: fixed;
+	left: var(--app-sidebar-width);
+	right: 0;
 	bottom: 0;
 	z-index: 14;
-	min-height: 68px;
-	width: calc(100% + var(--app-content-inline-padding) + var(--app-content-inline-padding));
-	margin-inline: calc(0px - var(--app-content-inline-padding));
+	min-height: calc(var(--catalog-footer-height) + env(safe-area-inset-bottom));
 	padding: 12px calc(12px + var(--app-content-inline-padding));
+	padding-bottom: calc(12px + env(safe-area-inset-bottom));
 	display: grid;
 	grid-template-columns: 1fr auto 1fr;
 	align-items: center;
@@ -1136,4 +1139,25 @@ a.media-card {
 	line-height: 1.4;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.status-last-scan {
+	grid-template-columns: 31px minmax(0, 1fr) 18px;
+	border: 0;
+	border-right: 1px solid var(--line);
+	border-radius: 0;
+	color: inherit;
+	background: transparent;
+	text-align: left;
+	cursor: pointer;
+}
+
+.status-last-scan:hover,
+.status-last-scan:focus-visible {
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.status-disclosure {
+	align-self: center;
+	color: var(--muted);
 }

@@ -167,6 +167,7 @@
 	}
 
 	.app-shell {
+		--app-sidebar-width: 0px;
 		display: block;
 	}
 
@@ -629,16 +630,26 @@
 		gap: 10px;
 	}
 
+	.library-page {
+		--catalog-footer-height: 104px;
+	}
+
 	.catalog-footer {
 		grid-template-columns: 1fr;
+		justify-items: center;
+		gap: 8px;
 	}
 
 	.catalog-footer > :last-child {
-		justify-self: start;
+		display: none;
 	}
 
 	.pagination-placeholder {
 		display: none;
+	}
+
+	.catalog-footer .pagination-placeholder {
+		display: inline-flex;
 	}
 
 	.form-grid,

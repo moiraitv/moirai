@@ -248,9 +248,10 @@ small {
 }
 
 .app-shell {
+	--app-sidebar-width: 244px;
 	min-height: 100vh;
 	display: grid;
-	grid-template-columns: 244px minmax(0, 1fr);
+	grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
 }
 
 .sidebar {

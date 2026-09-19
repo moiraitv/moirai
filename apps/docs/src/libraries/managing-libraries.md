@@ -21,12 +21,12 @@ See [Media file naming](/libraries/media-file-naming) for recommended movie and 
 
 Direct streaming from media center software such as Jellyfin, Plex, Emby, and similar services is not currently supported. Make the underlying media files available to Moirai through a filesystem path instead, such as a folder mounted into its Docker container.
 
-The first scan can take time for a large collection. A source watcher handles ordinary additions and changes afterward. Use ![Sync library](/icons/refresh-cw.svg) when you want an immediate full scan.
-
-Opening a library shows watcher health, the indexed count, scan history, and its catalog. A scan may finish with warnings even when most media was indexed successfully. Review the library diagnostics before changing a schedule that depends on missing items.
-
-After scanning, the catalog displays the indexed media with its posters and titles. This example shows a populated library with 17 movies and a completed scan.
+The first scan can take time for a large collection. A source watcher handles ordinary additions and changes afterward. Use ![Sync library](/icons/refresh-cw.svg) when you want an immediate full scan. After scanning, the catalog displays the indexed media with its posters and titles.
 
 ![Evening Cinema library with 17 indexed movies, poster artwork, and scan status](/screenshots/library-catalog.png)
+
+At the top of the library screen you can see watcher health, the indexed count, scan history, and its most recent change. A scan may finish with warnings even when most media was indexed successfully. Click or tap **Last scan** at the top of the library to open **Scan history**, including scan results, item counts, and recorded issues. Review those issues before changing a schedule that depends on missing items.
+
+![Scan history dialog with completed scan results](/screenshots/library-scan-history.png)
 
 Library settings can change the display name or source path. A path change is staged for safety when it could make many existing items appear to have disappeared.

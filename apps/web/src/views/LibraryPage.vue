@@ -61,7 +61,7 @@ import {
 } from '../catalog-virtualization';
 import LoadingState from '../components/LoadingState.vue';
 import ActionMenu from '../components/ActionMenu.vue';
-import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
+import LibraryScanHistoryModal from '../components/library/LibraryScanHistoryModal.vue';
 import TransientToast from '../components/TransientToast.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
 import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
@@ -72,7 +72,6 @@ import {
 	type LibraryFilterDraft,
 } from '../components/library/library-filter';
 import LibraryReconciliationModal from '../components/library/LibraryReconciliationModal.vue';
-import StatusPill from '../components/StatusPill.vue';
 import AddItemsToProgramModal from '../components/programs/AddItemsToProgramModal.vue';
 import ProgramAdditionToast from '../components/programs/ProgramAdditionToast.vue';
 import { liveEvents } from '../live-events';
@@ -87,7 +86,7 @@ const librariesStore = useLibrariesStore();
 const id = computed(() => String(route.params.id));
 const library = ref<Library>();
 const scans = ref<ScanRun[]>([]);
-const scanHistoryOpen = useDisclosureState('library-scan-history', false);
+const scanHistoryOpen = ref(false);
 const filterModalInstance = ref(0);
 const reconciliation = ref<LibraryReconciliation>();
 const genres = ref<MediaGenreFacet[]>([]);
@@ -1132,6 +1131,7 @@ watch(searchText, (value) => {
 });
 watch(id, () => {
 	// Discard actions captured for the previous library before loading the new route.
+	scanHistoryOpen.value = false;
 	resetSelectionToolbar();
 	selectionToolbarMotionActive.value = false;
 	selectedIds.value = [];
@@ -1270,10 +1270,11 @@ onUnmounted(() => {
 					<span class="status-icon"><Layers3 :size="24" /></span>
 					<div><span>Indexed</span><strong>{{ library.itemCount.toLocaleString() }}</strong><small>{{ typeLabel }}</small></div>
 				</div>
-				<div class="status-stat status-last-scan">
+				<button type="button" class="status-stat status-last-scan" aria-label="Last scan: open scan history" aria-haspopup="dialog" @click="scanHistoryOpen = true">
 					<span class="status-icon"><Clock3 :size="24" /></span>
 					<div><span>Last scan</span><strong>{{ formatDate(library.lastScanCompletedAt) }}</strong><small>{{ formatActivityTime(library.lastScanCompletedAt) }}</small></div>
-				</div>
+					<ChevronRight class="status-disclosure" :size="18" aria-hidden="true" />
+				</button>
 				<div class="status-stat status-change">
 					<span class="status-icon"><Zap :size="24" /></span>
 					<div><span>Last change</span><strong>{{ formatDate(library.lastChangeDetectedAt) }}</strong><small>{{ formatActivityTime(library.lastChangeDetectedAt) }}</small></div>
@@ -1408,7 +1409,7 @@ onUnmounted(() => {
 			<span>{{ pagination.pageSize }} per page</span>
 		</footer>
 
-		<AnimatedDisclosure v-model="scanHistoryOpen" class="diagnostics"><template #summary><span>Scan history</span></template><article v-for="run in scans" :key="run.id"><StatusPill :value="run.status" /><span>{{ new Date(run.startedAt).toLocaleString() }}</span><span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span><ul v-if="run.issues.length"><li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">{{ issue.code }} — {{ issue.path ?? issue.message }}</li></ul></article></AnimatedDisclosure>
+		<LibraryScanHistoryModal v-if="scanHistoryOpen" :scans="scans" @close="scanHistoryOpen = false" />
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
 		<LibrarySettingsModal v-if="showSettings" :library="library" @close="showSettings = false" @saved="finishSettings" @deleted="finishDeletion" />

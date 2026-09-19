@@ -37,6 +37,32 @@ test('captures setup and authentication', async ({ page }) => {
 test('captures libraries and scanning', async ({ page, documentationServer }) => {
 	const { libraryId, mediaRoot } = await seedLibrary(page, documentationServer.directory, true);
 	await capture(page, 'library-catalog.png');
+	const historyTrigger = page.getByRole('button', { name: 'Last scan: open scan history' });
+	await historyTrigger.click();
+	const history = page.getByRole('dialog', { name: 'Scan history' });
+	await expect(history.locator('article').first()).toBeVisible();
+	await capture(page, 'library-scan-history.png');
+	await page.keyboard.press('Escape');
+	await expect(history).toBeHidden();
+	await expect(historyTrigger).toBeFocused();
+	await historyTrigger.press('Enter');
+	await history.getByRole('button', { name: 'Close scan history' }).click();
+	await expect(history).toBeHidden();
+
+	// The footer stays at the viewport edge at either end of the catalog on desktop and mobile.
+	for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(viewport);
+		for (const bottom of [false, true]) {
+			await page.evaluate((atBottom) => window.scrollTo({ top: atBottom ? document.body.scrollHeight : 0, behavior: 'instant' }), bottom);
+			await expect.poll(async () => {
+				const bounds = await page.locator('.catalog-footer').boundingBox();
+				return bounds ? Math.abs(bounds.y + bounds.height - viewport.height) : Infinity;
+			}).toBeLessThan(2);
+			await expect(page.getByRole('button', { name: 'Next page', exact: true })).toBeVisible();
+		}
+	}
+	await page.setViewportSize({ width: 1440, height: 900 });
+
 	await page.goto(`/libraries/${libraryId}?q=Drama`);
 	await expect(page.locator('.media-card-match').first()).toContainText('Genre');
 	await capture(page, 'library-search.png');

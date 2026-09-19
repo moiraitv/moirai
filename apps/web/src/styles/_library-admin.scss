@@ -1,14 +1,17 @@
+.library-scan-history-modal {
+	width: min(900px, 100%);
+}
+
+.library-scan-history-modal .diagnostics {
+	margin-top: 0;
+	border-top: 0;
+	overflow-wrap: anywhere;
+}
+
 .diagnostics {
 	margin-top: 16px;
 	border-top: 1px solid var(--line);
 	color: var(--muted);
-}
-
-.diagnostics .animated-disclosure-trigger {
-	cursor: pointer;
-	padding: 15px 0;
-	color: #b8c3ce;
-	font-size: 0.78rem;
 }
 
 .diagnostics article {

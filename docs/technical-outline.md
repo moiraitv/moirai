@@ -429,7 +429,9 @@ requiring approval, provided the paths and content remain consistent.
 
 If the process stops during a scan, startup marks that scan failed and schedules a recovery scan for
 the enabled library. Completed scan history is retained for 30 days or 2,000 entries per library by
-default. Running scans are never pruned.
+default. Running scans are never pruned. The library’s Last scan status block opens a scrollable
+scan-history dialog with results, counts, and retained issues. Catalog pagination stays pinned
+to the viewport bottom on desktop and mobile, with space reserved below the media list.
 
 ### Scheduling during outages
 
