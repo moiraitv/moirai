@@ -39,6 +39,8 @@ import MediaSelectionDrawer from './MediaSelectionDrawer.vue';
 import ProgramTypeRail from './ProgramTypeRail.vue';
 import ProgramSourceBrowser from './ProgramSourceBrowser.vue';
 import SelectionStrategyEditor from './SelectionStrategyEditor.vue';
+import { DEFAULT_SIMILARITY_QUANTITY, DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS, DEFAULT_SIMILARITY_VARIETY } from '@moirai/shared';
+import SimilarityProgramEditor from './SimilarityProgramEditor.vue';
 import SequenceProgramEditor from './SequenceProgramEditor.vue';
 import { itemsInReferenceOrder, manualOrderFromDisplay, mergeVisibleManualOrder } from './selected-media-order';
 import { useSelectedMediaOrderState } from './selected-media-order-state';
@@ -195,7 +197,14 @@ const form = reactive({
 	subtitlePreferences: {} as SubtitlePreferences,
 	audioPreferences: {} as AudioPreferences,
 	name: '',
-	type: 'content' as 'content' | 'sequence',
+	type: 'content' as 'content' | 'sequence' | 'similarity' | 'theme',
+	sourceProgramId: '',
+	theme: '',
+	variety: DEFAULT_SIMILARITY_VARIETY,
+	quantity: DEFAULT_SIMILARITY_QUANTITY,
+	softPreferences: '',
+	exclusionText: '',
+	exclusionStrictness: DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS,
 	sourceType: 'library-query' as
     'library-query' | 'collection' | 'item' | 'group' | 'group-collection',
 	libraryId: '',
@@ -229,12 +238,19 @@ function resetForm(program?: SchedulingProgram): void {
 	form.audioPreferences = cloneContractValue(program?.config.audioPreferences ?? {});
 	form.subtitlePreferences = cloneContractValue(program?.config.subtitlePreferences ?? {});
 	form.type = program?.config.type ?? 'content';
+	form.theme = program?.config.type === 'theme' ? program.config.theme : '';
+	form.sourceProgramId = program?.config.type === 'similarity' ? program.config.sourceProgramId : '';
+	form.variety = (program?.config.type === 'similarity' || program?.config.type === 'theme') ? program.config.variety : DEFAULT_SIMILARITY_VARIETY;
+	form.quantity = (program?.config.type === 'similarity' || program?.config.type === 'theme') ? program.config.quantity : DEFAULT_SIMILARITY_QUANTITY;
+	form.softPreferences = (program?.config.type === 'similarity' || program?.config.type === 'theme') ? program.config.softPreferences ?? '' : '';
+	form.exclusionText = (program?.config.type === 'similarity' || program?.config.type === 'theme') ? (program.config.hardExclusions ?? []).join(', ') : '';
+	form.exclusionStrictness = (program?.config.type === 'similarity' || program?.config.type === 'theme') ? program.config.exclusionStrictness ?? DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS : DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS;
 	form.sourceType = 'library-query';
-	form.libraryId = librariesStore.libraries[0]?.id ?? '';
+	form.libraryId = program?.config.type === 'theme' ? program.config.libraryId : librariesStore.libraries[0]?.id ?? '';
 	form.sourceId = '';
 	form.includeDescendants = true;
 	form.kinds = [];
-	form.filter = emptyCatalogProgramItemFilter();
+	form.filter = program?.config.type === 'theme' || program?.config.type === 'similarity' ? catalogProgramItemFilterSchema.parse(program.config.filter ?? {}) : emptyCatalogProgramItemFilter();
 	form.querySort = { type: 'name', direction: 'asc' };
 	form.queryItemLimit = null;
 	form.selectedItemIds = [];
@@ -317,7 +333,7 @@ async function loadSourceOptions(): Promise<void> {
 	sourceLoading.value = true;
 	sourceLoaded.value = false;
 	try {
-		if (form.sourceType === 'library-query') {
+		if (form.type === 'theme' || form.sourceType === 'library-query') {
 			const facets = await api.mediaGenres(form.libraryId);
 			if (sequence !== sourceLoadSequence) {
 				return;
@@ -679,6 +695,12 @@ function moveEntry(index: number, offset: number): void {
 
 /** Build the validated request body from the current editor form. */
 function payload(): ProgramCreate {
+	if (form.type === 'similarity' || form.type === 'theme') {
+		return { name: form.name, config: { ...(form.type === 'theme' ? { type: 'theme', libraryId: form.libraryId, theme: form.theme, filter: form.filter } as const : { type: 'similarity', sourceProgramId: form.sourceProgramId, filter: form.filter } as const),
+			variety: form.variety, quantity: form.quantity, softPreferences: form.softPreferences,
+			hardExclusions: form.exclusionText.split(',').map((text) => text.trim()).filter(Boolean), exclusionStrictness: form.exclusionStrictness, subtitlePreferences: form.subtitlePreferences,
+			audioPreferences: form.audioPreferences } };
+	}
 	if (form.type === 'sequence') {
 		return {
 			name: form.name,
@@ -791,7 +813,7 @@ async function save(stayOnPage = false): Promise<boolean> {
 async function leaveEditor(): Promise<void> {
 	allowRouteLeave = true;
 	try {
-		await router.push('/schedules/programs');
+		await router.push({ path: '/schedules/programs', query: route.query });
 	}
 	finally {
 		allowRouteLeave = false;
@@ -841,13 +863,13 @@ watch(
 		void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	},
 );
-watch(() => form.libraryId, () => void loadSourceOptions());
+watch(() => [form.libraryId, form.type], () => void loadSourceOptions());
 onMounted(async () => {
 	unsubscribeLiveEvents = subscribeToSelectedMediaRefresh(
 		() => form.libraryId,
-		() => form.sourceType === 'collection' || form.sourceType === 'library-query',
+		() => form.type === 'theme' || form.sourceType === 'collection' || form.sourceType === 'library-query',
 		() => {
-			if (form.sourceType === 'collection') {
+			if (form.type !== 'theme' && form.sourceType === 'collection') {
 				void loadSelectedItems();
 			}
 			else {
@@ -908,7 +930,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 						{{
 							form.type === 'content'
 								? 'Define what content can play and how it should be selected.'
-								: 'Arrange reusable programs in a custom repeating order.'
+								: form.type === 'theme' ? 'Find media matching a theme in a target library.' : form.type === 'similarity' ? 'Select related media from a Specific media items Program.' : 'Arrange reusable programs in a custom repeating order.'
 						}}
 					</p>
 				</ResourceEditorHeader>
@@ -1127,6 +1149,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 								<SelectionStrategyEditor v-model="form.strategy" v-model:seed="form.seed" />
 							</template>
 
+							<SimilarityProgramEditor v-else-if="form.type === 'similarity' || form.type === 'theme'" v-model:filter="form.filter" v-model:theme="form.theme" v-model:library-id="form.libraryId" v-model:source-program-id="form.sourceProgramId" v-model:variety="form.variety" v-model:quantity="form.quantity" v-model:soft-preferences="form.softPreferences" v-model:exclusion-text="form.exclusionText" v-model:exclusion-strictness="form.exclusionStrictness" :genres="genres" :filters-loading="sourceLoading" :filters-loaded="sourceLoaded" :type="form.type" :libraries="librariesStore.libraries" :read-only-source="Boolean(editingId)" :programs="programs" :status="statuses.get(editingId ?? '')" />
 							<SequenceProgramEditor
 								v-else
 								v-model:entries="form.entries"

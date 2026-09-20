@@ -17,7 +17,8 @@ export class SchedulingValidationError extends Error {
 
 /** Collect the stable identifiers for referenced program. */
 function referencedProgramIds(config: ProgramConfig): string[] {
-	return config.type === 'sequence' ? config.entries.map((entry) => entry.programId) : [];
+	return config.type === 'sequence' ? config.entries.map((entry) => entry.programId)
+		: config.type === 'similarity' ? [config.sourceProgramId] : [];
 }
 
 /** Ensure a filler reference exists and cannot recursively select filler. */
@@ -31,6 +32,13 @@ function assertFillerProgram(filler: FillerConfig | null, programIds: Set<string
 export function validatePrograms(programs: SchedulingProgram[]): void {
 	const byId = new Map(programs.map((program) => [program.id, program]));
 	for (const program of programs) {
+		if (program.config.type === 'similarity') {
+			const source = byId.get(program.config.sourceProgramId);
+			if (source?.config.type !== 'content' || source.config.source.type !== 'collection') {
+				throw new SchedulingValidationError('Similar Items requires a Specific media items Program');
+			}
+		}
+
 		for (const referencedId of referencedProgramIds(program.config)) {
 			if (!byId.has(referencedId)) {
 				throw new SchedulingValidationError(

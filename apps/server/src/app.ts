@@ -1,3 +1,6 @@
+import { fileURLToPath } from 'node:url';
+import { EmbeddingService } from './semantic/service.js';
+import { SemanticRepository } from './repository/semantic.js';
 import { existsSync } from 'node:fs';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
@@ -175,8 +178,13 @@ export async function buildApp(
 		config.debug,
 	);
 
+	const embeddings = new EmbeddingService(new SemanticRepository(db), events, fileURLToPath(new URL('./embedding-model/', import.meta.url)));
+	const unsubscribeEmbeddings = events.subscribe((event) => embeddings.handleEvent(event));
+
 	// Register optional resource consumers in the order they should be shed.
 	const unregisterPressureShedders = [
+		resourcePressure.register({ name: 'semantic-embeddings', stage: 'background',
+			suspend: () => embeddings.suspend(), recover: () => embeddings.resume() }),
 		resourcePressure.register({
 			name: 'library-watchers',
 			stage: 'background',
@@ -210,8 +218,12 @@ export async function buildApp(
 		() => timelineMaterializer.runNow(),
 		(message, extra) => logs.logger.warn(extra ?? {}, message),
 	);
-	const unsubscribeMaterializer = events.subscribe((event) =>
-		timelineMaterializer.handleEvent(event));
+	const unsubscribeMaterializer = events.subscribe((event) => {
+		if (event.type === 'embeddings.changed') {
+			repository.invalidateSchedulingCatalog();
+		}
+		timelineMaterializer.handleEvent(event);
+	});
 	const unsubscribeEpg = events.subscribe((event) => {
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed') {
 			epg.invalidate();
@@ -274,6 +286,7 @@ export async function buildApp(
 				'Authentication is uninitialized; the first visitor can claim administrator access',
 			);
 		}
+		embeddings.start();
 		timelineMaterializer.start();
 		playout.start();
 		await playback.start();
@@ -283,6 +296,8 @@ export async function buildApp(
 		authentication.close();
 		unsubscribeSessionRevocations();
 		unsubscribeMaterializer();
+		unsubscribeEmbeddings();
+		await embeddings.close();
 		unsubscribeEpg();
 		unsubscribePlayout();
 		unsubscribePlayback();
@@ -310,6 +325,7 @@ export async function buildApp(
 
 	// Register API domains after their shared dependencies are ready.
 	registerHttpRoutes(app, {
+		requestEmbeddingWork: (includeMedia) => embeddings.requestPreferences(includeMedia),
 		playout,
 		config,
 		authentication,

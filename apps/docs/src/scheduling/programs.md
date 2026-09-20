@@ -39,7 +39,6 @@ contextual: true
 >
 >   Random from any collection or library query
 
-
 In a saved program, open **Used by** in the editor title bar to see direct sequence, template, and schedule references.
 
 A ![](/icons/list-video.svg) Program is a reusable rule that tells Moirai what content to play and in what order. ![](/icons/calendar-range.svg) Templates use ![](/icons/list-video.svg) Programs in their time slots, so one ![](/icons/list-video.svg) Program can appear on several ![](/icons/tv-minimal.svg) Channels or days.
@@ -78,6 +77,47 @@ The **Selection** controls determine how eligible items are consumed:
 - **Weighted random** favors content your viewers have chosen while retaining variety.
 
 The optional **Stable seed** makes randomized choices repeatable. Whether playback continues from its previous position or restarts each day is configured in the ![](/icons/calendar-range.svg) Template slot, under **Advanced scheduling behavior**.
+
+## Similar Items Programs
+
+Choose **Similar Items** to find media related to a hand-picked Content Program. First create a Content Program whose source is **Specific media items**, then select it as the **Source Program**. Library queries, selected groups, and Sequence Programs cannot be sources.
+
+Open **Additional filters** below Source Program to restrict which related items can qualify. Use **Configure Filters** for the same genre, year, rating, and other metadata rules as filters elsewhere. Filters apply to candidate matches only; source items still guide similarity even when they do not meet those filters.
+
+![Create a Similar Items Program](/screenshots/program-similarity-create.png)
+
+Move the **Cohesion / Variety** slider toward Cohesive for closer matches, or toward Varied for a more diverse selection that still relates to the source. **Quantity** sets the number of items in each set, from 1 to 500, with 20 as the default. Recommendations stay within the source library and media kinds, and they exclude the source items. Episode selections recommend episodes; music selections use title, artist, album, and available descriptive information.
+
+Below Quantity, use either or both optional refinements:
+
+- **Preferences:** describe themes to favor, such as “darker, slower-paced science fiction.” This is a preference, not a guarantee.
+- **Exclusions:** enter comma-separated concepts to avoid, such as `superhero movies, romantic comedies`. Describe the concept itself rather than writing “no superhero movies.” Increase **Exclusion strictness** to exclude broader matches, or lower it to exclude only closer matches. This is approximate, so check **Excluded matches** alongside the remaining sample and adjust as needed.
+
+**Excluded matches** shows a sample of available candidates filtered out by your concepts and strictness. While Moirai prepares matches, the preview shows a loading message over dimmed cards. Changes do not affect existing active sets still finish unchanged and apply at the next schedule generation.
+
+**Sample matches** in the editor update as you change the source, library filters, variety, quantity, or refinements. When there are fewer related matches than your requested Quantity, both previews show the available count and requested count. This count covers all related matches, not just the cards visible in the preview. These previews may differ from the set selected for a schedule.
+
+New refinements are prepared between small batches of library items if it is actively scanning, so they can become ready while library preparation is still running.
+
+Each schedule use keeps its own set. The set and its order survive restarts, new library items, and edits. Changing source contents, library filters, variety, quantity, or refinements affects the next set. The current set finishes first, even for slots configured to restart daily. New sets prefer items absent from the last ten completed sets. When reuse is needed, items from the least recent set are preferred. Smaller libraries may reuse media or produce fewer matches.
+
+Items count as used when Moirai commits them to its schedule, so the displayed remaining count describes schedule preparation rather than what viewers have already watched. A temporarily unavailable or deleted remaining item keeps its place and prevents that set from finishing until the item is available again. Moirai shows a warning instead of silently replacing it.
+
+Removing a channel's schedule clears its Similar Items sets and selection history. Assigning a schedule again starts fresh sets using the current Program settings; other channels keep their sets.
+
+Similarity runs locally on the server. Initial library preparation happens in the background; the Program shows preparation or failure status while waiting for usable matches. If Moirai cannot finish preparing matches, open the Program editor and choose **Retry preparation**. This retries only the failed preparation for relevant media and your current theme, preferences, and exclusions. Items already prepared and active sets stay unchanged. Both container and native builds bundle the model, so installing or running the built application needs no model download or outbound connection. See [configuration](/operations/configuration) for packaging details.
+
+## Theme Programs
+
+Choose **Theme** to find media matching a description. Select a **Target library**, use **Configure Filters** to choose which media can qualify, then enter a **Theme**, such as “space exploration and first contact” or “quiet mysteries in small towns.” Matches use the media’s titles, descriptions, and other metadata.
+
+Filters use the same rules as filters elsewhere and are applied before theme matching. For example, require the Comedy genre and enter “raunchy late-night comedies” to rank only comedies by that theme. Leave the filters empty to consider all compatible media.
+
+![Create a Theme Program](/screenshots/program-theme-create.png)
+
+Use **Quantity**, **Cohesion / Variety**, **Preferences**, and **Exclusions** just as you would for Similar Items. Review **Sample matches** and **Excluded matches** as you refine the theme.
+
+Each schedule use keeps its own set and finishes it before selecting another. Changes to the theme, target library, library filters, quantity, or refinements apply to the next set. The same preparation status, retry controls, and rotation behavior described below apply to Theme Programs. If a scan corrects a media runtime, the schedule refreshes its future timings at the next daily boundary.
 
 ## Sequence Programs
 

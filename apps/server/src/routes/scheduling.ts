@@ -1,3 +1,4 @@
+import { registerSemanticProgramRoutes } from './semantic-programs.js';
 import { registerProgramGroupRoutes } from './program-groups.js';
 import type { FastifyInstance } from 'fastify';
 import { Temporal } from '@js-temporal/polyfill';
@@ -59,14 +60,16 @@ interface SchedulingRouteDependencies {
 	repository: Repository;
 	events: LiveEventHub;
 	schedulingWorkers: SchedulingWorkerPool;
+	requestEmbeddingWork?: (includeMedia?: boolean) => void;
 }
 
 /** Register reusable scheduling configuration and preview endpoints. */
 export function registerSchedulingRoutes(
 	app: FastifyInstance,
-	{ config, repository, events, schedulingWorkers }: SchedulingRouteDependencies,
+	{ config, repository, events, schedulingWorkers, requestEmbeddingWork }: SchedulingRouteDependencies,
 ): void {
 	registerProgramGroupRoutes(app, repository, events);
+	registerSemanticProgramRoutes(app, repository, requestEmbeddingWork);
 	// Reusable program definitions.
 	app.get('/api/v1/programs', {
 		schema: apiOperation({

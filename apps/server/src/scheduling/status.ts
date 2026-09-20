@@ -1,5 +1,7 @@
+import { similarityProgramStatus } from '../semantic/status.js';
 import {
 	orderSelectedMedia,
+	PROGRAM_PREVIEW_ITEM_LIMIT,
 	type ProgramConfig,
 	type SchedulableMedia,
 	type SchedulingCatalog,
@@ -12,9 +14,6 @@ import {
 	compareSchedulingMedia,
 	mediaMatchesLibraryQuery,
 } from './content-query.js';
-
-/** Maximum media entries embedded in one program overview row. */
-const PROGRAM_PREVIEW_ITEM_LIMIT = 12;
 
 /** Check whether one indexed group descends from another. */
 function descendantOf(
@@ -229,6 +228,12 @@ export function schedulingProgramStatuses(
 
 		if (program.config.type === 'content') {
 			const status = contentStatus(program, catalog);
+			resolved.set(program.id, status);
+			return status;
+		}
+
+		if (program.config.type === 'similarity' || program.config.type === 'theme') {
+			const status = similarityProgramStatus(program, programs, catalog);
 			resolved.set(program.id, status);
 			return status;
 		}

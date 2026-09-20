@@ -82,6 +82,7 @@ export class MaintenanceService {
 
 	/** Perform one bounded background maintenance pass. */
 	private async run(): Promise<void> {
+		this.repository.semantic.pruneSeeds();
 		this.repository.pruneScanHistory({
 			scanDays: this.config.scanHistoryRetentionDays,
 			scansPerLibrary: this.config.scanHistoryMaxPerLibrary,

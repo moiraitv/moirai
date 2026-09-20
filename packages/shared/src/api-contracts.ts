@@ -1,3 +1,4 @@
+import { SEMANTIC_HISTORY_LIMIT, MAX_SIMILARITY_QUANTITY, PROGRAM_PREVIEW_ITEM_LIMIT, semanticProgramConfigSchema } from './scheduling.js';
 import { z } from 'zod';
 import { guideEntrySchema } from './guide.js';
 import {
@@ -388,6 +389,16 @@ export const selectionStateRecordSchema = z.object({
 	consumerKey: z.string(),
 	configFingerprint: z.string(),
 	value: z.union([
+		z.object({
+			type: z.literal('similarity'),
+			seed: z.object({
+				programId: idSchema, consumerKey: z.string(), generation: z.number().int().positive(),
+				itemIds: z.array(idSchema), sourceItemIds: z.array(idSchema),
+				config: semanticProgramConfigSchema, createdAt: isoDateSchema,
+			}),
+			consumedItemIds: z.array(idSchema),
+			recentSeeds: z.array(z.array(idSchema).max(MAX_SIMILARITY_QUANTITY)).max(SEMANTIC_HISTORY_LIMIT).optional(),
+		}),
 		z.object({ type: z.literal('sequential'), nextIndex: z.number().int(), lastItemId: idSchema.nullable() }),
 		z.object({
 			type: z.literal('shuffle'),
@@ -693,8 +704,13 @@ export const dataConflictReportSchema = z.object({
 	truncated: z.boolean(),
 });
 
+/** Number of failed embeddings explicitly queued for another local inference attempt. */
+export const semanticRetryResultSchema = z.object({ queued: z.number().int().nonnegative() });
+
 /** Program source availability shown by the scheduling overview. */
 export const schedulingProgramStatusSchema = z.object({
+	currentSets: z.array(z.object({ channelName: z.string().optional(), programId: idSchema, consumerKey: z.string(), generation: z.number().int(),
+		total: z.number().int(), remaining: z.number().int(), requestedTotal: z.number().int().positive().optional() })).optional(),
 	programId: idSchema,
 	health: z.enum(['ready', 'degraded', 'unavailable', 'missing', 'empty']),
 	sourceLabel: z.string(),
@@ -707,7 +723,14 @@ export const schedulingProgramStatusSchema = z.object({
 		year: true,
 		artworkUrl: true,
 		availability: true,
-	})).max(12),
+	})).max(PROGRAM_PREVIEW_ITEM_LIMIT),
+	previewPending: z.boolean().optional(),
+	matchingItemCount: z.number().int().nonnegative().optional(),
+	requestedItemCount: z.number().int().positive().optional(),
+	failedEmbeddingCount: z.number().int().nonnegative().optional(),
+	excludedPreviewItems: z.array(mediaItemSchema.pick({
+		id: true, libraryId: true, title: true, year: true, artworkUrl: true, availability: true,
+	})).max(PROGRAM_PREVIEW_ITEM_LIMIT).optional(),
 });
 
 /** One cursor page of currently indexed matches for a Quick Setup library query. */

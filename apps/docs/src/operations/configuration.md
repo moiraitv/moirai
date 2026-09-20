@@ -90,3 +90,9 @@ For `MOIRAI_TRUST_PROXY`, supply only the proxy addresses or CIDRs you control. 
 `MOIRAI_ETV_CHANNEL_PATH` selects a prebuilt channel worker. Otherwise Moirai checks `ETV_NEXT_DIR`, the pinned development submodule's build, and then `PATH`. The management UI remains available without the worker, but playback is unavailable. The Docker image already includes the worker and media inspection tools.
 
 `MOIRAI_WEB_PORT` and `MOIRAI_WEB_HOST` apply only to local development. For a non-loopback development hostname, the web server binds all interfaces but accepts only the configured hostname. `MOIRAI_WEB_HOST` can override the bind address.
+
+## Local similarity model
+
+Similar Items Programs use `BAAI/bge-small-en-v1.5` locally on the CPU. Every server build packages the pinned ONNX model, tokenizer, and license in `apps/server/dist/embedding-model`. Container images include that complete server build. Native deployments should copy the entire server `dist` directory, including the model folder. Changing `MOIRAI_DATA_DIR` does not change the bundled model location.
+
+One background worker prepares the library, releases the model after a minute without work, and suspends under system resource pressure. English descriptions give the best results with this model. If the bundle is incomplete, Similar Items may show an error while the rest of Moirai remains available; rebuild or reinstall may be needed to fix it.

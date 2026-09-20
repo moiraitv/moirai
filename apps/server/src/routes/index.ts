@@ -44,6 +44,7 @@ export interface HttpRouteDependencies {
 	epg: EpgService;
 	timelineMaterializer: TimelineMaterializer;
 	schedulingWorkers: SchedulingWorkerPool;
+	requestEmbeddingWork?: (includeMedia?: boolean) => void;
 	logs: LogService;
 	health: HealthService;
 }

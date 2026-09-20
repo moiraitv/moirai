@@ -218,6 +218,27 @@
       "when": 1789783300000,
       "tag": "0030_scan_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1789783400000,
+      "tag": "0031_semantic_programs",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1789783500000,
+      "tag": "0032_semantic_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1789783600000,
+      "tag": "0033_semantic_schema_compatibility",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,9 @@ export function countProgramUsages(overview: SchedulingOverview | null): Map<str
 		}
 	}
 	for (const program of overview?.programs ?? []) {
+		if (program.config.type === 'similarity') {
+			countUse(program.config.sourceProgramId);
+		}
 		if (program.config.type === 'sequence') {
 			for (const entry of program.config.entries) {
 				countUse(entry.programId);

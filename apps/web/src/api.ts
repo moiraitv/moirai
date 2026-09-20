@@ -1,3 +1,4 @@
+import type { ProgramConfig, SchedulingProgramStatus } from '@moirai/shared';
 import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
 import type { EncodingProfile, EncodingProfileCreate } from '@moirai/shared';
@@ -258,6 +259,10 @@ export const api = {
 	createCreditTemplate: (body: CreditTemplateCreate) => request<CreditTemplate>('/api/v1/credit-templates', { method: 'POST', body: JSON.stringify(body) }),
 	updateCreditTemplate: (id: string, body: CreditTemplateCreate) => request<CreditTemplate>(`/api/v1/credit-templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 	deleteCreditTemplate: (id: string) => request<void>(`/api/v1/credit-templates/${id}`, { method: 'DELETE' }),
+	retrySimilarityEmbeddings: (body: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>) =>
+		request<{ queued: number }>('/api/v1/programs/similarity-retry', { method: 'POST', body: JSON.stringify(body) }),
+	previewSimilarityProgram: (body: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>, signal?: AbortSignal) =>
+		request<SchedulingProgramStatus>('/api/v1/programs/similarity-preview', { method: 'POST', body: JSON.stringify(body), ...(signal ? { signal } : {}) }),
 	creditPreviewVideos: () => request<MediaItem[]>('/api/v1/credit-templates/preview-videos'),
 	previewCreditTemplate: (body: CreditPreview) => request<CreditPreviewResult>('/api/v1/credit-templates/preview', { method: 'POST', body: JSON.stringify(body) }),
 	setDefaultGuideTemplate: (id: string) => request<GuideTemplate>(`/api/v1/guide-templates/${id}/default`, { method: 'PUT' }),

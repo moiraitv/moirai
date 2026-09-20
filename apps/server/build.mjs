@@ -1,12 +1,16 @@
 import path from 'node:path';
+import { packageEmbeddingModel } from '../../scripts/embedding-model.mjs';
 import { cp, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 
+await packageEmbeddingModel(path.join(directory, 'dist', 'embedding-model'));
+
 await build({
 	entryPoints: {
+		'embedding-worker': path.join(directory, 'src/semantic/worker.ts'),
 		'auth-reset': path.join(directory, 'src/auth-reset.ts'),
 		main: path.join(directory, 'src/main.ts'),
 		'credit-worker': path.join(directory, 'src/playback/credit-worker.ts'),

@@ -9,6 +9,7 @@ import {
 	ensureCatalogSearchDeferTable,
 } from '../repository/catalog-search-sql.js';
 import * as schema from './schema.js';
+import * as semanticSchema from './semantic-schema.js';
 
 /** Database handle to the SQLite connection. */
 export type MoiraiDatabase = ReturnType<typeof createDatabase>['db'];
@@ -28,7 +29,7 @@ export function createDatabase(databasePath: string, migrationsDir: string) {
 		sqlite.pragma('journal_mode = WAL');
 	}
 
-	const db = drizzle(sqlite, { schema });
+	const db = drizzle(sqlite, { schema: { ...schema, ...semanticSchema } });
 	migrate(db, { migrationsFolder: migrationsDir });
 	ensureCatalogSearchDeferTable(sqlite);
 	endCatalogSearchDefer(sqlite);

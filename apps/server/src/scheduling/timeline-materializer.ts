@@ -1,3 +1,5 @@
+import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
+import { StaleSemanticDecisionError } from '../repository/semantic.js';
 import { Temporal } from '@js-temporal/polyfill';
 import {
 	XMLTV_EPG_DAYS,
@@ -82,6 +84,10 @@ function referencedPrograms(
 	while (changed) {
 		changed = false;
 		for (const program of programs) {
+			if (ids.has(program.id) && program.config.type === 'similarity' && !ids.has(program.config.sourceProgramId)) {
+				ids.add(program.config.sourceProgramId);
+				changed = true;
+			}
 			if (!ids.has(program.id) || program.config.type !== 'sequence') {
 				continue;
 			}
@@ -124,6 +130,10 @@ function inputFingerprint(
 	const itemIds = new Set<string>();
 	const groupIds = new Set<string>();
 	for (const program of selectedPrograms) {
+		if (program.config.type === 'theme') {
+			libraryIds.add(program.config.libraryId);
+			continue;
+		}
 		if (program.config.type !== 'content') {
 			continue;
 		}
@@ -176,6 +186,7 @@ function inputFingerprint(
 		templates: selectedTemplates.map(templatePlaybackInput),
 		programs: selectedPrograms,
 		catalog: {
+			semantic: semanticSchedulingFingerprint(schedule.channelId, selectedPrograms, catalog),
 			media: selectedMedia,
 			groupParents: Object.fromEntries(
 				[...selectedGroupIds].map((id) => [id, catalog.groupParents[id] ?? null]),
@@ -363,7 +374,7 @@ export class TimelineMaterializer {
 			return;
 		}
 
-		if (event.type === 'scheduling.changed' || relevantScan || relevantReconciliation) {
+		if (event.type === 'scheduling.changed' || event.type === 'embeddings.changed' || relevantScan || relevantReconciliation) {
 			this.dirty = true;
 			this.revision += 1;
 			void this.runNow().catch(() => undefined);
@@ -769,6 +780,8 @@ export class TimelineMaterializer {
 		return () => {
 			try {
 				this.repository.commitMaterializedTimeline({
+					expectedCommittedAt: current?.committedAt ?? null,
+					expectedRevision: current?.revision ?? 0,
 					channelId: schedule.channelId,
 					windowStart: desiredStart,
 					windowEnd: desiredEnd,
@@ -788,6 +801,11 @@ export class TimelineMaterializer {
 				});
 			}
 			catch (error) {
+				if (error instanceof StaleSemanticDecisionError) {
+					this.dirty = true;
+					this.revision += 1;
+					return;
+				}
 				const message = internalErrorMessage(error);
 				this.repository.markTimelineFailed(schedule.channelId, message, currentTimestamp());
 				this.events.publish({

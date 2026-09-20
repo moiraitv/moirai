@@ -311,8 +311,15 @@ export const timelineEventDataSchema = z.object({
 	status: z.enum(['ready', 'pending', 'failed']),
 });
 
+/** Coalesced local embedding preparation progress; scheduling overview provides recovery state. */
+export const embeddingEventDataSchema = z.object({
+	pending: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
+	status: z.enum(['working', 'idle', 'model-missing']),
+});
+
 /** Versioned, bounded server event envelope; REST remains the state-recovery contract. */
 export const liveEventSchema = z.discriminatedUnion('type', [
+	z.object({ ...liveEventEnvelopeShape, type: z.literal('embeddings.changed'), data: embeddingEventDataSchema }),
 	z.object({
 		...liveEventEnvelopeShape,
 		type: z.literal('system.ready'),
@@ -353,7 +360,8 @@ export const liveEventSchema = z.discriminatedUnion('type', [
 export type LiveEvent = z.infer<typeof liveEventSchema>;
 /** Shared wire contract for live event input. */
 export type LiveEventInput
-	= | { type: 'library.changed'; data: z.infer<typeof libraryEventDataSchema> }
+	= | { type: 'embeddings.changed'; data: z.infer<typeof embeddingEventDataSchema> }
+		| { type: 'library.changed'; data: z.infer<typeof libraryEventDataSchema> }
 		| { type: 'scan.changed'; data: z.infer<typeof scanEventDataSchema> }
 		| { type: 'channel.changed'; data: z.infer<typeof channelEventDataSchema> }
 		| { type: 'playback.changed'; data: z.infer<typeof playbackEventDataSchema> }

@@ -26,6 +26,7 @@ const csrfProtectedMethods = new Set(['delete', 'patch', 'post', 'put']);
 const liveEventDescriptions = [
 	['system.ready', 'Confirms the connection and supplies its stable connection identifier.'],
 	['library.changed', 'Reports library configuration, watcher, source-detection, or reconciliation changes.'],
+	['embeddings.changed', 'Reports coalesced local media and refinement embedding preparation progress and missing model status.'],
 	['scan.changed', 'Reports scan lifecycle, progress, counts, and programming impact.'],
 	['channel.changed', 'Reports channel creation, updates (including inherited encoding profile changes), and deletion.'],
 	['playback.changed', 'Reports playback process and playout synchronization changes.'],

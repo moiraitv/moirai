@@ -8,6 +8,7 @@ import { test } from './documentation/fixture';
 import { serveReviewFixture } from './documentation/review-fixture';
 import { capture, captureSection, assertProgramColors } from './documentation/capture';
 import { seedLibrary, seedSchedule, normalizeFixtureLogs } from './documentation/seed';
+import { seedSemanticCache } from './documentation/semantic';
 import { helpReviewLabel, type HelpReviewReason } from '../../apps/web/src/help-review';
 import MarkdownIt from 'markdown-it';
 import { userDocsTermBadges } from '../../scripts/user-docs-term-badges';
@@ -157,6 +158,37 @@ test('captures Programs', async ({ page, documentationServer }) => {
 	}
 	await expect(page.locator('.sequence-entry')).toHaveCount(3);
 	await capture(page, 'program-sequence-create.png');
+
+	seedSemanticCache(documentationServer.directory);
+	await page.getByRole('radio', { name: /^Theme/u }).check();
+	await page.getByPlaceholder('e.g. Evening Lineup').fill('Space discovery');
+	await page.getByLabel('Theme', { exact: true }).fill('Space exploration and first contact');
+	await expect(page.getByRole('region', { name: 'Sample matches' }).getByRole('link').first()).toBeVisible();
+	await capture(page, 'program-theme-create.png');
+	await page.getByRole('radio', { name: /^Similar Items/u }).check();
+	await page.getByLabel('Source Program', { exact: true }).selectOption(sequenceProgramIds[1]!);
+	await page.getByPlaceholder('e.g. Evening Lineup').fill('Related Cinema');
+	await page.getByLabel('Exclusions', { exact: true }).fill('superhero movies');
+	await page.getByLabel('Exclusions', { exact: true }).blur();
+	await expect(page.getByLabel('Exclusion strictness', { exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Sample matches' }).getByRole('link').first()).toBeVisible();
+	await capture(page, 'program-similarity-create.png');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('dialog')).toBeHidden();
+	const similarRow = page.locator('.program-row').filter({ has: page.getByRole('link', { name: 'Related Cinema', exact: true }) });
+	await expect(similarRow.locator('.program-carousel')).toHaveCSS('display', 'flex');
+	await expect(similarRow.locator('.similarity-sample-heading')).toHaveCSS('text-align', 'center');
+	await expect(similarRow.locator('.similarity-sample-heading')).toHaveCSS('text-transform', 'uppercase');
+	await similarRow.screenshot({ path: 'test-results/program-similarity-list.png' });
+	await similarRow.getByRole('link', { name: 'Related Cinema', exact: true }).click();
+	await expect(page.getByLabel('Source Program', { exact: true })).toHaveJSProperty('readOnly', true);
+	const sample = page.getByRole('dialog').getByRole('region', { name: 'Sample matches' });
+	await expect(sample.getByRole('link').first()).toBeVisible();
+	await expect(sample.locator('.program-carousel')).toHaveCSS('display', 'flex');
+	const quantity = await page.getByLabel('Quantity', { exact: true }).boundingBox();
+	const carousel = await sample.locator('.program-carousel').boundingBox();
+	expect(carousel!.x).toBe(quantity!.x);
+	await page.screenshot({ path: 'test-results/program-similarity-edit.png' });
 
 });
 test('sorts Programs by name ignoring leading articles and punctuation', async ({ page, documentationServer }) => {

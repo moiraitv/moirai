@@ -53,32 +53,60 @@ export function schedulingRootProgramIds(
 	return ids;
 }
 
+/** Resolve only Programs reachable through sequence entries and similarity sources. */
+export function reachableSchedulingPrograms(programs: SchedulingProgram[], rootProgramIds?: Iterable<string>): SchedulingProgram[] {
+	const byId = new Map(programs.map((program) => [program.id, program]));
+	const pending = rootProgramIds ? [...rootProgramIds] : programs.map((program) => program.id);
+	const visited = new Set<string>();
+	const result: SchedulingProgram[] = [];
+	while (pending.length) {
+		const id = pending.pop()!;
+		if (visited.has(id)) {
+			continue;
+		}
+		visited.add(id);
+		const program = byId.get(id);
+		if (!program) {
+			continue;
+		}
+		result.push(program);
+		if (program.config.type === 'sequence') {
+			pending.push(...program.config.entries.map((entry) => entry.programId));
+		}
+		else if (program.config.type === 'similarity') {
+			pending.push(program.config.sourceProgramId);
+		}
+	}
+	return result;
+}
+
 /** Follow composite programs and collect only catalog references reachable from the roots. */
 export function schedulingCatalogScope(
 	programs: SchedulingProgram[],
 	rootProgramIds?: Iterable<string>,
 ): SchedulingCatalogScope {
 	const byId = new Map(programs.map((program) => [program.id, program]));
-	const pending = rootProgramIds ? [...rootProgramIds] : programs.map((program) => program.id);
-	const visited = new Set<string>();
 	const itemIds = new Set<string>();
 	const groupIds = new Set<string>();
 	const libraryIds = new Set<string>();
 	const sourceLibraryIds = new Set<string>();
-	while (pending.length > 0) {
-		const id = pending.pop()!;
-		if (visited.has(id)) {
-			continue;
-		}
-
-		visited.add(id);
-		const program = byId.get(id);
-		if (!program) {
-			continue;
-		}
-
+	for (const program of reachableSchedulingPrograms(programs, rootProgramIds)) {
 		if (program.config.type === 'sequence') {
-			pending.push(...program.config.entries.map((entry) => entry.programId));
+			continue;
+		}
+
+		if (program.config.type === 'similarity') {
+			const anchor = byId.get(program.config.sourceProgramId);
+			if (anchor?.config.type === 'content' && anchor.config.source.type === 'collection') {
+				libraryIds.add(anchor.config.source.libraryId);
+				sourceLibraryIds.add(anchor.config.source.libraryId);
+			}
+			continue;
+		}
+
+		if (program.config.type === 'theme') {
+			libraryIds.add(program.config.libraryId);
+			sourceLibraryIds.add(program.config.libraryId);
 			continue;
 		}
 

@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import { refinementTexts } from '../semantic/refinement.js';
+import { SemanticPreferenceRepository } from './semantic-preferences.js';
+import { SemanticRepository, StaleSemanticDecisionError } from './semantic.js';
 import { and, asc, eq, gt, inArray, isNotNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import type {
 	ChannelTimelineMaterializationStatus,
@@ -17,7 +21,7 @@ import {
 	selectionStates,
 	timelineMaterializations,
 } from '../db/schema.js';
-import { indexSchedulingCatalog, schedulingCatalogScope } from '../scheduling/catalog.js';
+import { indexSchedulingCatalog, schedulingCatalogScope, reachableSchedulingPrograms } from '../scheduling/catalog.js';
 import type {
 	MaterializedSegmentRecord,
 	OccupiedMediaInterval,
@@ -182,6 +186,9 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		{ revision: number; value: Promise<SchedulingCatalog> }
 	>();
 
+	private readonly semanticCatalogs = new Map<string, NonNullable<SchedulingCatalog['semantic']>>();
+	private readonly semanticPreferences = new Map<string, NonNullable<NonNullable<SchedulingCatalog['semantic']>['preferences']>>();
+
 	constructor(db: MoiraiDatabase) {
 		super(db);
 	}
@@ -190,6 +197,15 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	invalidateSchedulingCatalog(): void {
 		this.schedulingCatalogRevision += 1;
 		this.schedulingCatalogCache.clear();
+		this.semanticCatalogs.clear();
+		this.semanticPreferences.clear();
+	}
+
+	/** Drop cached seed history after deleting a channel's schedule and generated state. */
+	override async deleteChannelSchedule(channelId: string): Promise<boolean> {
+		const deleted = await super.deleteChannelSchedule(channelId);
+		this.invalidateSchedulingCatalog();
+		return deleted;
 	}
 
 	/** Load a group together with its descendants and ancestors for artwork inheritance. */
@@ -251,12 +267,44 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		programs?: SchedulingProgram[],
 		rootProgramIds?: Iterable<string>,
 	): Promise<SchedulingCatalog> {
-		const scopedPrograms = programs ?? (await this.listPrograms());
-		const scope = schedulingCatalogScope(scopedPrograms, rootProgramIds);
+		const scopedPrograms = reachableSchedulingPrograms(programs ?? (await this.listPrograms()), rootProgramIds);
+		const scope = schedulingCatalogScope(scopedPrograms);
+		const similarities = scopedPrograms.filter((program) => program.config.type === 'similarity' || program.config.type === 'theme');
+		let semantic: SchedulingCatalog['semantic'];
+		let semanticKey = '';
+		if (similarities.length) {
+			const programIds = similarities.map((program) => program.id).sort();
+			const sources = new Set(similarities.flatMap((program) => program.config.type === 'similarity' ? [program.config.sourceProgramId] : []));
+			const libraryIds = [...new Set(scopedPrograms.flatMap((program) => sources.has(program.id)
+				&& program.config.type === 'content' && program.config.source.type === 'collection' ? [program.config.source.libraryId] : program.config.type === 'theme' ? [program.config.libraryId] : []))].sort();
+			const texts = [...new Set(similarities.flatMap((program) => (program.config.type === 'similarity' || program.config.type === 'theme') ? refinementTexts(program.config) : []))].sort();
+			semanticKey = JSON.stringify([programIds, libraryIds]);
+			semantic = this.semanticCatalogs.get(semanticKey);
+			if (!semantic) {
+				semantic = new SemanticRepository(this.db).catalog({ programIds, libraryIds });
+				this.semanticCatalogs.set(semanticKey, semantic);
+				if (this.semanticCatalogs.size > 32) {
+					this.semanticCatalogs.delete(this.semanticCatalogs.keys().next().value!);
+				}
+			}
+			// Draft wording changes share decoded corpus vectors instead of retaining another copy.
+			const preferenceKey = JSON.stringify(texts);
+			let preferences = this.semanticPreferences.get(preferenceKey);
+			if (!preferences) {
+				preferences = new SemanticPreferenceRepository(this.db).catalog(texts);
+				this.semanticPreferences.set(preferenceKey, preferences);
+				if (this.semanticPreferences.size > 32) {
+					this.semanticPreferences.delete(this.semanticPreferences.keys().next().value!);
+				}
+			}
+			semantic = { ...semantic, preferences };
+			scope.itemIds = [...new Set([...scope.itemIds, ...semantic.seeds.flatMap((seed) => seed.itemIds)])].sort();
+		}
 		const key = JSON.stringify(scope);
 		const cached = this.schedulingCatalogCache.get(key);
 		if (cached?.revision === this.schedulingCatalogRevision) {
-			return cached.value;
+			const catalog = await cached.value;
+			return semantic ? this.withSemanticCatalog(catalog, semantic, semanticKey) : catalog;
 		}
 
 		const revision = this.schedulingCatalogRevision;
@@ -273,7 +321,18 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		while (this.schedulingCatalogCache.size > 32) {
 			this.schedulingCatalogCache.delete(this.schedulingCatalogCache.keys().next().value!);
 		}
-		return value;
+		const catalog = await value;
+		return semantic ? this.withSemanticCatalog(catalog, semantic, semanticKey) : catalog;
+	}
+
+	/** Preserve live eligibility and scope worker reuse to the same immutable seed catalog. */
+	private withSemanticCatalog(catalog: SchedulingCatalog, semantic: NonNullable<SchedulingCatalog['semantic']>, semanticKey: string): SchedulingCatalog {
+		const unavailableItems = Object.fromEntries(catalog.media.filter((media) =>
+			media.availability !== 'available' || !['available', 'degraded'].includes(catalog.libraryAvailability[media.libraryId] ?? 'unknown'))
+			.map((media) => [media.id, true as const]));
+		const snapshot = { ...semantic, unavailableItems };
+		const preferencesKey = createHash('sha256').update(JSON.stringify(semantic.preferences ?? {})).digest('hex');
+		return { ...catalog, semantic: snapshot, cacheKey: `${catalog.cacheKey}:semantic:${this.schedulingCatalogRevision}:${semanticKey}:${preferencesKey}` };
 	}
 
 	/** Query only the libraries, groups, and media needed by the requested scheduling scope. */
@@ -506,6 +565,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					multipartStatus: item.multipartStatus,
 					genres: genreMap.get(item.id) ?? [],
 					genreNames: genreNameMap.get(item.id) ?? [],
+					tags: metadataStrings(metadata, 'tags'),
 					plot: item.plot,
 					year: item.year,
 					releaseDate: metadataReleaseDate(metadata),
@@ -599,6 +659,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 
 		return {
 			channelId: row.channelId,
+			revision: row.revision,
 			health: row.status,
 			windowStart: row.windowStart,
 			windowEnd: row.windowEnd,
@@ -850,6 +911,19 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	/** Commit generated rows and their exact tail cursor state as one SQLite transaction. */
 	commitMaterializedTimeline(input: TimelineCommit): void {
 		this.db.transaction((tx) => {
+			if (input.expectedCommittedAt !== undefined || input.expectedRevision !== undefined) {
+				const current = tx.select({ committedAt: timelineMaterializations.committedAt, revision: timelineMaterializations.revision, fingerprint: timelineMaterializations.inputFingerprint })
+					.from(timelineMaterializations).where(eq(timelineMaterializations.channelId, input.channelId)).get();
+				if ((input.expectedRevision !== undefined && (current?.revision ?? 0) !== input.expectedRevision)
+					|| (input.expectedCommittedAt !== undefined && (current?.fingerprint === UNCOMMITTED_FAILURE_FINGERPRINT ? null : current?.committedAt ?? null) !== input.expectedCommittedAt)) {
+					throw new StaleSemanticDecisionError('Stale timeline proposal; retry scheduling');
+				}
+			}
+			const states = [...input.baseState, ...input.finalState, ...input.segments.flatMap((segment) => segment.stateDelta)];
+			if (states.some((state) => state.value.type === 'similarity')) {
+				new SemanticRepository(this.db).commitSeeds(input.channelId, states);
+			}
+
 			// Remove the replaceable future and any history before the retained window.
 			tx.delete(materializedTimelineSegments)
 				.where(
@@ -911,6 +985,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			tx.insert(timelineMaterializations)
 				.values({
 					channelId: input.channelId,
+					revision: 1,
 					status: 'ready',
 					windowStart: input.windowStart,
 					windowEnd: input.windowEnd,
@@ -929,6 +1004,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				.onConflictDoUpdate({
 					target: timelineMaterializations.channelId,
 					set: {
+						revision: sql`${timelineMaterializations.revision} + 1`,
 						status: 'ready',
 						windowStart: input.windowStart,
 						windowEnd: input.windowEnd,
@@ -945,6 +1021,9 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					},
 				})
 				.run();
-		});
+		}, { behavior: 'immediate' });
+		if (input.finalState.some((state) => state.value.type === 'similarity')) {
+			this.invalidateSchedulingCatalog();
+		}
 	}
 }

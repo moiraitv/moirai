@@ -9,6 +9,7 @@ import {
 } from './normalization.js';
 import {
 	catalogProgramItemFilterShape,
+	catalogProgramItemFilterSchema,
 	catalogProgramItemQuerySchema,
 	sortDirectionSchema,
 	validateMediaGenreRules,
@@ -294,8 +295,49 @@ export const sequenceEntrySchema = z.object({
 /** Shared wire contract for sequence entry. */
 export type SequenceEntry = z.infer<typeof sequenceEntrySchema>;
 
+/** Maximum media entries embedded in one Program sample carousel. */
+export const PROGRAM_PREVIEW_ITEM_LIMIT = 12;
+
+/** Default number of recommendations committed in a semantic seed. */
+export const DEFAULT_SIMILARITY_QUANTITY = 20;
+/** Bound seed size and recommendation work. */
+export const MAX_SIMILARITY_QUANTITY = 500;
+/** Default exploration balance on the cohesive-to-varied scale. */
+export const DEFAULT_SIMILARITY_VARIETY = 35;
+
+/** Default semantic exclusion breadth; higher values exclude more loosely related content. */
+export const DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS = 50;
+
+/** Semantic source settings; changes apply only to the next generated set. */
+export const similarityProgramConfigSchema = z.object({
+	type: z.literal('similarity'),
+	sourceProgramId: z.uuid(),
+	filter: catalogProgramItemFilterSchema.optional(),
+	variety: z.number().int().min(0).max(100).default(DEFAULT_SIMILARITY_VARIETY),
+	quantity: z.number().int().min(1).max(MAX_SIMILARITY_QUANTITY).default(DEFAULT_SIMILARITY_QUANTITY),
+	exclusionStrictness: z.number().int().min(0).max(100).optional(),
+	softPreferences: z.string().trim().max(500).optional(),
+	/** Historical wire key; entries are concepts excluded by semantic similarity. */
+	hardExclusions: z.array(z.string().trim().min(1).max(100)).max(30)
+		.transform((values) => [...new Map(values.map((value) => [value.toLocaleLowerCase('en-US'), value])).values()]).optional(),
+	subtitlePreferences: subtitlePreferencesSchema.optional(),
+	audioPreferences: audioPreferencesSchema.optional(),
+});
+
+/** Theme-based selection shares semantic refinements without referencing another Program. */
+export const themeProgramConfigSchema = similarityProgramConfigSchema.omit({ sourceProgramId: true }).extend({
+	type: z.literal('theme'),
+	libraryId: z.uuid(),
+	theme: z.string().trim().min(1).max(500),
+});
+
+/** Settings accepted by semantic previews and immutable recommendation decisions. */
+export const semanticProgramConfigSchema = z.discriminatedUnion('type', [similarityProgramConfigSchema, themeProgramConfigSchema]);
+
 /** Validate the program config contract at runtime. */
 export const programConfigSchema = z.discriminatedUnion('type', [
+	similarityProgramConfigSchema,
+	themeProgramConfigSchema,
 	z.object({
 		type: z.literal('content'),
 		subtitlePreferences: subtitlePreferencesSchema.optional(),
@@ -852,7 +894,8 @@ export interface ChannelSchedule extends ChannelScheduleConfig {
 
 /** Shared wire contract for selection state value. */
 export type SelectionStateValue
-	= | { type: 'sequential'; nextIndex: number; lastItemId: string | null }
+	= | { type: 'similarity'; seed: SimilaritySeed; consumedItemIds: string[]; recentSeeds?: string[][] | undefined }
+		| { type: 'sequential'; nextIndex: number; lastItemId: string | null }
 		| {
 			type: 'shuffle';
 			cycle: number;
@@ -897,6 +940,8 @@ export interface SchedulableMedia {
 	multipartStatus?: 'none' | 'complete' | 'incomplete' | 'ambiguous';
 	genres: string[];
 	genreNames: string[];
+	/** Indexed keyword labels used by explicit semantic exclusions. */
+	tags?: string[];
 	plot: string | null;
 	year: number | null;
 	releaseDate?: string | null;
@@ -912,8 +957,47 @@ export interface SchedulableMedia {
 	availability: MediaAvailability;
 }
 
+/** Maximum completed sets retained in each timeline cursor for deterministic rotation. */
+export const SEMANTIC_HISTORY_LIMIT = 10;
+
+/** Immutable recommendation decision shared with scheduling workers and persisted at commit. */
+export interface SimilaritySeed {
+	programId: string;
+	consumerKey: string;
+	generation: number;
+	itemIds: string[];
+	sourceItemIds: string[];
+	config: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>;
+	createdAt: string;
+}
+
+/** Remaining committed scheduling selections for one independent consumer. */
+export interface SimilaritySetStatus {
+	channelName?: string;
+	programId: string;
+	consumerKey: string;
+	generation: number;
+	/** Quantity captured when this immutable set was generated. */
+	requestedTotal?: number;
+	total: number;
+	remaining: number;
+}
+
+/** Semantic corpus and durable decisions available to a pure scheduling pass. */
+export interface SemanticCatalog {
+	preferences?: Record<string, { status: 'pending' | 'ready' | 'failed'; vector?: number[]; error?: string }>;
+	unavailableItems?: Record<string, true>;
+	preparationError?: string;
+	currentSets?: SimilaritySetStatus[];
+	vectors: Record<string, number[]>;
+	pendingItemIds: string[];
+	failedItemIds: string[];
+	seeds: SimilaritySeed[];
+}
+
 /** Shared wire contract for scheduling catalog. */
 export interface SchedulingCatalog {
+	semantic?: SemanticCatalog;
 	media: SchedulableMedia[];
 	/** In-process revision/scope identity used to avoid repeated worker transfers. */
 	cacheKey?: string;
@@ -947,12 +1031,23 @@ export interface SchedulingProgramPreviewItem {
 
 /** Shared wire contract for scheduling program status. */
 export interface SchedulingProgramStatus {
+	currentSets?: SimilaritySetStatus[];
 	programId: string;
 	health: SchedulingProgramHealth;
 	sourceLabel: string;
 	indexedItemCount: number;
 	availableItemCount: number;
 	previewItems: SchedulingProgramPreviewItem[];
+	/** Read-only sample of available candidates removed by semantic exclusions. */
+	excludedPreviewItems?: SchedulingProgramPreviewItem[];
+	/** Whether the sample is waiting for local embedding preparation. */
+	previewPending?: boolean;
+	/** Full related pool size, independent of the carousel display limit. */
+	matchingItemCount?: number;
+	/** Requested size for future sets; current sets retain their original settings. */
+	requestedItemCount?: number;
+	/** Failed relevant media and refinement embeddings eligible for explicit retry. */
+	failedEmbeddingCount?: number;
 }
 
 /** Shared wire contract for scheduling overview. */
@@ -1076,6 +1171,8 @@ export interface GuideSegmentMediaPreview {
 	episodeNumber: number | null;
 	episodeEndNumber: number | null;
 	genreNames: string[];
+	/** Indexed keyword labels used by explicit semantic exclusions. */
+	tags?: string[];
 	plot: string | null;
 	year: number | null;
 	artworkUrl: string | null;

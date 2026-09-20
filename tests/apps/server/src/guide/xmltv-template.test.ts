@@ -8,7 +8,7 @@ import {
 } from '@server/guide/xmltv-template.js';
 
 it('escapes interpolated XML and rejects invalid Liquid on preview validation', async () => {
-	expect(escapeXmlText(`A <title> & "quote"`)).toBe('A &lt;title&gt; &amp; &quot;quote&quot;');
+	expect(escapeXmlText('A <title> & "quote"')).toBe('A &lt;title&gt; &amp; &quot;quote&quot;');
 	await expect(validateGuideTemplateSources({
 		...BUILTIN_GUIDE_TEMPLATE.sources,
 		episode: '{{ missing }}',

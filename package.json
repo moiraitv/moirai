@@ -42,7 +42,8 @@
     "etv:setup": "node scripts/etv-development.mjs setup",
     "etv:build": "node scripts/etv-development.mjs build",
     "etv:check": "tsx scripts/etv-contract.ts check",
-    "etv:sync": "tsx scripts/etv-contract.ts sync"
+    "etv:sync": "tsx scripts/etv-contract.ts sync",
+    "embeddings:model": "node scripts/embedding-model.mjs"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",

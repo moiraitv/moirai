@@ -24,6 +24,7 @@ import {
 	updateSelectedMediaAdditionOrder,
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
+import { similaritySeeds } from '../db/semantic-schema.js';
 import {
 	channels,
 	channelScheduleLayers,
@@ -200,6 +201,11 @@ export class SchedulingConfigurationRepository {
 	): Promise<void> {
 		if (current.type !== updated.type) {
 			throw new SchedulingValidationError('Program type cannot be changed after creation');
+		}
+
+		if (current.type === 'similarity' && updated.type === 'similarity'
+			&& current.sourceProgramId !== updated.sourceProgramId) {
+			throw new SchedulingValidationError('Similar Items source Program cannot be changed after creation');
 		}
 
 		if (current.type !== 'content' || updated.type !== 'content') {
@@ -465,8 +471,9 @@ export class SchedulingConfigurationRepository {
 		const referencedBySequence = programs.some(
 			(program) =>
 				program.id !== id
-				&& program.config.type === 'sequence'
-				&& program.config.entries.some((entry) => entry.programId === id),
+				&& ((program.config.type === 'similarity' && program.config.sourceProgramId === id)
+					|| (program.config.type === 'sequence'
+						&& program.config.entries.some((entry) => entry.programId === id))),
 		);
 		const [slotReference] = await this.db
 			.select({ id: scheduleSlots.id })
@@ -882,7 +889,7 @@ export class SchedulingConfigurationRepository {
 		}
 	}
 
-	/** Delete a channel's template stack, committed timeline, and persistent playback cursors. */
+	/** Delete a channel's template stack, timeline, cursors, and semantic decisions atomically. */
 	async deleteChannelSchedule(channelId: string): Promise<boolean> {
 		return this.db.transaction((tx) => {
 			tx.delete(materializedTimelineSegments)
@@ -892,6 +899,7 @@ export class SchedulingConfigurationRepository {
 				.where(eq(timelineMaterializations.channelId, channelId))
 				.run();
 			tx.delete(selectionStates).where(eq(selectionStates.channelId, channelId)).run();
+			tx.delete(similaritySeeds).where(eq(similaritySeeds.channelId, channelId)).run();
 			return (
 				tx.delete(channelSchedules).where(eq(channelSchedules.channelId, channelId)).run().changes
 				> 0

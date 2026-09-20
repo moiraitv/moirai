@@ -16,6 +16,9 @@ function references(kind: Exclude<ResourceUsageKind, 'media'>, id: string): SQL 
 			SELECT 'program' AS kind, p.id, p.name, 'Sequence entry' AS role
 			FROM scheduling_programs p, json_each(p.config, '$.entries') e
 			WHERE json_extract(p.config, '$.type') = 'sequence' AND json_extract(e.value, '$.programId') = ${id}
+			UNION ALL
+			SELECT 'program', p.id, p.name, 'Similarity source' FROM scheduling_programs p
+			WHERE json_extract(p.config, '$.type') = 'similarity' AND json_extract(p.config, '$.sourceProgramId') = ${id}
 			UNION ALL SELECT 'template', t.id, t.name, 'Slot program'
 			FROM schedule_slots s JOIN schedule_templates t ON t.id = s.template_id WHERE s.program_id = ${id}
 			UNION ALL SELECT 'template', t.id, t.name, 'Slot filler'

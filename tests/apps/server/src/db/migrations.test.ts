@@ -738,3 +738,63 @@ it('upgrades slot guide defaults without changing committed state or the schedul
 			.toEqual({ id: 'segment', starts_at: '2026-09-01T00:00:00Z', finishes_at: '2026-09-02T00:00:00Z', state_delta: '[]' });
 	});
 });
+
+it('adds semantic persistence to the prior schema without replacing programs or committed cursors', async () => {
+	await upgradeFrom('0030_scan_fts', (sqlite) => {
+		insertScheduleFoundation(sqlite);
+		sqlite.prepare(`INSERT INTO timeline_materializations
+			(channel_id, status, window_start, window_end, continuation_at, input_fingerprint, base_state, issues, committed_at)
+			VALUES ('channel','ready','2026-09-01T00:00:00Z','2026-09-02T00:00:00Z','2026-09-02T00:00:00Z',
+			'original','[{"cursor":"preserved"}]','[]','2026-09-01T00:00:00Z')`).run();
+	}, (sqlite) => {
+		expect(sqlite.prepare('SELECT revision, input_fingerprint, base_state FROM timeline_materializations').get())
+			.toEqual({ revision: 0, input_fingerprint: 'original', base_state: '[{"cursor":"preserved"}]' });
+		expect(sqlite.prepare('SELECT id FROM scheduling_programs').get()).toEqual({ id: 'program' });
+		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM media_embeddings').get()).toEqual({ count: 0 });
+		sqlite.prepare('INSERT INTO similarity_seeds VALUES (?,?,?,?,?,?,?)').run('consumer', 1, 'program', 'channel', '[]', '{}', 'now');
+		sqlite.prepare('INSERT INTO similarity_seed_items VALUES (?,?,?,?)').run('consumer', 1, 'deleted-item', 0);
+		expect(() => sqlite.prepare('INSERT INTO similarity_seed_items VALUES (?,?,?,?)').run('consumer', 1, 'other', 0)).toThrow();
+		expect(() => sqlite.prepare('INSERT INTO similarity_seed_items VALUES (?,?,?,?)').run('consumer', 1, 'deleted-item', 1)).toThrow();
+		expect(() => sqlite.prepare('INSERT INTO similarity_seeds VALUES (?,?,?,?,?,?,?)').run('consumer', 1, 'program', 'channel', '[]', '{}', 'later')).toThrow();
+	});
+});
+
+
+it.each([true, false])('repairs applied semantic migrations with missing columns: %s', async (missingColumns) => {
+	const embedding = Buffer.from([1, 2, 3, 4]);
+	await upgradeFrom('0032_semantic_preferences', (sqlite) => {
+		insertScheduleFoundation(sqlite);
+		if (missingColumns) {
+			sqlite.exec('ALTER TABLE semantic_preferences DROP COLUMN error_code');
+			sqlite.exec('ALTER TABLE timeline_materializations DROP COLUMN revision');
+		}
+		sqlite.prepare(`INSERT INTO timeline_materializations
+			(channel_id,status,window_start,window_end,continuation_at,input_fingerprint,base_state,issues,committed_at)
+			VALUES ('channel','ready','start','end','continuation','fingerprint','[{"cursor":7}]','[]','committed')`).run();
+		sqlite.prepare('INSERT INTO semantic_preferences(input_hash,input_text,embedding,status,generated_at) VALUES (?,?,?,?,?)')
+			.run('retained-hash', 'retained concept', embedding, 'ready', 'generated');
+		sqlite.prepare('INSERT INTO similarity_seeds VALUES (?,?,?,?,?,?,?)').run('consumer', 1, 'program', 'channel', '[]', '{}', 'now');
+		sqlite.prepare('INSERT INTO similarity_seed_items VALUES (?,?,?,?)').run('consumer', 1, 'retained-media', 0);
+	}, (sqlite) => {
+		expect(sqlite.prepare('SELECT * FROM semantic_preferences').get()).toEqual({ input_hash: 'retained-hash', input_text: 'retained concept', embedding, status: 'ready', generated_at: 'generated', error_code: null });
+		expect(sqlite.prepare('SELECT revision,input_fingerprint,base_state,continuation_at FROM timeline_materializations').get())
+			.toEqual({ revision: 0, input_fingerprint: 'fingerprint', base_state: '[{"cursor":7}]', continuation_at: 'continuation' });
+		expect(sqlite.prepare('SELECT media_id FROM similarity_seed_items').get()).toEqual({ media_id: 'retained-media' });
+		expect(sqlite.pragma('foreign_key_check')).toEqual([]);
+	});
+});
+
+it('adds preference caching while retaining existing semantic seeds and unrelated settings', async () => {
+	await upgradeFrom('0031_semantic_programs', (sqlite) => {
+		insertScheduleFoundation(sqlite);
+		sqlite.prepare('INSERT INTO settings(key,value) VALUES (?,?)').run('preference-upgrade', '{"retained":true}');
+		sqlite.prepare('INSERT INTO similarity_seeds VALUES (?,?,?,?,?,?,?)').run('consumer', 1, 'program', 'channel', '[]', '{}', 'now');
+		sqlite.prepare('INSERT INTO similarity_seed_items VALUES (?,?,?,?)').run('consumer', 1, 'retained-media', 0);
+	}, (sqlite) => {
+		expect(sqlite.prepare('SELECT media_id,ordinal FROM similarity_seed_items').get()).toEqual({ media_id: 'retained-media', ordinal: 0 });
+		expect(sqlite.prepare("SELECT value FROM settings WHERE key='preference-upgrade'").get()).toEqual({ value: '{"retained":true}' });
+		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM semantic_preferences').get()).toEqual({ count: 0 });
+		sqlite.prepare("INSERT INTO semantic_preferences(input_hash,input_text,status) VALUES ('hash','slow sci-fi','pending')").run();
+		expect(sqlite.prepare('SELECT status FROM semantic_preferences').get()).toEqual({ status: 'pending' });
+	});
+});

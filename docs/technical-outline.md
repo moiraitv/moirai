@@ -572,6 +572,101 @@ do not require confirmation, and a changed item set invalidates a stale confirma
 mutating the program. Reordering the same additions also invalidates confirmation for sequential
 programs, while shuffle and random programs compare additions as an unordered set.
 
+Theme programs (`theme`) rank playable media from an explicit target library against a required,
+trimmed theme of up to 500 characters. Optional library filters reuse the Library Query validation and
+in-memory metadata matcher before semantic ranking, for both previews and new sets, without extra
+database queries. Existing themes without filters retain their library-wide scope; filter edits do not
+rewrite committed sets. The editor orders target library, filter configuration, theme, then refinements.
+Theme programs share the semantic refinements, previews, retries, rotation, and immutable set lifecycle
+below. Theme text uses the persistent concept-vector cache;
+saved themes are retained during draft eviction. Catalog and embedding reads stay scoped to reachable
+Programs and their libraries. Theme target libraries also contribute media and library attributes to
+timeline change detection, so corrected runtimes stage regeneration at the normal application boundary.
+The existing semantic preview/retry routes accept either configuration,
+and the existing seed storage retains the originating configuration without a schema migration.
+
+Similar Items programs (`similarity`) reference only Content programs with explicit item collections.
+Update validation rejects changes to the saved source Program ID before persistence; source contents
+and similarity settings remain editable.
+They rank playable same-library, same-kind candidates using normalized BGE-small-en-v1.5 embeddings,
+excluding source items. Optional library filters share Theme’s candidate matcher and validation,
+without filtering the source anchors or adding scheduling queries. Missing filters preserve existing
+behavior; edits apply to the next immutable set. The editor exposes a collapsed Additional filters
+section after Source Program and loads genre choices on demand. Semantic text includes title, kind,
+plot, genres, tags, and episode/music ancestor context, never paths or technical metadata. Input schema v2 budgets actual tokenizer output
+within 510 content tokens (plus two special tokens), reserving 256 for the item overview, 64 for
+identity, 96 for metadata, and 94 for ancestor context. A schema change regenerates cached vectors
+asynchronously; committed sets remain immutable. A pinned Transformers.js CPU ONNX child process
+uses CLS pooling, one inference thread, local-only assets, bounded batches, and idle/pressure retirement.
+Process isolation allows the native runtime to reload safely after each retirement.
+Every server build acquires and verifies immutable model artifacts and packages them, with the license,
+in `apps/server/dist/embedding-model`. Docker copies that complete output, and native deployments
+must retain it. Runtime resolves the bundle relative to the server module, independently of the working
+or data directory; remote model loading is disabled and no runtime download fallback exists.
+Verified existing build assets (or the previous local development cache) allow offline rebuilds.
+Startup and catalog events backfill SQLite float32 vectors without a rescan, invalidating model,
+input-schema, or semantic-text changes. Failed inputs remain distinguishable from pending work. The editor's explicit retry operation
+requeues only failed relevant media and current refinement identities for one attempt; ready vectors
+and committed seeds remain unchanged. The request wakes media reconciliation and invalidates the
+scoped catalog cache.
+
+Deterministic MMR blends centroid and maximum-anchor relevance equally, with variety lowering the
+relevance weight from 1 to 0.55. A fixed 0.15 relevance band and positive anchor similarity constrain
+exploration. New sets prefer candidates absent from the last ten completed sets, then the least-recent set
+represented in that bounded history before applying MMR. History travels in optional timeline cursor
+state, survives pruning/restarts, and defaults to empty for older cursors. Replayed seed decisions
+remain unchanged. Relevance maxima use reductions rather than argument spreading for large pools.
+Optional soft preferences use the same local worker and a model-keyed SQLite prompt cache. Within
+that fixed source-relevance band, ranking blends 70% source relevance and 30% preference similarity
+before MMR. Semantic exclusions compare each candidate with every excluded concept and remove matches before
+ranking. Strictness 0–100 lowers the cosine cutoff linearly from 0.8 to 0.5 (default 50 / 0.65).
+This is an approximate semantic boundary, not a classification guarantee. The existing `hardExclusions`
+wire key now stores semantic concepts; saved entries adopt this behavior only for future seed decisions.
+Exclusions share the model-keyed prompt cache, and pending or failed concept inference blocks new
+sets instead of silently ignoring filters. The editor previews both remaining and excluded candidates. Draft previews enqueue preferences asynchronously
+and never commit seeds. Preference preparation/failure is visible through existing embedding events.
+During library backfill, each batch of at most 20 media inferences is followed by up to 20 queued
+refinement inferences, so new editor requests do not wait for the complete library pass and neither
+queue monopolizes inference.
+Migration 0032 adds the preference cache without rewriting media embeddings or committed seeds.
+Migration 0033 repairs development databases that recorded earlier versions of 0031/0032 without
+the timeline revision or preference error columns. It preserves cached vectors, seed membership,
+timeline contents and cursors; startup resets only optimistic revision counters and transient
+preference preparation errors.
+Migration progress matches stored markers to the current journal, so extra historical markers
+cannot cause a pending repair to be skipped.
+Quantity defaults to 20 and accepts 1–500. Settings and source edits apply only to future decisions.
+The editor retains raw exclusion text in the parent draft immediately, including unfinished comma
+separators, while parsing concepts for debounced previews and save payloads. Text edits wait 750 ms;
+other controls wait 250 ms without shortening a pending text delay. Superseded preview HTTP requests
+are aborted and stale results ignored. Embedding events coalesce into serial, quiet sample refreshes
+at most once per second; overview events also coalesce. Already queued inference may finish and cache
+its result. Semantic selection
+honors primary first-item fitting and longest-fitting filler, retaining seed order for duration ties.
+
+Each persistent scheduling consumer owns immutable, ordered seed generations in SQLite, including
+across occurrence resets. Consumption advances only with committed timeline segments; previews and
+rejected scheduling branches cannot consume entries. Seed decisions, timeline rows, and cursor deltas
+commit atomically with a timeline revision check and unique generation/ordinal constraints. Rewinds
+reuse persisted decisions. Retention preserves generations referenced by baseline or segment cursors
+and later decisions. Committed entries resolve catalog compatibility aliases for playback while
+recording consumption against the original seed IDs, so multipart reconciliation can complete an
+existing set without rewriting its membership. Missing items remain unconsumed and produce
+diagnostics instead of silently
+changing a seed. The editor exposes preparation state and remaining schedule selections per consumer. Read-only draft
+previews and overview carousels share bounded, cached semantic samples without writing seed state.
+The API reports full related-pool and requested counts separately from the carousel limit; shortages
+are shown only once preparation has settled. Catalog loading follows reachable sequence/similarity
+references, reads vectors only from source libraries and retained seeds only for reachable Programs,
+and caches refinement snapshots until catalog invalidation. Content-only scopes do no semantic reads. Worker cache identities include the reachable semantic
+Program/library scope, so identical media pools cannot reuse another Program's seed history.
+Nested consumers include the child Program identity. Deleted Program checkpoints remain replayable
+without recreating owned seed rows. Deleting a channel schedule atomically removes that channel's
+semantic seeds and membership alongside its timeline and cursors, then invalidates cached catalogs;
+reassignment generates fresh decisions from current settings without affecting other channels.
+Semantic recovery fingerprints track relevant availability while
+excluding embedding changes unrelated to a channel's sources.
+
 Selection strategies include sequential, deterministic shuffle without repeats, deterministic
 random selection, and deterministic viewing-weighted random selection. Weighted selection retains
 baseline odds for unseen content, blends episode and show preference equally, caps preference
@@ -585,7 +680,7 @@ channel priority by day, and falls back to normal selection rather than creating
 candidate conflicts. Already committed guide entries are never rewritten solely to remove a
 collision.
 
-The Programs catalog is searchable and filterable by content or sequence type. It sorts names
+The Programs catalog is searchable and filterable by content, sequence, similarity, or theme type. It sorts names
 alphabetically using media title normalization, ignoring punctuation and leading A, An, or The.
 Content rows expose
 a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows

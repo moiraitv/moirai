@@ -106,6 +106,7 @@ export interface MediaSourcePickerQuery {
 
 /** Persisted timeline window and the state checkpoint used to continue it. */
 export interface TimelineMaterializationRecord extends ChannelTimelineMaterializationStatus {
+	revision?: number;
 	guideOccurrences?: import('@moirai/shared').GuideOccurrence[];
 	windowStart: string;
 	windowEnd: string;
@@ -134,6 +135,8 @@ export interface MaterializedSegmentRecord {
 
 /** Atomic replacement of a channel timeline window and its continuation state. */
 export interface TimelineCommit {
+	expectedRevision?: number;
+	expectedCommittedAt?: string | null;
 	guideOccurrences?: import('@moirai/shared').GuideOccurrence[];
 	channelId: string;
 	windowStart: string;

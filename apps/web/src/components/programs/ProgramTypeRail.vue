@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Program configuration modes supported by the editor. */
-type ProgramType = 'content' | 'sequence';
+type ProgramType = 'content' | 'sequence' | 'similarity' | 'theme';
 
 const props = withDefaults(defineProps<{ modelValue: ProgramType; disabled?: boolean }>(), {
 	disabled: false,
@@ -24,12 +24,12 @@ function select(value: ProgramType): void {
 		<div v-if="disabled" class="program-type-fixed">
 			<span class="program-type-radio" aria-hidden="true"></span>
 			<span class="program-type-copy">
-				<strong>{{ modelValue === 'content' ? 'Content' : 'Sequence' }}</strong>
-				<small>{{ modelValue === 'content' ? 'Choose what can play' : 'Arrange programs in a custom order' }}</small>
+				<strong>{{ modelValue === 'content' ? 'Content' : modelValue === 'theme' ? 'Theme' : modelValue === 'similarity' ? 'Similar Items' : 'Sequence' }}</strong>
+				<small>{{ modelValue === 'content' ? 'Choose what can play' : modelValue === 'theme' ? 'Find media matching a theme' : modelValue === 'similarity' ? 'Find related media' : 'Arrange programs in a custom order' }}</small>
 			</span>
 		</div>
 		<div v-else class="program-type-options" role="radiogroup" aria-labelledby="program-type-heading" aria-describedby="program-type-description">
-			<label v-for="option in [{ value: 'content', title: 'Content', detail: 'Choose what can play' }, { value: 'sequence', title: 'Sequence', detail: 'Arrange programs in a custom order' }] as const" :key="option.value" :class="{ active: modelValue === option.value }">
+			<label v-for="option in [{ value: 'content', title: 'Content', detail: 'Choose what can play' }, { value: 'similarity', title: 'Similar Items', detail: 'Find related media' }, { value: 'theme', title: 'Theme', detail: 'Find media matching a theme' }, { value: 'sequence', title: 'Sequence', detail: 'Arrange programs in a custom order' }] as const" :key="option.value" :class="{ active: modelValue === option.value }">
 				<input :checked="modelValue === option.value" type="radio" :value="option.value" @change="select(option.value)" />
 				<span class="program-type-radio" aria-hidden="true"></span>
 				<span class="program-type-copy"><strong>{{ option.title }}</strong><small>{{ option.detail }}</small></span>

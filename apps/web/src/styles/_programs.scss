@@ -549,3 +549,55 @@
 	border-color: var(--accent);
 	color: var(--accent);
 }
+
+.similarity-sample--catalog > .similarity-sample-heading {
+	margin: 14px 0 0 22px;
+	text-align: center;
+}
+
+.similarity-sample-stage {
+	position: relative;
+}
+
+.similarity-sample-dimmed {
+	opacity: 0.25;
+	filter: blur(3px);
+	pointer-events: none;
+}
+
+.similarity-sample-overlay {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 20px;
+	text-align: center;
+
+	> p,
+	> .loading-state {
+		min-height: 0;
+		margin: 0;
+		padding: 12px 16px;
+		border-radius: 8px;
+		background: #0b1a27e8;
+	}
+}
+
+.program-carousel > article.similarity-sample-placeholder {
+	> span {
+		height: auto;
+		aspect-ratio: 2 / 3;
+		background: linear-gradient(145deg, #39586a, #182b43 55%, #685446);
+	}
+
+	> strong,
+	> small {
+		height: 12px;
+		background: #39586a;
+		border-radius: 3px;
+	}
+
+	> small {
+		width: 50%;
+	}
+}

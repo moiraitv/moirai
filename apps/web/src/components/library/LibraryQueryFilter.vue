@@ -21,10 +21,11 @@ const props = defineProps<{
 	genres: MediaGenreFacet[];
 	loading: boolean;
 	loaded: boolean;
+	showOrdering?: boolean;
 }>();
 const filter = defineModel<CatalogProgramItemFilter>({ required: true });
-const sort = defineModel<LibraryQuerySort>('sort', { required: true });
-const itemLimit = defineModel<number | null>('itemLimit', { required: true });
+const sort = defineModel<LibraryQuerySort>('sort', { default: () => ({ type: 'name', direction: 'asc' }) });
+const itemLimit = defineModel<number | null>('itemLimit', { default: null });
 const modalOpen = ref(false);
 const configureButton = ref<HTMLButtonElement>();
 const filterSummary = computed(() => catalogProgramItemFilterSummary(
@@ -60,7 +61,8 @@ function updateItemLimit(event: Event): void {
 		<div class="library-query-filter-main">
 			<div class="library-query-filter-copy">
 				<strong>Query parameters</strong>
-				<small v-if="loading && !loaded">Loading available filters…</small>
+				<small v-if="!loaded && loading">Loading available filters…</small>
+				<small v-else-if="!loaded">Filters unavailable</small>
 				<div v-else-if="filterSummary.length" class="library-query-filter-summary" :title="filterSummary.join(' · ')">
 					<span v-for="summary in visibleFilterSummary" :key="summary">{{ summary }}</span>
 					<span v-if="hiddenFilterCount" class="library-query-filter-more">+{{ hiddenFilterCount }} more</span>
@@ -71,7 +73,7 @@ function updateItemLimit(event: Event): void {
 				<Filter :size="16" aria-hidden="true" /> Configure Filters
 			</button>
 		</div>
-		<div class="library-query-order">
+		<div v-if="showOrdering !== false" class="library-query-order">
 			<label>
 				<span>Order by</span>
 				<select v-model="sort.type">

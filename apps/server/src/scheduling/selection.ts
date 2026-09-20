@@ -1,3 +1,4 @@
+import { chooseSimilarity } from '../semantic/selection.js';
 import { createHash } from 'node:crypto';
 import {
 	countLabel,
@@ -30,7 +31,7 @@ export interface SelectionResult {
 }
 
 /** Constraint used when deciding whether primary content may cross a boundary. */
-type SelectionFitMode = 'best-fit' | 'first-fit-arbitrary';
+export type SelectionFitMode = 'best-fit' | 'first-fit-arbitrary';
 
 /** Immutable catalog indexes and mutable proposed state used during selection. */
 export interface SelectionContext {
@@ -810,6 +811,11 @@ export function selectProgram(
 		if (!media && fitSeconds !== null && (context.candidateCache.get(programId)?.playable.length ?? 0) > 0) {
 			context.fitRejectionCount += 1;
 		}
+		return media ? { media, state, programAncestry: [...ancestry, programId] } : null;
+	}
+
+	if (program.config.type === 'similarity' || program.config.type === 'theme') {
+		const media = chooseSimilarity(programId, consumerKey, state, context, fitSeconds, fitMode);
 		return media ? { media, state, programAncestry: [...ancestry, programId] } : null;
 	}
 

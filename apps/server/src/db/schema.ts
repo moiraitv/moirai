@@ -557,6 +557,7 @@ export const selectionStates = sqliteTable(
  * fingerprint used to decide when regeneration is needed.
  */
 export const timelineMaterializations = sqliteTable('timeline_materializations', {
+	revision: integer('revision').notNull().default(0),
 	channelId: text('channel_id')
 		.primaryKey()
 		.references(() => channels.id, { onDelete: 'cascade' }),

@@ -1,3 +1,4 @@
+import { SemanticRepository } from './semantic.js';
 import { appendProgramGroups } from './program-groups.js';
 import { mediaAirings } from './media-airings.js';
 import { mediaResourceUsage } from './media-resource-usage.js';
@@ -110,6 +111,8 @@ export class Repository extends LibraryRepository {
 	readonly creditTemplates: CreditTemplateRepository;
 	/** Reusable XMLTV templates and the default assignment. */
 	readonly guideTemplates: GuideTemplateRepository;
+	/** Embedding caches and immutable semantic seed decisions. */
+	readonly semantic: SemanticRepository;
 	/** Authentication persistence exposed to the cross-cutting authentication service. */
 	readonly authentication: AuthenticationRepository;
 	private readonly catalog: MediaCatalogRepository;
@@ -121,6 +124,7 @@ export class Repository extends LibraryRepository {
 
 	constructor(private readonly database: MoiraiDatabase) {
 		super(database);
+		this.semantic = new SemanticRepository(database);
 		this.authentication = new AuthenticationRepository(database);
 		this.encodingProfiles = new EncodingProfileRepository(database);
 		this.creditTemplates = new CreditTemplateRepository(database);

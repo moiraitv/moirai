@@ -40,6 +40,8 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'getChannelSubtitleIssues',
 	'createLibrary',
 	'createProgram',
+	'previewSimilarityProgram',
+	'retrySimilarityEmbeddings',
 	'createQuickChannelSetup',
 	'previewQuickChannelSetup',
 	'createScheduleTemplate',
@@ -129,6 +131,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 ].sort();
 
 const EXPECTED_EVENT_TYPES = [
+	'embeddings.changed',
 	'channel.changed',
 	'library.changed',
 	'playback.changed',

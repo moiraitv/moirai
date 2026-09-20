@@ -48,8 +48,12 @@ export function migrationProgressFromSqlite(
 	migrationsDir: string,
 ): MigrationProgress {
 	const journal = readMigrationJournal(migrationsDir);
-	const applied = Math.min(countAppliedMigrations(sqlite), journal.length);
-	const current = journal[applied];
+	const appliedTimes = new Set(countAppliedMigrations(sqlite) > 0
+		? (sqlite.prepare('SELECT created_at AS createdAt FROM __drizzle_migrations').all() as Array<{ createdAt: number }>)
+			.map((row) => Number(row.createdAt)) : []);
+	// Historical markers outside the current journal must not hide pending migrations.
+	const applied = journal.filter((entry) => appliedTimes.has(entry.when)).length;
+	const current = journal.find((entry) => !appliedTimes.has(entry.when));
 	return {
 		applied,
 		total: journal.length,
