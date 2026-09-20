@@ -944,6 +944,9 @@ channel, explicit no-programming intervals, bounded metadata snapshots, episode 
 artwork where available. Each channel uses its assigned Liquid guide template, or the saved default
 when none is assigned. Templates have a built-in read-only Standard XMLTV layout and per-type
 sources for channel, episode, movie, music video, other, filler, no-programming, and block listings.
+The built-in movie and episode layouts emit `Movie` and `Series` programme categories respectively,
+alongside media genres, for client content-type classification. Saved custom sources remain authored;
+blank tabs inherit the current built-in layout.
 Published XMLTV is minified after a successful render. The Guide timeline uses the same per-channel
 templates for listing titles and optional subtitles. The Channels timeline keeps program-source
 labels. The template editor preview renders the unpublished draft. Invalid live sources fall back to

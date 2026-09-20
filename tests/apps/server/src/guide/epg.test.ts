@@ -101,6 +101,39 @@ function guide(channelId: string, mediaId: string): ScheduleGuide {
 }
 
 describe('XMLTV EPG', () => {
+	it.each([
+		['movie', 'Movie', false],
+		['episode', 'Series', false],
+		['movie', 'Movie', true],
+		['episode', 'Series', true],
+	] as const)('classifies %s listings as %s with blank fallback %s and preserves genres', async (kind, category, blank) => {
+		const channel = {
+			...channelCreateSchema.parse({ number: '1', name: 'Classification' }),
+			id: randomUUID(),
+			createdAt: '2026-11-01T00:00:00Z',
+			updatedAt: '2026-11-01T00:00:00Z',
+		};
+		const source = catalog();
+		source.media[0]!.kind = kind;
+		const xml = await buildXmltv(
+			[channel],
+			guide(channel.id, source.media[0]!.id),
+			source,
+			'https://moirai.example.test',
+			{
+				...builtinXmltv,
+				sourcesForChannel: () => ({
+					...BUILTIN_GUIDE_TEMPLATE.sources,
+					[kind]: blank ? '' : BUILTIN_GUIDE_TEMPLATE.sources[kind],
+				}),
+			},
+		);
+		const programmes = new XMLParser().parse(xml).tv.programme;
+
+		expect(programmes[0].category).toEqual([category, 'Science Fiction']);
+		expect(programmes[1].category).toBe('No programming');
+	});
+
 	it('formats each instant with the correct DST offset', () => {
 		expect(xmltvTimestamp('2026-11-01T08:30:00Z', 'America/Los_Angeles')).toBe(
 			'20261101013000 -0700',

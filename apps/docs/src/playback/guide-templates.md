@@ -17,6 +17,8 @@ Channels that do not choose a template use **Default for XMLTV**. Changing the d
 
 The included **Standard XMLTV** template provides a basic guide similar to any current live TV streaming service. You can click **View** to inspect its template or choose **Duplicate** to create an editable copy. Built-in templates cannot be edited or deleted.
 
+The built-in layout identifies movies with a `Movie` category and episodes with a `Series` category, alongside their genres. This lets clients such as Channels DVR recognize movies in automatic collections. Built-in layouts update with Moirai; saved custom copies keep their own content. For an existing custom template, add `<category>Movie</category>` inside the Movie tab’s `<programme>` element and `<category>Series</category>` inside the Episode tab’s `<programme>` element, or leave those tabs empty to use the built-in layouts. After updating, refresh the XMLTV guide in your client.
+
 ![Built-in guide template viewer with a Duplicate action](/screenshots/guide-template-view.png)
 
 ## Edit a template

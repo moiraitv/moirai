@@ -173,6 +173,7 @@ Interpolated text is escaped for XML. Blank tabs fall back to this built-in sour
 {%- if item and item.year %}
     <date>{{ item.year }}</date>
 {%- endif %}
+    <category>Series</category>
 {%- if item %}
 {%- for genre in item.genre_names %}
     <category>{{ genre }}</category>
@@ -218,6 +219,7 @@ Interpolated text is escaped for XML. Blank tabs fall back to this built-in sour
 {%- if item and item.year %}
     <date>{{ item.year }}</date>
 {%- endif %}
+    <category>Movie</category>
 {%- if item %}
 {%- for genre in item.genre_names %}
     <category>{{ genre }}</category>
