@@ -340,7 +340,7 @@ export class FallbackFillerStore {
 				}
 				if (durationMilliseconds < FALLBACK_FILLER_MIN_DURATION_MILLISECONDS) {
 					throw new FallbackFillerValidationError(
-						'Fallback filler must be at least 1 minute long',
+						'Fallback filler must be at least 30 seconds long',
 					);
 				}
 

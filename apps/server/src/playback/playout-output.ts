@@ -203,7 +203,7 @@ function fallbackItems(
 		!Number.isSafeInteger(fallback.durationMilliseconds)
 		|| fallback.durationMilliseconds < FALLBACK_FILLER_MIN_DURATION_MILLISECONDS
 	) {
-		throw new Error('Fallback filler must have a measured duration of at least 1 minute');
+		throw new Error('Fallback filler must have a measured duration of at least 30 seconds');
 	}
 	if (
 		!Number.isSafeInteger(initialSourceOffsetMs)

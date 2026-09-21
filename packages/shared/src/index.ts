@@ -46,7 +46,7 @@ export const MEDIA_EXTENSIONS = [
 /** Maximum encoded size accepted for one managed playback fallback filler. */
 export const FALLBACK_FILLER_MAX_BYTES = 512 * 1024 * 1024;
 /** Minimum measured duration accepted for one managed playback fallback filler. */
-export const FALLBACK_FILLER_MIN_DURATION_MILLISECONDS = 60_000;
+export const FALLBACK_FILLER_MIN_DURATION_MILLISECONDS = 30_000;
 /** Conclusive source observations required before an ordinary missing item is deleted. */
 export const REMOVAL_CONFIRMATION_OBSERVATIONS = 3;
 /** Minimum spacing between conclusive observations that confirm a removal. */

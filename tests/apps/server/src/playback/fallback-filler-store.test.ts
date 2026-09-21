@@ -13,6 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FALLBACK_FILLER_MIN_DURATION_MILLISECONDS } from '@moirai/shared';
 import type { MediaProbe, MediaProbeResult } from '@server/media/media-probe.js';
 import {
 	FallbackFillerStore,
@@ -103,9 +104,10 @@ describe('fallback filler store', () => {
 		await store.remove({ type: 'global' });
 		await expect(access(path.join(root, 'managed', 'global', 'current')))
 			.rejects.toMatchObject({ code: 'ENOENT' });
+		const bundled = JSON.parse(await readFile('apps/server/assets/dead-air.json', 'utf8'));
 		expect(await store.resolve(channelId)).toMatchObject({
 			source: 'bundled',
-			durationMilliseconds: 161_762,
+			durationMilliseconds: bundled.durationMilliseconds,
 		});
 	});
 
@@ -323,9 +325,9 @@ describe('fallback filler store', () => {
 		expect(await readdir(directory)).toEqual(['current']);
 	});
 
-	it('requires one video stream with a measured duration of at least one minute', async () => {
+	it('requires one video stream with the minimum measured duration', async () => {
 		const shortVideo = probed(true, 90_000);
-		shortVideo.streams[0]!.durationMilliseconds = 59_999;
+		shortVideo.streams[0]!.durationMilliseconds = FALLBACK_FILLER_MIN_DURATION_MILLISECONDS - 1;
 		const multipleVideos = probed(true);
 		multipleVideos.streams.push({
 			...multipleVideos.streams[0]!,
@@ -334,19 +336,23 @@ describe('fallback filler store', () => {
 		});
 		const probe = vi.fn()
 			.mockResolvedValueOnce(shortVideo)
-			.mockResolvedValueOnce(multipleVideos);
+			.mockResolvedValueOnce(multipleVideos)
+			.mockResolvedValueOnce(probed(true, FALLBACK_FILLER_MIN_DURATION_MILLISECONDS));
 		const { store } = await fixture(probe);
 
 		await expect(store.store(
 			{ type: 'global' },
 			'short.mp4',
 			Readable.from(Buffer.alloc(12, 1)),
-		)).rejects.toThrow('at least 1 minute');
+		)).rejects.toThrow('at least 30 seconds');
 		await expect(store.store(
 			{ type: 'global' },
 			'multiple.mp4',
 			Readable.from(Buffer.alloc(12, 2)),
 		)).rejects.toThrow('exactly one video stream');
+		await store.store({ type: 'global' }, 'minimum.mp4', Readable.from(Buffer.alloc(12, 3)));
+		expect((await store.status({ type: 'global' })).override?.durationMilliseconds)
+			.toBe(FALLBACK_FILLER_MIN_DURATION_MILLISECONDS);
 	});
 
 	it('falls through from incomplete managed state and keeps it removable', async () => {

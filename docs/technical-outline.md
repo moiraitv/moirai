@@ -1047,7 +1047,7 @@ daily document still covers every instant without gaps or overlaps.
 Each managed scope owns one private asset and metadata pair. Replacements are streamed, probed, and
 staged together before the complete active directory is replaced with rollback protection. Startup
 restores the prior pair if replacement was interrupted. Uploads must contain exactly one video stream,
-and that stream must have a measured duration of at least one minute; a longer audio or container
+and that stream must have a measured duration of at least 30 seconds; a longer audio or container
 duration cannot satisfy this minimum. The minimum does not constrain authored schedule filler such as
 short commercials.
 Invalid or missing overrides fall through to the next source while remaining visible as management

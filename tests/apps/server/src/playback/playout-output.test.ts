@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { channelCreateSchema, type Channel, type ScheduleGuide } from '@moirai/shared';
+import { channelCreateSchema, FALLBACK_FILLER_MIN_DURATION_MILLISECONDS, type Channel, type ScheduleGuide } from '@moirai/shared';
 import { buildEtvPlayoutFiles } from '@server/playback/playout-output.js';
 
 /** Build a channel with validated normalization defaults. */
@@ -235,7 +235,7 @@ describe('ErsatzTV playout output', () => {
 		expect(nextDocument.items[0].source.in_point_ms ?? 0).toBe(priorOutPoint % 161_000);
 	});
 
-	it('rejects only a playback fallback source shorter than one minute', () => {
+	it('rejects playback fallback below the minimum and accepts the exact minimum', () => {
 		const configured = channel();
 		const guide: ScheduleGuide = {
 			timeZone: 'UTC',
@@ -249,8 +249,13 @@ describe('ErsatzTV playout output', () => {
 		expect(() => buildEtvPlayoutFiles(
 			[configured],
 			guide,
-			fallback(configured, { durationMilliseconds: 59_999 }),
-		)).toThrow('at least 1 minute');
+			fallback(configured, { durationMilliseconds: FALLBACK_FILLER_MIN_DURATION_MILLISECONDS - 1 }),
+		)).toThrow('at least 30 seconds');
+		expect(() => buildEtvPlayoutFiles(
+			[configured],
+			guide,
+			fallback(configured, { durationMilliseconds: FALLBACK_FILLER_MIN_DURATION_MILLISECONDS }),
+		)).not.toThrow();
 	});
 
 	it('continues to emit authored filler shorter than one minute', () => {
