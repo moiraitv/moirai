@@ -794,15 +794,15 @@ const unsubscribe = liveEvents.subscribe((event) => {
 		}, 180);
 	}
 });
-/** Resolve editor links against this page's refreshed catalog rather than previously cached data. */
-watch(() => [route.query.edit, route.query.new, editorLinksReady.value], () => {
+/** Resolve editor links after catalog refreshes, including reads that supersede page startup. */
+watch(() => [route.query.edit, route.query.new, editorLinksReady.value, channels.value], () => {
 	if (showForm.value) {
 		return;
 	}
 	if (route.query.new === '1') {
 		add();
 	}
-	else if (typeof route.query.edit === 'string' && editorLinksReady.value) {
+	else if (typeof route.query.edit === 'string' && editorLinksReady.value && channelsLoaded.value) {
 		const channel = channels.value.find(candidate => candidate.id === route.query.edit);
 		if (channel) {
 			edit(channel);

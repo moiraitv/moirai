@@ -15,14 +15,14 @@ import {
 	type LibraryFilterDraft,
 } from './library-filter';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	libraryId: string;
 	libraryType?: string | undefined;
 	genres: MediaGenreFacet[];
 	loading: boolean;
 	loaded: boolean;
 	showOrdering?: boolean;
-}>();
+}>(), { libraryType: undefined, showOrdering: true });
 const filter = defineModel<CatalogProgramItemFilter>({ required: true });
 const sort = defineModel<LibraryQuerySort>('sort', { default: () => ({ type: 'name', direction: 'asc' }) });
 const itemLimit = defineModel<number | null>('itemLimit', { default: null });

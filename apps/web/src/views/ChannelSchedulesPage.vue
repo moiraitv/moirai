@@ -637,6 +637,16 @@ watch(
 	},
 );
 watch([draft, previewDate], () => schedulePreview(), { deep: true });
+// A newer catalog request can finish after startup; focus only once the editor can render.
+watch(
+	() => !initialLoading.value && draft.value && channel.value ? channelId.value : null,
+	(id) => {
+		if (id) {
+			void focusDiagnosticRoute();
+		}
+	},
+	{ flush: 'post' },
+);
 onMounted(async () => {
 	try {
 		await Promise.all([
@@ -662,9 +672,6 @@ onMounted(async () => {
 	}
 	finally {
 		initialLoading.value = false;
-	}
-	if (editing.value && draft.value) {
-		await focusDiagnosticRoute();
 	}
 });
 const unsubscribeTimeline = liveEvents.subscribe((event) => {

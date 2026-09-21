@@ -310,7 +310,9 @@ test('keeps incomplete schedule previews stable without repeated requests', asyn
 	const card = page.locator('.schedule-channel-card').filter({ hasText: channel.name });
 	await expect(card).toBeVisible({ timeout: 30_000 });
 	await expect(card.locator('.next-day')).toContainText('Preview incomplete');
+	// Initial loading requests the first day followed by the complete preview window.
+	await expect.poll(() => guideRequests).toBe(2);
 	await page.clock.fastForward(180_000);
 	await expect(card.locator('.next-day')).toContainText('Preview incomplete');
-	expect(guideRequests).toBe(1);
+	expect(guideRequests).toBe(2);
 });

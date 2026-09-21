@@ -16,6 +16,7 @@ for (const todayHasGap of [false, true]) {
 		});
 		expect(channelResponse.ok()).toBe(true);
 		const channel = await channelResponse.json() as { id: string };
+		await page.route('**/api/v1/channels', route => route.fulfill({ json: [channel] }));
 		const slotId = randomUUID();
 		const templateResponse = await page.request.post('/api/v1/schedule-templates', {
 			headers,
@@ -95,7 +96,7 @@ for (const todayHasGap of [false, true]) {
 			await page.keyboard.press('Tab');
 			const nextControl = path === '/channels'
 				? row.getByRole('button', { name: `Edit ${channelName}`, exact: true })
-				: page.getByRole('button', { name: 'First-day programming Scheduled content', exact: true });
+				: page.getByRole('button', { name: /^First-day programming,/ }).first();
 			await expect(nextControl).toBeFocused();
 			await expect(panel).toBeHidden();
 

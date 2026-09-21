@@ -111,6 +111,7 @@ test('retains a restart failure through polling and clears it after a successful
 	await restart.click();
 	await expect(page.getByText('Restart failed temporarily')).toBeHidden();
 	expect(attempts).toBe(2);
+	await page.unrouteAll({ behavior: 'wait' });
 });
 
 test('shows playback reconnection, escalates repeated failures, then recovers', async ({ page }) => {

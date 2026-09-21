@@ -16,6 +16,7 @@ test('saves a guide block without changing playback and exposes actual items on 
 	const channelResponse = await page.request.post('/api/v1/channels', { headers, data: { number: '99.8', name: 'Slot Guide' } });
 	expect(channelResponse.ok()).toBe(true);
 	const channel = await channelResponse.json();
+	await page.route('**/api/v1/channels', route => route.fulfill({ json: [channel] }));
 	const slotId = randomUUID();
 	const response = await page.request.post('/api/v1/schedule-templates', {
 		headers, data: {
@@ -206,6 +207,7 @@ test('opens the channel editor from the full identity cell and keyboard', async 
 	});
 	expect(response.ok()).toBe(true);
 	const channel = await response.json();
+	await page.route('**/api/v1/channels', route => route.fulfill({ json: [channel] }));
 	try {
 		await page.goto('/channels');
 		const cell = page.locator('.guide-channel-cell').filter({ hasText: 'Full cell edit' });

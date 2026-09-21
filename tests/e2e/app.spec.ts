@@ -442,7 +442,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		await new Promise((resolve) => setTimeout(resolve, 500));
 		await route.continue();
 	});
-	await page.getByRole('link', { name: 'Library', exact: true }).click();
+	await page.getByRole('link', { name: 'Libraries', exact: true }).click();
 	const refreshedChannels = page.waitForResponse(
 		(response) =>
 			response.request().method() === 'GET' && response.url().endsWith('/api/v1/channels'),
@@ -689,6 +689,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('link', { name: 'New Program' }).click();
 	await page.getByLabel('Name').fill(`${programName} Follow-up`);
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page).toHaveURL(/\/schedules\/programs$/u);
 	const programCard = page.locator('.program-row').filter({
 		has: page.getByRole('link', { name: programName, exact: true }),
 	});
@@ -750,7 +751,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.goto(movieLibraryUrl);
 	await page.getByRole('button', { name: 'Select items' }).click();
-	await expect(page.getByRole('button', { name: 'Cancel item selection' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Cancel selection', exact: true })).toBeVisible();
 	await expect(page.locator('a.media-card').filter({ hasText: 'Companion Fixture' })).toHaveAttribute('tabindex', '-1');
 	await expect(page.getByRole('button', { name: 'Add Selected' })).toBeDisabled();
 	await expect(page.locator('.catalog-controls-stack')).toHaveCSS('position', 'sticky');
@@ -942,10 +943,11 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(advancedScheduling).toHaveAttribute('aria-expanded', 'true');
 	const templateBoundary = page.getByRole('group', { name: /Outgoing boundary at/ });
 	await templateBoundary.getByLabel('Policy').selectOption('finish-left');
+	await templateBoundary.getByRole('button', { name: 'Use a finite maximum drift' }).click();
+	await templateBoundary.getByLabel('Maximum drift in minutes').fill('120');
 	await templateBoundary.getByLabel('Fallback').selectOption('favor-right');
 	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toBeVisible();
 	await templateBoundary.getByLabel('Maximum early start (minutes)').fill('75');
-	await templateBoundary.getByLabel('Maximum drift in minutes').fill('120');
 	const noLimit = templateBoundary.getByRole('button', { name: 'No Limit', exact: true });
 	await noLimit.click();
 	await expect(noLimit).toHaveAttribute('aria-pressed', 'true');
@@ -1310,7 +1312,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(guideChannelCell.locator('.guide-channel-copy > p')).toHaveCount(0);
 	await expect(guideChannelCell.getByRole('button', { name: '5 warnings; show details' }))
 		.toBeVisible();
-	await page.unroute('**/api/v1/schedule-guide?*');
+	await page.unrouteAll({ behavior: 'wait' });
 	await page.goto('/schedules/templates?sort=name&view=grid');
 	await expect(page).not.toHaveURL(/(?:sort|view)=/);
 	const templateHelpHeading = page.getByRole('heading', { name: 'What is a template?' });
@@ -1619,7 +1621,8 @@ test('loads playback controls before tracking and independently saving panel dra
 	});
 	await page.goto('/settings');
 	const save = page.locator('form').getByRole('button', { name: 'Save Settings' });
-	await expect(page.getByRole('status')).toContainText('Loading playback settings');
+	await expect(page.getByRole('status').filter({ hasText: 'Loading playback settings' }))
+		.toBeVisible();
 	await expect(save).toHaveCount(0);
 	releaseSettings?.();
 	await expect(save).toBeDisabled();
