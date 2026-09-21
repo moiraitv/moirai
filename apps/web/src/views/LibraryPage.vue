@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isSuppressedScanIssue } from '@moirai/shared';
 import { libraryScanAttention } from '../library-scan-issues';
 import { useCatalogSelection } from '../composables/useCatalogSelection';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -94,6 +95,8 @@ const browse = ref<MediaBrowseResult>();
 const latestScan = computed(() => scans.value[0]);
 const scanAttention = computed(() => libraryScanAttention(library.value, scans.value));
 const currentScanIssues = computed(() => scanAttention.value.issues);
+const suppressedScanIssues = computed(() =>
+	(scans.value.find(scan => scan.status !== 'running')?.issues ?? []).filter(isSuppressedScanIssue));
 const activeScanId = ref<string>();
 const activeScanProgress = ref<ScanProgress>();
 const sourceUnavailable = computed(() =>
@@ -1198,7 +1201,7 @@ onUnmounted(() => {
 
 		<div class="library-status-surface">
 			<p v-if="actionError" class="notice error" role="alert">{{ actionError }}</p>
-			<LibraryScanWarnings v-if="scanAttention.count > 0" :key="id" :count="scanAttention.count" :issues="currentScanIssues" />
+			<LibraryScanWarnings v-if="scanAttention.count > 0 || suppressedScanIssues.length" :key="id" :library-id="id" :count="scanAttention.count" :issues="currentScanIssues" :suppressed-issues="suppressedScanIssues" @refresh="loadLibrary" />
 			<div v-if="sourceUnavailable" class="source-outage-banner" role="status">
 				<span class="source-outage-icon"><Unplug :size="22" /></span>
 				<div>

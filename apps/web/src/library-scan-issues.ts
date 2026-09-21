@@ -1,4 +1,4 @@
-import { isRemovalScanIssue, type Library, type ScanRun } from '@moirai/shared';
+import { isRemovalScanIssue, isSuppressedScanIssue, type Library, type ScanRun } from '@moirai/shared';
 
 /** Show current actionable scan issues while preserving historical diagnostics in scan history. */
 export function libraryScanAttention(
@@ -14,6 +14,7 @@ export function libraryScanAttention(
 		return { count: library.warningCount, issues: [] };
 	}
 
-	const issues = latest.issues.filter(issue => library.pendingRemovalCount > 0 || !isRemovalScanIssue(issue));
+	const issues = latest.issues.filter(issue => !isSuppressedScanIssue(issue)
+		&& (library.pendingRemovalCount > 0 || !isRemovalScanIssue(issue)));
 	return { count: Math.min(library.warningCount, issues.length), issues };
 }

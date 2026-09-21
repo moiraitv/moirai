@@ -1,3 +1,4 @@
+import { listTailAssessments, setSilentEndingAcceptance } from './media-tail-assessments.js';
 import { SemanticRepository } from './semantic.js';
 import { appendProgramGroups } from './program-groups.js';
 import { mediaAirings } from './media-airings.js';
@@ -88,6 +89,16 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Load cached physical-file tail decisions once for an upcoming scan. */
+	listTailAssessments(libraryId: string) {
+		return listTailAssessments(this.database, libraryId);
+	}
+
+	/** Remember or restore a silent ending only when the latest finding still matches. */
+	setSilentEndingAcceptance(libraryId: string, path: string, fingerprint: string, accepted: boolean) {
+		return setSilentEndingAcceptance(this.database, libraryId, path, fingerprint, accepted);
+	}
+
 	/** Inspect committed showings without generating new schedule data. */
 	mediaAirings(id: string, page: number, pageSize: number) {
 		return mediaAirings(this.database, id, page, pageSize);

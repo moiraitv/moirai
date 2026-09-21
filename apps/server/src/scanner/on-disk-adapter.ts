@@ -59,10 +59,12 @@ export class OnDiskSourceAdapter implements LibrarySourceAdapter {
 		return discoverOnDisk(library, {
 			signal: context.signal,
 			probeCache: context.probeCache,
+			tailAssessments: context.tailAssessments ?? new Map(),
 			discoveryConcurrency: this.mediaProbe?.concurrencyLimit ?? 1,
 			onProgress: context.onProgress,
 			...(this.mediaProbe
 				? {
+					inspectTail: this.mediaProbe.inspectTail.bind(this.mediaProbe),
 					probeMedia: (scanRoot: string, file: string, signal?: AbortSignal) =>
 						this.mediaProbe!.probe(scanRoot, file, signal),
 				}

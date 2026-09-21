@@ -80,6 +80,7 @@ describe('OnDiskSourceAdapter', () => {
 		const probe = {
 			concurrencyLimit: 3,
 			probe: vi.fn(),
+			inspectTail: vi.fn(),
 		} as unknown as MediaProbe;
 		const adapter = new OnDiskSourceAdapter(probe);
 		const discovery = {

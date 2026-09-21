@@ -6,6 +6,17 @@ const removal: ScanIssue = { code: 'removal_approval_required', path: null, mess
 const unrelated: ScanIssue = { code: 'scan_failed', path: null, message: 'Source unavailable.', severity: 'error' };
 
 describe('current library scan attention', () => {
+	it.each(['black', 'mostly-black'] as const)('excludes %s findings while preserving history', result => {
+		const suppressed: ScanIssue = {
+			code: 'media_audio_video_duration_mismatch', path: 'film.mp4', message: 'Silent tail', severity: 'warning',
+			tailAssessment: { fingerprint: 'file', result, accepted: false },
+		};
+		const scans = [{ status: 'complete' as const, issues: [suppressed, unrelated] }];
+		expect(libraryScanAttention({ warningCount: 1, pendingRemovalCount: 0 }, scans))
+			.toEqual({ count: 1, issues: [unrelated] });
+		expect(scans[0]!.issues).toEqual([suppressed, unrelated]);
+	});
+
 	it('hides an already-stale removal alert after reconciliation without mutating scan history', () => {
 		const scans = [{ status: 'partial' as const, issues: [removal] }];
 		expect(libraryScanAttention({ warningCount: 1, pendingRemovalCount: 0 }, scans)).toEqual({ count: 0, issues: [] });

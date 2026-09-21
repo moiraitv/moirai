@@ -787,3 +787,12 @@ export const guideTemplates = sqliteTable('guide_templates', {
 	uniqueIndex('guide_templates_name_key_unique').on(table.nameKey),
 	uniqueIndex('guide_templates_one_default').on(table.isDefault).where(sql`${table.isDefault} = 1`),
 ]);
+
+/** Physical-file tail assessments and explicit acceptance survive scan-history pruning. */
+export const mediaTailAssessments = sqliteTable('media_tail_assessments', {
+	libraryId: text('library_id').notNull().references(() => libraries.id, { onDelete: 'cascade' }),
+	relativePath: text('relative_path').notNull(),
+	fingerprint: text('fingerprint').notNull(),
+	result: text('result', { enum: ['black', 'mostly-black', 'not-black', 'uncertain'] }).notNull(),
+	accepted: integer('accepted', { mode: 'boolean' }).notNull().default(false),
+}, table => [uniqueIndex('media_tail_assessments_file').on(table.libraryId, table.relativePath)]);

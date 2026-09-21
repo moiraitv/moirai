@@ -1,3 +1,4 @@
+import { persistTailAssessments } from './media-tail-assessments.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import type {
@@ -10,6 +11,7 @@ import type {
 import {
 	countLabel,
 	isRemovalScanIssue,
+	isSuppressedScanIssue,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 } from '@moirai/shared';
@@ -254,7 +256,7 @@ export abstract class ScanRepository {
 						sourceAvailability: 'degraded',
 						sourceAvailabilityUpdatedAt: completedAt,
 						lastScanCompletedAt: completedAt,
-						warningCount: candidateIssues.length,
+						warningCount: candidateIssues.filter(issue => !isSuppressedScanIssue(issue)).length,
 						updatedAt: completedAt,
 					})
 					.where(eq(libraries.id, run.libraryId))
@@ -313,7 +315,7 @@ export abstract class ScanRepository {
 						sourceAvailability: 'degraded',
 						sourceAvailabilityUpdatedAt: completedAt,
 						lastScanCompletedAt: completedAt,
-						warningCount: candidateIssues.length,
+						warningCount: candidateIssues.filter(issue => !isSuppressedScanIssue(issue)).length,
 						updatedAt: completedAt,
 					})
 					.where(eq(libraries.id, run.libraryId))
@@ -587,6 +589,11 @@ export abstract class ScanRepository {
           )`);
 				}
 
+				persistTailAssessments(tx, run.libraryId, reconciledIssues, traversalComplete, [
+					...items.flatMap(item => [item.relativePath, ...item.parts.map(part => part.relativePath)]),
+					...reconciledIssues.flatMap(issue => issue.path ? [issue.path] : []),
+				]);
+
 				// Finalize scan history and publish the library's resulting health state.
 				const status = traversalComplete
 					? reconciledIssues.some((issue) => issue.severity === 'error')
@@ -633,7 +640,7 @@ export abstract class ScanRepository {
 						lastIndexedChangeAt: changedCount > 0 || removedCount > 0 || missingItems.length > 0
 							? completedAt
 							: undefined,
-						warningCount: reconciledIssues.length,
+						warningCount: reconciledIssues.filter(issue => !isSuppressedScanIssue(issue)).length,
 						sourceAvailability,
 						sourceAvailabilityUpdatedAt: completedAt,
 						reconciliationStatus: pendingRemovalCount === 0

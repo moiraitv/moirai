@@ -264,7 +264,29 @@ stream durations or Matroska duration tags. Container, audio, and subtitle durat
 a fallback. Scans report a per-file warning when any measured audio track differs from the video
 duration by more than thirty seconds, including on cached scans, without excluding the item.
 The library warning banner displays at most ten issues inline; a dedicated dialog shows the full list.
-Probe contract version 5 refreshes older cached durations on the next library scan.
+Audio tracks ending within one second of one another before a single non-artwork video stream are
+eligible for silent-tail assessment. FFmpeg decodes every frame after the earliest audio ending,
+requiring at least 90% black pixels in every frame throughout the tail and complete decoded coverage
+before suppressing a finding. The pixel darkness threshold remains 0.03. This visual heuristic
+includes sparse white credits but does not identify credits or establish audio completeness.
+The shared probe queue bounds concurrency; decoding is single-threaded, limited to 120 seconds of
+source, 30 seconds of wall time, and 1 MiB per output stream. Files are opened through validated
+inherited descriptors and their identities checked before and after inspection. Missing timing,
+multiple video tracks, nonqualifying frames, excessive tails, and failed inspection never auto-suppress.
+Migration 0034 adds physical-file assessments keyed by library and relative path.
+Migration 0035 clears unaccepted not-black and uncertain cached results for reassessment on the next
+scan, preserving manual acceptance, prior black results, and scan history. New qualifying results
+use mostly-black; legacy black results remain supported. One batch read
+per scan loads cached outcomes; reconciliation persists them transactionally in bounded batches.
+File fingerprints invalidate decisions after replacement or probe-contract changes. Explicit
+silent-ending acceptance survives scan-history pruning and can be restored through the dedicated
+library dialog. Active counts and scan-event issue counts exclude suppressed findings while scan history retains reasons.
+Acceptance checks the latest finding and fingerprint and conflicts while a scan runs; it performs
+no source-file mutation. Candidate-source findings disable acceptance and restoration until an
+accepted-source scan replaces them, since quarantined scans do not persist assessments.
+Complete scans remove obsolete assessments, and library deletion cascades
+cleanup. The additive scan-issue contract exposes assessment result, fingerprint, and acceptance.
+Probe contract version 6 refreshes older cached durations on the next library scan.
 
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured
 video duration of at most 366 days and a usable video stream remains browsable, but scheduling

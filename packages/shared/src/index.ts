@@ -212,6 +212,11 @@ export const scanIssueSchema = z.object({
 	code: z.string(),
 	message: z.string(),
 	severity: z.enum(['warning', 'error']),
+	tailAssessment: z.object({
+		fingerprint: z.string(),
+		result: z.enum(['black', 'mostly-black', 'not-black', 'uncertain']),
+		accepted: z.boolean(),
+	}).optional(),
 });
 /** Validate transient progress reported while a scan is running. */
 export const scanProgressSchema = z.object({
@@ -276,7 +281,7 @@ export const scanEventDataSchema = z.object({
 	discoveredCount: z.number().int().nonnegative(),
 	changedCount: z.number().int().nonnegative(),
 	removedCount: z.number().int().nonnegative(),
-	issueCount: z.number().int().nonnegative(),
+	issueCount: z.number().int().nonnegative().describe('Active scan issues, excluding suppressed silent-ending findings'),
 	affectsProgramming: z.boolean().default(false),
 	progress: scanProgressSchema.optional(),
 });

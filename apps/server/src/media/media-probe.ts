@@ -3,10 +3,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import type { Logger } from 'pino';
 import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
 import { resourceErrorCode, type ResourcePressureCoordinator } from '../operations/resource-pressure.js';
+import { inspectBlackTail, type BlackTailTarget } from './black-tail.js';
 import { openSourceFile } from './source-file.js';
 
 /** Probe contract version included in cache identities. */
-export const MEDIA_PROBE_VERSION = 5;
+export const MEDIA_PROBE_VERSION = 6;
 /** Maximum ffprobe JSON accepted from one media file. */
 const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 /** Maximum stream records retained from an untrusted container. */
@@ -54,6 +55,8 @@ export interface ProbedMediaStream {
 	type: 'video' | 'audio' | 'subtitle';
 	codec: string | null;
 	durationMilliseconds: number | null;
+	startMilliseconds?: number | null;
+	isAttachedPicture?: boolean;
 	width: number | null;
 	height: number | null;
 	channels?: number | null;
@@ -104,6 +107,7 @@ interface ProbeDocument {
 		height?: number;
 		channels?: number;
 		duration?: string | number;
+		start_time?: string | number;
 		tags?: Record<string, unknown>;
 		disposition?: Record<string, unknown>;
 	}>;
@@ -208,6 +212,9 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 			type: stream.codec_type as ProbedMediaStream['type'],
 			codec: typeof stream.codec_name === 'string' ? stream.codec_name.slice(0, 64) : null,
 			durationMilliseconds: streamDurationMilliseconds(stream),
+			startMilliseconds: stream.start_time != null && Number.isFinite(Number(stream.start_time))
+				? Math.round(Number(stream.start_time) * 1_000) : null,
+			isAttachedPicture: disposition(stream.disposition?.attached_pic),
 			width: stream.codec_type === 'video' ? dimension(stream.width) : null,
 			height: stream.codec_type === 'video' ? dimension(stream.height) : null,
 			channels: stream.codec_type === 'audio' ? dimension(stream.channels) : null,
@@ -219,7 +226,7 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 			isCommentary: disposition(stream.disposition?.comment),
 		}];
 	});
-	const videoStreams = streams.filter((stream) => stream.type === 'video');
+	const videoStreams = streams.filter((stream) => stream.type === 'video' && !stream.isAttachedPicture);
 	if (videoStreams.length === 0) {
 		throw new MediaProbeError('missing-video', 'Media file has no usable video stream');
 	}
@@ -256,9 +263,11 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 /**
  * Inspect media through a bounded set of ffprobe child processes. The service verifies descriptor-safe
  * executable support, enforces concurrency and timeouts, normalizes playback facts, and exposes probe
- * availability through readiness state.
+ * availability through readiness state. Optional FFmpeg tail inspection shares the same queue and
+ * is cancelled with the service.
  */
 export class MediaProbe {
+	private readonly tailAbort = new AbortController();
 	private active = 0;
 	private readonly waiters: Array<() => void> = [];
 	private readonly children = new Set<ChildProcess>();
@@ -324,7 +333,7 @@ export class MediaProbe {
 						'-v',
 						'error',
 						'-show_entries',
-						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,duration:stream_tags=language,title,DURATION:stream_disposition=default,forced,hearing_impaired,comment',
+						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,duration,start_time:stream_tags=language,title,DURATION:stream_disposition=default,forced,hearing_impaired,comment,attached_pic',
 						'-of',
 						'json',
 						'-fd',
@@ -359,8 +368,22 @@ export class MediaProbe {
 		}
 	}
 
-	/** Stop accepting work and terminate every active ffprobe process. */
+	/** Share the bounded probe queue with full-frame tail inspection during background scans. */
+	async inspectTail(root: string, file: string, target: BlackTailTarget, signal?: AbortSignal) {
+		await this.acquire(signal);
+		try {
+			return await inspectBlackTail(root, file, target, AbortSignal.any([
+				this.tailAbort.signal, ...(signal ? [signal] : []),
+			]));
+		}
+		finally {
+			this.release();
+		}
+	}
+
+	/** Stop accepting work, cancel tail inspection, and terminate every active ffprobe process. */
 	async close(): Promise<void> {
+		this.tailAbort.abort();
 		this.closing = true;
 		this.state = { status: 'stopping' };
 		for (const child of this.children) {

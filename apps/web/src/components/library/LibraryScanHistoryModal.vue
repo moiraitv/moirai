@@ -26,6 +26,9 @@ const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('
 								<li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">
 									<span>{{ issue.code }}<template v-if="issue.path"> — {{ issue.path }}</template></span>
 									<div>{{ issue.message }}</div>
+									<small v-if="issue.tailAssessment?.result === 'black'">Suppressed: confirmed black tail</small>
+									<small v-else-if="issue.tailAssessment?.result === 'mostly-black'">Suppressed: the complete inspected silent ending is at least 90% black in every frame.</small>
+									<small v-else-if="issue.tailAssessment?.accepted">Suppressed: accepted silent ending</small>
 								</li>
 							</ul>
 						</article>

@@ -239,6 +239,20 @@
       "when": 1789783600000,
       "tag": "0033_semantic_schema_compatibility",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1789783700000,
+      "tag": "0034_media_tail_assessments",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1789783800000,
+      "tag": "0035_mostly_black_tail_assessments",
+      "breakpoints": true
     }
   ]
 }
