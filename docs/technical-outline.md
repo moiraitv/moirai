@@ -262,7 +262,8 @@ vary; Burn playlists omit subtitle rendition metadata.
 Playback and scheduling duration use the longest valid video-track duration, accepting native
 stream durations or Matroska duration tags. Container, audio, and subtitle durations never supply
 a fallback. Scans report a per-file warning when any measured audio track differs from the video
-duration by more than one second, including on cached scans, without excluding the item.
+duration by more than thirty seconds, including on cached scans, without excluding the item.
+The library warning banner displays at most ten issues inline; a dedicated dialog shows the full list.
 Probe contract version 5 refreshes older cached durations on the next library scan.
 
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured

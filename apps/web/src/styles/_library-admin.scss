@@ -616,3 +616,11 @@ label.check input {
 	color: var(--accent);
 	background: transparent;
 }
+
+.library-scan-issues-modal {
+	width: min(900px, 100%);
+}
+
+.library-all-issues {
+	margin-top: 12px;
+}
