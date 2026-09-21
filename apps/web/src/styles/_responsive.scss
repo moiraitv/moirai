@@ -86,6 +86,10 @@
 }
 
 @media (max-width: 900px) {
+	.guide-frame-page {
+		--guide-sticky-top: 64px;
+	}
+
 	.schedule-editor-columns {
 		grid-template-columns: 1fr;
 	}

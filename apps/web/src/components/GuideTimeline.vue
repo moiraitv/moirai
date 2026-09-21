@@ -38,7 +38,7 @@ const props = withDefaults(
 		emptyMessage?: string;
 		showTechnicalDetails?: boolean;
 		hourWidth?: number | null;
-		visibleHours?: number;
+		visibleHours?: number | null;
 		useEntryTitles?: boolean;
 		inspectListings?: boolean;
 		subtitleMode?: 'source' | 'listing';
@@ -49,7 +49,7 @@ const props = withDefaults(
 		emptyMessage: 'No schedule assigned',
 		showTechnicalDetails: false,
 		hourWidth: null,
-		visibleHours: 6,
+		visibleHours: null,
 		useEntryTitles: false,
 		inspectListings: false,
 		subtitleMode: 'source',
@@ -62,6 +62,7 @@ const emit = defineEmits<{
 }>();
 
 defineSlots<{
+	toolbar(): unknown;
 	detail(props: {
 		channel: Channel;
 		preview: ScheduleGuide['channels'][number]['preview'] | undefined;
@@ -70,6 +71,7 @@ defineSlots<{
 }>();
 
 const guideScroll = ref<HTMLElement>();
+const headerScroll = ref<HTMLElement>();
 const centerNow = ref(false);
 const blockPopover = ref<InstanceType<typeof GuideBlockPopover>>();
 const itemPreview = ref<InstanceType<typeof GuideItemPreview>>();
@@ -90,12 +92,14 @@ const selectedError = ref('');
 const detailCache = new Map<string, GuideSegmentDetail>();
 let detailRequest = 0;
 const trackWidth = ref(0);
+const responsiveHours = ref(6);
 const hourWidth = computed(() => {
 	if (props.hourWidth != null) {
 		return props.hourWidth;
 	}
 
-	return trackWidth.value > 0 ? Math.max(48, trackWidth.value / props.visibleHours) : 112;
+	const hours = props.visibleHours ?? (props.listingPresentation === 'guide' ? responsiveHours.value : 6);
+	return trackWidth.value > 0 ? Math.max(48, trackWidth.value / hours) : 112;
 });
 const calendarGeometry = computed(() =>
 	props.startDate ? guideDayGeometry(props.startDate, props.days, props.timeZone, 1) : []);
@@ -173,7 +177,8 @@ function measureTrack(): void {
 		return;
 	}
 
-	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
+	responsiveHours.value = window.innerWidth <= 680 ? 2 : window.innerWidth <= 1220 ? 4 : 6;
+	const channelWidth = headerScroll.value?.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
 	const next = Math.max(0, scroller.clientWidth - channelWidth);
 	if (trackWidth.value !== next) {
 		trackWidth.value = next;
@@ -182,6 +187,10 @@ function measureTrack(): void {
 
 /** Coalesce scroll and resize measurements to one animation frame. */
 function scheduleViewportRead(): void {
+	if (headerScroll.value && guideScroll.value) {
+		headerScroll.value.scrollLeft = guideScroll.value.scrollLeft;
+	}
+
 	if (viewportFrame !== 0) {
 		return;
 	}
@@ -412,7 +421,7 @@ function centerCurrentTime(): void {
 		return;
 	}
 
-	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
+	const channelWidth = headerScroll.value?.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
 	scroller.scrollLeft = Math.max(0, target - (scroller.clientWidth - channelWidth) / 2);
 }
 
@@ -468,39 +477,44 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="guide-frame" :class="{ 'guide-frame-page': listingPresentation === 'guide' }">
-		<div ref="guideScroll" class="guide-scroll" :aria-label="accessibleLabel">
-			<div
-				class="guide-canvas"
-				:style="{
-					'--guide-hour-width': `${hourWidth}px`,
-					'--guide-timeline-width': `${timelineWidth}px`,
-				}"
-			>
-				<div class="guide-corner"><TvMinimal :size="18" />Channels</div>
-				<div class="guide-time-header">
-					<div
-						v-for="day in visibleDays"
-						:key="day.key"
-						class="guide-day-heading"
-						:class="{ today: day.key === dateKey(new Date(), timeZone) }"
-						:style="{ left: `${day.left}px`, width: `${day.width}px` }"
-					>
-						<strong>{{ day.weekday }}</strong
-						><span>{{ day.date }}</span>
-						<small
-							v-for="tick in day.ticks"
-							:key="tick.hour"
-							:style="{ left: `${tick.left}px` }"
-						>{{ displayHour(tick.hour) }}</small
+	<div
+		class="guide-frame" :class="{ 'guide-frame-page': listingPresentation === 'guide' }" :style="{
+			'--guide-hour-width': `${hourWidth}px`,
+			'--guide-timeline-width': `${timelineWidth}px`,
+		}">
+		<div class="guide-sticky-header">
+			<slot name="toolbar"></slot>
+			<div ref="headerScroll" class="guide-header-scroll">
+				<div class="guide-canvas guide-header-canvas">
+					<div class="guide-corner"><TvMinimal :size="18" />Channels</div>
+					<div class="guide-time-header">
+						<div
+							v-for="day in visibleDays"
+							:key="day.key"
+							class="guide-day-heading"
+							:class="{ today: day.key === dateKey(new Date(), timeZone) }"
+							:style="{ left: `${day.left}px`, width: `${day.width}px` }"
 						>
+							<strong>{{ day.weekday }}</strong
+							><span>{{ day.date }}</span>
+							<small
+								v-for="tick in day.ticks"
+								:key="tick.hour"
+								:style="{ left: `${tick.left}px` }"
+							>{{ displayHour(tick.hour) }}</small
+							>
+						</div>
+						<span
+							v-if="currentTimeLeft !== null"
+							class="current-time-line"
+							:style="{ left: `${currentTimeLeft}px` }"
+						></span>
 					</div>
-					<span
-						v-if="currentTimeLeft !== null"
-						class="current-time-line"
-						:style="{ left: `${currentTimeLeft}px` }"
-					></span>
 				</div>
+			</div>
+		</div>
+		<div ref="guideScroll" class="guide-scroll" :aria-label="accessibleLabel">
+			<div class="guide-canvas guide-body-canvas">
 				<div ref="rowsBody" class="guide-rows" :style="{ height: `${rowsHeight}px` }" @focusin="retainFocus" @focusout="releaseFocus" @keydown="navigateRows">
 					<div v-for="{ row, index, top } in visibleRows" :key="row.key" :ref="measureRow" class="guide-row" :class="{ 'guide-row-last': index === guideRows.length - 1 }" tabindex="-1" :data-index="index" :data-guide-row="row.key" :style="{ top: `${top}px` }">
 						<template v-if="row.type === 'family'">

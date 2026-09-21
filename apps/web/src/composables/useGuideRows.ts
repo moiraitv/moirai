@@ -15,7 +15,7 @@ export function useGuideRows(rows: Ref<ChannelGuideRow[]>, ready: Ref<boolean>) 
 		count: ready.value ? rows.value.length : 0,
 		estimateSize: (index: number) => rows.value[index]?.type === 'family' ? 34 : 108,
 		getItemKey: (index: number) => rows.value[index]!.key,
-		overscan: 3,
+		overscan: 8,
 		scrollMargin: margin.value,
 		rangeExtractor: (range: Parameters<typeof defaultRangeExtractor>[0]) => {
 			const indexes = defaultRangeExtractor(range);

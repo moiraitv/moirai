@@ -134,11 +134,28 @@
 }
 
 .guide-frame {
-	overflow: hidden;
+	overflow: clip;
 	border: 1px solid var(--line-bright);
 	border-radius: 12px;
 	background: #08131e;
 	box-shadow: 0 20px 55px rgba(0, 0, 0, 0.2);
+}
+
+.guide-frame-page .guide-sticky-header {
+	position: sticky;
+	top: var(--guide-sticky-top, 0px);
+	z-index: 7;
+	background: #0c1b28;
+}
+
+.guide-sticky-header .guide-toolbar {
+	margin: 0;
+	padding: 14px 17px;
+	border-bottom: 1px solid var(--line-bright);
+}
+
+.guide-header-scroll {
+	overflow: hidden;
 }
 
 .guide-scroll {
@@ -155,6 +172,10 @@
 	grid-template-columns: var(--guide-channel-width) var(--guide-timeline-width);
 	grid-template-rows: 78px;
 	grid-auto-rows: auto;
+}
+
+.guide-body-canvas {
+	grid-template-rows: auto;
 }
 
 .guide-corner,

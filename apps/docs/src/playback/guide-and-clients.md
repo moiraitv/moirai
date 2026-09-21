@@ -9,7 +9,7 @@ contextual: true
 
 The **![](/icons/calendar-days.svg) Guide** page shows the committed rolling lineup and the addresses an IPTV client needs. Listing titles and optional subtitles come from each channel’s [guide template](/playback/guide-templates), or from the default template when the channel does not choose one.
 
-On Guide and Channels, the guide list expands to show all channels and scrolls vertically with the page. The timeline shows six hours at a time; scroll horizontally to browse later programming. Select **Today** to return to the current week, centering the now line within the visible timeline.
+On Guide and Channels, the guide list expands to show all channels and scrolls vertically with the page. Guide shows approximately two hours on phones, four hours on tablets, and six hours on desktops; Channels shows six hours. Scroll horizontally to browse later programming. On Guide, the week controls and time ruler stay visible while you scroll down the channels. Select **Today** to return to the current week, centering the now line within the visible timeline.
 
 Hover over an individual media item, or focus it with the keyboard, to see its details in the same preview used on Programs. Click the item to open its full guide details.
 

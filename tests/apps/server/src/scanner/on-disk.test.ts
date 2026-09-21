@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
 import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
-import { MediaProbeError } from '@server/media/media-probe.js';
+import { MediaProbeError, parseMediaProbeOutput } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 import { MAX_MEDIA_SCAN_ATTEMPTS } from '@server/scanner/scan-queue.js';
 
@@ -774,4 +774,43 @@ it('groups artist-folder singles with metadata albums and keeps existing folder 
 	expect(after.items.find(item => item.title === 'Loose')?.groupId).toBe(unknownAlbum.id);
 	expect(after.items.find(item => item.title === 'Loose')?.metadata.album).toBeNull();
 	expect(after.items.find(item => item.title === 'Existing')?.id).toBe(before.items[0]?.id);
+});
+
+
+it('refreshes container-duration caches and retains mismatch warnings on cached scans', async () => {
+	const fixture = await library();
+	const relativePath = 'Stargate.mp4';
+	const file = path.join(fixture.sourceConfig.scanRoot, relativePath);
+	await writeFile(file, 'video');
+	const info = await stat(file, { bigint: true });
+	const oldFingerprint = createHash('sha256')
+		.update([4, info.dev, info.ino, info.size, info.mtimeMs].map(String).join(':')).digest('hex');
+	const probeMedia = vi.fn(async () => parseMediaProbeOutput(JSON.stringify({
+		format: { duration: '26025.108' },
+		streams: [
+			{ codec_type: 'video', duration: '7781.523733' },
+			{ codec_type: 'audio', duration: '26025.108' },
+		],
+	}), 5));
+	const result = await discoverOnDisk(fixture, { probeMedia, probeCache: new Map([[relativePath, {
+		relativePath, probeFingerprint: oldFingerprint, durationMilliseconds: 26_025_108,
+		probeStatus: 'complete', probeUpdatedAt: '2026-01-01T00:00:00Z',
+		probeErrorCode: null, technicalMetadata: { streams: [] },
+	}]]) });
+	const item = result.items[0]!;
+	expect(probeMedia).toHaveBeenCalledOnce();
+	expect(item.durationMilliseconds).toBe(7_781_524);
+	expect(item.probeStatus).toBe('complete');
+	expect(item.probeFingerprint).not.toBe(oldFingerprint);
+	expect(result.issues).toContainEqual(expect.objectContaining({
+		path: relativePath, code: 'media_audio_video_duration_mismatch', severity: 'warning',
+	}));
+
+	probeMedia.mockClear();
+	const cached = await discoverOnDisk(fixture, { probeMedia, probeCache: new Map([[relativePath, item]]) });
+	expect(probeMedia).not.toHaveBeenCalled();
+	expect(cached.items[0]!.durationMilliseconds).toBe(7_781_524);
+	expect(cached.issues).toContainEqual(expect.objectContaining({
+		path: relativePath, code: 'media_audio_video_duration_mismatch', severity: 'warning',
+	}));
 });

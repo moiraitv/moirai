@@ -16,7 +16,7 @@ afterEach(async () => {
 });
 
 describe('media probe output', () => {
-	it('prefers container duration and retains bounded playback facts', () => {
+	it('uses video duration and retains bounded playback facts', () => {
 		expect(parseMediaProbeOutput(JSON.stringify({
 			format: { duration: '65.125', format_name: 'matroska,webm' },
 			streams: [
@@ -24,7 +24,7 @@ describe('media probe output', () => {
 				{ codec_type: 'audio', codec_name: 'aac', duration: '64.5' },
 			],
 		}), 42)).toEqual({
-			durationMilliseconds: 65_125,
+			durationMilliseconds: 65_000,
 			fileSizeBytes: 42,
 			container: 'matroska,webm',
 			streams: [
@@ -64,14 +64,16 @@ describe('media probe output', () => {
 		});
 	});
 
-	it('uses the longest stream duration but never accepts an audio-only file', () => {
+	it('uses the longest video duration but never accepts an audio-only file', () => {
 		const video = JSON.stringify({
 			streams: [
 				{ codec_type: 'video', codec_name: 'h264', duration: '10.25' },
+				{ codec_type: 'video', codec_name: 'h264', duration: '10.5' },
 				{ codec_type: 'audio', codec_name: 'aac', duration: '11.75' },
+				{ codec_type: 'subtitle', duration: '20' },
 			],
 		});
-		expect(parseMediaProbeOutput(video, 1).durationMilliseconds).toBe(11_750);
+		expect(parseMediaProbeOutput(video, 1).durationMilliseconds).toBe(10_500);
 		expect(() => parseMediaProbeOutput(JSON.stringify({
 			format: { duration: '10' },
 			streams: [{ codec_type: 'audio', codec_name: 'aac' }],
@@ -80,7 +82,7 @@ describe('media probe output', () => {
 
 	it('uses Matroska duration tags when native stream durations are unavailable', () => {
 		const result = parseMediaProbeOutput(JSON.stringify({
-			format: { format_name: 'matroska,webm' },
+			format: { duration: '100', format_name: 'matroska,webm' },
 			streams: [{
 				codec_type: 'video',
 				codec_name: 'vp9',
@@ -98,9 +100,35 @@ describe('media probe output', () => {
 		const durationSeconds = MAX_MEDIA_DURATION_MILLISECONDS / 1_000 + 1;
 		expect(() => parseMediaProbeOutput(JSON.stringify({
 			format: { duration: String(durationSeconds) },
-			streams: [{ codec_type: 'video', codec_name: 'h264' }],
+			streams: [{ codec_type: 'video', codec_name: 'h264', duration: String(durationSeconds) }],
 		}), 1)).toThrow(MediaProbeError);
 	});
+
+	it('ignores inflated container and audio durations like the Stargate file', () => {
+		const result = parseMediaProbeOutput(JSON.stringify({
+			format: { duration: '26025.108' },
+			streams: [
+				{ codec_type: 'video', duration: '7781.523733' },
+				{ codec_type: 'audio', duration: '26025.108' },
+				{ codec_type: 'audio', duration: '26025.082' },
+			],
+		}), 1);
+
+		expect(result.durationMilliseconds).toBe(7_781_524);
+	});
+
+	it.each([undefined, '0', '-1', 'NaN', 'Infinity'])(
+		'rejects unusable video duration %s despite measured container and audio durations',
+		(duration) => {
+			expect(() => parseMediaProbeOutput(JSON.stringify({
+				format: { duration: '100' },
+				streams: [
+					{ codec_type: 'video', duration },
+					{ codec_type: 'audio', duration: '100' },
+				],
+			}), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+		},
+	);
 
 	it('captures bounded container tags and embedded subtitle dispositions', () => {
 		const result = parseMediaProbeOutput(JSON.stringify({
@@ -109,7 +137,7 @@ describe('media probe output', () => {
 				tags: { TITLE: 'Tagged title', ARTIST: 'Artist', unrelated: 'ignored' },
 			},
 			streams: [
-				{ codec_type: 'video', codec_name: 'h264', width: 1920, height: 1080 },
+				{ codec_type: 'video', codec_name: 'h264', width: 1920, height: 1080, duration: '10' },
 				{
 					index: 3,
 					codec_type: 'subtitle',

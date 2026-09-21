@@ -6,7 +6,7 @@ import { resourceErrorCode, type ResourcePressureCoordinator } from '../operatio
 import { openSourceFile } from './source-file.js';
 
 /** Probe contract version included in cache identities. */
-export const MEDIA_PROBE_VERSION = 4;
+export const MEDIA_PROBE_VERSION = 5;
 /** Maximum ffprobe JSON accepted from one media file. */
 const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 /** Maximum stream records retained from an untrusted container. */
@@ -186,7 +186,7 @@ function dimension(value: unknown): number | null {
 	return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
 }
 
-/** Parse and validate bounded ffprobe output. */
+/** Validate bounded ffprobe output and derive playback duration solely from video tracks. */
 export function parseMediaProbeOutput(output: string, fileSizeBytes: number): MediaProbeResult {
 	let document: ProbeDocument;
 	try {
@@ -224,14 +224,12 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 		throw new MediaProbeError('missing-video', 'Media file has no usable video stream');
 	}
 
-	const measuredDuration
-		= durationMilliseconds(document.format?.duration)
-			?? rawStreams.reduce<number | null>((longest, stream) => {
-				const current = streamDurationMilliseconds(stream);
-				return current !== null && (longest === null || current > longest) ? current : longest;
-			}, null);
+	const measuredDuration = videoStreams.reduce<number | null>((longest, stream) => {
+		const current = stream.durationMilliseconds;
+		return current !== null && (longest === null || current > longest) ? current : longest;
+	}, null);
 	if (measuredDuration === null) {
-		throw new MediaProbeError('missing-duration', 'Media file has no usable measured duration');
+		throw new MediaProbeError('missing-duration', 'Media file has no usable measured video duration');
 	}
 
 	const primaryVideo = videoStreams.find((stream) => stream.width && stream.height);

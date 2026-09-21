@@ -191,8 +191,8 @@ test('Today recenters the current guide window on both pages', async ({ page }) 
 		});
 		await page.getByRole('button', { name: 'Today', exact: true }).click();
 		await expect.poll(() => scroller.evaluate(element => {
-			const line = element.querySelector<HTMLElement>('.guide-time-header .current-time-line')!;
-			const column = element.querySelector<HTMLElement>('.guide-corner')!;
+			const line = element.closest('.guide-frame')!.querySelector<HTMLElement>('.guide-time-header .current-time-line')!;
+			const column = element.closest('.guide-frame')!.querySelector<HTMLElement>('.guide-corner')!;
 			const target = Number.parseFloat(line.style.left);
 			const expected = Math.max(0, target - (element.clientWidth - column.offsetWidth) / 2);
 			return Math.abs(element.scrollLeft - expected);

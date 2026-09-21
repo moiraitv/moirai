@@ -259,9 +259,15 @@ font upgrades update only the protected built-in template, preserving authored c
 Convert playlists advertise a neutral subtitle rendition because program languages may
 vary; Burn playlists omit subtitle rendition metadata.
 
+Playback and scheduling duration use the longest valid video-track duration, accepting native
+stream durations or Matroska duration tags. Container, audio, and subtitle durations never supply
+a fallback. Scans report a per-file warning when any measured audio track differs from the video
+duration by more than one second, including on cached scans, without excluding the item.
+Probe contract version 5 refreshes older cached durations on the next library scan.
+
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured
-duration of at most 366 days and a usable video stream remains browsable, but scheduling excludes it
-and reports a scan diagnostic. This bound also prevents corrupt probe output from overflowing
+video duration of at most 366 days and a usable video stream remains browsable, but scheduling
+excludes it and reports a scan diagnostic. This bound also prevents corrupt probe output from overflowing
 scheduling arithmetic.
 
 Successful probes are cached using the file identity, size, modification time, and probe-contract
@@ -882,7 +888,9 @@ M3U entries include Channels DVR's `channel-id` from the persistent channel UUID
 `channel-number` from the configured number, using the existing M3U escaping. The UUID remains
 stable across renames and renumbering; existing `tvg-id`, `tvg-chno`, XMLTV identifiers, and stream
 URL generation remain unchanged.
-Guide and Channels share a timeline scale that fits six elapsed hours in the visible track. The Guide
+The Guide timeline fits approximately two elapsed hours on phones (up to 680px), four on tablets
+(up to 1220px), and six on desktops; Channels retains its six-hour scale. The Guide week controls
+and synchronized time ruler remain sticky during page scrolling, below the mobile app header. The Guide
 page channel column uses fixed-width number, unbezeled icon, and name tracks. Guide listings may show
 a landscape or poster thumbnail when width allows, using the card artwork variant so stills stay
 sharp at listing height. Landscape thumbs are cropped to a square. Listings show vertically centered
@@ -897,8 +905,8 @@ On Channels, the edit button covers the full channel cell while warning badges r
 interactive; keyboard focus outlines the complete edit target.
 The shared guide expands to its full row height and scrolls vertically with the page, while
 retaining horizontal timeline scrolling. Programme nodes are mounted only for the scrolled elapsed-time
-window plus two hours of overscan, including the initial mount. Large lineups also mount only nearby
-channel and family rows, with measured heights and three rows of vertical overscan. Small embedded
+window plus two hours of overscan, including the initial mount. Large lineups mount only nearby
+channel and family rows, with measured heights and eight rows of vertical overscan on each side. Small embedded
 previews retain all their rows. Focused rows remain mounted, and keyboard navigation reveals the next
 channel when needed. Immutable guide snapshots use shallow reactivity; weakly owned per-channel
 interval indexes reuse parsed timestamps across route remounts without retaining replaced snapshots.

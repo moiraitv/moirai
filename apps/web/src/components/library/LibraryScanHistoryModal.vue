@@ -23,7 +23,10 @@ const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('
 							<span>{{ new Date(run.startedAt).toLocaleString() }}</span>
 							<span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span>
 							<ul v-if="run.issues.length">
-								<li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">{{ issue.code }} — {{ issue.path ?? issue.message }}</li>
+								<li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">
+									<span>{{ issue.code }}<template v-if="issue.path"> — {{ issue.path }}</template></span>
+									<div>{{ issue.message }}</div>
+								</li>
 							</ul>
 						</article>
 					</div>

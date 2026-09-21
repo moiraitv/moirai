@@ -332,31 +332,6 @@ onBeforeUnmount(() => {
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="initialLoading" label="Loading the channel guide…" />
 		<div v-else class="async-state-surface">
-			<div class="guide-toolbar">
-				<div class="guide-week-controls">
-					<button
-						class="square-button"
-						aria-label="Previous week"
-						:disabled="!canMovePrevious"
-						@click="moveWindow(-1)"
-					>
-						<ChevronLeft :size="18" />
-					</button>
-					<button class="toolbar-button" @click="showToday">
-						<CalendarDays :size="17" />Today
-					</button>
-					<button
-						class="square-button"
-						aria-label="Next week"
-						:disabled="!canMoveNext"
-						@click="moveWindow(1)"
-					>
-						<ChevronRight :size="18" />
-					</button>
-					<strong>{{ weekLabel }}</strong>
-				</div>
-				<span class="guide-time-zone"><Clock3 :size="15" />{{ timeZone }}</span>
-			</div>
 			<p v-if="guide?.segmentLimitApplied" class="notice warning">
 				Showing {{ guide.days }} of {{ guide.requestedDays }} requested days because this
 				schedule contains an unusually high number of programs.
@@ -372,7 +347,35 @@ onBeforeUnmount(() => {
 				use-entry-titles
 				subtitle-mode="listing"
 				listing-presentation="guide"
-			/>
+			>
+				<template #toolbar>
+					<div class="guide-toolbar">
+						<div class="guide-week-controls">
+							<button
+								class="square-button"
+								aria-label="Previous week"
+								:disabled="!canMovePrevious"
+								@click="moveWindow(-1)"
+							>
+								<ChevronLeft :size="18" />
+							</button>
+							<button class="toolbar-button" @click="showToday">
+								<CalendarDays :size="17" />Today
+							</button>
+							<button
+								class="square-button"
+								aria-label="Next week"
+								:disabled="!canMoveNext"
+								@click="moveWindow(1)"
+							>
+								<ChevronRight :size="18" />
+							</button>
+							<strong>{{ weekLabel }}</strong>
+						</div>
+						<span class="guide-time-zone"><Clock3 :size="15" />{{ timeZone }}</span>
+					</div>
+				</template>
+			</GuideTimeline>
 			<ResourceEmptyState
 				v-else-if="!error"
 				title="No channels configured"

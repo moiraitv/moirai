@@ -55,6 +55,7 @@ import {
 	type ParsedVideoFilename,
 } from './video-filename.js';
 import { collapseMultipartItems } from './multipart.js';
+import { mediaDurationHealthIssues } from './media-duration-health.js';
 import { runScanQueue, type ScanFileOutcome } from './scan-queue.js';
 import type {
 	MissingItemPresenceCheck,
@@ -556,6 +557,10 @@ export async function discoverOnDisk(
 				message: 'Media file could not be measured because ffprobe is unavailable.',
 				severity: 'warning',
 			});
+		}
+
+		if (probeResult) {
+			issues.push(...mediaDurationHealthIssues(probeResult, relativePath));
 		}
 
 		// Parse bounded descriptive metadata without trusting it for playback properties.
