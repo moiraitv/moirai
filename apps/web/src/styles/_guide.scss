@@ -297,6 +297,8 @@
 	object-fit: cover;
 	object-position: center right;
 	pointer-events: none;
+	// Bound even white artwork below the luminance allowed behind white listing text.
+	filter: brightness(0.45);
 	opacity: 0.32;
 	mask-image: linear-gradient(to right, transparent 28%, #000 70%);
 	-webkit-mask-image: linear-gradient(to right, transparent 28%, #000 70%);
@@ -331,7 +333,6 @@
 
 .guide-programme-timespan {
 	flex-shrink: 0;
-	opacity: 0.72;
 	font-size: 0.64rem;
 }
 
@@ -343,7 +344,6 @@
 
 .guide-programme small {
 	color: inherit;
-	opacity: 0.78;
 }
 
 .guide-preview-modal {

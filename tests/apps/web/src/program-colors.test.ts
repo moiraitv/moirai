@@ -22,10 +22,10 @@ function contrastRatio(left: string, right: string): number {
 	);
 }
 
-function midpoint(left: string, right: string): string {
+function interpolate(left: string, right: string, fraction: number): string {
 	return `#${hexChannels(left)
 		.map((channel, index) =>
-			Math.round((channel + hexChannels(right)[index]!) / 2)
+			Math.round(channel * (1 - fraction) + hexChannels(right)[index]! * fraction)
 				.toString(16)
 				.padStart(2, '0'))
 		.join('')}`;
@@ -43,15 +43,30 @@ describe('program colors', () => {
 			'--program-color': expect.stringMatching(/^#/),
 			'--program-color-dark': expect.stringMatching(/^#/),
 			'--program-color-glow': expect.stringContaining('rgba('),
-			'--program-color-foreground': expect.stringMatching(/^#/),
+			'--program-color-foreground': '#ffffff',
 		});
 	});
 
-	it('chooses readable text for every program gradient', () => {
+	it('provides 32 distinct backgrounds with white text', () => {
+		expect(PROGRAM_COLOR_PALETTE).toHaveLength(32);
+		expect(new Set(PROGRAM_COLOR_PALETTE.map(color => color.solid)).size).toBe(PROGRAM_COLOR_PALETTE.length);
 		for (const color of PROGRAM_COLOR_PALETTE) {
-			expect(
-				contrastRatio(midpoint(color.solid, color.dark), color.foreground),
-			).toBeGreaterThanOrEqual(4.5);
+			expect(color.foreground).toBe('#ffffff');
 		}
+	});
+
+	it('keeps white text readable throughout every program gradient', () => {
+		for (const color of PROGRAM_COLOR_PALETTE) {
+			for (let step = 0; step <= 100; step += 1) {
+				expect(contrastRatio(interpolate(color.solid, color.dark, step / 100), color.foreground))
+					.toBeGreaterThanOrEqual(4.5);
+			}
+		}
+	});
+
+	it('keeps the unassigned fallback stable and exposes all palette entries through hashing', () => {
+		expect(programColorStyle(null)).toEqual(programColorStyle('unassigned-program'));
+		const assigned = new Set(Array.from({ length: 1024 }, (_, index) => programColor(`program-${index}`)));
+		expect(assigned.size).toBe(PROGRAM_COLOR_PALETTE.length);
 	});
 });

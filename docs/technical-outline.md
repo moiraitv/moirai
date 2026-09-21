@@ -887,6 +887,11 @@ page channel column uses fixed-width number, unbezeled icon, and name tracks. Gu
 a landscape or poster thumbnail when width allows, using the card artwork variant so stills stay
 sharp at listing height. Landscape thumbs are cropped to a square. Listings show vertically centered
 title and timespan copy, a 24-hour timespan, and a dimmed fanart wash. Adjacent listings leave a small gutter.
+Guide listings, schedule editors, and previews share 32 curated program gradients selected by a stable
+program-ID hash. Opaque white text maintains at least 4.5:1 contrast across the gradients; the fanart
+wash is darkened before compositing to preserve that contrast even with bright artwork. Thumbnails
+retain their original brightness. Palette expansion can reassign program colors without changing
+stored scheduling data.
 Channels keeps the compact logo-above-number cell.
 On Channels, the edit button covers the full channel cell while warning badges remain independently
 interactive; keyboard focus outlines the complete edit target.
