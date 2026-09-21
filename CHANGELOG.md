@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.0 - 2026-09-21
+
+### New
+
+- **Similar Items** programs find media related to a hand-picked program. 
+- **Theme** programs find media matching a description. Both run locally with a bundled model and prepare matches in the background as the schedule needs them.
+- Similar Items and Theme editors have match previews, library filters, quantity, **Cohesion / Variety**, preferences, and exclusions.
+- **Guide Templates** customize XMLTV channel and program listings with Liquid templating engine, a live preview, a global default, and per-channel overrides. Duplicate the built-in **Standard XMLTV** template to get started.
+- Optional **Duration → From / To** filters limit playback length in the library, Quick Setup, and program queries.
+- Library health reports audio/video track duration differences. **Ignore issue** hides supported findings until the relevant files change; **Suppressed issues** lets you review them and restore manually ignored findings.
+
+### Improvements
+
+- The guide scrolls more smoothly with large channel lineups and keeps its week controls and time ruler visible. It shows about two hours on phones and four on tablets or larger.
+- Guide listing appearance has been updated to use template titles and subtitles, thumbnails, and dimmed background artwork.
+- Library scans do less repeated database and search-index work. Large program lists and log views are more responsive.
+- Libraries show scan status in the main navigation. **Last scan** opens scan history, and **Show all issues** opens the full list of findings.
+- Program colors expanded to a palette of 32 with darker gradients and more readable text. Opening an editor preserves the Programs list's filters and scroll position.
+- Posters, landscape images, and fanart are now imported and used by the UI.
+
+### Changes
+
+- Audio/video duration warnings are suppressed when audio is no more than 5% shorter or 30 seconds longer than the video. Larger differences can also be auto-suppressed when inspection confirms a short silent ending stays at least 90% black like most foreign audio credit sequences.
+- The bundled dead-air fallback loop has been updated to be smaller and better visually.
+- The built-in XMLTV template labels movies as **Movie** and episodes as **Series** so clients can classify them correctly in automatic categories.
+
+### Fixes
+
+- Playback and scheduling use measured video-track durations instead of container or audio runtimes. Cached measurements are refreshed on the next scan; embedded cover images no longer count as video tracks.
+- Channel editor links and scheduling diagnostic controls resolve correctly when their data loads overlap.
+
 ## 0.1.1 - 2026-09-17
 
 ### New
