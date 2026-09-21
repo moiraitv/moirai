@@ -535,12 +535,12 @@ async function loadChannels(): Promise<void> {
 }
 
 /** Load the committed seven-day guide beginning at the selected date. */
-async function loadGuide(): Promise<void> {
+async function loadGuide(reusePending = false): Promise<void> {
 	if (!weekStart.value) {
 		return;
 	}
 
-	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value);
+	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value, 'preserve', reusePending);
 	guideRefreshError.value = '';
 }
 
@@ -566,7 +566,7 @@ async function loadInitial(): Promise<void> {
 		if (!weekStart.value) {
 			weekStart.value = dateKey(new Date(), timeZone.value);
 		}
-		await loadGuide();
+		await loadGuide(true);
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);

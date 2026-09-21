@@ -10,7 +10,7 @@ export default defineConfig({
 	timeout: 90_000,
 	// Local indexing and saves can take longer than five seconds under CPU contention.
 	expect: { timeout: 30_000 },
-	testIgnore: 'user-documentation.spec.ts',
+	testIgnore: ['user-documentation.spec.ts', '**/performance/**'],
 	outputDir: 'test-results/playwright',
 	use: {
 		baseURL: `http://127.0.0.1:${webPort}`,

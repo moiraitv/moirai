@@ -45,13 +45,19 @@ export function guideListingWashUrl(
 	return fanartUrl || landscapeUrl || null;
 }
 
+/** Last-used formatter; bounded to one zone rather than one allocation per listing. */
+let listingFormatter: { timeZone: string; format: Intl.DateTimeFormat } | undefined;
+
 /** Format a listing interval as 24-hour hours and minutes without a time zone. */
 export function guideListingTimespan(start: string, finish: string, timeZone: string): string {
-	const format = new Intl.DateTimeFormat('en-GB', {
-		hour: '2-digit',
-		minute: '2-digit',
-		hour12: false,
-		timeZone,
-	});
+	if (listingFormatter?.timeZone !== timeZone) {
+		listingFormatter = { timeZone, format: new Intl.DateTimeFormat('en-GB', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false,
+			timeZone,
+		}) };
+	}
+	const format = listingFormatter.format;
 	return `${format.format(new Date(start))}–${format.format(new Date(finish))}`;
 }

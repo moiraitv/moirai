@@ -97,12 +97,12 @@ const canMoveNext = computed(() =>
 	channelsStore.guideNavigationTarget('forward') !== null);
 
 /** Load the committed seven-day guide beginning at the selected date. */
-async function loadGuide(): Promise<void> {
+async function loadGuide(reusePending = false): Promise<void> {
 	if (!weekStart.value) {
 		return;
 	}
 
-	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value);
+	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value, 'preserve', reusePending);
 	error.value = '';
 }
 
@@ -128,7 +128,7 @@ async function loadInitial(): Promise<void> {
 		if (!weekStart.value || weekStart.value < today) {
 			weekStart.value = today;
 		}
-		await loadGuide();
+		await loadGuide(true);
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);

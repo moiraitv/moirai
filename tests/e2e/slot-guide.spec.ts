@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import { SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide, type TimelineSegment } from '@moirai/shared';
 import { authenticateAdministrator } from './authentication';
+
+/** Compare playback identity and timing independently of item-mode presentation enrichment. */
+function playbackFields(segment: TimelineSegment): Record<string, unknown> {
+	const presentation = new Set(['title', 'subtitle', 'posterUrl', 'landscapeUrl', 'fanartUrl']);
+	return Object.fromEntries(Object.entries(segment).filter(([key]) => !presentation.has(key)));
+}
 
 test('saves a guide block without changing playback and exposes actual items on desktop and touch', async ({ page }) => {
 	const pageErrors: string[] = [];
@@ -24,7 +30,7 @@ test('saves a guide block without changing playback and exposes actual items on 
 	const beforeResponse = await page.request.get('/api/v1/schedule-guide');
 	expect(beforeResponse.ok()).toBe(true);
 	const before = await beforeResponse.json() as ScheduleGuide;
-	const original = before.channels.find((entry) => entry.channelId === channel.id)!.preview.segments;
+	const original = before.channels.find((entry) => entry.channelId === channel.id)!.preview.segments.map(playbackFields);
 	// Prime the XMLTV cache before making a presentation-only edit.
 	expect((await page.request.get(`http://127.0.0.1:${process.env.MOIRAI_E2E_API_PORT ?? '3008'}/epg.xml`)).ok()).toBe(true);
 	await page.goto(`/schedules/templates/${template.id}`);
@@ -32,6 +38,8 @@ test('saves a guide block without changing playback and exposes actual items on 
 	const save = page.getByRole('button', { name: 'Save', exact: true });
 	await expect(save).toBeEnabled();
 	await save.click();
+	await expect(page.getByRole('dialog', { name: 'Template editor', exact: true })).toBeHidden();
+	await page.goto(`/schedules/templates/${template.id}`);
 	await expect(save).toBeDisabled();
 	const defaultGuide = await (await page.request.get('/api/v1/schedule-guide')).json() as ScheduleGuide;
 	expect(defaultGuide.channels.find((entry) => entry.channelId === channel.id)!.entries?.some((entry) =>
@@ -78,11 +86,13 @@ test('saves a guide block without changing playback and exposes actual items on 
 	await expect(page.getByRole('textbox', { name: 'Guide title', exact: true })).toHaveValue('Rock Music');
 	await expect(save).toBeEnabled();
 	await save.click();
+	await expect(page.getByRole('dialog', { name: 'Template editor', exact: true })).toBeHidden();
+	await page.goto(`/schedules/templates/${template.id}`);
 	await expect(save).toBeDisabled();
 	await expect(page.getByRole('textbox', { name: 'Guide title', exact: true })).toHaveValue('Rock Music');
 	const afterResponse = await page.request.get('/api/v1/schedule-guide');
 	const after = await afterResponse.json() as ScheduleGuide;
-	expect(after.channels.find((entry) => entry.channelId === channel.id)!.preview.segments).toEqual(original);
+	expect(after.channels.find((entry) => entry.channelId === channel.id)!.preview.segments.map(playbackFields)).toEqual(original);
 	expect(after.channels.find((entry) => entry.channelId === channel.id)!.entries?.some((entry) => entry.title === 'Rock Music')).toBe(true);
 	const xml = await (await page.request.get(`http://127.0.0.1:${process.env.MOIRAI_E2E_API_PORT ?? '3008'}/epg.xml`)).text();
 	expect(xml).toContain('<title>Rock Music</title>');

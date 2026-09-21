@@ -892,9 +892,15 @@ On Channels, the edit button covers the full channel cell while warning badges r
 interactive; keyboard focus outlines the complete edit target.
 The shared guide expands to its full row height and scrolls vertically with the page, while
 retaining horizontal timeline scrolling. Programme nodes are mounted only for the scrolled elapsed-time
-window plus two hours of overscan, so a dense week does not create a DOM node for every listing.
+window plus two hours of overscan, including the initial mount. Large lineups also mount only nearby
+channel and family rows, with measured heights and three rows of vertical overscan. Small embedded
+previews retain all their rows. Focused rows remain mounted, and keyboard navigation reveals the next
+channel when needed. Immutable guide snapshots use shallow reactivity; weakly owned per-channel
+interval indexes reuse parsed timestamps across route remounts without retaining replaced snapshots.
+Calendar geometry is independent of zoom, and listing presentation is derived only for mounted entries.
 Guide and Channels request one committed day first, then the remainder of the seven-day window,
-so the visible range paints before the rest of the week arrives. Combined guide reads select
+so the visible range paints before the rest of the week arrives. Concurrent route bootstrap reads share
+an in-flight guide request; explicit refreshes and live changes can supersede it. Combined guide reads select
 timeline-segment columns without snapshot, cursor, or playback JSON, omit duplicate `entries` when
 the timeline is item-mode, use one time-ordered `starts_at`/`channel_id` limit query, and cache the
 assembled guide in-process until timeline, channel, or scheduling events invalidate it.

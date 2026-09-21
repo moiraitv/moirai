@@ -211,10 +211,10 @@
 	background-size: var(--guide-hour-width) 100%;
 }
 
-.guide-canvas > .guide-channel-cell:nth-last-child(2),
-.guide-canvas > .guide-family-cell:nth-last-child(2),
-.guide-canvas > .guide-channel-track:last-child,
-.guide-canvas > .guide-family-track:last-child {
+.guide-row-last > .guide-channel-cell,
+.guide-row-last > .guide-family-cell,
+.guide-row-last > .guide-channel-track,
+.guide-row-last > .guide-family-track {
 	border-bottom: 0;
 }
 

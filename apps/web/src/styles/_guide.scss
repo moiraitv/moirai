@@ -549,6 +549,7 @@
 }
 
 .guide-block-copy {
+	flex: none;
 	position: sticky;
 	left: calc(var(--guide-channel-width) + 9px);
 	display: block;
@@ -626,4 +627,16 @@
 	&.range-end {
 		right: 0;
 	}
+}
+
+.guide-rows {
+	grid-column: 1 / -1;
+	position: relative;
+}
+
+.guide-row {
+	position: absolute;
+	width: 100%;
+	display: grid;
+	grid-template-columns: var(--guide-channel-width) var(--guide-timeline-width);
 }

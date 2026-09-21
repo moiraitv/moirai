@@ -45,23 +45,21 @@ const displayEntries = computed(() =>
 		request: logRequestDetails(record.entry.context),
 	})));
 
+/** Reuse both responsive timestamp formats across log rows and refreshes. */
+const fullTimeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+/** Compact log timestamps retain date and second precision on narrower screens. */
+const compactTimeFormatter = new Intl.DateTimeFormat(undefined, {
+	month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+
 /** Format a full log timestamp in the viewer's locale. */
 function formatTime(value: string): string {
-	return new Intl.DateTimeFormat(undefined, {
-		dateStyle: 'medium',
-		timeStyle: 'medium',
-	}).format(new Date(value));
+	return fullTimeFormatter.format(new Date(value));
 }
 
 /** Format a shorter timestamp while retaining date and second precision. */
 function formatCompactTime(value: string): string {
-	return new Intl.DateTimeFormat(undefined, {
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-		second: '2-digit',
-	}).format(new Date(value));
+	return compactTimeFormatter.format(new Date(value));
 }
 
 /** Format retained log size using compact binary units. */
@@ -180,6 +178,7 @@ onBeforeUnmount(() => {
 				<button
 					v-for="row in displayEntries"
 					:key="row.entry.id"
+					v-memo="[row.entry, row.completion]"
 					class="log-entry"
 					type="button"
 					aria-haspopup="dialog"

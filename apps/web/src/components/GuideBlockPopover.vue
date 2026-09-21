@@ -4,6 +4,7 @@ import { X } from '@lucide/vue';
 import type { GuideEntry, TimelineSegment } from '@moirai/shared';
 import { guidePointerFraction, guideTimelineCrop } from '../guide-crop';
 import { guideSourceLabel } from '../guide-source';
+import { guideIntervalIndex } from '../guide-index';
 import { programColorStyle } from '../program-colors';
 
 const props = withDefaults(defineProps<{ segments: TimelineSegment[]; timeZone: string; selectable?: boolean; programNames?: Record<string, string> }>(), { selectable: true, programNames: () => ({}) });
@@ -24,9 +25,9 @@ const position = ref({ left: '0px', top: '0px' });
 let anchor: HTMLElement | null = null;
 let restoringFocus = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
-const blockItems = computed(() => entry.value ? props.segments.filter((segment) =>
-	segment.channelId === entry.value!.channelId && Date.parse(segment.start) < Date.parse(entry.value!.finish)
-	&& Date.parse(segment.finish) > Date.parse(entry.value!.start)) : []);
+const blockItems = computed(() => entry.value ? guideIntervalIndex(props.segments)
+	.query(Date.parse(entry.value.start), Date.parse(entry.value.finish))
+	.filter(segment => segment.channelId === entry.value!.channelId) : []);
 const crop = computed(() => entry.value ? guideTimelineCrop(entry.value, blockItems.value, fraction.value) : null);
 
 /** Format the full actual airtime in the configured guide zone, including its date. */

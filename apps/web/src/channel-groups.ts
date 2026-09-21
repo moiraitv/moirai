@@ -5,10 +5,13 @@ export type ChannelGuideRow
 	= | { type: 'family'; key: string; label: string }
 		| { type: 'channel'; key: string; channel: Channel };
 
+/** Reuse natural channel-number collation across guide remounts. */
+const channelNumberCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
 /** Sort channel numbers naturally and label dotted families only when at least two exist. */
 export function channelGuideRows(channels: Channel[]): ChannelGuideRow[] {
 	const sorted = [...channels].sort((left, right) =>
-		left.number.localeCompare(right.number, undefined, { numeric: true, sensitivity: 'base' }));
+		channelNumberCollator.compare(left.number, right.number));
 	const familyCounts = new Map<string, number>();
 	for (const channel of sorted) {
 		const separator = channel.number.indexOf('.');

@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { orderCatalogNames } from '../catalog-name-order';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
 	ChevronLeft, ChevronRight, FileText,
 	Layers3, Lightbulb, ListOrdered, Plus, Search, Zap,
 } from '@lucide/vue';
-import { catalogSortTitle, type SchedulingProgram } from '@moirai/shared';
+import type { SchedulingProgram } from '@moirai/shared';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../components/PageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
@@ -83,15 +84,14 @@ const programPageSize = computed(() => {
 const requestedProgramPage = computed(() => Math.max(1, Number(queryText('page') || 1) || 1));
 const filteredPrograms = computed(() => {
 	const search = programSearch.value.trim().toLocaleLowerCase();
-	return programs.value.filter((program) => {
+	return orderCatalogNames(programs.value.filter((program) => {
 		if (programTypeFilter.value !== 'all' && program.config.type !== programTypeFilter.value) {
 			return false;
 		}
 
 		const source = statuses.value.get(program.id)?.sourceLabel ?? '';
 		return !search || `${program.name} ${source}`.toLocaleLowerCase().includes(search);
-	}).sort((left, right) =>
-		catalogSortTitle(left.name).localeCompare(catalogSortTitle(right.name), 'en-US', { sensitivity: 'base' }));
+	}));
 });
 const programTotalPages = computed(() => Math.max(1, Math.ceil(filteredPrograms.value.length / programPageSize.value)));
 const programPage = computed(() => Math.min(requestedProgramPage.value, programTotalPages.value));

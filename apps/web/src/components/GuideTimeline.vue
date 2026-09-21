@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { TvMinimal } from '@lucide/vue';
 import type { Channel, GuideEntry, GuideSegmentDetail, ScheduleGuide, TimelineSegment } from '@moirai/shared';
 import { api } from '../api';
+import { guideIntervalIndex } from '../guide-index';
+import { useGuideRows } from '../composables/useGuideRows';
 import { channelLogoUrl } from '../channel-logo';
 import { dateKey, formatDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
@@ -10,7 +12,6 @@ import {
 	guideDayGeometry,
 	guideInstantPosition,
 	guideSegmentWidth,
-	guideSpanOverlapsRange,
 } from '../guide-geometry';
 import { channelGuideRows } from '../channel-groups';
 import { guideSourceLabel } from '../guide-source';
@@ -73,15 +74,16 @@ const centerNow = ref(false);
 const blockPopover = ref<InstanceType<typeof GuideBlockPopover>>();
 const itemPreview = ref<InstanceType<typeof GuideItemPreview>>();
 const programNames = computed(() => Object.assign({}, ...(props.guide?.channels.map(channel => channel.preview.programNames ?? {}) ?? [])) as Record<string, string>);
-const actualSegments = computed(() => props.guide?.channels.flatMap((channel) => channel.preview.segments) ?? []);
-const segmentsById = computed(() => new Map(actualSegments.value.map(segment => [segment.id, segment])));
+const activeChannelId = ref<string | null>(null);
+const activeSegments = computed(() => props.guide?.channels.find(channel => channel.channelId === activeChannelId.value)?.preview.segments ?? []);
 const displayedByChannel = computed(() => new Map((props.guide?.channels ?? []).map((channel) =>
 	[channel.channelId, channel.entries ?? channel.preview.segments])));
 /** Extra hours rendered beyond the scrolled viewport so scrolling does not flash empty track. */
 const GUIDE_OVERSCAN_HOURS = 2;
 const viewportStart = ref(0);
-const viewportEnd = ref(Number.POSITIVE_INFINITY);
-const pinnedProgrammeId = ref<string | null>(null);
+const viewportEnd = ref(0);
+const viewportReady = ref(false);
+const pinnedProgramme = shallowRef<TimelineSegment | GuideEntry | null>(null);
 const selectedDetail = ref<GuideSegmentDetail | null>(null);
 const selectedLoading = ref(false);
 const selectedError = ref('');
@@ -95,8 +97,12 @@ const hourWidth = computed(() => {
 
 	return trackWidth.value > 0 ? Math.max(48, trackWidth.value / props.visibleHours) : 112;
 });
-const daysGeometry = computed(() =>
-	guideDayGeometry(props.startDate, props.days, props.timeZone, hourWidth.value));
+const calendarGeometry = computed(() =>
+	props.startDate ? guideDayGeometry(props.startDate, props.days, props.timeZone, 1) : []);
+const daysGeometry = computed(() => calendarGeometry.value.map(day => ({
+	...day, left: day.left * hourWidth.value, width: day.width * hourWidth.value,
+	ticks: day.ticks.map(tick => ({ ...tick, left: tick.left * hourWidth.value })),
+})));
 const timelineWidth = computed(() => {
 	const finalDay = daysGeometry.value.at(-1);
 	return finalDay ? finalDay.left + finalDay.width : 0;
@@ -108,42 +114,31 @@ const guideByChannel = computed(
 );
 
 const guideRows = computed(() => channelGuideRows(props.channels));
-const positionedByChannel = computed(() => {
-	const days = daysGeometry.value;
-	const result = new Map<string, Array<{
-		programme: TimelineSegment | GuideEntry;
-		left: number;
-		right: number;
-	}>>();
-	for (const [channelId, programmes] of displayedByChannel.value) {
-		result.set(channelId, programmes.map((programme) => {
-			const left = guideInstantPosition(programme.start, days, hourWidth.value);
-			return {
-				programme,
-				left,
-				right: left + guideSegmentWidth(programme.start, programme.finish, hourWidth.value),
-			};
-		}));
-	}
-
-	return result;
-});
+const { body: rowsBody, visibleRows, height: rowsHeight, measureRow, retainFocus, releaseFocus, navigateRows, measureOffset } = useGuideRows(guideRows, viewportReady);
 const visibleByChannel = computed(() => {
-	const rangeStart = viewportStart.value;
-	const rangeEnd = viewportEnd.value;
-	const pinned = pinnedProgrammeId.value;
 	const result = new Map<string, Array<TimelineSegment | GuideEntry>>();
-	for (const [channelId, programmes] of positionedByChannel.value) {
-		result.set(
-			channelId,
-			programmes
-				.filter((entry) =>
-					entry.programme.id === pinned
-					|| guideSpanOverlapsRange(entry.left, entry.right, rangeStart, rangeEnd))
-				.map((entry) => entry.programme),
-		);
+	if (!viewportReady.value || !daysGeometry.value.length) {
+		return result;
 	}
-
+	const origin = daysGeometry.value[0]!.startMilliseconds;
+	const millisecondsPerPixel = 3_600_000 / hourWidth.value;
+	for (const { row } of visibleRows.value) {
+		if (row.type !== 'channel') {
+			continue;
+		}
+		const channelId = row.channel.id;
+		const programmes: Array<TimelineSegment | GuideEntry> = displayedByChannel.value.get(channelId) ?? [];
+		const visible = guideIntervalIndex(programmes).query(
+			origin + viewportStart.value * millisecondsPerPixel,
+			origin + viewportEnd.value * millisecondsPerPixel,
+			3 * millisecondsPerPixel,
+		);
+		const pinned = pinnedProgramme.value;
+		if (pinned && pinned.channelId === channelId && !visible.includes(pinned)) {
+			visible.push(pinned);
+		}
+		result.set(channelId, visible);
+	}
 	return result;
 });
 let viewportFrame = 0;
@@ -152,16 +147,16 @@ let viewportObserver: ResizeObserver | null = null;
 /** Read the scrolled timeline window and quantize it to hour-sized buckets. */
 function readViewport(): void {
 	const scroller = guideScroll.value;
-	if (!scroller || scroller.clientWidth === 0) {
+	if (!scroller || trackWidth.value === 0) {
 		return;
 	}
 
-	const channelWidth = scroller.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
+	viewportReady.value = true;
 	const unit = hourWidth.value;
 	const overscan = unit * GUIDE_OVERSCAN_HOURS;
-	const start = Math.floor((scroller.scrollLeft - channelWidth - overscan) / unit) * unit;
+	const start = Math.floor((scroller.scrollLeft - overscan) / unit) * unit;
 	const end = Math.ceil(
-		(scroller.scrollLeft + scroller.clientWidth - channelWidth + overscan) / unit,
+		(scroller.scrollLeft + trackWidth.value + overscan) / unit,
 	) * unit;
 	if (viewportStart.value !== start) {
 		viewportStart.value = start;
@@ -193,17 +188,16 @@ function scheduleViewportRead(): void {
 
 	viewportFrame = requestAnimationFrame(() => {
 		viewportFrame = 0;
-		measureTrack();
 		readViewport();
 	});
 }
 
+/** One formatter shared by every ruler tick. */
+const hourFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', timeZone: 'UTC' });
+
 /** Format a wall-clock hour using the viewer's preferred hour cycle. */
 function displayHour(hour: number): string {
-	return new Intl.DateTimeFormat(undefined, {
-		hour: 'numeric',
-		timeZone: 'UTC',
-	}).format(new Date(Date.UTC(2026, 0, 1, hour)));
+	return hourFormatter.format(new Date(Date.UTC(2026, 0, 1, hour)));
 }
 
 const visibleDays = computed(() =>
@@ -274,6 +268,31 @@ function listingWash(segment: TimelineSegment | GuideEntry): string | null {
 	return guideListingWashUrl(segment.fanartUrl, segment.landscapeUrl);
 }
 
+/** Derive each mounted listing's presentation once per viewport or data change. */
+const listingViews = computed(() => {
+	const views = new Map<TimelineSegment | GuideEntry, {
+		style: Record<string, string>;
+		thumb: ReturnType<typeof guideListingThumb>;
+		wash: string | null;
+		timespan: string;
+	}>();
+	for (const programmes of visibleByChannel.value.values()) {
+		for (const programme of programmes) {
+			views.set(programme, {
+				style: segmentStyle(programme), thumb: listingThumb(programme), wash: listingWash(programme),
+				timespan: props.listingPresentation === 'guide'
+					? guideListingTimespan(programme.start, programme.finish, props.timeZone) : '',
+			});
+		}
+	}
+	return views;
+});
+
+/** Read presentation metadata for a listing selected by the current viewport. */
+function listingView(programme: TimelineSegment | GuideEntry) {
+	return listingViews.value.get(programme)!;
+}
+
 /** Open the Liquid-value inspector from a preview channel cell. */
 function inspectChannel(event: MouseEvent): void {
 	if (props.inspectListings && event.currentTarget instanceof HTMLElement) {
@@ -285,13 +304,15 @@ function inspectChannel(event: MouseEvent): void {
 function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): void {
 	if (props.inspectListings) {
 		if (event.type === 'click' && event.currentTarget instanceof HTMLElement) {
-			pinnedProgrammeId.value = entry.id;
+			pinnedProgramme.value = entry;
+			activeChannelId.value = entry.channelId;
 			emit('inspect', { id: entry.id, target: event.currentTarget });
 		}
 		return;
 	}
 
-	pinnedProgrammeId.value = entry.id;
+	pinnedProgramme.value = entry;
+	activeChannelId.value = entry.channelId;
 	if ('kind' in entry && entry.kind === 'block') {
 		itemPreview.value?.close();
 		void blockPopover.value?.show(
@@ -303,7 +324,8 @@ function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = fa
 	}
 	else {
 		const segment = 'segmentId' in entry
-			? segmentsById.value.get(entry.segmentId ?? '') : entry;
+			? guideIntervalIndex(activeSegments.value).query(Date.parse(entry.start), Date.parse(entry.finish))
+				.find(segment => segment.id === entry.segmentId) : entry;
 		if (event.type === 'click') {
 			itemPreview.value?.close();
 			if (segment) {
@@ -320,6 +342,7 @@ function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = fa
 function leaveEntry(): void {
 	itemPreview.value?.close();
 	blockPopover.value?.leave();
+	pinnedProgramme.value = null;
 }
 
 /** Load and display safe metadata for one committed guide segment. */
@@ -398,6 +421,9 @@ defineExpose({ centerCurrentTime });
 watch(
 	() => [props.startDate, props.guide, hourWidth.value] as const,
 	async ([startDate, , width], previous) => {
+		if (previous && previous[1] !== props.guide) {
+			pinnedProgramme.value = null;
+		}
 		const startChanged = !previous || previous[0] !== startDate;
 		const zoomChanged = Boolean(previous) && previous[2] !== width;
 		if (startChanged) {
@@ -413,6 +439,7 @@ watch(
 		}
 
 		readViewport();
+		measureOffset();
 	},
 );
 onMounted(() => {
@@ -421,6 +448,7 @@ onMounted(() => {
 	readViewport();
 	guideScroll.value?.addEventListener('scroll', scheduleViewportRead, { passive: true });
 	viewportObserver = new ResizeObserver(() => {
+		measureTrack();
 		scheduleViewportRead();
 	});
 	if (guideScroll.value) {
@@ -428,6 +456,7 @@ onMounted(() => {
 	}
 });
 onBeforeUnmount(() => {
+	closeSegment();
 	guideScroll.value?.removeEventListener('scroll', scheduleViewportRead);
 	viewportObserver?.disconnect();
 	viewportObserver = null;
@@ -472,142 +501,144 @@ onBeforeUnmount(() => {
 						:style="{ left: `${currentTimeLeft}px` }"
 					></span>
 				</div>
-				<template v-for="row in guideRows" :key="row.key">
-					<template v-if="row.type === 'family'">
-						<div class="guide-family-cell">{{ row.label }}</div>
-						<div class="guide-family-track" aria-hidden="true"></div>
-					</template>
-					<template v-else>
-						<template v-for="channel in [row.channel]" :key="channel.id">
-							<article
-								class="guide-channel-cell"
-								:class="{ 'guide-channel-inspect': inspectListings, 'guide-channel-cell-page': listingPresentation === 'guide' }"
-								@click="inspectChannel($event)"
-							>
-								<template v-if="listingPresentation === 'guide'">
-									<span class="channel-number">{{ channel.number }}</span>
-									<img
-										v-if="channelLogoUrl(channel)"
-										class="guide-channel-logo"
-										:src="channelLogoUrl(channel) ?? undefined"
-										alt=""
-									/>
-									<span v-else class="guide-channel-logo"><TvMinimal :size="36" aria-hidden="true" /></span>
-								</template>
-								<div v-else class="guide-channel-identity">
-									<img
-										v-if="channelLogoUrl(channel)"
-										class="guide-channel-logo"
-										:src="channelLogoUrl(channel) ?? undefined"
-										alt=""
-									/>
-									<span v-else class="guide-channel-logo"><TvMinimal :size="24" aria-hidden="true" /></span>
-									<span class="channel-number">{{ channel.number }}</span>
-								</div>
-								<div class="guide-channel-copy">
-									<h2>{{ channel.name }}</h2>
-									<p v-if="showTechnicalDetails">
-										{{ channel.video.width }}×{{ channel.video.height }}
-										{{ channel.video.format?.toUpperCase() }} ·
-										{{ channel.audio.format?.toUpperCase() }}
-									</p>
-									<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)"></slot>
-									<ScheduleWarningBadge
-										:issues="guideByChannel.get(channel.id)?.issues ?? []"
-										:channel-id="channel.id"
-										:time-zone="timeZone"
-									/>
-								</div>
-								<div v-if="$slots.actions" class="guide-channel-actions">
-									<slot name="actions" :channel="channel"></slot>
-								</div>
-							</article>
-							<div class="guide-channel-track">
-								<span
-									v-for="day in visibleDays.slice(1)"
-									:key="day.key"
-									class="guide-day-boundary"
-									:style="{ left: `${day.left}px` }"
-								></span>
-								<component
-									:is="'kind' in segment && segment.kind === 'block' ? 'div' : 'button'"
-									v-for="segment in visibleByChannel.get(channel.id) ?? []"
-									:key="segment.id"
-									type="button"
-									class="guide-programme"
-									:data-program-id="segment.programId"
-									:class="[`role-${segment.role}`, { truncated: segment.truncated, 'guide-block': 'kind' in segment && segment.kind === 'block' }]"
-									:style="segmentStyle(segment)"
-									:aria-label="`${segment.title}, ${segment.start} – ${segment.finish}`"
-									@click="openEntry(segment, $event, true)"
-									@pointerenter="openEntry(segment, $event)"
-									@pointermove="'kind' in segment && segment.kind === 'block' && blockPopover?.move($event, segment)"
-									@focusin="openEntry(segment, $event)"
-									@pointerleave="leaveEntry"
-									@focusout="leaveEntry"
-								>
-									<img
-										v-if="listingWash(segment)"
-										class="guide-programme-fanart"
-										:src="artworkVariantUrl(listingWash(segment), 'card')"
-										:srcset="artworkSrcset(listingWash(segment), 'card')"
-										alt=""
-										loading="lazy"
-										decoding="async"
-									/>
-									<img
-										v-if="listingThumb(segment)"
-										class="guide-programme-thumb"
-										:class="`guide-programme-thumb-${listingThumb(segment)!.kind}`"
-										:src="artworkVariantUrl(listingThumb(segment)!.url, 'card')"
-										:srcset="artworkSrcset(listingThumb(segment)!.url, 'card')"
-										alt=""
-										loading="lazy"
-										decoding="async"
-									/>
-									<component
-										:is="'kind' in segment && segment.kind === 'block' ? 'button' : 'span'"
-										class="guide-programme-copy"
-										:class="{ 'guide-block-copy': 'kind' in segment && segment.kind === 'block' }">
-										<strong>{{
-											useEntryTitles || segment.role !== 'dead-air' ? segment.title : 'No programming'
-										}}</strong>
-										<small
-											v-if="subtitleMode === 'source' || listingSubtitle(segment) || segment.truncated"
-										>{{
-											subtitleMode === 'source'
-												? ('kind' in segment && segment.kind === 'block' ? 'Slot' : guideSourceLabel(segment, programNames))
-												: listingSubtitle(segment)
-										}}<template v-if="segment.truncated">{{
-											subtitleMode === 'source' || listingSubtitle(segment) ? ' · truncated' : 'truncated'
-										}}</template></small
-										>
-										<small v-if="listingPresentation === 'guide'" class="guide-programme-timespan">{{
-											guideListingTimespan(segment.start, segment.finish, timeZone)
-										}}</small>
-									</component>
-								</component>
-								<div
-									v-if="!guideByChannel.get(channel.id)"
-									class="guide-empty-day"
-									:style="{ left: '8px', width: `${timelineWidth - 16}px` }"
-								>
-									<span>{{ emptyMessage }}</span>
-								</div>
-								<span
-									v-if="currentTimeLeft !== null"
-									class="current-time-line"
-									:style="{ left: `${currentTimeLeft}px` }"
-								></span>
-							</div>
+				<div ref="rowsBody" class="guide-rows" :style="{ height: `${rowsHeight}px` }" @focusin="retainFocus" @focusout="releaseFocus" @keydown="navigateRows">
+					<div v-for="{ row, index, top } in visibleRows" :key="row.key" :ref="measureRow" class="guide-row" :class="{ 'guide-row-last': index === guideRows.length - 1 }" tabindex="-1" :data-index="index" :data-guide-row="row.key" :style="{ top: `${top}px` }">
+						<template v-if="row.type === 'family'">
+							<div class="guide-family-cell">{{ row.label }}</div>
+							<div class="guide-family-track" aria-hidden="true"></div>
 						</template>
-					</template>
-				</template>
+						<template v-else>
+							<template v-for="channel in [row.channel]" :key="channel.id">
+								<article
+									class="guide-channel-cell"
+									:class="{ 'guide-channel-inspect': inspectListings, 'guide-channel-cell-page': listingPresentation === 'guide' }"
+									@click="inspectChannel($event)"
+								>
+									<template v-if="listingPresentation === 'guide'">
+										<span class="channel-number">{{ channel.number }}</span>
+										<img
+											v-if="channelLogoUrl(channel)"
+											class="guide-channel-logo"
+											:src="channelLogoUrl(channel) ?? undefined"
+											alt=""
+										/>
+										<span v-else class="guide-channel-logo"><TvMinimal :size="36" aria-hidden="true" /></span>
+									</template>
+									<div v-else class="guide-channel-identity">
+										<img
+											v-if="channelLogoUrl(channel)"
+											class="guide-channel-logo"
+											:src="channelLogoUrl(channel) ?? undefined"
+											alt=""
+										/>
+										<span v-else class="guide-channel-logo"><TvMinimal :size="24" aria-hidden="true" /></span>
+										<span class="channel-number">{{ channel.number }}</span>
+									</div>
+									<div class="guide-channel-copy">
+										<h2>{{ channel.name }}</h2>
+										<p v-if="showTechnicalDetails">
+											{{ channel.video.width }}×{{ channel.video.height }}
+											{{ channel.video.format?.toUpperCase() }} ·
+											{{ channel.audio.format?.toUpperCase() }}
+										</p>
+										<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)"></slot>
+										<ScheduleWarningBadge
+											:issues="guideByChannel.get(channel.id)?.issues ?? []"
+											:channel-id="channel.id"
+											:time-zone="timeZone"
+										/>
+									</div>
+									<div v-if="$slots.actions" class="guide-channel-actions">
+										<slot name="actions" :channel="channel"></slot>
+									</div>
+								</article>
+								<div class="guide-channel-track">
+									<span
+										v-for="day in visibleDays.slice(1)"
+										:key="day.key"
+										class="guide-day-boundary"
+										:style="{ left: `${day.left}px` }"
+									></span>
+									<component
+										:is="'kind' in segment && segment.kind === 'block' ? 'div' : 'button'"
+										v-for="segment in visibleByChannel.get(channel.id) ?? []"
+										:key="segment.id"
+										type="button"
+										class="guide-programme"
+										:data-program-id="segment.programId"
+										:class="[`role-${segment.role}`, { truncated: segment.truncated, 'guide-block': 'kind' in segment && segment.kind === 'block' }]"
+										:style="listingView(segment).style"
+										:aria-label="`${segment.title}, ${segment.start} – ${segment.finish}`"
+										@click="openEntry(segment, $event, true)"
+										@pointerenter="openEntry(segment, $event)"
+										@pointermove="'kind' in segment && segment.kind === 'block' && blockPopover?.move($event, segment)"
+										@focusin="openEntry(segment, $event)"
+										@pointerleave="leaveEntry"
+										@focusout="leaveEntry"
+									>
+										<img
+											v-if="listingView(segment).wash"
+											class="guide-programme-fanart"
+											:src="artworkVariantUrl(listingView(segment).wash, 'card')"
+											:srcset="artworkSrcset(listingView(segment).wash, 'card')"
+											alt=""
+											loading="lazy"
+											decoding="async"
+										/>
+										<img
+											v-if="listingView(segment).thumb"
+											class="guide-programme-thumb"
+											:class="`guide-programme-thumb-${listingView(segment).thumb!.kind}`"
+											:src="artworkVariantUrl(listingView(segment).thumb!.url, 'card')"
+											:srcset="artworkSrcset(listingView(segment).thumb!.url, 'card')"
+											alt=""
+											loading="lazy"
+											decoding="async"
+										/>
+										<component
+											:is="'kind' in segment && segment.kind === 'block' ? 'button' : 'span'"
+											class="guide-programme-copy"
+											:class="{ 'guide-block-copy': 'kind' in segment && segment.kind === 'block' }">
+											<strong>{{
+												useEntryTitles || segment.role !== 'dead-air' ? segment.title : 'No programming'
+											}}</strong>
+											<small
+												v-if="subtitleMode === 'source' || listingSubtitle(segment) || segment.truncated"
+											>{{
+												subtitleMode === 'source'
+													? ('kind' in segment && segment.kind === 'block' ? 'Slot' : guideSourceLabel(segment, programNames))
+													: listingSubtitle(segment)
+											}}<template v-if="segment.truncated">{{
+												subtitleMode === 'source' || listingSubtitle(segment) ? ' · truncated' : 'truncated'
+											}}</template></small
+											>
+											<small v-if="listingPresentation === 'guide'" class="guide-programme-timespan">{{
+												listingView(segment).timespan
+											}}</small>
+										</component>
+									</component>
+									<div
+										v-if="!guideByChannel.get(channel.id)"
+										class="guide-empty-day"
+										:style="{ left: '8px', width: `${timelineWidth - 16}px` }"
+									>
+										<span>{{ emptyMessage }}</span>
+									</div>
+									<span
+										v-if="currentTimeLeft !== null"
+										class="current-time-line"
+										:style="{ left: `${currentTimeLeft}px` }"
+									></span>
+								</div>
+							</template>
+						</template>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
 	<GuideItemPreview ref="itemPreview" />
-	<GuideBlockPopover ref="blockPopover" :segments="actualSegments" :program-names="programNames" :time-zone="timeZone" @select="openSegment" />
+	<GuideBlockPopover ref="blockPopover" :segments="activeSegments" :program-names="programNames" :time-zone="timeZone" @select="openSegment" />
 	<GuideSegmentPreviewModal
 		v-if="selectedLoading || selectedDetail || selectedError"
 		:detail="selectedDetail"

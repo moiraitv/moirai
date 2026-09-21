@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import {
 	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
@@ -23,7 +23,7 @@ export const useChannelsStore = defineStore('channels', () => {
 	const publicUrlStatus = ref<'configured' | 'unreachable-default'>('configured');
 	const maxExplicitMediaItems = ref(DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS);
 	const capabilitiesLoaded = ref(false);
-	const guide = ref<ScheduleGuide | null>(null);
+	const guide = shallowRef<ScheduleGuide | null>(null);
 	const guideWeekStart = ref('');
 	const guideDays = ref(0);
 	const guideLoading = ref(false);
@@ -105,8 +105,36 @@ export const useChannelsStore = defineStore('channels', () => {
 		}
 	}
 
+	let pendingGuide: { key: string; promise: Promise<void> } | undefined;
+
+	/** Share a route bootstrap read without coalescing explicit mutations or live refreshes. */
+	function loadGuide(
+		startDate: string,
+		days = 7,
+		navigation: GuideNavigation = 'preserve',
+		reusePending = false,
+	): Promise<void> {
+		const today = dateKey(new Date(), timeZone.value);
+		if (startDate < today) {
+			startDate = today;
+			days = 7;
+			navigation = 'preserve';
+		}
+		const key = `${startDate}:${days}:${navigation}`;
+		if (reusePending && pendingGuide?.key === key) {
+			return pendingGuide.promise;
+		}
+		const promise = performGuideLoad(startDate, days, navigation).finally(() => {
+			if (pendingGuide?.promise === promise) {
+				pendingGuide = undefined;
+			}
+		});
+		pendingGuide = { key, promise };
+		return promise;
+	}
+
 	/** Refresh the guide, advancing expired start dates and navigation history to today. */
-	async function loadGuide(
+	async function performGuideLoad(
 		startDate: string,
 		days = 7,
 		navigation: GuideNavigation = 'preserve',

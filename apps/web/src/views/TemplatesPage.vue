@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { orderCatalogNames } from '../catalog-name-order';
 import { computed, onMounted, ref } from 'vue';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, Search } from '@lucide/vue';
-import { catalogSortTitle, SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type ScheduleSlot, type ScheduleTemplate } from '@moirai/shared';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import { templateSlotStyle } from '../channel-schedule-display';
@@ -38,9 +39,13 @@ const templatePageSize = computed(() => {
 const requestedTemplatePage = computed(() => Math.max(1, Number(queryText('page') || 1) || 1));
 const filteredTemplates = computed(() => {
 	const search = templateSearch.value.trim().toLocaleLowerCase();
-	return templates.value.filter((template) => {
+	return orderCatalogNames(templates.value.filter((template) => {
 		if (search && !template.name.toLocaleLowerCase().includes(search)) {
 			return false; 
+		}
+
+		if (templateChannelFilter.value === 'all') {
+			return true;
 		}
 
 		const assignments = channelSchedules.value.filter((schedule) => scheduleUsesTemplate(schedule, template.id));
@@ -53,8 +58,7 @@ const filteredTemplates = computed(() => {
 		}
 
 		return true;
-	}).sort((left, right) =>
-		catalogSortTitle(left.name).localeCompare(catalogSortTitle(right.name), 'en-US', { sensitivity: 'base' }));
+	}));
 });
 const templateTotalPages = computed(() => Math.max(1, Math.ceil(filteredTemplates.value.length / templatePageSize.value)));
 const templatePage = computed(() => Math.min(requestedTemplatePage.value, templateTotalPages.value));

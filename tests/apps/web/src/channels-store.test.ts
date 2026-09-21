@@ -155,3 +155,51 @@ it('does not propagate failures superseded by newer channel, capability, or guid
 		request.mockRestore();
 	}
 });
+
+it('shares route bootstrap reads but lets live refresh supersede an in-flight snapshot', async () => {
+	let resolve!: (value: ScheduleGuide) => void;
+	const request = vi.spyOn(api, 'scheduleGuide').mockImplementationOnce(() => new Promise(done => {
+		resolve = done;
+	}));
+	const store = useChannelsStore();
+	const first = store.loadGuide('2026-08-01', 1, 'preserve', true);
+	const second = store.loadGuide('2026-08-01', 1, 'preserve', true);
+	expect(request).toHaveBeenCalledTimes(1);
+	const fresh = guide('2026-08-01', 1, 1);
+	fresh.committedAt = '2026-08-01T12:00:00Z';
+	request.mockResolvedValue(fresh);
+	await store.loadGuide('2026-08-01', 1);
+	resolve(guide('2026-08-01', 1, 1));
+	await Promise.all([first, second]);
+	expect(store.guide).toBe(fresh);
+	expect(store.guide?.channels).toBe(fresh.channels);
+	await store.loadGuide('2026-08-01', 1, 'preserve', true);
+	expect(request).toHaveBeenCalledTimes(3);
+});
+
+it('shares the remaining week after a progressive first day and retries a failed shared request', async () => {
+	let rejectWeek!: (error: Error) => void;
+	const request = vi.spyOn(api, 'scheduleGuide').mockImplementation(async (start, days) => {
+		if (days === 1) {
+			return guide(start, 1, 1);
+		}
+		return new Promise<ScheduleGuide>((_, reject) => {
+			rejectWeek = reject;
+		});
+	});
+	const store = useChannelsStore();
+	const first = store.loadGuide('2026-08-01', 7, 'preserve', true);
+	await vi.waitFor(() => expect(store.guideDays).toBe(1));
+	const second = store.loadGuide('2026-08-01', 7, 'preserve', true);
+	expect(request).toHaveBeenCalledTimes(2);
+	const settled = Promise.allSettled([first, second]);
+	rejectWeek(new Error('Week unavailable'));
+	expect((await settled).map(result => result.status)).toEqual(['rejected', 'rejected']);
+	expect(store.guideDays).toBe(1);
+	expect(store.guideLoaded).toBe(true);
+	request.mockResolvedValue(guide('2026-08-01', 7, 7));
+	await store.loadGuide('2026-08-01', 7, 'preserve', true);
+	expect(request).toHaveBeenCalledTimes(3);
+	expect(store.guideDays).toBe(7);
+	expect(store.error).toBe('');
+});
