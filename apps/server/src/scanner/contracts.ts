@@ -25,6 +25,7 @@ export interface ScanDiscovery {
 export interface ScanContext {
 	signal: AbortSignal;
 	probeCache: Map<string, MediaProbeCacheEntry>;
+	tailAssessments?: Map<string, NonNullable<ScanIssue['tailAssessment']>>;
 	onProgress: (progress: ScanProgress) => void;
 }
 

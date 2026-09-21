@@ -92,20 +92,20 @@
       }
     },
     "libraries.manage": {
-      "digest": "621b2740d22b84c1a8da06377f5fef574d1b60a63b1ce942609d6ec2f524df9f",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "digest": "24b37e3766521fc6c654af6c522811888942ecd1e44128841c52db7c7028a647",
+      "reviewedAt": "2026-09-21T17:22:49.538Z",
       "components": {
         "text": {
-          "digest": "65aeb0415554d601aec93c6db752d83d1cde7ea8e989e283aaf6c6c7d07fd184",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "digest": "024e39cfb5e9b84e08bccf448d988c03a9663e30c2758e048b72be34b3231b9f",
+          "reviewedAt": "2026-09-21T17:22:49.538Z"
         },
         "screenshots": {
           "digest": "410033f12b37ae0aca61399d19d6f121ae9b2a0a9dc32345ec3c425a74b66ae4",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-21T17:22:49.538Z"
         },
         "icons": {
           "digest": "b7de0ac7171638ed763c01109e08eb02e28218b0f3b1c1f21b81cdad54fa9051",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-21T17:22:49.538Z"
         }
       }
     },

@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
 import {
+	isSuppressedScanIssue,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	WATCHER_INTEGRITY_SCAN_INTERVAL_MINUTES,
 	type Library,
@@ -419,6 +420,7 @@ export class ScannerManager {
 			discovery = await adapter.discover(library, {
 				signal,
 				probeCache,
+				tailAssessments: await this.repository.listTailAssessments?.(libraryId),
 				onProgress: (progress) => this.publishScanProgress(run, progress),
 			});
 		}
@@ -812,7 +814,7 @@ export class ScannerManager {
 				discoveredCount: scan.discoveredCount,
 				changedCount: scan.changedCount,
 				removedCount: scan.removedCount,
-				issueCount: scan.issues.length,
+				issueCount: scan.issues.filter(issue => !isSuppressedScanIssue(issue)).length,
 				affectsProgramming,
 				...(progress ? { progress } : {}),
 			},

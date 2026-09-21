@@ -55,7 +55,7 @@ import {
 	type ParsedVideoFilename,
 } from './video-filename.js';
 import { collapseMultipartItems } from './multipart.js';
-import { mediaDurationHealthIssues } from './media-duration-health.js';
+import { assessDurationHealth, type TailInspector } from './media-duration-health.js';
 import { runScanQueue, type ScanFileOutcome } from './scan-queue.js';
 import type {
 	MissingItemPresenceCheck,
@@ -69,6 +69,8 @@ interface DiscoveryOptions {
 	openDirectory?: typeof opendir;
 	signal?: AbortSignal;
 	probeCache?: Map<string, MediaProbeCacheEntry>;
+	tailAssessments?: Map<string, NonNullable<ScanIssue['tailAssessment']>>;
+	inspectTail?: TailInspector;
 	probeMedia?: (scanRoot: string, file: string, signal?: AbortSignal) => Promise<MediaProbeResult>;
 	discoveryConcurrency?: number;
 	onProgress?: (progress: ScanProgress) => void;
@@ -560,7 +562,10 @@ export async function discoverOnDisk(
 		}
 
 		if (probeResult) {
-			issues.push(...mediaDurationHealthIssues(probeResult, relativePath));
+			issues.push(...await assessDurationHealth(probeResult, {
+				root: scanRoot, file, relativePath, fingerprint: probeFingerprint,
+				cached: options.tailAssessments?.get(relativePath), inspect: options.inspectTail, signal,
+			}));
 		}
 
 		// Parse bounded descriptive metadata without trusting it for playback properties.

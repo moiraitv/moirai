@@ -599,3 +599,33 @@ describe('ScannerManager', () => {
 		);
 	});
 });
+
+
+it('publishes only active warnings while retaining suppressed findings in scan results', async () => {
+	const completed = {
+		...running, status: 'complete' as const, removedItemIds: [],
+		issues: [
+			{ code: 'media_audio_video_duration_mismatch', path: 'film.mp4', message: 'tail', severity: 'warning' as const,
+				tailAssessment: { fingerprint: 'file', result: 'mostly-black' as const, accepted: false } },
+			{ code: 'nfo_missing', path: 'other.mp4', message: 'missing', severity: 'warning' as const },
+		],
+	};
+	const repository = {
+		getLibraryScanTarget: vi.fn().mockResolvedValue(library),
+		beginScan: vi.fn().mockResolvedValue(running),
+		listMediaProbeCache: vi.fn().mockResolvedValue([]),
+		listTailAssessments: vi.fn().mockResolvedValue(new Map()),
+		reconcileScan: vi.fn().mockResolvedValue(completed),
+		invalidateSchedulingCatalog: vi.fn(),
+	} as unknown as Repository;
+	mocks.discoverOnDisk.mockResolvedValue({ groups: [], items: [], issues: completed.issues,
+		traversalComplete: true, sourceIdentity: { sourceType: 'on-disk', sourceKey: '/media', details: {} }, conflicts: [] });
+	const publish = vi.fn();
+	const manager = new ScannerManager(repository, { publish }, sourceRegistry());
+	const result = await manager.scan(library.id, 'manual');
+	expect(result.issues).toHaveLength(2);
+	expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
+		data: expect.objectContaining({ status: 'complete', issueCount: 1 }),
+	}));
+	await manager.close();
+});

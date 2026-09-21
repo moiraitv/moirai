@@ -1,3 +1,4 @@
+import { registerSilentEndingRoutes } from './silent-endings.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
@@ -39,6 +40,7 @@ export function registerLibraryRoutes(
 	app: FastifyInstance,
 	{ repository, scanner, events, artworkCache, timelineMaterializer }: LibraryRouteDependencies,
 ): void {
+	registerSilentEndingRoutes(app, repository, events);
 	// Validate source definitions through their registered scanner adapter before persistence.
 	const validateLibrarySource = async (
 		input: Pick<LibraryCreate, 'sourceType' | 'sourceConfig'>,

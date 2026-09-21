@@ -798,3 +798,10 @@ export const guideSegmentDetailSchema = z.object({
 		libraryName: z.string().nullable(),
 	}),
 });
+
+/** Accept or restore one silent-ending finding only for its observed physical file identity. */
+export const silentEndingAcceptanceSchema = z.object({
+	path: z.string().min(1).max(4096),
+	fingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+	accepted: z.boolean(),
+});
