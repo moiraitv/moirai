@@ -147,3 +147,14 @@ describe('dynamic scheduling content filters', () => {
 		})).map((item) => item.title)).toEqual(['Zulu', 'The Example Film', 'Missing']);
 	});
 });
+
+describe('duration bounds in scheduling', () => {
+	it.each([
+		[null, null, null, true], [0, null, null, false], [null, 60, null, false],
+		[60, null, 59.999, false], [60, null, 60, true],
+		[null, 60, 60, true], [null, 60, 60.001, false],
+		[60, 60, 60, true], [0, 0, 0, true],
+	])('matches inclusive %s–%s bounds against %s seconds', (minimumDurationSeconds, maximumDurationSeconds, durationSeconds, expected) => {
+		expect(mediaMatchesLibraryQuery({ ...media, durationSeconds }, source({ minimumDurationSeconds, maximumDurationSeconds }))).toBe(expected);
+	});
+});

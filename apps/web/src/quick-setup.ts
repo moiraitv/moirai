@@ -137,6 +137,8 @@ export function quickSourceSummary(source: QuickChannelSetupCreate['source']): s
 			source.name,
 			source.releaseYearFrom,
 			source.releaseYearTo,
+			source.minimumDurationSeconds,
+			source.maximumDurationSeconds,
 			source.minimumRating,
 			source.minimumUserRating,
 			source.addedFrom,

@@ -9,6 +9,7 @@ import {
 	mediaSortSchema,
 	sortDirectionSchema,
 	validateMediaGenreRules,
+	validateMediaDurationRange,
 } from '@moirai/shared';
 import {
 	mediaBrowseResultSchema,
@@ -56,6 +57,12 @@ const optionalRatingQuerySchema = z.preprocess(
 	z.coerce.number().min(0).max(10).optional(),
 );
 
+/** Optional whole-second bound; blank query inputs leave that end unrestricted. */
+const optionalDurationQuerySchema = z.preprocess(
+	(value) => value === '' || value === null ? undefined : value,
+	z.coerce.number().int().nonnegative().optional(),
+);
+
 /** Filters, sorting, and pagination accepted by catalog browsing. */
 const mediaBrowseQuerySchema = z.object({
 	parentId: z.uuid().optional(),
@@ -69,6 +76,8 @@ const mediaBrowseQuerySchema = z.object({
 	album: z.string().trim().max(120).optional(),
 	releaseYearFrom: z.coerce.number().int().min(1800).max(2200).optional(),
 	releaseYearTo: z.coerce.number().int().min(1800).max(2200).optional(),
+	minimumDurationSeconds: optionalDurationQuerySchema,
+	maximumDurationSeconds: optionalDurationQuerySchema,
 	minimumRating: optionalRatingQuerySchema,
 	minimumUserRating: optionalRatingQuerySchema,
 	addedFrom: z.iso.datetime({ offset: true }).optional(),
@@ -78,7 +87,7 @@ const mediaBrowseQuerySchema = z.object({
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
 	director: z.string().trim().max(120).default(''),
-}).superRefine(validateMediaGenreRules);
+}).superRefine(validateMediaGenreRules).superRefine(validateMediaDurationRange);
 
 /** Genre rules used to calculate contextual Match all facet-action counts. */
 const mediaGenreFacetQuerySchema = z.object({
@@ -142,6 +151,8 @@ export function registerCatalogRoutes(
 			parentId: query.parentId ?? null,
 			releaseYearFrom: query.releaseYearFrom ?? null,
 			releaseYearTo: query.releaseYearTo ?? null,
+			minimumDurationSeconds: query.minimumDurationSeconds ?? null,
+			maximumDurationSeconds: query.maximumDurationSeconds ?? null,
 			minimumRating: query.minimumRating ?? null,
 			minimumUserRating: query.minimumUserRating ?? null,
 			addedFrom: query.addedFrom ?? null,

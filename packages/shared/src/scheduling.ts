@@ -13,6 +13,7 @@ import {
 	catalogProgramItemQuerySchema,
 	sortDirectionSchema,
 	validateMediaGenreRules,
+	validateMediaDurationRange,
 } from './catalog.js';
 
 /** Number of nominal wall-clock seconds represented by a daily template. */
@@ -228,6 +229,8 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		album: catalogProgramItemFilterShape.album,
 		releaseYearFrom: catalogProgramItemFilterShape.releaseYearFrom.removeDefault().optional(),
 		releaseYearTo: catalogProgramItemFilterShape.releaseYearTo.removeDefault().optional(),
+		minimumDurationSeconds: catalogProgramItemFilterShape.minimumDurationSeconds.removeDefault().optional(),
+		maximumDurationSeconds: catalogProgramItemFilterShape.maximumDurationSeconds.removeDefault().optional(),
 		minimumRating: catalogProgramItemFilterShape.minimumRating.removeDefault().optional(),
 		minimumUserRating: catalogProgramItemFilterShape.minimumUserRating.removeDefault().optional(),
 		addedFrom: catalogProgramItemFilterShape.addedFrom.removeDefault().optional(),
@@ -242,6 +245,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 	}),
 ]).superRefine((source, context) => {
 	if (source.type === 'library-query') {
+		validateMediaDurationRange(source, context);
 		validateMediaGenreRules({
 			genres: source.genres,
 			excludedGenres: source.excludedGenres ?? [],
@@ -398,6 +402,7 @@ export const quickChannelSourceSchema = z.discriminatedUnion('type', [
 	}),
 ]).superRefine((source, context) => {
 	if (source.type === 'library-query') {
+		validateMediaDurationRange(source, context);
 		validateMediaGenreRules(source, context);
 	}
 });
@@ -440,7 +445,7 @@ export const quickChannelQueryPreviewRequestSchema = z.object({
 	itemLimit: z.number().int().min(1).max(MAX_LIBRARY_QUERY_ITEMS).nullable().default(null),
 	cursor: z.string().regex(/^\d+$/).max(12).nullable().default(null),
 	limit: z.number().int().min(1).max(48).default(24),
-}).superRefine(validateMediaGenreRules);
+}).superRefine(validateMediaGenreRules).superRefine(validateMediaDurationRange);
 /** Shared request for previewing currently indexed dynamic library-query matches. */
 export type QuickChannelQueryPreviewRequest = z.infer<
 	typeof quickChannelQueryPreviewRequestSchema

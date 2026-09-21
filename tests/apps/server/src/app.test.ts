@@ -2469,3 +2469,22 @@ describe('guide template API', () => {
 		expect((await app.inject({ method: 'DELETE', url: `/api/v1/guide-templates/${template.id}` })).statusCode).toBe(204);
 	}, 15_000);
 });
+
+
+it('validates duration query bounds and forwards unrestricted and inclusive values', async () => {
+	const { app, services } = await fixture();
+	const libraryId = randomUUID();
+	const browse = vi.spyOn(services.repository, 'browseMedia');
+	for (const [query, minimumDurationSeconds, maximumDurationSeconds] of [
+		['', null, null], ['minimumDurationSeconds=&maximumDurationSeconds=', null, null],
+		['minimumDurationSeconds=0', 0, null], ['maximumDurationSeconds=90061', null, 90061],
+		['minimumDurationSeconds=60&maximumDurationSeconds=60', 60, 60],
+	] as const) {
+		const response = await app.inject(`/api/v1/libraries/${libraryId}/media?${query}`);
+		expect(response.statusCode).toBe(200);
+		expect(browse).toHaveBeenLastCalledWith(libraryId, expect.objectContaining({ minimumDurationSeconds, maximumDurationSeconds }));
+	}
+	for (const query of ['minimumDurationSeconds=-1', 'maximumDurationSeconds=1.5', 'minimumDurationSeconds=abc', 'minimumDurationSeconds=9007199254740992', 'minimumDurationSeconds=61&maximumDurationSeconds=60']) {
+		expect((await app.inject(`/api/v1/libraries/${libraryId}/media?${query}`)).statusCode).toBe(400);
+	}
+});

@@ -1,3 +1,4 @@
+import './documentation/duration-filters';
 import { randomUUID } from 'node:crypto';
 import { rename, mkdir, writeFile, copyFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -108,6 +109,7 @@ test('captures libraries and scanning', async ({ page, documentationServer }) =>
 		const bounds = await filters.boundingBox();
 		return Boolean(bounds && bounds.y >= 0 && bounds.y + bounds.height <= page.viewportSize()!.height);
 	}).toBe(true);
+	await filters.locator('.filter-modal-body').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }));
 	await capture(page, 'library-filters.png');
 	await filters.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(filters).toBeHidden();

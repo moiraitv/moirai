@@ -116,6 +116,8 @@ export interface MediaQuery {
 	album?: string | undefined;
 	releaseYearFrom?: number | undefined;
 	releaseYearTo?: number | undefined;
+	minimumDurationSeconds?: number | undefined;
+	maximumDurationSeconds?: number | undefined;
 	minimumRating?: number | undefined;
 	minimumUserRating?: number | undefined;
 	addedFrom?: string | undefined;

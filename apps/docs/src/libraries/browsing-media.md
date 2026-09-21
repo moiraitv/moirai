@@ -27,9 +27,11 @@ Select ![Filter media](/icons/funnel.svg) above the catalog to open these contro
 
 ![Filter media editor showing genre choices, title search, release year, and added-date controls](/screenshots/library-filters.png)
 
-Music-video libraries also offer **Artist** and **Album** filters. Artist matches any credited artist or the parent artist; Album matches album metadata or the parent album. Both accept part of a name, ignoring case.
-
 The same filters are available in Quick Setup and program library queries. Use **Match all** when every selected genre must be present or **Match any** when one is enough; excluded genres remove matching items. Release-year and indexed-date filters answer different questions: when the media was released versus when Moirai added it to the catalog.
+
+Use **Duration → From** and **To** to filter by playback length. Enter hours, minutes, and seconds; either end can be left blank or provide both limits include the exact duration entered. Blank components within an entered upper or lower bound count as zero.
+
+Music-video libraries also offer **Artist** and **Album** filters. Artist matches any credited artist or the parent artist; Album matches album metadata or the parent album. Both accept part of a name, ignoring case.
 
 Use the eye button in the upper-left corner of a media card for a quick preview. It appears on hover or keyboard focus on desktop and stays visible on touch devices.
 
@@ -41,11 +43,11 @@ Open **Used by** at the right edge of the item page to see programs that select 
 
 ![Media usage and realized showings](/screenshots/media-item-usage.png)
 
-Each catalog card has a **+** control that adds that one item or group to a program without entering selection mode. It uses the same destination dialog as **Add Selected**.
-
 Selection mode lets you choose shows, seasons, artists, or albums and add them to a new or existing selected-groups program. For example, open a show, choose **Select groups**, select seasons 1–8, then choose **Add Selected**. Name a new program and leave **Playback order** set to **Sequential** to play only those seasons in episode order. Newly indexed episodes within the selected seasons join automatically.
 
 **Select Page** selects the groups or items on the current page. If a page contains both groups and individual items, choose **Groups** or **Items** in the selection toolbar; changing the kind clears the current selection. The destination dialog only offers compatible programs from the same library, and skips references already selected.
+
+Each catalog card has a **+** control that adds that one item or group to a program without entering selection mode. It uses the same destination dialog as **Add Selected**.
 
 ![Library selection mode with two movies selected and the Add Selected, Add All, and Select Page controls](/screenshots/library-selection.png)
 

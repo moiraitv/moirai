@@ -10,12 +10,12 @@ it('filters candidates without filtering anchors and preserves saved filters acr
 	try {
 		await f.embeddings();
 		const config = similarityProgramConfigSchema.parse({ ...f.program.config,
-			filter: { genres: ['Comedy'], excludedGenres: ['Horror'], releaseYearFrom: 1980, releaseYearTo: 1989 } });
+			filter: { genres: ['Comedy'], excludedGenres: ['Horror'], releaseYearFrom: 1980, releaseYearTo: 1989, minimumDurationSeconds: 60, maximumDurationSeconds: 120 } });
 		await f.repository.updateProgram(f.program.id, { config });
 		f.reopen();
 		const context = await f.context();
 		const program = context.programs.get(f.program.id)!;
-		expect(program.config).toMatchObject({ filter: { genres: ['comedy'], excludedGenres: ['horror'], releaseYearFrom: 1980, releaseYearTo: 1989 } });
+		expect(program.config).toMatchObject({ filter: { genres: ['comedy'], excludedGenres: ['horror'], releaseYearFrom: 1980, releaseYearTo: 1989, minimumDurationSeconds: 60, maximumDurationSeconds: 120 } });
 		const candidates = context.catalog.media.filter((item) => item.id !== f.ids[0]);
 		for (const item of context.catalog.media) {
 			item.genres = ['drama'];
@@ -24,9 +24,10 @@ it('filters candidates without filtering anchors and preserves saved filters acr
 		for (const item of candidates.slice(0, 3)) {
 			item.genres = ['comedy'];
 			item.year = 1985;
+			item.durationSeconds = 90;
 		}
 		candidates[1]!.genres.push('horror');
-		candidates[2]!.year = 1995;
+		candidates[2]!.durationSeconds = 120.001;
 		const source = semanticSource(config, [...context.programs.values()], context.catalog);
 		expect(source.sourceIds).toEqual([f.ids[0]]);
 		expect(source.anchors).toHaveLength(1);

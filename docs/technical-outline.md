@@ -565,6 +565,14 @@ Unicode folding. Search results skip A–Z navigation aggregation. Catalog and s
 searches share those predicates. Search
 results carry optional match reasons, resolved in page-bounded batches only while searching;
 cards share the same formatter and virtualized rows account for the extra explanation line.
+Shared catalog filters support inclusive minimumDurationSeconds and maximumDurationSeconds bounds
+against indexed playback duration, including fractional media durations. Bounds are optional,
+nonnegative safe whole seconds with minimum no greater than maximum; unknown durations are excluded
+when either bound is set. The shared hours/minutes/seconds editor preserves bounds in library URLs,
+recursive selection, dynamic programs, similarity candidate filters, and Quick Setup. SQL catalog
+queries and in-memory scheduling apply the same rules, without additional per-item queries. Existing
+saved filters omit the bounds and remain unrestricted without migration.
+
 Recursive Add All selection applies the same search and filters as browsing. Music-video Artist
 and Album filters are shared by Library, Programs, and Quick Setup and evaluated against the same
 credits and hierarchy labels in SQL and scheduling. Music matching shares Unicode lowercase
@@ -929,7 +937,7 @@ M3U entries include Channels DVR's `channel-id` from the persistent channel UUID
 stable across renames and renumbering; existing `tvg-id`, `tvg-chno`, XMLTV identifiers, and stream
 URL generation remain unchanged.
 The Guide timeline fits approximately two elapsed hours on phones (up to 680px), four on tablets
-(up to 1220px), and six on desktops; Channels retains its six-hour scale. The Guide week controls
+(up to 1220px), and four on desktops; Channels retains its six-hour scale. The Guide week controls
 and synchronized time ruler remain sticky during page scrolling, below the mobile app header. The Guide
 page channel column uses fixed-width number, unbezeled icon, and name tracks. Guide listings may show
 a landscape or poster thumbnail when width allows, using the card artwork variant so stills stay

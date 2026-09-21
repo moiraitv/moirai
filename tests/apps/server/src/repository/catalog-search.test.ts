@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { catalogProgramItemQuerySchema } from '@moirai/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
 import { Repository, type DiscoveredGroup, type DiscoveredItem } from '@server/repository/index.js';
@@ -144,6 +145,8 @@ describe('catalog search persist', () => {
 			name: '',
 			releaseYearFrom: null,
 			releaseYearTo: null,
+			minimumDurationSeconds: null,
+			maximumDurationSeconds: null,
 			minimumRating: null,
 			minimumUserRating: null,
 			addedFrom: null,
@@ -244,4 +247,29 @@ describe('catalog search persist', () => {
 		expect(body()).toContain('Renamed');
 		expect(body()).not.toContain('Example');
 	});
+});
+
+
+it('filters exact playback durations consistently in catalog counts and recursive selection', async () => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	databases.push(database);
+	const repository = new Repository(database.db);
+	const library = await repository.createLibrary({ name: 'Duration', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' }, scanIntervalMinutes: 15, watcherEnabled: false, enabled: true });
+	const group = show(crypto.randomUUID(), 'Show');
+	const items = [59_999, 60_000, 60_001, null].map((durationMilliseconds, index) => ({ ...episode(group.id, `Episode ${index}`), durationMilliseconds }));
+	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [group], items, [], true);
+	for (const [bounds, expected] of [
+		[{ minimumDurationSeconds: 60, maximumDurationSeconds: 60 }, [items[1]!.id]],
+		[{ minimumDurationSeconds: 60 }, [items[1]!.id, items[2]!.id]],
+		[{ maximumDurationSeconds: 60 }, [items[0]!.id, items[1]!.id]],
+		[{ minimumDurationSeconds: 0 }, items.slice(0, 3).map(item => item.id)],
+	] as const) {
+		const query = catalogProgramItemQuerySchema.parse({ ...bounds });
+		const result = await repository.browseMedia(library.id, { ...query, page: 1, pageSize: 100 });
+		expect(result.items.map(item => item.id)).toEqual(expected);
+		expect(result.pagination.totalEntries).toBe(expected.length);
+		const selection = repository.resolveProgramItemSelection(library.id, { ...query, parentId: group.id });
+		expect(selection.itemIds).toEqual(expected);
+		expect(selection.matchedItemCount).toBe(expected.length);
+	}
 });

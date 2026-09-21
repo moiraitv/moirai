@@ -108,6 +108,14 @@ export class MediaCatalogRepository {
 			conditions.push('i.year <= ?');
 			conditionParams.push(query.releaseYearTo);
 		}
+		if (query.minimumDurationSeconds != null) {
+			conditions.push('i.duration_milliseconds / 1000.0 >= ?');
+			conditionParams.push(query.minimumDurationSeconds);
+		}
+		if (query.maximumDurationSeconds != null) {
+			conditions.push('i.duration_milliseconds / 1000.0 <= ?');
+			conditionParams.push(query.maximumDurationSeconds);
+		}
 		if (query.minimumRating !== null) {
 			conditions.push("json_extract(i.metadata, '$.rating') >= ?");
 			conditionParams.push(query.minimumRating);
@@ -196,6 +204,8 @@ export class MediaCatalogRepository {
 			|| query.director
 			|| query.releaseYearFrom !== null
 			|| query.releaseYearTo !== null
+			|| query.minimumDurationSeconds != null
+			|| query.maximumDurationSeconds != null
 			|| query.minimumRating !== null
 			|| query.minimumUserRating !== null
 			|| query.addedFrom
@@ -534,6 +544,8 @@ export class MediaCatalogRepository {
 				name: '',
 				releaseYearFrom: null,
 				releaseYearTo: null,
+				minimumDurationSeconds: null,
+				maximumDurationSeconds: null,
 				minimumRating: null,
 				minimumUserRating: null,
 				addedFrom: null,

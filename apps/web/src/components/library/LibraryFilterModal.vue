@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, useId, useTemplateRef, watch } from 'vue';
 import { CalendarDays, Check, Filter, Search, Star, UserRound, X } from '@lucide/vue';
 import { MAX_MEDIA_GENRE_RULES, type MediaGenreFacet } from '@moirai/shared';
+import DurationFilterInput from './DurationFilterInput.vue';
+import { durationFilterError } from './duration-filter';
 import { api } from '../../api';
 import { countLabel } from '../../count-label';
 import { useAnimatedDismissal } from '../../motion';
@@ -21,9 +23,13 @@ const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('
 const genreMatchInput = useTemplateRef<HTMLInputElement>('genreMatchInput');
 const localDraft = reactive<LibraryFilterDraft>({
 	...props.draft,
+	minimumDuration: { ...props.draft.minimumDuration },
+	maximumDuration: { ...props.draft.maximumDuration },
 	genres: [...props.draft.genres],
 	excludedGenres: [...props.draft.excludedGenres],
 });
+const durationErrorId = useId();
+const durationError = computed(() => durationFilterError(localDraft.minimumDuration, localDraft.maximumDuration));
 const contextualGenres = ref<MediaGenreFacet[] | null>(null);
 const genreCountsLoading = ref(false);
 const genreCountsError = ref(false);
@@ -46,12 +52,14 @@ function clearDraft(): void {
 
 /** Commit an independent snapshot so later edits cannot mutate applied route state. */
 function applyDraft(): void {
-	if (genreRuleLimitExceeded.value) {
+	if (genreRuleLimitExceeded.value || durationError.value) {
 		return;
 	}
 
 	emit('apply', {
 		...localDraft,
+		minimumDuration: { ...localDraft.minimumDuration },
+		maximumDuration: { ...localDraft.maximumDuration },
 		genres: [...localDraft.genres],
 		excludedGenres: localDraft.genreMatch === 'all'
 			? [...localDraft.excludedGenres]
@@ -254,7 +262,16 @@ onUnmounted(() => genreCountsController?.abort());
 							</div>
 						</fieldset>
 
-						<label class="filter-field">
+						<fieldset class="filter-range-field">
+							<legend>Duration</legend>
+							<div class="filter-range-inputs">
+								<DurationFilterInput v-model="localDraft.minimumDuration" label="From" :invalid="Boolean(durationError)" :error-id="durationErrorId" />
+								<DurationFilterInput v-model="localDraft.maximumDuration" label="To" :invalid="Boolean(durationError)" :error-id="durationErrorId" />
+							</div>
+							<p v-if="durationError" :id="durationErrorId" class="notice error" role="alert">{{ durationError }}</p>
+						</fieldset>
+
+						<label class="filter-field filter-rating-start">
 							<span>Minimum popular rating</span>
 							<span class="filter-input"><input v-model="localDraft.minimumRating" type="number" inputmode="decimal" min="0" max="10" step="0.1" placeholder="0–10" /><Star :size="19" aria-hidden="true" /></span>
 						</label>
@@ -281,7 +298,7 @@ onUnmounted(() => genreCountsController?.abort());
 				<footer class="filter-modal-footer">
 					<button type="button" class="button ghost" @click="clearDraft">Clear All</button>
 					<button type="button" class="button secondary" @click="requestClose">Cancel</button>
-					<button class="button filter-apply" type="submit" :disabled="genreRuleLimitExceeded">Apply Filters <Filter :size="17" aria-hidden="true" /></button>
+					<button class="button filter-apply" type="submit" :disabled="genreRuleLimitExceeded || Boolean(durationError)">Apply Filters <Filter :size="17" aria-hidden="true" /></button>
 				</footer>
 			</form>
 		</div>

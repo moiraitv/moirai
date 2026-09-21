@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { durationFilterDraft, durationFilterSeconds } from '../components/library/duration-filter';
 import { libraryScanAttention } from '../library-scan-issues';
 import { useCatalogSelection } from '../composables/useCatalogSelection';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -240,6 +241,7 @@ const activeFilterCount = computed(
 			queryString('artist'),
 			queryString('album'),
 			queryString('releaseFrom') || queryString('releaseTo'),
+			queryString('minimumDurationSeconds') || queryString('maximumDurationSeconds'),
 			queryString('minimumRating'),
 			queryString('minimumUserRating'),
 			queryString('addedFrom') || queryString('addedTo') || dateWindow.value,
@@ -418,6 +420,8 @@ function currentMediaQuery(): MediaQuery {
 		album: queryString('album') || undefined,
 		releaseYearFrom: releaseFrom || undefined,
 		releaseYearTo: releaseTo || undefined,
+		minimumDurationSeconds: queryString('minimumDurationSeconds') ? Number(queryString('minimumDurationSeconds')) : undefined,
+		maximumDurationSeconds: queryString('maximumDurationSeconds') ? Number(queryString('maximumDurationSeconds')) : undefined,
 		minimumRating: queryString('minimumRating') ? minimumRating : undefined,
 		minimumUserRating: queryString('minimumUserRating') ? minimumUserRating : undefined,
 		addedFrom: windowBounds.addedFrom ?? localDay(queryString('addedFrom')),
@@ -951,6 +955,8 @@ function openFilters(): void {
 	filterDraft.album = queryString('album');
 	filterDraft.releaseFrom = queryString('releaseFrom');
 	filterDraft.releaseTo = queryString('releaseTo');
+	filterDraft.minimumDuration = durationFilterDraft(currentMediaQuery().minimumDurationSeconds);
+	filterDraft.maximumDuration = durationFilterDraft(currentMediaQuery().maximumDurationSeconds);
 	filterDraft.minimumRating = queryString('minimumRating');
 	filterDraft.minimumUserRating = queryString('minimumUserRating');
 	filterDraft.addedFrom = queryString('addedFrom');
@@ -972,6 +978,8 @@ async function applyFilters(draft: LibraryFilterDraft): Promise<void> {
 		album: draft.album || undefined,
 		releaseFrom: draft.releaseFrom || undefined,
 		releaseTo: draft.releaseTo || undefined,
+		minimumDurationSeconds: durationFilterSeconds(draft.minimumDuration) ?? undefined,
+		maximumDurationSeconds: durationFilterSeconds(draft.maximumDuration) ?? undefined,
 		minimumRating: draft.minimumRating || undefined,
 		minimumUserRating: draft.minimumUserRating || undefined,
 		addedFrom: draft.addedFrom || undefined,

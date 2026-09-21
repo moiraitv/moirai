@@ -4,12 +4,14 @@ import {
 	catalogProgramItemFilterSummary,
 	catalogProgramItemFilter,
 	emptyCatalogProgramItemFilter,
+	emptyLibraryFilterDraft,
 	libraryFilterDraft,
 } from '@web/components/library/library-filter';
 
 describe('shared library query filter controls', () => {
 	it('round-trips every persisted filter through date and numeric form fields', () => {
 		const filter = catalogProgramItemFilter({
+			...emptyLibraryFilterDraft(),
 			name: 'Example',
 			artist: 'Guest',
 			album: 'Live',
@@ -27,6 +29,7 @@ describe('shared library query filter controls', () => {
 		});
 
 		expect(libraryFilterDraft(filter)).toEqual({
+			...emptyLibraryFilterDraft(),
 			name: 'Example',
 			artist: 'Guest',
 			album: 'Live',
@@ -59,6 +62,7 @@ describe('shared library query filter controls', () => {
 
 	it('summarizes applied filters in priority order with compact genre and date ranges', () => {
 		const filter = catalogProgramItemFilter({
+			...emptyLibraryFilterDraft(),
 			name: 'A title that is deliberately much longer than the summary',
 			releaseFrom: '1990',
 			releaseTo: '2024',

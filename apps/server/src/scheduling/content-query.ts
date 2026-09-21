@@ -56,6 +56,8 @@ export function mediaMatchesLibraryQuery(
 		!source.name
 		&& source.releaseYearFrom == null
 		&& source.releaseYearTo == null
+		&& source.minimumDurationSeconds == null
+		&& source.maximumDurationSeconds == null
 		&& source.minimumRating == null
 		&& source.minimumUserRating == null
 		&& !source.addedFrom
@@ -81,6 +83,14 @@ export function mediaMatchesLibraryQuery(
 		return false;
 	}
 	if (source.releaseYearTo != null && (media.year ?? Infinity) > source.releaseYearTo) {
+		return false;
+	}
+	if (source.minimumDurationSeconds != null
+		&& (media.durationSeconds == null || media.durationSeconds < source.minimumDurationSeconds)) {
+		return false;
+	}
+	if (source.maximumDurationSeconds != null
+		&& (media.durationSeconds == null || media.durationSeconds > source.maximumDurationSeconds)) {
 		return false;
 	}
 	if (source.minimumRating != null && (media.rating ?? -Infinity) < source.minimumRating) {

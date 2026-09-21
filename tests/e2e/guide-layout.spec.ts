@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installGuideFixture } from './performance/guide-fixture';
 
-for (const [width, hours, stickyTop] of [[390, 2, 64], [1024, 4, 0], [1440, 6, 0]]) {
+for (const [width, hours, stickyTop] of [[390, 2, 64], [1024, 4, 0], [1440, 4, 0]]) {
 	test(`guide keeps navigation and time sticky with ${hours} hours at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width: width!, height: 900 });
 		await installGuideFixture(page, 100);

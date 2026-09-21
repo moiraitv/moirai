@@ -406,3 +406,57 @@
 	min-width: 174px;
 	background: linear-gradient(180deg, #228f74, #126650);
 }
+
+.filter-duration-bound > legend {
+	color: var(--muted-strong);
+	font-size: 0.76rem;
+	font-weight: 500;
+}
+
+.filter-duration-inputs {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	border: 1px solid #37516a;
+	border-radius: 11px;
+	background: rgba(5, 16, 27, 0.68);
+
+	&:focus-within {
+		border-color: var(--accent);
+	}
+}
+
+.filter-duration-unit {
+	position: relative;
+	min-width: 0;
+
+	& + & {
+		border-left: 1px solid #37516a;
+	}
+
+	input {
+		width: 100%;
+		min-width: 0;
+		height: 40px;
+		min-height: 40px;
+		padding: 10px 22px 10px 10px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		box-shadow: none;
+		text-align: center;
+	}
+}
+
+.filter-duration-suffix {
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	transform: translateY(-50%);
+	color: var(--muted-strong);
+	font-size: 0.76rem;
+	pointer-events: none;
+}
+
+.filter-rating-start {
+	grid-column: 1;
+}

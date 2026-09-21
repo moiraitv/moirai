@@ -92,7 +92,7 @@ const selectedError = ref('');
 const detailCache = new Map<string, GuideSegmentDetail>();
 let detailRequest = 0;
 const trackWidth = ref(0);
-const responsiveHours = ref(6);
+const responsiveHours = ref(4);
 const hourWidth = computed(() => {
 	if (props.hourWidth != null) {
 		return props.hourWidth;
@@ -177,7 +177,7 @@ function measureTrack(): void {
 		return;
 	}
 
-	responsiveHours.value = window.innerWidth <= 680 ? 2 : window.innerWidth <= 1220 ? 4 : 6;
+	responsiveHours.value = window.innerWidth <= 680 ? 2 : 4;
 	const channelWidth = headerScroll.value?.querySelector<HTMLElement>('.guide-corner')?.offsetWidth ?? 0;
 	const next = Math.max(0, scroller.clientWidth - channelWidth);
 	if (trackWidth.value !== next) {

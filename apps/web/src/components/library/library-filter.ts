@@ -4,6 +4,7 @@ import type {
 	GenreMatch,
 } from '@moirai/shared';
 import type { MediaQuery } from '../../api';
+import { durationFilterDraft, durationFilterSeconds, durationFilterLabel, type DurationFilterDraft } from './duration-filter';
 
 /** Editable catalog filters retained privately until the user applies them. */
 export interface LibraryFilterDraft {
@@ -12,6 +13,8 @@ export interface LibraryFilterDraft {
 	album?: string;
 	releaseFrom: string;
 	releaseTo: string;
+	minimumDuration: DurationFilterDraft;
+	maximumDuration: DurationFilterDraft;
 	minimumRating: string;
 	minimumUserRating: string;
 	addedFrom: string;
@@ -31,6 +34,8 @@ export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 		album: '',
 		releaseFrom: '',
 		releaseTo: '',
+		minimumDuration: durationFilterDraft(null),
+		maximumDuration: durationFilterDraft(null),
 		minimumRating: '',
 		minimumUserRating: '',
 		addedFrom: '',
@@ -49,6 +54,8 @@ export function emptyCatalogProgramItemFilter(): CatalogProgramItemFilter {
 		name: '',
 		releaseYearFrom: null,
 		releaseYearTo: null,
+		minimumDurationSeconds: null,
+		maximumDurationSeconds: null,
 		minimumRating: null,
 		minimumUserRating: null,
 		addedFrom: null,
@@ -116,6 +123,14 @@ export function catalogProgramItemFilterSummary(
 	if (releaseYears) {
 		labels.push(releaseYears);
 	}
+	const duration = compactFilterRange(
+		'Duration',
+		filter.minimumDurationSeconds == null ? null : durationFilterLabel(filter.minimumDurationSeconds),
+		filter.maximumDurationSeconds == null ? null : durationFilterLabel(filter.maximumDurationSeconds),
+	);
+	if (duration) {
+		labels.push(duration);
+	}
 	if (filter.minimumRating !== null) {
 		labels.push(`Rating: ${filter.minimumRating}+`);
 	}
@@ -175,6 +190,8 @@ export function libraryFilterDraft(filter: CatalogProgramItemFilter): LibraryFil
 		album: filter.album ?? '',
 		releaseFrom: filter.releaseYearFrom === null ? '' : String(filter.releaseYearFrom),
 		releaseTo: filter.releaseYearTo === null ? '' : String(filter.releaseYearTo),
+		minimumDuration: durationFilterDraft(filter.minimumDurationSeconds),
+		maximumDuration: durationFilterDraft(filter.maximumDurationSeconds),
 		minimumRating: filter.minimumRating === null ? '' : String(filter.minimumRating),
 		minimumUserRating: filter.minimumUserRating === null ? '' : String(filter.minimumUserRating),
 		addedFrom: localDateValue(filter.addedFrom),
@@ -197,6 +214,8 @@ export function catalogProgramItemFilter(
 		...(draft.album?.trim() ? { album: draft.album.trim() } : {}),
 		releaseYearFrom: draft.releaseFrom ? Number(draft.releaseFrom) : null,
 		releaseYearTo: draft.releaseTo ? Number(draft.releaseTo) : null,
+		minimumDurationSeconds: durationFilterSeconds(draft.minimumDuration),
+		maximumDurationSeconds: durationFilterSeconds(draft.maximumDuration),
 		minimumRating: draft.minimumRating ? Number(draft.minimumRating) : null,
 		minimumUserRating: draft.minimumUserRating ? Number(draft.minimumUserRating) : null,
 		addedFrom: localDateInstant(draft.addedFrom),
@@ -221,6 +240,8 @@ export function catalogProgramQuery(query: MediaQuery): CatalogProgramItemQuery 
 		...(query.album ? { album: query.album } : {}),
 		releaseYearFrom: query.releaseYearFrom ?? null,
 		releaseYearTo: query.releaseYearTo ?? null,
+		minimumDurationSeconds: query.minimumDurationSeconds ?? null,
+		maximumDurationSeconds: query.maximumDurationSeconds ?? null,
 		minimumRating: query.minimumRating ?? null,
 		minimumUserRating: query.minimumUserRating ?? null,
 		addedFrom: query.addedFrom ?? null,

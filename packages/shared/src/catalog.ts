@@ -145,6 +145,17 @@ export function validateMediaGenreRules(value: MediaGenreRules, context: z.Refin
 	}
 }
 
+/** Validate ordered inclusive duration bounds wherever catalog filters are accepted. */
+export function validateMediaDurationRange(
+	value: { minimumDurationSeconds?: number | null | undefined; maximumDurationSeconds?: number | null | undefined },
+	context: z.RefinementCtx,
+): void {
+	if (value.minimumDurationSeconds != null && value.maximumDurationSeconds != null
+		&& value.minimumDurationSeconds > value.maximumDurationSeconds) {
+		context.addIssue({ code: 'custom', path: ['maximumDurationSeconds'], message: 'Maximum duration must be at least minimum duration' });
+	}
+}
+
 /** Fields shared by library browsing and dynamic scheduling filters. */
 export const catalogProgramItemFilterShape = {
 	name: z.string().trim().max(120).default(''),
@@ -152,6 +163,8 @@ export const catalogProgramItemFilterShape = {
 	album: z.string().trim().max(120).optional(),
 	releaseYearFrom: z.number().int().min(1800).max(2200).nullable().default(null),
 	releaseYearTo: z.number().int().min(1800).max(2200).nullable().default(null),
+	minimumDurationSeconds: z.number().int().nonnegative().nullable().default(null),
+	maximumDurationSeconds: z.number().int().nonnegative().nullable().default(null),
 	minimumRating: z.number().min(0).max(10).nullable().default(null),
 	minimumUserRating: z.number().min(0).max(10).nullable().default(null),
 	addedFrom: z.iso.datetime({ offset: true }).nullable().default(null),
@@ -164,7 +177,7 @@ export const catalogProgramItemFilterShape = {
 };
 /** Validate reusable library filters independently of hierarchy and presentation ordering. */
 export const catalogProgramItemFilterSchema = z.object(catalogProgramItemFilterShape)
-	.superRefine(validateMediaGenreRules);
+	.superRefine(validateMediaGenreRules).superRefine(validateMediaDurationRange);
 /** Shared wire contract for reusable library filters. */
 export type CatalogProgramItemFilter = z.infer<typeof catalogProgramItemFilterSchema>;
 
@@ -175,7 +188,7 @@ export const catalogProgramItemQuerySchema = z.object({
 	sort: mediaSortSchema.default('title'),
 	direction: sortDirectionSchema.default('asc'),
 	...catalogProgramItemFilterShape,
-}).superRefine(validateMediaGenreRules);
+}).superRefine(validateMediaGenreRules).superRefine(validateMediaDurationRange);
 /** Shared wire contract for media sort. */
 export type MediaSort = z.infer<typeof mediaSortSchema>;
 /** Shared wire contract for sort direction. */

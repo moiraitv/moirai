@@ -11,7 +11,7 @@ To build a channel and its linked programming in one workflow, use [Quick Setup]
 
 A ![](/icons/tv-minimal.svg) Channel combines a viewer-facing number and name with playback settings. Open **![](/icons/tv-minimal.svg) Channels** to create or edit one and to review its resolved seven-day timeline.
 
-Each row shows the channel number centered below its logo, or a TV icon when no logo is set. The timeline uses the same zoom as the Guide page, showing six hours at a time; scroll horizontally to see later programming.
+Each row shows the channel number centered below its logo, or a TV icon when no logo is set. The timeline shows six hours at a time; scroll horizontally to see later programming.
 
 Hover over an individual media item, or focus it with the keyboard, to preview its details. Click it for full guide details.
 
