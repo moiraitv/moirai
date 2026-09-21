@@ -27,10 +27,12 @@ describe('media duration health', () => {
 		expect(issues[0]!.message).toContain('#2:');
 	});
 
-	it('ignores encoder padding, unknown audio durations, and long subtitles', () => {
+	it('ignores tolerated track differences, unknown audio durations, and long subtitles', () => {
 		const probe = parseMediaProbeOutput(JSON.stringify({
 			streams: [
 				{ codec_type: 'video', duration: videoSeconds },
+				{ codec_type: 'audio', duration: videoSeconds + 5 },
+				{ codec_type: 'audio', duration: videoSeconds - 5 },
 				{ codec_type: 'audio', duration: videoSeconds + toleranceSeconds },
 				{ codec_type: 'audio', duration: videoSeconds - toleranceSeconds },
 				{ codec_type: 'audio' },

@@ -1,8 +1,8 @@
 import type { ScanIssue } from '@moirai/shared';
 import type { MediaProbeResult } from '../media/media-probe.js';
 
-/** Allow small encoder padding and timestamp differences without flagging healthy media. */
-export const MEDIA_DURATION_MISMATCH_TOLERANCE_MILLISECONDS = 1_000;
+/** Allow up to thirty seconds of padding or track-end differences without a warning. */
+export const MEDIA_DURATION_MISMATCH_TOLERANCE_MILLISECONDS = 30_000;
 
 /** Report measured audio tracks that differ materially from the scheduled video duration. */
 export function mediaDurationHealthIssues(probe: MediaProbeResult, relativePath: string): ScanIssue[] {
