@@ -10,7 +10,7 @@ import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { libraryCreateSchema, isSuppressedScanIssue } from '@moirai/shared';
 import { createDatabase } from '@server/db/index.js';
-import { mediaTailAssessments, scanRuns } from '@server/db/schema.js';
+import { ignoredMediaIssues, mediaTailAssessments, scanRuns } from '@server/db/schema.js';
 import { persistTailAssessments } from '@server/repository/media-tail-assessments.js';
 import { Repository } from '@server/repository/index.js';
 import { discoverOnDisk } from '@server/scanner/on-disk.js';
@@ -73,6 +73,13 @@ it('persists acceptance across scans and history pruning, then invalidates it wh
 	expect(response.statusCode).toBe(200);
 	expect(response.json()[0].issues[0].tailAssessment.accepted).toBe(true);
 	expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'library.changed' }));
+	const generalUrl = `/api/v1/libraries/${library.id}/media-issue`;
+	const generalPayload = { path: issue.path!, code: issue.code, fingerprint: issue.ignoreState!.fingerprint, ignored: false };
+	expect((await app.inject({ method: 'PUT', url: generalUrl, payload: { ...generalPayload, fingerprint: 'invalid' } })).statusCode).toBe(400);
+	expect((await app.inject({ method: 'PUT', url: generalUrl, payload: { ...generalPayload, fingerprint: 'b'.repeat(64) } })).statusCode).toBe(409);
+	expect((await app.inject({ method: 'PUT', url: generalUrl, payload: generalPayload })).statusCode).toBe(200);
+	expect((await repository.getLibrary(library.id))!.warningCount).toBe(1);
+	expect((await app.inject({ method: 'PUT', url: generalUrl, payload: { ...generalPayload, ignored: true } })).statusCode).toBe(200);
 
 	expect((await repository.getLibrary(library.id))!.warningCount).toBe(0);
 	expect((await repository.listScans(library.id))[0]!.issues.some(isSuppressedScanIssue)).toBe(true);
@@ -154,6 +161,9 @@ it('reassesses prior automatic failures while preserving acceptance, black resul
 	expect((await current.getLibrary(library.id))!.name).toBe(library.name);
 	expect((await current.getLibrary(library.id))!.sourceConfig).toEqual(library.sourceConfig);
 	expect(await current.listScans(library.id)).toEqual(history);
+	expect(upgraded.db.select().from(ignoredMediaIssues).all()).toEqual(assessments.filter(entry => entry.accepted).map(entry => ({
+		libraryId: library.id, relativePath: entry.relativePath, code: 'media_audio_video_duration_mismatch', fingerprint: 'a'.repeat(64),
+	})));
 	expect(await current.listTailAssessments(library.id)).toEqual(new Map(
 		assessments.filter(assessment => assessment.accepted || assessment.result === 'black')
 			.map(({ relativePath, ...assessment }) => [relativePath, { ...assessment, fingerprint: 'a'.repeat(64) }]),

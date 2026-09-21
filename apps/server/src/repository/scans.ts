@@ -1,3 +1,4 @@
+import { applyMediaIssueIgnores } from './ignored-media-issues.js';
 import { persistTailAssessments } from './media-tail-assessments.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
@@ -201,6 +202,17 @@ export abstract class ScanRepository {
 					libraryState.candidateSourceIdentity
 					&& sourceIdentityHash(libraryState.candidateSourceIdentity) === identityHash,
 				);
+
+		if (candidateMode) {
+			for (const issue of issues) {
+				if (issue.tailAssessment) {
+					issue.tailAssessment.accepted = false;
+				}
+				if (issue.ignoreState) {
+					issue.ignoreState.ignored = false;
+				}
+			}
+		}
 
 		// Quarantine a complete candidate until the operator approves replacing the source.
 		if (
@@ -589,6 +601,7 @@ export abstract class ScanRepository {
           )`);
 				}
 
+				applyMediaIssueIgnores(tx, run.libraryId, reconciledIssues, traversalComplete, acceptingSource, items);
 				persistTailAssessments(tx, run.libraryId, reconciledIssues, traversalComplete, [
 					...items.flatMap(item => [item.relativePath, ...item.parts.map(part => part.relativePath)]),
 					...reconciledIssues.flatMap(issue => issue.path ? [issue.path] : []),

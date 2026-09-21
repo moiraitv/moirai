@@ -793,6 +793,14 @@ export const mediaTailAssessments = sqliteTable('media_tail_assessments', {
 	libraryId: text('library_id').notNull().references(() => libraries.id, { onDelete: 'cascade' }),
 	relativePath: text('relative_path').notNull(),
 	fingerprint: text('fingerprint').notNull(),
-	result: text('result', { enum: ['black', 'mostly-black', 'not-black', 'uncertain'] }).notNull(),
+	result: text('result', { enum: ['black', 'mostly-black', 'not-black', 'uncertain', 'within-duration-tolerance'] }).notNull(),
 	accepted: integer('accepted', { mode: 'boolean' }).notNull().default(false),
 }, table => [uniqueIndex('media_tail_assessments_file').on(table.libraryId, table.relativePath)]);
+
+/** Explicit media-issue decisions survive rescans and history pruning until their inputs change. */
+export const ignoredMediaIssues = sqliteTable('ignored_media_issues', {
+	libraryId: text('library_id').notNull().references(() => libraries.id, { onDelete: 'cascade' }),
+	relativePath: text('relative_path').notNull(),
+	code: text('code').notNull(),
+	fingerprint: text('fingerprint').notNull(),
+}, table => [uniqueIndex('ignored_media_issues_key').on(table.libraryId, table.relativePath, table.code)]);

@@ -1,4 +1,11 @@
-import { isRemovalScanIssue, isSuppressedScanIssue, type Library, type ScanRun } from '@moirai/shared';
+import { isRemovalScanIssue, isSuppressedScanIssue, type Library, type ScanIssue, type ScanRun } from '@moirai/shared';
+
+/** Candidate-source findings cannot change media-issue decisions until the source is accepted. */
+export function scanIssuesRequireSourceApproval(issues: readonly ScanIssue[]): boolean {
+	return issues.some(issue => [
+		'source_change_requires_approval', 'source_identity_requires_approval', 'source_candidate_incomplete',
+	].includes(issue.code));
+}
 
 /** Show current actionable scan issues while preserving historical diagnostics in scan history. */
 export function libraryScanAttention(

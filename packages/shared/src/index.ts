@@ -212,9 +212,10 @@ export const scanIssueSchema = z.object({
 	code: z.string(),
 	message: z.string(),
 	severity: z.enum(['warning', 'error']),
+	ignoreState: z.object({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/), ignored: z.boolean() }).optional(),
 	tailAssessment: z.object({
 		fingerprint: z.string(),
-		result: z.enum(['black', 'mostly-black', 'not-black', 'uncertain']),
+		result: z.enum(['black', 'mostly-black', 'not-black', 'uncertain', 'within-duration-tolerance']),
 		accepted: z.boolean(),
 	}).optional(),
 });

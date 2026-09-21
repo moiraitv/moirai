@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installGuideFixture } from './performance/guide-fixture';
 
-for (const count of [10, 25]) {
+for (const count of [1, 10, 25]) {
 	test(`limits ${count} library warnings inline and exposes full details on demand`, async ({ page }) => {
 		await installGuideFixture(page, 1);
 		const id = '00000000-0000-4000-8000-000000000001';
@@ -30,12 +30,9 @@ for (const count of [10, 25]) {
 		await page.goto(`/libraries/${id}`);
 		const banner = page.locator('.library-warning-banner');
 		await banner.getByRole('button', { name: 'Review Issues' }).click();
-		await expect(banner.locator('li')).toHaveCount(10);
+		await expect(banner.locator('li')).toHaveCount(Math.min(10, count));
 		const showAll = banner.getByRole('button', { name: /Show all issues/ });
-		if (count === 10) {
-			await expect(showAll).toHaveCount(0);
-			return;
-		}
+
 
 		for (const dismissal of ['escape', 'close', 'backdrop']) {
 			await showAll.click();
@@ -55,6 +52,6 @@ for (const count of [10, 25]) {
 			await expect(dialog).toHaveCount(0);
 			await expect(showAll).toBeFocused();
 		}
-		await expect(banner.locator('li')).toHaveCount(10);
+		await expect(banner.locator('li')).toHaveCount(Math.min(10, count));
 	});
 }

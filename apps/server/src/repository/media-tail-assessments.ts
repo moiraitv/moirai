@@ -1,7 +1,8 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
-import { isSuppressedScanIssue, type ScanIssue } from '@moirai/shared';
+import { setMediaIssueIgnored } from './ignored-media-issues.js';
+import { and, eq, sql } from 'drizzle-orm';
+import type { ScanIssue } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
-import { libraries, mediaTailAssessments, scanRuns } from '../db/schema.js';
+import { mediaTailAssessments } from '../db/schema.js';
 
 /** One SQLite transaction owns assessment persistence together with its completed scan. */
 type ScanTransaction = Parameters<Parameters<MoiraiDatabase['transaction']>[0]>[0];
@@ -27,43 +28,19 @@ export function persistTailAssessments(tx: ScanTransaction, libraryId: string, i
 	for (let offset = 0; offset < rows.length; offset += 100) {
 		tx.insert(mediaTailAssessments).values(rows.slice(offset, offset + 100)).onConflictDoUpdate({
 			target: [mediaTailAssessments.libraryId, mediaTailAssessments.relativePath],
-			set: { fingerprint: sql`excluded.fingerprint`, result: sql`excluded.result`, accepted: sql`excluded.accepted` },
+			set: {
+				fingerprint: sql`excluded.fingerprint`,
+				// Percentage eligibility is recomputed; keep the unchanged physical file's visual cache.
+				result: sql`CASE WHEN excluded.result = 'within-duration-tolerance'
+					AND ${mediaTailAssessments.fingerprint} = excluded.fingerprint
+					THEN ${mediaTailAssessments.result} ELSE excluded.result END`,
+				accepted: sql`excluded.accepted`,
+			},
 		}).run();
 	}
 }
 
 /** Accept or restore an eligible finding atomically; concurrent scans and stale identities conflict. */
 export function setSilentEndingAcceptance(db: MoiraiDatabase, libraryId: string, relativePath: string, fingerprint: string, accepted: boolean): boolean {
-	return db.transaction(tx => {
-		const running = tx.select({ id: scanRuns.id }).from(scanRuns)
-			.where(and(eq(scanRuns.libraryId, libraryId), eq(scanRuns.status, 'running'))).get();
-		const latest = tx.select().from(scanRuns).where(eq(scanRuns.libraryId, libraryId))
-			.orderBy(desc(scanRuns.startedAt), sql`rowid DESC`).get();
-		if (running || !latest) {
-			return false;
-		}
-		const issue = latest.issues.find(entry => entry.path === relativePath
-			&& entry.code === 'media_audio_video_duration_mismatch'
-			&& entry.tailAssessment?.fingerprint === fingerprint);
-		if (!issue?.tailAssessment || ['black', 'mostly-black'].includes(issue.tailAssessment.result)) {
-			return false;
-		}
-		const updated = tx.update(mediaTailAssessments).set({ accepted })
-			.where(and(
-				eq(mediaTailAssessments.libraryId, libraryId),
-				eq(mediaTailAssessments.relativePath, relativePath),
-				eq(mediaTailAssessments.fingerprint, fingerprint),
-			))
-			.run();
-		if (!updated.changes) {
-			return false;
-		}
-		const wasSuppressed = isSuppressedScanIssue(issue);
-		issue.tailAssessment.accepted = accepted;
-		tx.update(scanRuns).set({ issues: latest.issues }).where(eq(scanRuns.id, latest.id)).run();
-		const delta = Number(wasSuppressed) - Number(isSuppressedScanIssue(issue));
-		tx.update(libraries).set({ warningCount: sql`max(0, ${libraries.warningCount} + ${delta})` })
-			.where(eq(libraries.id, libraryId)).run();
-		return true;
-	});
+	return setMediaIssueIgnored(db, libraryId, relativePath, 'media_audio_video_duration_mismatch', fingerprint, accepted);
 }

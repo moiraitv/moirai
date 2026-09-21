@@ -45,7 +45,11 @@ Library settings can change the display name or source path. A path change is st
 
 ## Library health
 
-When a library scan finds issues, it will display a small alert at the top of the page. Open **Review Issues** on a library to see findings from that scan. **Last scan** opens the history of earlier results. Each finding includes a code and, when applicable, the affected path. Note that a warning does not necessarily mean the media cannot play.
+When a library scan finds issues, it will display a small alert at the top of the page. Open **Review Issues** on a library to see findings from that scan. **Last scan** opens the history of earlier results. Each finding includes a code and, when applicable, the affected path.
+
+Note that a warning does not necessarily mean the media cannot play. Choose **Ignore issue** to hide it from attention counts until its relevant files change. Ignoring does not repair media, make it playable, resolve catalog conflicts, or approve source changes or removals. Folder/source availability, scan-wide failures, and reconciliation decisions cannot be ignored.
+
+Open **Show all issues → Suppressed issues** to review automatically suppressed and manually ignored findings. You can also reach **Suppressed issues** from **Last scan**. Choose **Restore issue** on a manually ignored finding to return it to attention counts; a later scan may still suppress a duration finding automatically.
 
 After correcting a file, its metadata, or source access, synchronize the library to refresh its health. Use the finding code below to identify the problem and available remedies.
 
@@ -53,9 +57,9 @@ After correcting a file, its metadata, or source access, synchronize the library
 
 `media_audio_video_duration_mismatch` means at least one measured audio track differs from the video duration by more than thirty seconds. Playback and scheduling use the video duration, but audio tracks that differ in length significantly from the main video duration can be a sign of incomplete media. Check the reported tracks and watch the affected ending before deciding whether the difference is harmless or the file needs replacing.
 
-Moirai checks short silent endings during library scans. Endings that remain at least 90% black throughout the inspected frames are automatically suppressed. This includes many white-on-black credit cards. Endings that do not meet that threshold, incomplete inspection, and uncertain results remain warnings.
+Moirai automatically suppresses the finding when every measured audio track is no more than 5% shorter than the video and none is more than thirty seconds longer.
 
-You can silence a warning by clicking **Accept silent ending** after verifying that the remaining video is harmless silent credits or black screen. It's remembered until the file changes. Use **Suppressed issues** to review automatic and accepted findings, including their reasons. **Restore warning** reverses your acceptance.
+For larger differences, Moirai checks short silent endings during library scans when all audio tracks finish before the video and within thirty seconds of one another. Inspection starts at the earliest audio ending and continues to the end of the video. Endings that remain at least 90% black throughout the inspected frames are automatically suppressed. This includes most white-on-black credit sequences. Endings that do not meet that threshold, incomplete inspection, and uncertain results remain warnings.
 
 ### Missing NFO metadata
 

@@ -1,3 +1,4 @@
+import { setMediaIssueIgnored } from './ignored-media-issues.js';
 import { listTailAssessments, setSilentEndingAcceptance } from './media-tail-assessments.js';
 import { SemanticRepository } from './semantic.js';
 import { appendProgramGroups } from './program-groups.js';
@@ -89,6 +90,11 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Ignore or restore an unchanged media finding in the current accepted source. */
+	setMediaIssueIgnored(libraryId: string, path: string, code: string, fingerprint: string, ignored: boolean) {
+		return setMediaIssueIgnored(this.database, libraryId, path, code, fingerprint, ignored);
+	}
+
 	/** Load cached physical-file tail decisions once for an upcoming scan. */
 	listTailAssessments(libraryId: string) {
 		return listTailAssessments(this.database, libraryId);

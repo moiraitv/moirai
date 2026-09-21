@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { installGuideFixture } from './performance/guide-fixture';
 
 for (const width of [390, 1440]) {
-	test(`accepts and restores silent endings at ${width}px`, async ({ page }) => {
+	test(`ignores and restores media findings at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height: 900 });
 		await installGuideFixture(page, 1);
 		const id = '00000000-0000-4000-8000-000000000001';
@@ -13,10 +13,11 @@ for (const width of [390, 1440]) {
 			pendingRemovalCount: 0, itemCount: 0, warningCount: 1,
 			lastScanStartedAt: '2026-09-21T10:00:00Z', lastScanCompletedAt: '2026-09-21T10:01:00Z',
 		};
-		const issues = ['not-black', 'mostly-black'].map((result, index) => ({
-			code: 'media_audio_video_duration_mismatch', path: `Movie ${index + 1}.mp4`,
+		const issues = ['not-black', 'mostly-black', 'within-duration-tolerance'].map((result, index) => ({
+			code: width === 390 && index === 0 ? 'nfo_missing' : 'media_audio_video_duration_mismatch', path: `Movie ${index + 1}.mp4`,
 			message: 'Audio tracks end together before the video.', severity: 'warning',
-			tailAssessment: { fingerprint: 'a'.repeat(64), result, accepted: false },
+			ignoreState: { fingerprint: 'a'.repeat(64), ignored: false },
+			tailAssessment: width === 390 && index === 0 ? undefined : { fingerprint: 'a'.repeat(64), result, accepted: false },
 		}));
 		const scans = [{ id: 'scan', status: 'complete', issues, startedAt: library.lastScanStartedAt,
 			discoveredCount: 2, changedCount: 0, removedCount: 0 }];
@@ -34,7 +35,7 @@ for (const width of [390, 1440]) {
 			entries: [], items: [], groups: [], navigation: [],
 			pagination: { page: 1, pageSize: 100, totalEntries: 0, totalPages: 0 },
 		} }));
-		await page.route(`**/api/v1/libraries/${id}/silent-ending`, async route => {
+		await page.route(`**/api/v1/libraries/${id}/media-issue`, async route => {
 			acceptanceRequests += 1;
 			if (conflict) {
 				await route.fulfill({ status: 409, json: { message: 'A scan is running.' } });
@@ -42,9 +43,12 @@ for (const width of [390, 1440]) {
 			}
 			const input = route.request().postDataJSON();
 			expect(input.path).toBe(issues[0]!.path);
-			expect(input.fingerprint).toBe(issues[0]!.tailAssessment.fingerprint);
-			issues[0]!.tailAssessment.accepted = input.accepted;
-			library.warningCount = input.accepted ? 0 : 1;
+			expect(input.fingerprint).toBe(issues[0]!.ignoreState.fingerprint);
+			if (issues[0]!.tailAssessment) {
+				issues[0]!.tailAssessment.accepted = input.ignored;
+			}
+			issues[0]!.ignoreState.ignored = input.ignored;
+			library.warningCount = input.ignored ? 0 : 1;
 			await route.fulfill({ json: scans });
 		});
 		// Each candidate scan path must block decisions until an accepted-source scan replaces it.
@@ -55,7 +59,7 @@ for (const width of [390, 1440]) {
 			await page.getByRole('button', { name: 'Review Issues' }).click();
 			await page.getByRole('button', { name: 'Show all issues (2)' }).click();
 			const candidateDialog = page.getByRole('dialog', { name: /Library scan issues/ });
-			await expect(candidateDialog.getByRole('button', { name: 'Accept silent ending' })).toBeDisabled();
+			await expect(candidateDialog.getByRole('button', { name: 'Ignore issue' })).toBeDisabled();
 			await expect(candidateDialog.getByText(/Review and approve the source change/)).toBeVisible();
 			await candidateDialog.getByRole('button', { name: 'Close scan issues' }).click();
 			await page.getByRole('button', { name: 'Hide Issues' }).click();
@@ -64,29 +68,38 @@ for (const width of [390, 1440]) {
 		candidateCode = undefined;
 		library.warningCount = 1;
 		await page.goto(`/libraries/${id}`);
-		await expect(page.getByRole('button', { name: 'Suppressed issues (1)' })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Suppressed issues/ })).toHaveCount(0);
 		await page.getByRole('button', { name: 'Review Issues' }).click();
 		await page.getByRole('button', { name: 'Show all issues (1)' }).click();
 		let dialog = page.getByRole('dialog', { name: /Library scan issues/ });
 		conflict = true;
-		await dialog.getByRole('button', { name: 'Accept silent ending' }).click();
+		await dialog.getByRole('button', { name: 'Ignore issue' }).click();
 		await expect(dialog.getByRole('alert')).toContainText('A scan is running.');
 		conflict = false;
-		await dialog.getByRole('button', { name: 'Accept silent ending' }).click();
+		await dialog.getByRole('button', { name: 'Ignore issue' }).click();
 		await expect(dialog.getByText('No issues remain in this list.')).toBeVisible();
 		await dialog.getByRole('button', { name: 'Close scan issues' }).click();
 		await expect(dialog).toHaveCount(0);
 		await expect(page.locator('.library-warning-banner')).toHaveCount(0);
-		await page.getByRole('button', { name: 'Suppressed issues (2)' }).click();
+		await page.getByRole('button', { name: 'Last scan: open scan history' }).click();
+		const history = page.getByRole('dialog', { name: 'Scan history', exact: true });
+		await history.getByRole('button', { name: 'Suppressed issues (3)' }).click();
 		dialog = page.getByRole('dialog', { name: /Suppressed issues/ });
 		await expect(dialog.getByText('Automatically suppressed: the complete inspected silent ending is at least 90% black in every frame.')).toBeVisible();
-		await expect(dialog.getByRole('button', { name: 'Restore warning' })).toHaveCount(1);
+		await expect(dialog.getByRole('button', { name: 'Restore issue' })).toHaveCount(1);
+		await expect(dialog.getByRole('button', { name: 'Ignore issue' })).toHaveCount(0);
+		await expect(dialog.getByText(/every measured audio track is no more than 5%/)).toBeVisible();
 		await page.screenshot({ animations: 'disabled', path: `test-results/silent-endings-${width}.png` });
-		await dialog.getByRole('button', { name: 'Restore warning' }).click();
-		await expect(dialog.locator('li')).toHaveCount(1);
+		await dialog.getByRole('button', { name: 'Restore issue' }).click();
+		await expect(dialog.locator('li')).toHaveCount(2);
 		await page.keyboard.press('Escape');
 		await expect(dialog).toHaveCount(0);
+		await expect(history).toBeVisible();
+		await expect(history.getByRole('button', { name: 'Suppressed issues (2)' })).toBeFocused();
+		await page.keyboard.press('Escape');
+		await expect(history).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Last scan: open scan history' })).toBeFocused();
 		await expect(page.locator('.library-warning-banner')).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Suppressed issues (1)' })).toBeFocused();
+		await expect(page.getByRole('button', { name: /Suppressed issues/ })).toHaveCount(0);
 	});
 }

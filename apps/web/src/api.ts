@@ -329,6 +329,8 @@ export const api = {
 		request<void | { status: string }>(`/api/v1/libraries/${id}/scans/current`, {
 			method: 'DELETE',
 		}),
+	setMediaIssueIgnored: (id: string, body: { path: string; code: string; fingerprint: string; ignored: boolean }) =>
+		request<ScanRun[]>(`/api/v1/libraries/${id}/media-issue`, { method: 'PUT', body: JSON.stringify(body) }),
 	setSilentEndingAcceptance: (id: string, body: { path: string; fingerprint: string; accepted: boolean }) =>
 		request<ScanRun[]>(`/api/v1/libraries/${id}/silent-ending`, { method: 'PUT', body: JSON.stringify(body) }),
 	scans: (id: string) => request<ScanRun[]>(`/api/v1/libraries/${id}/scans`),

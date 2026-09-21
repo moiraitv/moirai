@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { isSuppressedScanIssue } from '@moirai/shared';
 import { libraryScanAttention } from '../library-scan-issues';
 import { useCatalogSelection } from '../composables/useCatalogSelection';
 import PageHelpButton from '../components/PageHelpButton.vue';
@@ -95,8 +94,6 @@ const browse = ref<MediaBrowseResult>();
 const latestScan = computed(() => scans.value[0]);
 const scanAttention = computed(() => libraryScanAttention(library.value, scans.value));
 const currentScanIssues = computed(() => scanAttention.value.issues);
-const suppressedScanIssues = computed(() =>
-	(scans.value.find(scan => scan.status !== 'running')?.issues ?? []).filter(isSuppressedScanIssue));
 const activeScanId = ref<string>();
 const activeScanProgress = ref<ScanProgress>();
 const sourceUnavailable = computed(() =>
@@ -1201,7 +1198,7 @@ onUnmounted(() => {
 
 		<div class="library-status-surface">
 			<p v-if="actionError" class="notice error" role="alert">{{ actionError }}</p>
-			<LibraryScanWarnings v-if="scanAttention.count > 0 || suppressedScanIssues.length" :key="id" :library-id="id" :count="scanAttention.count" :issues="currentScanIssues" :suppressed-issues="suppressedScanIssues" @refresh="loadLibrary" />
+			<LibraryScanWarnings :key="id" :library-id="id" :count="scanAttention.count" :issues="currentScanIssues" :scan-issues="scans.find(scan => scan.status !== 'running')?.issues ?? []" @refresh="loadLibrary" />
 			<div v-if="sourceUnavailable" class="source-outage-banner" role="status">
 				<span class="source-outage-icon"><Unplug :size="22" /></span>
 				<div>
@@ -1398,7 +1395,7 @@ onUnmounted(() => {
 			<span>{{ pagination.pageSize }} per page</span>
 		</footer>
 
-		<LibraryScanHistoryModal v-if="scanHistoryOpen" :scans="scans" @close="scanHistoryOpen = false" />
+		<LibraryScanHistoryModal v-if="scanHistoryOpen" :library-id="id" :scans="scans" @close="scanHistoryOpen = false" @refresh="loadLibrary" />
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
 		<LibrarySettingsModal v-if="showSettings" :library="library" @close="showSettings = false" @saved="finishSettings" @deleted="finishDeletion" />

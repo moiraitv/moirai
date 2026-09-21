@@ -6,7 +6,7 @@ const removal: ScanIssue = { code: 'removal_approval_required', path: null, mess
 const unrelated: ScanIssue = { code: 'scan_failed', path: null, message: 'Source unavailable.', severity: 'error' };
 
 describe('current library scan attention', () => {
-	it.each(['black', 'mostly-black'] as const)('excludes %s findings while preserving history', result => {
+	it.each(['black', 'mostly-black', 'within-duration-tolerance'] as const)('excludes %s findings while preserving history', result => {
 		const suppressed: ScanIssue = {
 			code: 'media_audio_video_duration_mismatch', path: 'film.mp4', message: 'Silent tail', severity: 'warning',
 			tailAssessment: { fingerprint: 'file', result, accepted: false },
@@ -47,4 +47,11 @@ describe('current library scan attention', () => {
 	it('retains the warning count when detailed scan history has expired', () => {
 		expect(libraryScanAttention({ warningCount: 2, pendingRemovalCount: 0 }, [])).toEqual({ count: 2, issues: [] });
 	});
+});
+
+
+it('excludes ignored metadata findings without hiding operational failures', () => {
+	const ignored: ScanIssue = { code: 'nfo_missing', path: 'film.mp4', severity: 'warning', message: 'Missing NFO', ignoreState: { fingerprint: 'a'.repeat(64), ignored: true } };
+	expect(libraryScanAttention({ warningCount: 1, pendingRemovalCount: 0 }, [{ status: 'complete', issues: [ignored, unrelated] }]))
+		.toEqual({ count: 1, issues: [unrelated] });
 });

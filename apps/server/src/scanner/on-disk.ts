@@ -1,8 +1,9 @@
+import { readNfo, readGroupNfo } from './on-disk-nfo.js';
+import { attachMediaIssueIdentities, recordMediaIssueInputs, type MediaIssueInputs } from './media-issue-identity.js';
 import { createHash } from 'node:crypto';
 import { opendir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
-	MAX_NFO_BYTES,
 	MEDIA_EXTENSIONS,
 	type Library,
 	type MediaExternalId,
@@ -17,7 +18,6 @@ import { groupLooseMusicVideos } from './music-video-groups.js';
 import { internalErrorMessage } from '../error-message.js';
 import {
 	existingArtworkRoles,
-	existingFile,
 	itemArtworkStems,
 	referencedArtwork,
 } from './on-disk-artwork.js';
@@ -33,8 +33,8 @@ import {
 	ON_DISK_METADATA_VERSION,
 	titleBucket,
 } from './catalog-metadata.js';
-import { parseKodiNfo, type ParsedNfo } from './nfo.js';
-import { openSourceFile, readSourceFile, SourceFileError } from '../media/source-file.js';
+import type { ParsedNfo } from './nfo.js';
+import { openSourceFile, SourceFileError } from '../media/source-file.js';
 import {
 	mediaProbeFingerprint,
 	MediaProbeError,
@@ -219,121 +219,6 @@ async function walk(
 	return { files: [...files], complete };
 }
 
-/** Retrieve nfo for the library scan. */
-async function readNfo(
-	file: string,
-	scanRoot: string,
-	logicalStem: string,
-	typeKey: string,
-	signal?: AbortSignal,
-): Promise<{
-	parsed: ParsedNfo | null;
-	path: string | null;
-	status: 'complete' | 'incomplete' | 'invalid';
-	issue: ScanIssue | null;
-}> {
-	const stem = file.slice(0, -path.extname(file).length);
-	const candidates = [
-		`${logicalStem}.nfo`,
-		...(logicalStem === stem ? [] : [`${stem}.nfo`]),
-		...(typeKey === 'movies' ? [path.join(path.dirname(file), 'movie.nfo')] : []),
-	];
-	const nfoPath = await existingFile(candidates, signal);
-	if (!nfoPath) {
-		return {
-			parsed: null,
-			path: null,
-			status: 'incomplete',
-			issue: {
-				path: file,
-				code: 'nfo_missing',
-				message: 'No sidecar NFO was found; metadata was derived from the filename.',
-				severity: 'warning',
-			},
-		};
-	}
-
-	try {
-		const source = await readSourceFile(scanRoot, nfoPath, MAX_NFO_BYTES, signal);
-		return {
-			parsed: parseKodiNfo(source.content.toString('utf8')),
-			path: source.path,
-			status: 'complete',
-			issue: null,
-		};
-	}
-	catch (error) {
-		if (signal?.aborted) {
-			throw error;
-		}
-
-		const tooLarge = error instanceof SourceFileError && error.reason === 'too-large';
-		return {
-			parsed: null,
-			path: nfoPath,
-			status: 'invalid',
-			issue: {
-				path: nfoPath,
-				code: tooLarge ? 'nfo_too_large' : 'nfo_invalid',
-				message: tooLarge
-					? `NFO exceeds the ${MAX_NFO_BYTES} byte ingestion limit.`
-					: internalErrorMessage(error),
-				severity: 'warning',
-			},
-		};
-	}
-}
-
-/** Retrieve group-level NFO metadata for the library scan. */
-async function readGroupNfo(
-	file: string,
-	scanRoot: string,
-	issues: ScanIssue[],
-	signal?: AbortSignal,
-): Promise<ParsedNfo | null> {
-	try {
-		const source = await readSourceFile(scanRoot, file, MAX_NFO_BYTES, signal);
-		const parsed = parseKodiNfo(source.content.toString('utf8'));
-		if (parsed.truncatedFields.length > 0) {
-			issues.push({
-				path: normalizeRelative(scanRoot, file),
-				code: 'metadata_truncated',
-				message: `Metadata exceeded documented limits: ${parsed.truncatedFields.join(', ')}.`,
-				severity: 'warning',
-			});
-		}
-		if (parsed.invalidFields.length > 0) {
-			issues.push({
-				path: normalizeRelative(scanRoot, file),
-				code: 'metadata_invalid',
-				message: `Invalid metadata values were ignored: ${parsed.invalidFields.join(', ')}.`,
-				severity: 'warning',
-			});
-		}
-		return parsed;
-	}
-	catch (error) {
-		if (signal?.aborted) {
-			throw error;
-		}
-
-		if (error instanceof SourceFileError && error.reason === 'missing') {
-			return null;
-		}
-
-		const tooLarge = error instanceof SourceFileError && error.reason === 'too-large';
-		issues.push({
-			path: normalizeRelative(scanRoot, file),
-			code: tooLarge ? 'nfo_too_large' : 'tvshow_nfo_invalid',
-			message: tooLarge
-				? `NFO exceeds the ${MAX_NFO_BYTES} byte ingestion limit.`
-				: internalErrorMessage(error),
-			severity: 'warning',
-		});
-		return null;
-	}
-}
-
 /** Deduplicate provider identifiers while preferring explicit NFO defaults. */
 function mergedExternalIds(
 	primary: MediaExternalId[],
@@ -435,6 +320,7 @@ export async function discoverOnDisk(
 	});
 
 	const items: DiscoveredItem[] = [];
+	const healthInputs: MediaIssueInputs = { media: new Map(), metadata: new Map(), sidecars: new Map() };
 	const groupsByKey = new Map<string, DiscoveredGroup>();
 	const groupNfoCache = new Map<string, ParsedNfo | null>();
 	let traversalComplete = walked.complete;
@@ -486,6 +372,7 @@ export async function discoverOnDisk(
 		const filename = parsedByFile.get(file)!;
 		const logicalStem = path.join(path.dirname(file), filename.logicalStem);
 		const probeFingerprint = mediaProbeFingerprint(mediaInfo);
+		recordMediaIssueInputs(healthInputs, scanRoot, file, logicalStem, library.typeKey, probeFingerprint);
 		const cachedProbe = options.probeCache?.get(relativePath);
 
 		let probeResult: MediaProbeResult | null = null;
@@ -569,7 +456,7 @@ export async function discoverOnDisk(
 		}
 
 		// Parse bounded descriptive metadata without trusting it for playback properties.
-		const nfo = await readNfo(file, scanRoot, logicalStem, library.typeKey, signal);
+		const nfo = await readNfo(file, scanRoot, logicalStem, library.typeKey, healthInputs, signal);
 		if (nfo.issue) {
 			issues.push({ ...nfo.issue, path: normalizeRelative(scanRoot, nfo.issue.path ?? file) });
 		}
@@ -630,7 +517,7 @@ export async function discoverOnDisk(
 			if (!groupNfoCache.has(showDirectory)) {
 				groupNfoCache.set(
 					showDirectory,
-					await readGroupNfo(path.join(showDirectory, 'tvshow.nfo'), scanRoot, issues, signal),
+					await readGroupNfo(path.join(showDirectory, 'tvshow.nfo'), scanRoot, issues, healthInputs, signal),
 				);
 			}
 			const showNfo = groupNfoCache.get(showDirectory) ?? null;
@@ -699,7 +586,7 @@ export async function discoverOnDisk(
 				if (!groupNfoCache.has(seasonNfoPath)) {
 					groupNfoCache.set(
 						seasonNfoPath,
-						await readGroupNfo(seasonNfoPath, scanRoot, issues, signal),
+						await readGroupNfo(seasonNfoPath, scanRoot, issues, healthInputs, signal),
 					);
 				}
 				const seasonNfo = groupNfoCache.get(seasonNfoPath) ?? null;
@@ -794,7 +681,7 @@ export async function discoverOnDisk(
 				if (!groupNfoCache.has(albumNfoPath)) {
 					groupNfoCache.set(
 						albumNfoPath,
-						await readGroupNfo(albumNfoPath, scanRoot, issues, signal),
+						await readGroupNfo(albumNfoPath, scanRoot, issues, healthInputs, signal),
 					);
 				}
 				const albumNfo = groupNfoCache.get(albumNfoPath) ?? null;
@@ -1121,6 +1008,8 @@ export async function discoverOnDisk(
 			severity: 'error',
 		});
 	}
+
+	await attachMediaIssueIdentities(scanRoot, issues, items, conflicts, healthInputs, signal);
 
 	// Return stable ordering for deterministic reconciliation and diagnostics.
 	return {

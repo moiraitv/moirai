@@ -805,3 +805,11 @@ export const silentEndingAcceptanceSchema = z.object({
 	fingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
 	accepted: z.boolean(),
 });
+
+/** Ignore or restore one current media finding using its observed input identity. */
+export const mediaIssueIgnoreSchema = z.object({
+	path: z.string().min(1).max(4096),
+	code: z.string().min(1).max(128),
+	fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+	ignored: z.boolean(),
+});

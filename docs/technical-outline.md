@@ -264,28 +264,45 @@ stream durations or Matroska duration tags. Container, audio, and subtitle durat
 a fallback. Scans report a per-file warning when any measured audio track differs from the video
 duration by more than thirty seconds, including on cached scans, without excluding the item.
 The library warning banner displays at most ten issues inline; a dedicated dialog shows the full list.
-Audio tracks ending within one second of one another before a single non-artwork video stream are
-eligible for silent-tail assessment. FFmpeg decodes every frame after the earliest audio ending,
+Before consulting visual caches, each scan suppresses a duration finding when all measured audio
+tracks are at least 95% of the video duration and at most thirty seconds longer. Equality qualifies;
+unknown audio durations are not measured tracks. This rule does not depend on alignment or start
+offsets and reports within-duration-tolerance. Existing visual caches remain available for fallback.
+For larger differences, audio tracks ending within thirty seconds of one another, all before a single non-artwork video
+stream ends, are eligible for silent-tail assessment when the earliest audio ends more than thirty
+seconds before the video duration. FFmpeg decodes every frame after the earliest audio ending,
 requiring at least 90% black pixels in every frame throughout the tail and complete decoded coverage
 before suppressing a finding. The pixel darkness threshold remains 0.03. This visual heuristic
 includes sparse white credits but does not identify credits or establish audio completeness.
 The shared probe queue bounds concurrency; decoding is single-threaded, limited to 120 seconds of
 source, 30 seconds of wall time, and 1 MiB per output stream. Files are opened through validated
 inherited descriptors and their identities checked before and after inspection. Missing timing,
-multiple video tracks, nonqualifying frames, excessive tails, and failed inspection never auto-suppress.
+multiple video tracks, nonqualifying frames, excessive tails, and failed inspection never qualify for
+visual suppression.
 Migration 0034 adds physical-file assessments keyed by library and relative path.
 Migration 0035 clears unaccepted not-black and uncertain cached results for reassessment on the next
 scan, preserving manual acceptance, prior black results, and scan history. New qualifying results
 use mostly-black; legacy black results remain supported. One batch read
 per scan loads cached outcomes; reconciliation persists them transactionally in bounded batches.
-File fingerprints invalidate decisions after replacement or probe-contract changes. Explicit
-silent-ending acceptance survives scan-history pruning and can be restored through the dedicated
-library dialog. Active counts and scan-event issue counts exclude suppressed findings while scan history retains reasons.
-Acceptance checks the latest finding and fingerprint and conflicts while a scan runs; it performs
-no source-file mutation. Candidate-source findings disable acceptance and restoration until an
-accepted-source scan replaces them, since quarantined scans do not persist assessments.
-Complete scans remove obsolete assessments, and library deletion cascades
-cleanup. The additive scan-issue contract exposes assessment result, fingerprint, and acceptance.
+Migration 0036 adds ignored_media_issues keyed by library, normalized relative path, and issue code,
+migrating explicit silent-ending acceptance without changing cached results or historical scans.
+General ignore decisions are authoritative; the legacy acceptance endpoint and field remain compatible.
+Media fingerprints use physical identity; metadata uses relevant media/NFO inputs and sidecar absence;
+Multipart decisions include ordered member identities; show conflicts include participating metadata.
+Unavailable inputs include observable identity and stable availability state rather than error messages.
+One decision read per reconciliation applies decisions transactionally with health counts and scan
+history. Complete scans expire resolved decisions; partial scans retain unobserved decisions. Changed
+inputs and accepted source replacement invalidate decisions, independently of scan-history pruning.
+The shared eligibility allowlist excludes directory/source failures, global probe resource/executable
+failures, lifecycle diagnostics, source approvals, and removal reconciliation. Ignoring changes only
+attention counts and presentation, never playability, scheduling eligibility, or catalog conflicts.
+The library-scoped media-issue operation validates the latest finding and fingerprint, rejecting stale
+requests, active scans, and candidate sources. The full issues dialog offers Ignore issue and manually
+ignored findings offer Restore issue under Suppressed issues, accessible from both Show all issues
+and Last scan. Automatic suppressions have
+no manual override. Restoration removes the explicit ignore immediately; subsequent scans may apply
+automatic suppression again. Live library events refresh the transactionally updated health state.
+The additive scan-issue contract exposes ignoreState alongside the compatible tail assessment.
 Probe contract version 6 refreshes older cached durations on the next library scan.
 
 An NFO runtime does not make an item schedulable. A new or changed file without a finite measured

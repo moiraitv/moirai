@@ -253,6 +253,13 @@
       "when": 1789783800000,
       "tag": "0035_mostly_black_tail_assessments",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1789783900000,
+      "tag": "0036_ignored_media_issues",
+      "breakpoints": true
     }
   ]
 }
