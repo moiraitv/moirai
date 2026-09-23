@@ -380,3 +380,19 @@ body:has(.program-inspector-backdrop) {
 	font-size: 0.72rem;
 	color: var(--muted);
 }
+
+.program-definition-badges {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.program-definition-badges .program-type-badge {
+	flex-shrink: 0;
+}
+.program-definition-badges .program-subtype-badge {
+	min-width: 0;
+	max-width: 28ch;
+	margin-left: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

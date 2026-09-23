@@ -27,8 +27,8 @@ export function programDefinition(program: SchedulingProgram, programs: Map<stri
 	switch (config.type) {
 		case 'content': return contentSubtypeLabels[contentSubtype(program)] ?? 'Content';
 		case 'similarity': return `Based on “${programs.get(config.sourceProgramId)?.name ?? 'Missing Program'}”`;
-		case 'theme': return `Prompt-based · ${config.theme}`;
-		case 'sequence': return `${config.entries.length} source Programs`;
+		case 'theme': return `Prompt: ${config.theme}`;
+		case 'sequence': return `${config.entries.length} ${config.entries.length === 1 ? 'Program' : 'Programs'}`;
 		default: return 'Program definition';
 	}
 }
