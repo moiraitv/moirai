@@ -457,7 +457,7 @@ describe('readCommittedScheduleGuide', () => {
 	it('accepts a lookahead commit that still covers the advertised window after midnight', async () => {
 		vi.setSystemTime(new Date('2026-08-23T00:00:01Z'));
 		const configured = schedule();
-		const advertisedEnd = '2026-09-06T00:00:00Z';
+		const advertisedEnd = Temporal.PlainDate.from(START_DATE).add({ days: XMLTV_EPG_DAYS }).toZonedDateTime('UTC').toInstant().toString();
 		const covering = segment(configured.channelId, '2026-08-22T00:00:00Z', advertisedEnd);
 		const repository = {
 			getChannelSchedule: vi.fn().mockResolvedValue(configured),

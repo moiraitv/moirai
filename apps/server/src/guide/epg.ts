@@ -422,6 +422,7 @@ export class EpgService {
 		private readonly ensureMaterialized: () => Promise<void> = async () => undefined,
 		private readonly warn: GuideTemplateWarn = () => undefined,
 		private readonly workers?: SchedulingWorkerPool,
+		private readonly guideDays = XMLTV_EPG_DAYS,
 	) {}
 
 	/** Discard the cached XMLTV document after programming changes. */
@@ -459,7 +460,7 @@ export class EpgService {
 	private async generate(startDate: string): Promise<EpgDocument> {
 		if (this.workers) {
 			const result = await readCommittedGuideAfterMaterializing(() => this.workers!.read({ kind: 'xmltv', timeZone: this.timeZone, publicUrl: this.publicUrl,
-				startDate, days: XMLTV_EPG_DAYS }), this.ensureMaterialized);
+				startDate, days: this.guideDays, guideDays: this.guideDays }), this.ensureMaterialized);
 			result.warnings?.forEach(warning => this.warn(warning.message, warning.extra));
 			return { body: result.body, etag: result.etag!, startDate: result.startDate!, generatedAt: result.generatedAt! };
 		}
@@ -471,8 +472,8 @@ export class EpgService {
 					this.repository,
 					this.timeZone,
 					startDate,
-					XMLTV_EPG_DAYS,
-					{ includeMediaCatalog: true },
+					this.guideDays,
+					{ includeMediaCatalog: true, guideDays: this.guideDays },
 				),
 				this.ensureMaterialized,
 			),

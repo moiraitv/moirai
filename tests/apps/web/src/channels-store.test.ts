@@ -23,6 +23,7 @@ beforeEach(() => {
 	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
 	setActivePinia(createPinia());
+	useChannelsStore().guideHorizonDays = 14;
 	vi.restoreAllMocks();
 	vi.spyOn(api, 'timelineMaterializations').mockResolvedValue([]);
 });
@@ -250,4 +251,41 @@ it('shares duplicate channel reads and immediately accepts a save over an older 
 	finish([]);
 	await Promise.all([a, b]);
 	expect(store.channels).toEqual([saved]);
+});
+
+it('loads the configured horizon from capabilities and bounds requests and navigation', async () => {
+	vi.spyOn(api, 'capabilities').mockResolvedValue({ guideDays: 3, timeZone: 'UTC' } as Awaited<ReturnType<typeof api.capabilities>>);
+	vi.spyOn(api, 'scheduleGuide').mockImplementation(async (startDate, days = 7) => ({
+		...guide(startDate, days, days), committedEndDate: '2026-08-04',
+	}));
+	const store = useChannelsStore();
+	await store.loadCapabilities();
+	await store.loadGuide('2026-08-01', 7);
+	expect(store.guideHorizonDays).toBe(3);
+	expect(vi.mocked(api.scheduleGuide).mock.calls).toEqual([['2026-08-01', 1], ['2026-08-01', 3]]);
+	expect(store.guideNavigationTarget('forward')).toBeNull();
+	await store.loadGuide('2026-08-03', 7);
+	expect(api.scheduleGuide).toHaveBeenLastCalledWith('2026-08-03', 1);
+	await store.loadGuide('2026-08-10', 7);
+	expect(api.scheduleGuide).toHaveBeenLastCalledWith('2026-08-01', 3);
+});
+
+it('refreshes stale capabilities before guide reads and retries a failed capabilities refresh', async () => {
+	const capabilities = vi.spyOn(api, 'capabilities').mockResolvedValue({ guideDays: 7, timeZone: 'UTC' } as Awaited<ReturnType<typeof api.capabilities>>);
+	const reads = vi.spyOn(api, 'scheduleGuide').mockImplementation(async (start, days = 7) => guide(start, days, days));
+	const store = useChannelsStore();
+	await store.loadCapabilities();
+	await store.loadGuide('2026-08-01', 7);
+	store.invalidateCapabilities();
+	capabilities.mockRejectedValueOnce(new Error('Temporarily unavailable'));
+	reads.mockClear();
+	await expect(store.loadGuide('2026-08-01', 7)).rejects.toThrow('Temporarily unavailable');
+	expect(reads).not.toHaveBeenCalled();
+	expect(store.guideError).toBe('Temporarily unavailable');
+	capabilities.mockResolvedValue({ guideDays: 3, timeZone: 'UTC' } as Awaited<ReturnType<typeof api.capabilities>>);
+	await store.loadGuide('2026-08-01', 7);
+	expect(reads).toHaveBeenCalledExactlyOnceWith('2026-08-01', 3);
+	expect(store.guideError).toBe('');
+	await store.loadGuide('2026-08-01', 7);
+	expect(capabilities).toHaveBeenCalledTimes(3);
 });

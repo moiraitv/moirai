@@ -2,12 +2,13 @@ import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import {
 	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	XMLTV_EPG_DAYS,
 	type Channel,
 	type ChannelTimelineMaterializationStatus,
 	type ScheduleGuide,
 } from '@moirai/shared';
 import { api } from '../api';
-import { dateKey, shiftDateKey } from '../date-key';
+import { calendarDateSpan, dateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 
 /** History effect applied after one successful guide request. */
@@ -20,6 +21,7 @@ export const useChannelsStore = defineStore('channels', () => {
 	const loading = ref(true);
 	const loaded = ref(false);
 	const timeZone = ref('UTC');
+	const guideHorizonDays = ref(XMLTV_EPG_DAYS);
 	const publicUrl = ref('');
 	const publicUrlStatus = ref<'configured' | 'unreachable-default'>('configured');
 	const maxExplicitMediaItems = ref(DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS);
@@ -112,6 +114,14 @@ export const useChannelsStore = defineStore('channels', () => {
 		}
 	}
 
+	let capabilitiesStale = false;
+
+	/** Require fresh runtime settings before the next guide read after a server reconnect. */
+	function invalidateCapabilities(): void {
+		capabilitiesStale = true;
+		capabilitySequence += 1;
+	}
+
 	/** Load capabilities from the authoritative source and update the shared UI store. */
 	async function loadCapabilities(): Promise<void> {
 		const sequence = ++capabilitySequence;
@@ -122,10 +132,12 @@ export const useChannelsStore = defineStore('channels', () => {
 			}
 
 			timeZone.value = result.timeZone;
+			guideHorizonDays.value = result.guideDays ?? XMLTV_EPG_DAYS;
 			publicUrl.value = result.publicUrl;
 			publicUrlStatus.value = result.publicUrlStatus;
 			maxExplicitMediaItems.value = result.maxExplicitMediaItems;
 			capabilitiesLoaded.value = true;
+			capabilitiesStale = false;
 			error.value = '';
 		}
 		catch (cause) {
@@ -171,12 +183,6 @@ export const useChannelsStore = defineStore('channels', () => {
 		days = 7,
 		navigation: GuideNavigation = 'preserve',
 	): Promise<void> {
-		const today = dateKey(new Date(), timeZone.value);
-		if (startDate < today) {
-			startDate = today;
-			days = 7;
-			navigation = 'preserve';
-		}
 		const sequence = ++guideSequence;
 		guideRefreshing.value = true;
 		guideError.value = '';
@@ -185,6 +191,25 @@ export const useChannelsStore = defineStore('channels', () => {
 			guideLoading.value = true;
 		}
 		try {
+			if (capabilitiesStale) {
+				await loadCapabilities();
+				if (sequence !== guideSequence) {
+					return;
+				}
+			}
+			const today = dateKey(new Date(), timeZone.value);
+			if (startDate < today) {
+				startDate = today;
+				days = 7;
+				navigation = 'preserve';
+			}
+			const endDate = shiftDateKey(today, guideHorizonDays.value);
+			if (startDate >= endDate) {
+				startDate = today;
+				navigation = 'preserve';
+			}
+			days = Math.max(1, Math.min(days, calendarDateSpan(startDate, endDate)));
+
 			const statuses = api.timelineMaterializations().then(result => {
 				if (sequence === guideSequence) {
 					materializations.value = result;
@@ -259,7 +284,10 @@ export const useChannelsStore = defineStore('channels', () => {
 		if (direction === 'forward') {
 			const step = guidePendingWindowDays.value ?? guide.value.days;
 			const target = shiftDateKey(guideWeekStart.value, step);
-			return guide.value.committedEndDate && target >= guide.value.committedEndDate
+			const configuredEnd = shiftDateKey(dateKey(new Date(), timeZone.value), guideHorizonDays.value);
+			const committedEnd = guide.value.committedEndDate && guide.value.committedEndDate < configuredEnd
+				? guide.value.committedEndDate : configuredEnd;
+			return target >= committedEnd
 				? null
 				: target;
 		}
@@ -294,6 +322,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		loading,
 		loaded,
 		timeZone,
+		guideHorizonDays,
 		publicUrl,
 		publicUrlStatus,
 		maxExplicitMediaItems,
@@ -310,6 +339,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		loadChannels,
 		acceptSavedChannel,
 		loadCapabilities,
+		invalidateCapabilities,
 		loadGuide,
 		guideNavigationTarget,
 		clearGuideNavigationHistory,

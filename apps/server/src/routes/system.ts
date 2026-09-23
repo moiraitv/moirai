@@ -139,6 +139,7 @@ export function registerSystemRoutes(
 		etvContractRevision: ETV_CONTRACT_REVISION,
 		authentication: 'session',
 		timeZone: config.timeZone,
+		guideDays: config.guideDays,
 		publicUrl: config.publicUrl,
 		publicUrlStatus: publicUrlStatus(config.publicUrl),
 		maxExplicitMediaItems: config.maxExplicitMediaItems,

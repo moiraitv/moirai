@@ -26,7 +26,7 @@ Indexed catalog
         ↓
 Programs → templates → channel template stack
         ↓
-Committed 14-day timeline
+Committed configurable timeline (7 days by default)
         ↓
 Daily ErsatzTV playout files
         ↓
@@ -845,9 +845,15 @@ boundary failures.
 ### Materialization and determinism
 
 Saved channel schedules become durable rolling timelines in SQLite. The advertised XMLTV and playout
-window is 14 local days. The stored window keeps one extra local day so that window still covers the
-advertised 14 days after local midnight, before the next materialization pass replenishes the
-lookahead day. Each commit atomically
+window uses `MOIRAI_GUIDE_DAYS` (1–14 local days, default 7), validated at startup and
+reported in server capabilities. Guide reads, XMLTV, playout, and local or worker materialization
+share this horizon. The stored window keeps one extra local day so that window still covers the
+advertised horizon after local midnight, before the next materialization pass replenishes the
+lookahead day. Shortening the horizon preserves existing commits until they age out; expanding it
+appends missing coverage without resetting selection progress. Private playout always publishes
+at least today and tomorrow, using the materialized lookahead when the public horizon is one day.
+Guide consumers reload capabilities on `system.ready` before their next guide request; failed
+capability refreshes remain pending for retry. Each commit atomically
 stores:
 
 - concrete timestamped segments;
@@ -1033,7 +1039,7 @@ previews retain all their rows. Focused rows remain mounted, and keyboard naviga
 channel when needed. Immutable guide snapshots use shallow reactivity; weakly owned per-channel
 interval indexes reuse parsed timestamps across route remounts without retaining replaced snapshots.
 Calendar geometry is independent of zoom, and listing presentation is derived only for mounted entries.
-Guide and Channels request one committed day first, then the remainder of the seven-day window,
+Guide and Channels request one committed day first, then the remainder of an up-to-seven-day window within the configured horizon,
 so the visible range paints before the rest of the week arrives. Concurrent route bootstrap reads share
 an in-flight guide request; explicit refreshes and live changes can supersede it. Combined guide reads select
 timeline-segment columns without snapshot, cursor, or playback JSON, omit duplicate `entries` when
@@ -1221,7 +1227,7 @@ half-life, and negligible events are pruned after two years. Administrators can 
 decayed preferences from a Current scores dialog on Settings, with artwork, hierarchy labels, and
 the catalog plot hover, disable both collection and application, or permanently clear the history
 from a two-step control in that dialog. Preference changes affect only timeline days subsequently
-appended to the committed 14-day window.
+appended to the configured committed window.
 
 ### Audio stream preferences
 

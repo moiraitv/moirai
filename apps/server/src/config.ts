@@ -4,6 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 import {
 	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
+	MAX_TIMELINE_PREVIEW_DAYS,
+	XMLTV_EPG_DAYS,
 	MAX_EXPLICIT_MEDIA_ITEMS,
 } from '@moirai/shared';
 
@@ -37,6 +39,7 @@ export interface AppConfig {
 	ffprobePath: string;
 	mediaProbeConcurrency: number;
 	mediaProbeTimeoutMs: number;
+	guideDays: number;
 	schedulingWorkerCount: number;
 	schedulingWorkerQueueLimit: number;
 	maxExplicitMediaItems: number;
@@ -368,6 +371,13 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 				120_000,
 				'MOIRAI_MEDIA_PROBE_TIMEOUT_MS',
 			),
+		guideDays: integerFromEnvironment(
+			overrides.guideDays?.toString() ?? process.env.MOIRAI_GUIDE_DAYS,
+			XMLTV_EPG_DAYS,
+			1,
+			MAX_TIMELINE_PREVIEW_DAYS,
+			'MOIRAI_GUIDE_DAYS',
+		),
 		schedulingWorkerCount: overrides.schedulingWorkerCount
 			?? integerFromEnvironment(
 				process.env.MOIRAI_SCHEDULING_WORKERS,

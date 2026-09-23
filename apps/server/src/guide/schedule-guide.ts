@@ -208,12 +208,12 @@ export async function readCommittedScheduleGuide(
 	timeZone: string,
 	startDate: string,
 	days: number,
-	options: { includeMediaCatalog?: boolean } = {},
+	options: { includeMediaCatalog?: boolean; guideDays?: number } = {},
 ): Promise<MaterializedGuide> {
 	// Restrict reads to the durable rolling window maintained by the materializer.
 	const requestedStart = Temporal.PlainDate.from(startDate);
 	const today = Temporal.Now.plainDateISO(timeZone);
-	const committedEndDate = today.add({ days: XMLTV_EPG_DAYS });
+	const committedEndDate = today.add({ days: options.guideDays ?? XMLTV_EPG_DAYS });
 	const requestedEnd = requestedStart.add({ days });
 	if (
 		Temporal.PlainDate.compare(requestedStart, today) < 0
@@ -236,6 +236,7 @@ export async function readCommittedScheduleGuide(
 		timeZone,
 		startDate,
 		String(days),
+		committedEndDate.toString(),
 		...templates.map((template) => `${template.id}:${template.updatedAt}:${JSON.stringify(template.slots.map((slot) => slot.guide))}`),
 		...statuses.map((status) => `${status.channelId}:${status.committedAt}:${status.health}:${status.pendingSince ?? ''}`),
 		options.includeMediaCatalog ? 'media' : 'guide',
@@ -412,10 +413,11 @@ export async function readCommittedChannelScheduleGuide(
 	channelId: string,
 	startDate: string,
 	days: number,
+	guideDays = XMLTV_EPG_DAYS,
 ): Promise<ScheduleGuide> {
 	const requestedStart = Temporal.PlainDate.from(startDate);
 	const today = Temporal.Now.plainDateISO(timeZone);
-	const committedEndDate = today.add({ days: XMLTV_EPG_DAYS });
+	const committedEndDate = today.add({ days: guideDays });
 	const requestedEnd = requestedStart.add({ days });
 	if (
 		Temporal.PlainDate.compare(requestedStart, today) < 0

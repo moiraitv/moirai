@@ -16,6 +16,7 @@ export interface GuideReadRequest {
 	publicUrl: string;
 	startDate: string;
 	days: number;
+	guideDays?: number;
 }
 
 /** Complete response bytes and metadata, with bounded template warnings for the main logger. */
@@ -36,6 +37,7 @@ export async function guideRead(repository: Repository, request: GuideReadReques
 			request.channelId!,
 			request.startDate,
 			request.days,
+			request.guideDays,
 		));
 		readComplete();
 		return timePhase('serialize', () => {
@@ -50,8 +52,8 @@ export async function guideRead(repository: Repository, request: GuideReadReques
 			repository,
 			request.timeZone,
 			request.startDate,
-			request.kind === 'xmltv' ? XMLTV_EPG_DAYS : request.days,
-			{ includeMediaCatalog: true },
+			request.days,
+			{ includeMediaCatalog: true, guideDays: request.guideDays ?? XMLTV_EPG_DAYS },
 		),
 		repository.guideTemplates.sourcesById(),
 	]));

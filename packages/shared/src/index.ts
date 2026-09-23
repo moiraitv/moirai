@@ -71,6 +71,8 @@ export interface AppCapabilities {
 	publicUrl: string;
 	publicUrlStatus: 'configured' | 'unreachable-default';
 	maxExplicitMediaItems: number;
+	/** Configured local-day horizon; absent on older servers. */
+	guideDays?: number;
 }
 
 /** Authentication providers that can establish a full-access administrator session. */

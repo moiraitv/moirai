@@ -159,6 +159,8 @@ export async function buildApp(
 		events,
 		config.timeZone,
 		schedulingWorkers,
+		undefined,
+		config.guideDays,
 	);
 	const playout = new PlayoutSynchronizer(
 		repository,
@@ -170,6 +172,7 @@ export async function buildApp(
 		events,
 		logs.logger as FastifyBaseLogger,
 		schedulingWorkers,
+		config.guideDays,
 	);
 	const hardwareAcceleration = new HardwareAccelerationResolver(
 		logs.logger as FastifyBaseLogger,
@@ -229,6 +232,7 @@ export async function buildApp(
 		() => timelineMaterializer.runNow(),
 		(message, extra) => logs.logger.warn(extra ?? {}, message),
 		schedulingWorkers,
+		config.guideDays,
 	);
 	const unsubscribeMaterializer = events.subscribe((event) => {
 		if (event.type === 'embeddings.changed') {

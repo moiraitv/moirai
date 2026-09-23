@@ -203,3 +203,18 @@ describe('debug configuration', () => {
 		expect(loadConfig({ debug: true }).debug).toBe(true);
 	});
 });
+
+describe('guide horizon configuration', () => {
+	it('defaults to seven days and accepts a bounded custom horizon', () => {
+		vi.stubEnv('MOIRAI_GUIDE_DAYS', undefined);
+		expect(loadConfig().guideDays).toBe(7);
+		vi.stubEnv('MOIRAI_GUIDE_DAYS', '3');
+		expect(loadConfig().guideDays).toBe(3);
+		expect(loadConfig({ guideDays: 14 }).guideDays).toBe(14);
+	});
+
+	it.each(['0', '15', '2.5', 'invalid'])('rejects invalid horizon %s at startup', (value) => {
+		vi.stubEnv('MOIRAI_GUIDE_DAYS', value);
+		expect(() => loadConfig()).toThrow(/MOIRAI_GUIDE_DAYS/);
+	});
+});

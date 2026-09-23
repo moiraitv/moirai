@@ -32,7 +32,7 @@ import {
 /** Bounded local-date range accepted by committed guide endpoints. */
 const guideRangeQuerySchema = z.object({
 	startDate: z.iso.date().optional(),
-	days: z.coerce.number().int().min(1).max(MAX_TIMELINE_PREVIEW_DAYS).default(7),
+	days: z.coerce.number().int().min(1).max(MAX_TIMELINE_PREVIEW_DAYS).optional(),
 });
 
 /** Channel and segment identifiers for committed guide detail. */
@@ -69,7 +69,7 @@ export function registerGuideRoutes(
 		try {
 			const result = await readCommittedGuideAfterMaterializing(
 				() => schedulingWorkers.read({ kind: 'guide', timeZone: config.timeZone,
-					publicUrl: config.publicUrl, startDate, days: query.days }, workerRequestSignal(reply)),
+					publicUrl: config.publicUrl, startDate, guideDays: config.guideDays, days: query.days ?? config.guideDays }, workerRequestSignal(reply)),
 				() => timelineMaterializer.runNow(),
 			);
 			return sendWorkerJson(reply, result.body);

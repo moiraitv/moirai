@@ -23,6 +23,7 @@ import {
 import {
 	channelScheduleConfigSchema,
 	MAX_EXPLICIT_MEDIA_ITEMS,
+	MAX_TIMELINE_PREVIEW_DAYS,
 	programItemAdditionConfirmationTokenSchema,
 	programCreateSchema,
 	scheduleTemplateCreateSchema,
@@ -603,6 +604,7 @@ export const appCapabilitiesSchema = z.object({
 	publicUrl: z.url(),
 	publicUrlStatus: z.enum(['configured', 'unreachable-default']),
 	maxExplicitMediaItems: z.number().int().positive().max(MAX_EXPLICIT_MEDIA_ITEMS),
+	guideDays: z.number().int().min(1).max(MAX_TIMELINE_PREVIEW_DAYS).optional(),
 });
 
 /** Safe administrator identity returned after local or Logto authentication. */

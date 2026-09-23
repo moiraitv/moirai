@@ -1,3 +1,4 @@
+import { Temporal } from '@js-temporal/polyfill';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -945,14 +946,14 @@ describe('durable timeline materializer', () => {
 		);
 		await materializer.runNow();
 		const committed = test.materialization()!;
-		expect(committed.windowEnd).toBe('2026-09-06T07:00:00Z');
+		expect(committed.windowEnd).toBe(Temporal.PlainDate.from('2026-08-22').add({ days: XMLTV_EPG_DAYS + 1 }).toZonedDateTime('America/Los_Angeles').toInstant().toString());
 
 		vi.setSystemTime(new Date('2026-08-23T07:00:01Z'));
-		expect(committed.windowEnd).toBe('2026-09-06T07:00:00Z');
+		expect(committed.windowEnd).toBe(Temporal.PlainDate.from('2026-08-22').add({ days: XMLTV_EPG_DAYS + 1 }).toZonedDateTime('America/Los_Angeles').toInstant().toString());
 
 		await materializer.runNow();
 		expect(test.materialization()?.windowStart).toBe('2026-08-23T07:00:00Z');
-		expect(test.materialization()?.windowEnd).toBe('2026-09-07T07:00:00Z');
+		expect(test.materialization()?.windowEnd).toBe(Temporal.PlainDate.from('2026-08-23').add({ days: XMLTV_EPG_DAYS + 1 }).toZonedDateTime('America/Los_Angeles').toInstant().toString());
 	});
 
 	it('skips a recent pass on the same local date and runs after midnight', async () => {
@@ -983,6 +984,9 @@ describe('durable timeline materializer', () => {
 			test.repository,
 			test.events,
 			'America/Los_Angeles',
+			undefined,
+			undefined,
+			14,
 		);
 		await materializer.runNow();
 
@@ -1039,4 +1043,23 @@ it('records nominal slots displaced by an overrun without changing realized play
 		start: '2026-08-23T01:00:00Z', finish: '2026-08-23T02:00:00Z', actualStart: null, actualFinish: null,
 	});
 	expect(generated.segments[0]?.finish).toBe('2026-08-23T02:00:00Z');
+});
+
+it('uses a custom horizon plus one day and preserves commits when the horizon shrinks', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC', undefined, undefined, 3);
+	await materializer.runNow();
+	expect(test.materialization()?.windowEnd).toBe('2026-08-26T00:00:00Z');
+	expect(test.segments()).toHaveLength(4 * 24);
+	const original = structuredClone(test.segments());
+	await new TimelineMaterializer(test.repository, test.events, 'UTC', undefined, undefined, 1).runNow();
+	expect(test.segments()).toEqual(original);
+	await new TimelineMaterializer(test.repository, test.events, 'UTC', undefined, undefined, 5).runNow();
+	expect(test.materialization()?.windowEnd).toBe('2026-08-28T00:00:00Z');
+	expect(test.segments().slice(0, original.length)).toEqual(original);
+	vi.setSystemTime(new Date('2026-08-28T00:00:01Z'));
+	await new TimelineMaterializer(test.repository, test.events, 'UTC', undefined, undefined, 1).runNow();
+	expect(test.materialization()?.windowEnd).toBe('2026-08-30T00:00:00Z');
 });

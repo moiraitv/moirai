@@ -114,7 +114,7 @@ export function registerGuideTemplateRoutes(app: FastifyInstance, dependencies: 
 		try {
 			const result = await readCommittedGuideAfterMaterializing(
 				() => schedulingWorkers.read({ kind: 'guide-template', timeZone: config.timeZone,
-					publicUrl: config.publicUrl, startDate, days: 1, preview: input }, workerRequestSignal(reply)),
+					publicUrl: config.publicUrl, startDate, guideDays: config.guideDays, days: 1, preview: input }, workerRequestSignal(reply)),
 				() => timelineMaterializer.runNow(),
 			);
 			return sendWorkerJson(reply, result.body);

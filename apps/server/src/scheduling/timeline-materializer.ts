@@ -33,7 +33,7 @@ import { currentTimestamp, yieldToEventLoop } from '../time.js';
 const MATERIALIZATION_INTERVAL_MS = 60_000;
 /**
  * Extra local day kept beyond the advertised XMLTV window. Yesterday's lookahead day becomes
- * today's 14th advertised day, so midnight does not uncover the far edge before the next pass.
+ * today's final advertised day, so midnight does not uncover the far edge before the next pass.
  */
 const MATERIALIZED_LOOKAHEAD_DAYS = 1;
 
@@ -334,6 +334,7 @@ export class TimelineMaterializer {
 		private readonly timeZone: string,
 		private readonly workers?: SchedulingWorkerPool,
 		private readonly write: MaterializationWriter = async command => applyMaterializationWrite(repository, command),
+		private readonly guideDays = XMLTV_EPG_DAYS,
 	) {}
 
 	/** Report invalidation observed during an active pass so its owner can retry. */
@@ -481,7 +482,7 @@ export class TimelineMaterializer {
 	/** Refresh each configured channel using one shared catalog snapshot. */
 	private async materializeAll(): Promise<void> {
 		if (this.workers?.databaseBacked) {
-			const retry = await this.workers.materialize(this.timeZone, this.write, event => this.events.publish(event));
+			const retry = await this.workers.materialize(this.timeZone, this.write, event => this.events.publish(event), this.guideDays);
 			if (retry) {
 				this.revision += 1;
 				this.dirty = true;
@@ -511,7 +512,7 @@ export class TimelineMaterializer {
 		const today = Temporal.Instant.from(occupancyStart).toZonedDateTimeISO(this.timeZone).toPlainDate();
 		// One extra local day past the stored window covers DST-length days and far-edge overruns.
 		const occupancyEnd = startOfDate(
-			today.add({ days: XMLTV_EPG_DAYS + MATERIALIZED_LOOKAHEAD_DAYS + 1 }),
+			today.add({ days: this.guideDays + MATERIALIZED_LOOKAHEAD_DAYS + 1 }),
 			this.timeZone,
 		);
 		const occupiedMedia = await this.repository.listOccupiedMediaIntervals(
@@ -583,7 +584,7 @@ export class TimelineMaterializer {
 		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' });
 		const today = now.toZonedDateTimeISO(this.timeZone).toPlainDate();
 		const desiredStart = startOfDate(today, this.timeZone);
-		const desiredEndDate = today.add({ days: XMLTV_EPG_DAYS + MATERIALIZED_LOOKAHEAD_DAYS });
+		const desiredEndDate = today.add({ days: this.guideDays + MATERIALIZED_LOOKAHEAD_DAYS });
 		const desiredEnd = startOfDate(desiredEndDate, this.timeZone);
 		const currentFingerprint = inputFingerprint(schedule, templates, programs, sourceCatalog);
 
@@ -808,7 +809,7 @@ export class TimelineMaterializer {
 					templates,
 					existing,
 					localDate(current.windowStart, this.timeZone).toString(),
-					XMLTV_EPG_DAYS + MATERIALIZED_LOOKAHEAD_DAYS,
+					this.guideDays + MATERIALIZED_LOOKAHEAD_DAYS,
 					this.timeZone,
 				) : [],
 			generated.guideOccurrences,

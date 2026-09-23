@@ -1,3 +1,4 @@
+import { EpgService } from '@server/guide/epg.js';
 import { DatabaseJobReader } from '@server/scheduling/database-jobs.js';
 import { buildEtvPlayoutFiles } from '@server/playback/playout-output.js';
 import { Temporal } from '@js-temporal/polyfill';
@@ -413,3 +414,31 @@ it('matches semantic ranking in workers and reports missing draft preparation wi
 	expect(result.preferences).toContain('A new draft concept');
 	expect(f.database.sqlite.serialize()).toEqual(before);
 }, 20_000);
+
+it('uses the configured horizon for worker materialization, XMLTV, and guide bounds', async () => {
+	const f = await setup();
+	const base = await template(f, f.source.id);
+	await f.repository.setChannelSchedule(f.channel.id, { defaultTemplateId: base.id, layers: [], defaultFiller: null });
+	const guideDays = 3;
+	await f.workers.materialize('UTC', async command => applyMaterializationWrite(f.repository, command), () => f.workers.invalidateReads(), guideDays);
+	const today = Temporal.Now.plainDateISO('UTC');
+	const end = today.add({ days: guideDays });
+	const storedEnd = today.add({ days: guideDays + 1 }).toZonedDateTime('UTC').toInstant().toString();
+	expect((await f.repository.getTimelineMaterialization(f.channel.id))?.windowEnd).toBe(storedEnd);
+	const request = { timeZone: 'UTC', publicUrl: 'http://localhost:3000', startDate: today.toString(), days: guideDays, guideDays };
+	const guide = JSON.parse((await f.workers.read({ kind: 'guide', ...request })).body);
+	expect(guide.days).toBe(guideDays);
+	expect(guide.committedEndDate).toBe(end.toString());
+	const local = new SchedulingWorkerPool(0, 4, { db: f.database.db, repository: f.repository });
+	cleanups.push(() => local.close());
+	const xml = (await f.workers.read({ kind: 'xmltv', ...request })).body;
+	const epg = new EpgService(f.repository, 'UTC', request.publicUrl, undefined, undefined, f.workers, guideDays);
+	const localEpg = new EpgService(f.repository, 'UTC', request.publicUrl, undefined, undefined, undefined, guideDays);
+	expect((await epg.document()).body).toBe(xml);
+	expect((await localEpg.document()).body).toBe(xml);
+	expect(xml).toBe((await local.read({ kind: 'xmltv', ...request })).body);
+	const stops = [...xml.matchAll(/<programme\b[^>]*\bstop="(\d{14})/gu)].map(match => match[1]!);
+	expect(stops.length).toBeGreaterThan(0);
+	expect(stops.sort().at(-1)).toBe(`${end.toString().replaceAll('-', '')}000000`);
+	await expect(f.workers.read({ kind: 'guide', ...request, days: guideDays + 1 })).rejects.toThrow(/committed/i);
+}, 30_000);

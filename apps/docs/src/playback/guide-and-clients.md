@@ -11,7 +11,9 @@ The **![](/icons/calendar-days.svg) Guide** page shows the committed rolling lin
 
 On Guide and Channels, the guide list expands to show all channels and scrolls vertically with the page. Guide shows approximately two hours on phones, four hours on tablets, and four hours on desktops; Channels shows six hours. Scroll horizontally to browse later programming. On Guide, the week controls and time ruler stay visible while you scroll down the channels. Select **Today** to return to the current week, centering the now line within the visible timeline.
 
-A newly assigned channel may show **Preparing guide…** until its committed programming is available. You can continue browsing other channels during that period. If anything fails, the message remains visible with a **Retry** action. The guide refreshes when generation completes and after a connection is restored.
+The guide and XMLTV feed cover seven local calendar days by default, including today. Set `MOIRAI_GUIDE_DAYS` to a value from `1` to `14` and restart Moirai to change that horizon. A shorter horizon reduces guide size and future scheduling work. Moirai generates one extra day internally to keep listings available across midnight. With a one-day guide, tomorrow’s private playback file is also prepared in advance so playback can continue across midnight. Reducing the horizon limits the published guide immediately; existing generated programming ages out without resetting selection progress. The in-app guide displays up to seven days at a time and lets you move forward when more days are configured.
+
+A newly assigned channel may show **Preparing guide…** until its committed programming is available. You can continue browsing other channels during that period. If anything fails, the message remains visible with a **Retry** action. The guide refreshes when generation completes and after a connection is restored. Reconnecting also reloads the configured horizon before requesting listings.
 
 Hover over an individual media item, or focus it with the keyboard, to see its details in the same preview used on Programs. Click the item to open its full guide details.
 

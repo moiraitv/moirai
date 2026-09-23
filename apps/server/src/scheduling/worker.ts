@@ -40,7 +40,7 @@ parentPort.on('message', async (message: {
 } | { id: number; kind: 'preview'; input: PreviewJob }
 | { id: number; kind: 'read'; input: { request: DatabaseReadRequest; revision: string } }
 | { id: number; kind: 'playout'; input: Parameters<typeof buildEtvPlayoutFiles> }
-| { id: number; kind: 'materialize'; input: { timeZone: string; revision: string } }
+| { id: number; kind: 'materialize'; input: { timeZone: string; revision: string; guideDays: number } }
 | { kind: 'write-result'; writeId: number; error?: SchedulingWorkerErrorPayload }) => {
 	if (message.kind === 'write-result') {
 		const pending = writes.get(message.writeId);
@@ -76,6 +76,7 @@ parentPort.on('message', async (message: {
 					writes.set(writeId, { resolve, reject });
 					parentPort!.postMessage({ id: message.id, writeId, write });
 				}),
+				message.input.guideDays,
 			);
 			await materializer.runNow();
 			parentPort!.postMessage({ id: message.id, result: materializer.needsRefresh });

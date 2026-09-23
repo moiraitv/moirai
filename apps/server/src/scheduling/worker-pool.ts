@@ -11,7 +11,7 @@ import { StaleSemanticDecisionError } from '../repository/semantic.js';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
+import { MAX_TIMELINE_SEGMENTS, XMLTV_EPG_DAYS } from '@moirai/shared';
 import type { GenerateTimelineInput, TimelineGeneration } from './engine.js';
 import { generateTimelineDetailed, TimelineMaterializationLimitError } from './engine.js';
 import { TimelineIssueLimitError } from './timeline-issues.js';
@@ -35,7 +35,7 @@ type JobInput = { kind: 'generate'; input: GenerateTimelineInput }
 	| { kind: 'preview'; input: PreviewJob }
 	| { kind: 'read'; input: { request: DatabaseReadRequest; revision: string } }
 	| { kind: 'playout'; input: Parameters<typeof buildEtvPlayoutFiles> }
-	| { kind: 'materialize'; input: { timeZone: string; revision: string } };
+	| { kind: 'materialize'; input: { timeZone: string; revision: string; guideDays: number } };
 
 /** Main-connection fallback and invalidation source for database-backed preview jobs. */
 interface PreviewContext {
@@ -175,9 +175,9 @@ export class SchedulingWorkerPool {
 	}
 
 	/** Keep the complete background preparation pass off-thread and acknowledge ordered writes. */
-	materialize(timeZone: string, write: MaterializationWriter, event: (event: LiveEventInput) => void): Promise<boolean> {
+	materialize(timeZone: string, write: MaterializationWriter, event: (event: LiveEventInput) => void, guideDays = XMLTV_EPG_DAYS): Promise<boolean> {
 		const revision = `${this.previewContext!.repository.schedulingCatalogRevision}:${this.readRevision}`;
-		return this.enqueue<boolean>({ kind: 'materialize', input: { timeZone, revision } }, undefined, { write, event });
+		return this.enqueue<boolean>({ kind: 'materialize', input: { timeZone, revision, guideDays } }, undefined, { write, event });
 	}
 
 	constructor(

@@ -794,6 +794,10 @@ async function deleteChannel(): Promise<void> {
 	}
 }
 const unsubscribe = liveEvents.subscribe((event) => {
+	if (event.type === 'system.ready') {
+		channelsStore.invalidateCapabilities();
+	}
+
 	if (event.type === 'channel.changed' && Date.now() < suppressChannelEventsUntil) {
 		return;
 	}

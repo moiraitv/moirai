@@ -47,6 +47,7 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_LOGTO_APP_SECRET` | Unset | Traditional-web application secret; never returned or logged |
 | `MOIRAI_LOG_LEVEL` | `info` | Structured server log level |
 | `MOIRAI_LOG_DIR` | `<data>/logs` | Rotating structured server log directory |
+| `MOIRAI_GUIDE_DAYS` | `7` | Guide and XMLTV horizon in local calendar days, including today; accepts 1–14. One extra day is generated internally. |
 | `MOIRAI_LOG_RETENTION_DAYS` | `14` | Maximum age of retained JSONL logs |
 | `MOIRAI_LOG_MAX_MB` | `200` | Maximum total retained log size |
 | `MOIRAI_LOG_FILE_MAX_MB` | `10` | Rotation size for an individual log file |

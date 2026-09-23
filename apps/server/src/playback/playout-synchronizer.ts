@@ -65,6 +65,7 @@ export class PlayoutSynchronizer {
 		private readonly events: LiveEventPublisher,
 		private readonly logger: FastifyBaseLogger,
 		private readonly workers?: SchedulingWorkerPool,
+		private readonly guideDays = XMLTV_EPG_DAYS,
 	) {
 		this.subtitles = new SubtitleAssets(root, repository);
 	}
@@ -280,16 +281,19 @@ export class PlayoutSynchronizer {
 		}
 
 		const startDate = Temporal.Now.plainDateISO(this.timeZone).toString();
+		// Publish tomorrow before midnight even when the public guide contains only today.
+		const playoutDays = Math.max(2, this.guideDays);
 		const guide = await readCommittedGuideAfterMaterializing(
 			async () => this.workers?.databaseBacked
 				? JSON.parse((await this.workers.read({ kind: 'channel-guide', channelId: channel.id,
-					timeZone: this.timeZone, startDate, days: XMLTV_EPG_DAYS, publicUrl: '' })).body) as Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>
+					timeZone: this.timeZone, startDate, days: playoutDays, guideDays: playoutDays, publicUrl: '' })).body) as Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>
 				: readCommittedChannelScheduleGuide(
 					this.repository,
 					this.timeZone,
 					channel.id,
 					startDate,
-					XMLTV_EPG_DAYS,
+					playoutDays,
+					playoutDays,
 				),
 			this.ensureMaterialized,
 		);

@@ -28,8 +28,8 @@ export const MAX_TIMELINE_SEGMENTS = 50_000;
 export const MAX_TIMELINE_ISSUE_OCCURRENCES = 50;
 /** Bound combined guide responses while supporting several dense short-form channels. */
 export const MAX_GUIDE_TIMELINE_SEGMENTS = 200_000;
-/** Number of committed days exposed through the XMLTV guide. */
-export const XMLTV_EPG_DAYS = 14;
+/** Default number of local days exposed through the guide and XMLTV. */
+export const XMLTV_EPG_DAYS = 7;
 /** Default configured capacity for explicit media-item collections. */
 export const DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS = 5_000;
 /** Absolute contract ceiling for configured explicit media-item collections. */

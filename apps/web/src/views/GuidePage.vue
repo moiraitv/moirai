@@ -11,7 +11,6 @@ import {
 	ExternalLink,
 	RadioTower,
 } from '@lucide/vue';
-import { XMLTV_EPG_DAYS } from '@moirai/shared';
 import GuideTimeline from '../components/GuideTimeline.vue';
 import LoadingState from '../components/LoadingState.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -28,6 +27,7 @@ const {
 	channels,
 	guide,
 	timeZone,
+	guideHorizonDays,
 	publicUrl,
 	publicUrlStatus,
 	loaded: channelsLoaded,
@@ -78,7 +78,7 @@ const requestedWindowDays = computed(() => {
 function requestedDaysFor(startDate: string): number {
 	const committedEndDate = guide.value?.committedEndDate;
 	if (!committedEndDate || !startDate) {
-		return 7;
+		return Math.min(7, guideHorizonDays.value);
 	}
 
 	return Math.max(1, Math.min(7, calendarDateSpan(startDate, committedEndDate)));
@@ -228,6 +228,10 @@ function scheduleRefresh(): void {
 }
 
 const unsubscribe = liveEvents.subscribe((event) => {
+	if (event.type === 'system.ready') {
+		channelsStore.invalidateCapabilities();
+	}
+
 	if (affectsGuide(event)) {
 		scheduleRefresh();
 	}
@@ -259,7 +263,7 @@ onBeforeUnmount(() => {
 				<p class="eyebrow">IPTV client feed</p>
 				<h2>Playlist and guide URLs</h2>
 				<p>
-					A committed rolling {{ XMLTV_EPG_DAYS }}-day guide generated in {{ timeZone }}. Draft
+					A committed rolling {{ guideHorizonDays }}-day guide generated in {{ timeZone }}. Draft
 					previews never advance playback state.
 				</p>
 				<p v-if="publicUrlStatus === 'unreachable-default'" class="notice warning">
