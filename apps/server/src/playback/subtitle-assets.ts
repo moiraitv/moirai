@@ -201,7 +201,6 @@ export class SubtitleAssets {
 			}
 			const key = JSON.stringify({ sidecarVersion: 2, sidecar: sources.map((source) => ({
 				path: source.path, size: source.stat.size, modified: source.stat.mtimeMs,
-				device: source.stat.dev, inode: source.stat.ino,
 			})) });
 			const snapshots = [];
 			for (const source of sources) {

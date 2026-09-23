@@ -131,10 +131,11 @@ function disposition(value: unknown): boolean {
 	return value === 1 || value === '1' || value === true;
 }
 
-/** Produce a stable cache identity from the opened media file itself. */
+/**
+ * Version cached probe facts by size and modification time within their library/path scope.
+ * Exclude device and inode numbers because harmless network-share remounts can change them.
+ */
 export function mediaProbeFingerprint(info: {
-	dev: number | bigint;
-	ino: number | bigint;
 	size: number | bigint;
 	mtimeMs: number | bigint;
 }): string {
@@ -142,8 +143,6 @@ export function mediaProbeFingerprint(info: {
 		.update(
 			[
 				MEDIA_PROBE_VERSION,
-				String(info.dev),
-				String(info.ino),
 				String(info.size),
 				String(info.mtimeMs),
 			].join(':'),

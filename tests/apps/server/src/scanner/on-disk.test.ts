@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, opendir, readdir, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, opendir, readdir, rename, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
 import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
-import { MediaProbeError, parseMediaProbeOutput } from '@server/media/media-probe.js';
+import { MEDIA_PROBE_VERSION, MediaProbeError, parseMediaProbeOutput } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 import { MAX_MEDIA_SCAN_ATTEMPTS } from '@server/scanner/scan-queue.js';
 
@@ -737,12 +737,39 @@ describe('discoverOnDisk', () => {
 	});
 });
 
-it('refreshes pre-audio-channel-count probe caches during a normal scan', async () => {
+it('reuses probe and item fingerprints after filesystem identity changes, but probes modified files', async () => {
+	const fixture = await library();
+	const file = path.join(fixture.sourceConfig.scanRoot, 'Film.mp4');
+	await writeFile(file, 'video');
+	await utimes(file, 1_000, 1_000);
+	const before = await stat(file);
+	const probeMedia = vi.fn(async () => ({ durationMilliseconds: 60_000, fileSizeBytes: 5, container: 'mp4', streams: [], resolution: null, tags: {} }));
+	const first = await discoverOnDisk(fixture, { probeMedia });
+	const item = first.items[0]!;
+	const probeCache = new Map([['Film.mp4', item]]);
+
+	await rename(file, `${file}.old`);
+	await writeFile(file, 'video');
+	await utimes(file, 1_000, 1_000);
+	expect((await stat(file)).ino).not.toBe(before.ino);
+	probeMedia.mockClear();
+	const remounted = await discoverOnDisk(fixture, { probeMedia, probeCache });
+	expect(probeMedia).not.toHaveBeenCalled();
+	expect(remounted.items[0]!.probeFingerprint).toBe(item.probeFingerprint);
+	expect(remounted.items[0]!.fingerprint).toBe(item.fingerprint);
+	expect(remounted.issues).toEqual(first.issues);
+
+	await utimes(file, 2_000, 2_000);
+	await discoverOnDisk(fixture, { probeMedia, probeCache });
+	expect(probeMedia).toHaveBeenCalledOnce();
+});
+
+it.each([3, MEDIA_PROBE_VERSION])('refreshes legacy device/inode probe caches from contract %s during a normal scan', async (version) => {
 	const fixture = await library();
 	const file = path.join(fixture.sourceConfig.scanRoot, 'Audio.mp4');
 	await writeFile(file, 'video');
 	const info = await stat(file, { bigint: true });
-	const oldFingerprint = createHash('sha256').update([3, info.dev, info.ino, info.size, info.mtimeMs].map(String).join(':')).digest('hex');
+	const oldFingerprint = createHash('sha256').update([version, info.dev, info.ino, info.size, info.mtimeMs].map(String).join(':')).digest('hex');
 	const probeMedia = vi.fn(async () => ({ durationMilliseconds: 60_000, fileSizeBytes: 5, container: 'mp4', streams: [{
 		index: 1, type: 'audio' as const, codec: 'aac', durationMilliseconds: null, width: null, height: null,
 		language: 'eng', title: null, isDefault: true, isForced: false, isHearingImpaired: false, isCommentary: false, channels: 6,

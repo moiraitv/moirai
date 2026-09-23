@@ -287,7 +287,8 @@ per scan loads cached outcomes; reconciliation persists them transactionally in 
 Migration 0036 adds ignored_media_issues keyed by library, normalized relative path, and issue code,
 migrating explicit silent-ending acceptance without changing cached results or historical scans.
 General ignore decisions are authoritative; the legacy acceptance endpoint and field remain compatible.
-Media fingerprints use physical identity; metadata uses relevant media/NFO inputs and sidecar absence;
+Media fingerprints use size and modification time within their library/path scope;
+metadata uses relevant media/NFO inputs and sidecar absence;
 Multipart decisions include ordered member identities; show conflicts include participating metadata.
 Unavailable inputs include observable identity and stable availability state rather than error messages.
 One decision read per reconciliation applies decisions transactionally with health counts and scan
@@ -310,8 +311,12 @@ video duration of at most 366 days and a usable video stream remains browsable, 
 excludes it and reports a scan diagnostic. This bound also prevents corrupt probe output from overflowing
 scheduling arithmetic.
 
-Successful probes are cached using the file identity, size, modification time, and probe-contract
-version. Failed media probes move to the end of the scan for up to three total attempts per physical
+Successful probes are cached by library and relative path using size, modification time, and probe-contract
+version. Persistent probe and subtitle snapshot keys exclude device/inode identifiers so remounts
+do not invalidate unchanged files. Active source-read and scan-root identity checks retain those
+identifiers to detect replacement during an operation. Legacy identity-based hashes refresh once on
+next use; a same-size replacement preserving modification time is not detected by these cache keys.
+Failed media probes move to the end of the scan for up to three total attempts per physical
 file. Each retry pass waits for the preceding pass to finish and uses the same concurrency limit.
 Recovered files retain measured metadata without stale failure diagnostics; exhausted files retain
 one final probe diagnostic. Cancellation, an unavailable probe executable, and system resource

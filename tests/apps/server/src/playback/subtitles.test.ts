@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -449,6 +449,37 @@ it.each([false, true])('copies validated descriptors under a mapped root (symlin
 	configured.subtitlePreferences = { policy: 'off' };
 	await assets.prepare(configured, guide(configured, entry));
 	expect(lookup).toHaveBeenCalledTimes(2);
+});
+
+it('reuses sidecar snapshots across filesystem identity changes and refreshes changed subtitles', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-sidecar-remount-'));
+	roots.push(root);
+	const file = path.join(root, 'video.srt');
+	const content = '1\n00:00:01,000 --> 00:00:02,000\nCaption\n';
+	await writeFile(file, content);
+	await utimes(file, 1_000, 1_000);
+	const before = await stat(file);
+	const configured = channel();
+	configured.subtitlePreferences = { policy: 'any' };
+	const media = item();
+	media.subtitleTracks = [track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file] })];
+	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(path.join(root, 'assets'), repository);
+	const entry = segment(configured, media);
+	const first = (await assets.prepare(configured, guide(configured, entry))).get(entry.id)![0]!.path!;
+
+	await rename(file, `${file}.old`);
+	await writeFile(file, content);
+	await utimes(file, 1_000, 1_000);
+	expect((await stat(file)).ino).not.toBe(before.ino);
+	const reused = (await assets.prepare(configured, guide(configured, entry))).get(entry.id)![0]!.path!;
+	expect(reused).toBe(first);
+	expect(await readFile(reused, 'utf8')).toBe(content);
+
+	await writeFile(file, `${content}\n`);
+	const refreshed = (await assets.prepare(configured, guide(configured, entry))).get(entry.id)![0]!.path!;
+	expect(refreshed).not.toBe(first);
+	expect(await readFile(refreshed, 'utf8')).toBe(`${content}\n`);
 });
 
 it('closes the source and removes temporary output when streaming fails', async () => {

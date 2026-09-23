@@ -6,10 +6,20 @@ import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
 import {
 	MediaProbe,
 	MediaProbeError,
+	mediaProbeFingerprint,
 	parseMediaProbeOutput,
 } from '@server/media/media-probe.js';
 
 const roots: string[] = [];
+
+it('keeps probe fingerprints stable across remounts but invalidates changed file facts', () => {
+	const before = { dev: 1, ino: 2, size: 500, mtimeMs: 1_000 };
+	const remounted = { ...before, dev: 9, ino: 22 };
+	expect(mediaProbeFingerprint(remounted)).toBe(mediaProbeFingerprint(before));
+	expect(mediaProbeFingerprint({ ...remounted, size: 501 })).not.toBe(mediaProbeFingerprint(before));
+	expect(mediaProbeFingerprint({ ...remounted, mtimeMs: 2_000 })).not.toBe(mediaProbeFingerprint(before));
+	expect(mediaProbeFingerprint({ size: 500n, mtimeMs: 1_000n })).toBe(mediaProbeFingerprint(before));
+});
 
 afterEach(async () => {
 	await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
