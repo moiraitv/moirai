@@ -43,7 +43,11 @@ In a saved program, open **Used by** in the editor title bar to see direct seque
 
 A ![](/icons/list-video.svg) Program is a reusable rule that tells Moirai what content to play and in what order. ![](/icons/calendar-range.svg) Templates use ![](/icons/list-video.svg) Programs in their time slots, so one ![](/icons/list-video.svg) Program can appear on several ![](/icons/tv-minimal.svg) Channels or days.
 
-The Programs list is alphabetical by name, ignoring punctuation and leading “A”, “An”, or “The”, just like media titles.
+The Programs list starts in alphabetical order, ignoring punctuation and leading “A”, “An”, or “The”, just like media titles. Search by name or definition, filter by Program type, Content definition, or usage, and choose a different sort order.
+
+Select a Program to inspect its definition, media sample, health, and direct references. Close the drawer with its close button or Escape. Choose **Edit Program** to make any changes.
+
+The **Items** column shows the indexed count; its tooltip reports unavailable items when any exist. The **References** count includes authored uses in Programs, templates, and channel schedules; it is not solely a count of Channels it appears on. **Used by** lists the direct resources. Similar Items and Theme previews show sample matches, while **Current sets** reports the remaining items in each schedule use.
 
 ![The programs catalog](/screenshots/programs.png)
 

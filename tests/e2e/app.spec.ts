@@ -690,36 +690,32 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Name').fill(`${programName} Follow-up`);
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs$/u);
-	const programCard = page.locator('.program-row').filter({
-		has: page.getByRole('link', { name: programName, exact: true }),
+	const programCard = page.locator('.program-management-row').filter({
+		has: page.getByRole('button', { name: programName, exact: true }),
 	});
-	const seasonProgramCard = page.locator('.program-row').filter({
-		has: page.getByRole('link', { name: seasonProgramName, exact: true }),
+	const seasonProgramCard = page.locator('.program-management-row').filter({
+		has: page.getByRole('button', { name: seasonProgramName, exact: true }),
 	});
 	await page.getByRole('searchbox', { name: 'Search programs' }).fill('No matching program');
 	await expect(page.getByRole('heading', { name: 'No matching programs' })).toBeVisible();
 	await page.getByRole('button', { name: 'Clear Filters' }).click();
 	await expect(programCard).toBeVisible();
-	await expect(seasonProgramCard).toContainText('1 selected media groups');
-	const programCarouselItem = programCard.getByRole('link', { name: /Broadcast Fixture/ });
-	await expect(programCarouselItem).toHaveCSS('display', 'grid');
-	await expect(programCarouselItem).toHaveCSS('background-color', 'rgb(11, 26, 39)');
+	await expect(seasonProgramCard).toContainText('Specific Groups');
+	await programCard.locator('.program-management-identity').click();
+	const programCarouselItem = page.locator('.program-inspector').getByRole('link', { name: /Broadcast Fixture/ });
 	await programCarouselItem.click();
 	await expect(page).toHaveURL(new RegExp(`/libraries/${movieLibraryId}/items/`));
 	await page.goBack();
-	await expect(programCard).toBeVisible();
-	const programEditAction = programCard.getByRole('link', { name: `Edit ${programName}` });
-	await expect(programEditAction).toBeVisible();
-	await programEditAction.hover();
-	await expect.poll(() => programEditAction.evaluate((element) =>
-		getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
-	await seasonProgramCard.locator('.program-row-counts').click();
+	await page.getByRole('button', { name: 'Close program inspector' }).click();
+	await seasonProgramCard.locator('.program-management-identity').click();
+	await page.locator('.program-inspector').getByRole('link', { name: 'Edit Program', exact: true }).click();
 	await page.getByRole('button', { name: 'Review Selection' }).click();
 	await expect(page.getByRole('dialog', { name: 'Review selection' })).toContainText('Season 1');
 	await page.getByRole('button', { name: 'Done' }).click();
 	await page.getByRole('button', { name: 'Close program editor' }).click();
-	await expect(programCard).toContainText(`1 selected from ${libraryName}`);
-	await programCard.getByRole('link', { name: programName, exact: true }).click();
+	await page.getByRole('button', { name: 'Close program inspector' }).click();
+	await programCard.locator('.program-management-identity').click();
+	await page.locator('.program-inspector').getByRole('link', { name: 'Edit Program', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect(page.getByRole('button', { name: 'Delete Program' })).toBeVisible();
 	await expect(page.locator('.resource-editor-action-bar').getByRole('button')).toHaveText([

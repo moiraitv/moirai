@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { authenticateAdministrator } from './authentication';
 
-test('preserves catalog scroll, filters and pagination when closing a Program editor', async ({ page }) => {
+test('preserves catalog scroll, filters and selection when closing a Program editor', async ({ page }) => {
 	const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
 	const ids: string[] = [];
 	try {
@@ -15,24 +15,27 @@ test('preserves catalog scroll, filters and pagination when closing a Program ed
 			ids.push((await response.json()).id);
 		}
 		await page.goto('/schedules/programs?q=Scroll&page=2&pageSize=10');
-		const opener = page.locator('.program-row').last().getByRole('link').first();
-		await expect(page.locator('.program-row')).toHaveCount(10);
-		await opener.scrollIntoViewIfNeeded();
-		const position = await page.evaluate(() => window.scrollY);
-		expect(position).toBeGreaterThan(100);
+		const list = page.locator('.program-management-list');
+		await expect(list).toBeVisible();
+		await list.evaluate(element => {
+			element.scrollTop = element.scrollHeight;
+		});
+		const opener = page.getByRole('button', { name: /^Scroll fixture 23/ });
+		await expect(opener).toBeVisible();
+		const position = await list.evaluate(element => element.scrollTop);
+		expect(position).toBeGreaterThan(0);
 		await opener.click();
+		await page.getByRole('link', { name: 'Edit Program', exact: true }).click();
 		await expect(page.getByRole('dialog', { name: 'Edit Program' })).toBeVisible();
 		await page.getByRole('button', { name: 'Close program editor' }).click();
-		await expect(page.getByRole('dialog')).toBeHidden();
-		await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(position);
-		expect(new URL(page.url()).searchParams.get('page')).toBe('2');
+		await expect(page.getByRole('dialog', { name: 'Edit Program' })).toBeHidden();
+		await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(position);
+		expect(new URL(page.url()).searchParams.get('page')).toBeNull();
 		expect(new URL(page.url()).searchParams.get('q')).toBe('Scroll');
+		expect(new URL(page.url()).searchParams.get('selected')).toBe(ids[23]);
+		await page.getByRole('button', { name: 'Close program inspector' }).click();
 		await expect(opener).toBeFocused();
-		await opener.click();
-		await expect(page.getByRole('dialog', { name: 'Edit Program' })).toBeVisible();
-		await page.keyboard.press('Escape');
-		await expect(page.getByRole('dialog')).toBeHidden();
-		await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(position);
+
 	}
 	finally {
 		for (const id of ids) {

@@ -41,20 +41,15 @@ export function useProgramResourceActions(
 			|| !program
 			|| options.saving()
 			|| deleting.value
-			|| !(await requestConfirmation({
-				key: `delete-program:${program.id}`,
-				title: 'Delete Program?',
-				message: `Delete ${program.name} and discard any unsaved changes? This cannot be undone.`,
-				confirmLabel: 'Delete Program',
-				destructive: true,
-			}))
 		) {
 			return;
 		}
 
 		deleting.value = true;
 		try {
-			await api.deleteProgram(program.id);
+			if (!(await confirmProgramDeletion(program, true))) {
+				return;
+			}
 			await options.onDeleted();
 		}
 		catch (cause) {
@@ -66,4 +61,19 @@ export function useProgramResourceActions(
 	}
 
 	return { deleting, resetProgram, deleteProgram };
+}
+
+/** Confirm permanent deletion consistently from inspection and full editing. */
+export async function confirmProgramDeletion(program: SchedulingProgram, discardDraft = false): Promise<boolean> {
+	if (!(await requestConfirmation({
+		key: `delete-program:${program.id}`,
+		title: 'Delete Program?',
+		message: `Delete ${program.name}${discardDraft ? ' and discard any unsaved changes' : ''}? This cannot be undone.`,
+		confirmLabel: 'Delete Program',
+		destructive: true,
+	}))) {
+		return false;
+	}
+	await api.deleteProgram(program.id);
+	return true;
 }

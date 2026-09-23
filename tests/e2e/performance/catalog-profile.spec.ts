@@ -26,21 +26,22 @@ test('profiles large scheduling catalogs and program editor navigation', async (
 	const errors: string[] = [];
 	page.on('pageerror', error => errors.push(error.message));
 	const samples = [];
-	for (const [path, selector] of [['/schedules/programs', '.program-row'], ['/schedules/templates', '.template-row']] as const) {
+	for (const [path, selector] of [['/schedules/programs', '.program-management-row'], ['/schedules/templates', '.template-row']] as const) {
 		const start = performance.now();
 		await page.goto(path);
 		await expect(page.locator(selector).first()).toBeVisible();
 		samples.push({ path, load: performance.now() - start, rendered: await page.locator(selector).count() });
 	}
 	await page.goto('/schedules/programs');
-	await expect(page.locator('.program-row').first()).toBeVisible();
+	await expect(page.locator('.program-management-row').first()).toBeVisible();
 	const start = performance.now();
 	await page.getByRole('searchbox', { name: 'Search programs' }).fill('Program 49');
 	await expect(page).toHaveURL(/q=Program\+49/);
-	await page.locator('.program-row a').first().click();
+	await page.locator('.program-management-identity').first().click();
+	await page.locator('.program-inspector').getByRole('link', { name: 'Edit Program', exact: true }).click();
 	await expect(page.getByRole('dialog', { name: 'Edit Program' })).toBeVisible();
 	await page.getByRole('button', { name: 'Close program editor' }).click();
-	await expect(page.getByRole('dialog')).toBeHidden();
+	await expect(page.getByRole('dialog', { name: 'Edit Program' })).toBeHidden();
 	samples.push({ filterAndEditor: performance.now() - start });
 	console.log(JSON.stringify({ catalogs: samples, errors }));
 	await saveProfile(testInfo, 'catalog-profile', { samples, errors });

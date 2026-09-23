@@ -289,23 +289,6 @@
 	background: #ef6b6b;
 }
 
-.programs-catalog {
-	margin-top: 27px;
-}
-
-.programs-catalog > h2 {
-	margin: 0 0 14px 10px;
-	font-size: 0.92rem;
-}
-
-.programs-catalog-toolbar {
-	margin-bottom: 18px;
-	display: grid;
-	grid-template-columns: minmax(260px, 350px) 190px;
-	align-items: center;
-	gap: 20px;
-}
-
 .program-search-control {
 	height: 43px;
 	padding: 0 13px;
@@ -336,67 +319,6 @@
 
 .program-search-control input:focus {
 	box-shadow: none;
-}
-
-.programs-catalog-toolbar > select {
-	height: 43px;
-}
-
-.programs-list-panel {
-	border: 1px solid var(--line);
-	border-radius: 11px;
-	background: linear-gradient(110deg, rgba(12, 28, 40, 0.96), rgba(8, 21, 31, 0.9));
-}
-
-.program-row {
-	padding: 15px;
-	border-bottom: 1px solid var(--line);
-	cursor: pointer;
-}
-
-.program-row:hover {
-	background: rgba(23, 49, 63, 0.3);
-}
-
-.program-row-heading {
-	display: grid;
-	grid-template-columns: 10px minmax(220px, 1fr) auto 34px;
-	align-items: center;
-	gap: 12px;
-}
-
-.program-row-heading > div {
-	min-width: 0;
-	display: grid;
-	gap: 4px;
-}
-
-.program-row-heading a {
-	width: fit-content;
-	overflow: hidden;
-	color: #f3f7fa;
-	font-size: 0.94rem;
-	font-weight: 720;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.program-row-heading small,
-.program-row-counts {
-	color: var(--muted);
-	font-size: 0.72rem;
-}
-
-.program-row-menu {
-	position: relative;
-}
-
-.program-row-menu.icon-button,
-.program-row-menu > .context-menu-trigger {
-	width: 32px;
-	height: 36px;
-	display: grid;
-	place-items: center;
 }
 
 .program-carousel {
@@ -506,48 +428,6 @@
 
 .sequence-carousel > article > span {
 	height: 44px;
-}
-
-.programs-pagination {
-	min-height: 68px;
-	padding: 12px 22px;
-	display: grid;
-	grid-template-columns: 1fr auto 1fr;
-	align-items: center;
-	gap: 18px;
-}
-
-.programs-pagination > span {
-	color: var(--muted-strong);
-	font-size: 0.78rem;
-}
-
-.programs-pagination > select {
-	width: 150px;
-	min-height: 41px;
-	justify-self: end;
-}
-
-.program-page-buttons {
-	display: flex;
-	gap: 8px;
-}
-
-.program-page-buttons button {
-	width: 38px;
-	height: 38px;
-	padding: 0;
-	display: grid;
-	place-items: center;
-	border: 1px solid var(--line-bright);
-	border-radius: 6px;
-	color: #d7e0e7;
-	background: #0a1824;
-}
-
-.program-page-buttons button.active {
-	border-color: var(--accent);
-	color: var(--accent);
 }
 
 .similarity-sample--catalog > .similarity-sample-heading {

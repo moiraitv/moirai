@@ -137,6 +137,8 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	const { libraryId, sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/programs');
 	await expect(page.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
+	await page.locator(`[data-program-id="${sequenceProgramIds[1]}"]`).click();
+	await expect(page.locator('.program-inspector')).toBeVisible();
 	await capture(page, 'programs.png');
 	await page.goto('/schedules/programs/new');
 	await expect(page.getByRole('dialog', { name: 'Create Program' })).toBeVisible();
@@ -177,12 +179,11 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await capture(page, 'program-similarity-create.png');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();
-	const similarRow = page.locator('.program-row').filter({ has: page.getByRole('link', { name: 'Related Cinema', exact: true }) });
-	await expect(similarRow.locator('.program-carousel')).toHaveCSS('display', 'flex');
-	await expect(similarRow.locator('.similarity-sample-heading')).toHaveCSS('text-align', 'center');
-	await expect(similarRow.locator('.similarity-sample-heading')).toHaveCSS('text-transform', 'uppercase');
+	const similarRow = page.locator('.program-management-row').filter({ has: page.getByRole('button', { name: /^Related Cinema/ }) });
+	await expect(similarRow.locator('.program-mini-preview')).toHaveCSS('display', 'flex');
 	await similarRow.screenshot({ path: 'test-results/program-similarity-list.png' });
-	await similarRow.getByRole('link', { name: 'Related Cinema', exact: true }).click();
+	await similarRow.getByRole('button', { name: /^Related Cinema/ }).click();
+	await page.locator('.program-inspector').getByRole('link', { name: 'Edit Program', exact: true }).click();
 	await expect(page.getByLabel('Source Program', { exact: true })).toHaveJSProperty('readOnly', true);
 	const sample = page.getByRole('dialog').getByRole('region', { name: 'Sample matches' });
 	await expect(sample.getByRole('link').first()).toBeVisible();
@@ -211,11 +212,11 @@ test('sorts Programs by name ignoring leading articles and punctuation', async (
 	}
 
 	await page.goto('/schedules/programs');
-	await expect(page.locator('.program-row-heading > div > a')).toHaveText([
+	await expect(page.locator('.program-management-identity strong')).toHaveText([
 		'banana Sort', "The 'Burbs Sort", 'An Education Sort', 'A Quiet Sort', 'There Sort',
 	]);
 	await page.getByRole('searchbox', { name: 'Search programs' }).fill('Sort');
-	await expect(page.locator('.program-row-heading > div > a')).toHaveText([
+	await expect(page.locator('.program-management-identity strong')).toHaveText([
 		'banana Sort', "The 'Burbs Sort", 'An Education Sort', 'A Quiet Sort', 'There Sort',
 	]);
 });

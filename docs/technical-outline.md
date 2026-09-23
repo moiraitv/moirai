@@ -548,6 +548,14 @@ Channel
                  └─ reusable programs
 ```
 
+The Programs management view virtualizes the loaded scheduling overview with TanStack Virtual.
+Search, type, Content subtype, direct-reference usage, sorting, and inspector selection are URL-backed;
+existing Program editor routes remain unchanged. The shared inspector uses type-specific detail
+components, an inline desktop layout, and a focus-trapped drawer on smaller viewports. Only the
+selected Program loads paginated usage details; rows derive reference counts from the overview.
+Semantic previews remain samples rather than committed sets, and inspection does not alter generation.
+Inspector deletion uses inline two-step confirmation; list and editor deletion retain their modal confirmation.
+
 A program separates content eligibility from selection behavior. Content sources include:
 
 - one media item;

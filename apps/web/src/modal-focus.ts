@@ -10,6 +10,8 @@ interface ModalFocusOptions {
 
 /** One shared stack lets nested and teleported dialogs suspend their parent trap. */
 const trapStack: FocusTrap[] = [];
+/** Backdrops included in modal focus ownership so their dismissal handlers receive clicks. */
+const modalBackdropSelector = '.moirai-dialog-backdrop, .selection-drawer-backdrop, .help-drawer-backdrop';
 /** Per-element state survives reactive directive updates without reactivating a dialog. */
 const states = new WeakMap<HTMLElement, { trap: FocusTrap; options: ModalFocusOptions; keydown: (event: KeyboardEvent) => void }>();
 
@@ -20,6 +22,10 @@ function update(element: HTMLElement, options: ModalFocusOptions): void {
 	if (options.active !== false && !state.trap.active) {
 		if (options.navigation) {
 			state.trap.updateContainerElements([element, ...document.querySelectorAll<HTMLElement>('.sidebar-backdrop')]);
+		}
+		else {
+			// Responsive presentations may have gained a backdrop since the directive mounted.
+			state.trap.updateContainerElements(element.closest<HTMLElement>(modalBackdropSelector) ?? element);
 		}
 		state.trap.activate();
 	}
@@ -49,7 +55,7 @@ async function restoreFocus(opener: Element | null): Promise<void> {
 export const modalFocus: ObjectDirective<HTMLElement, ModalFocusOptions | undefined> = {
 	mounted(element, binding) {
 		element.setAttribute('tabindex', element.getAttribute('tabindex') ?? '-1');
-		const container = element.closest<HTMLElement>('.moirai-dialog-backdrop, .selection-drawer-backdrop, .help-drawer-backdrop') ?? element;
+		const container = element.closest<HTMLElement>(modalBackdropSelector) ?? element;
 		let opener: Element | null = null;
 		const trap = createFocusTrap(container, {
 			trapStack,

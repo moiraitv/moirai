@@ -7,8 +7,8 @@ import { errorMessage } from '../error-message';
 import MediaPlayingAt from './MediaPlayingAt.vue';
 import LoadingState from './LoadingState.vue';
 
-const props = defineProps<{ kind: ResourceUsageKind; resourceId: string | undefined; revision?: number }>();
-const open = ref(false);
+const props = defineProps<{ kind: ResourceUsageKind; resourceId: string | undefined; revision?: number; inline?: boolean }>();
+const open = ref(Boolean(props.inline));
 const page = ref(1);
 const result = ref<ResourceUsage | null>(null);
 const loading = ref(false);
@@ -22,7 +22,7 @@ let sequence = 0;
 const headered = computed(() => props.kind !== 'media');
 const usageIcon = computed(() => props.kind === 'media' ? Tv : GitBranch);
 const headerSlot = computed(() => {
-	if (!headered.value) {
+	if (!headered.value || props.inline) {
 		return null;
 	}
 
@@ -105,7 +105,7 @@ watch(open, (isOpen) => {
 	}
 });
 watch(() => props.resourceId, () => {
-	open.value = false;
+	open.value = Boolean(props.inline);
 });
 onBeforeUnmount(() => {
 	for (const animation of animations) {
@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div ref="layout" class="resource-usage-layout" :class="{ 'has-usage': resourceId, 'usage-open': open && resourceId, 'usage-header': headered }">
+	<div ref="layout" class="resource-usage-layout" :class="{ 'has-usage': resourceId, 'usage-open': open && resourceId, 'usage-header': headered && !inline, 'usage-inline': inline }">
 		<div class="resource-usage-main"><slot /></div>
 		<Teleport v-if="headerSlot && resourceId" :to="headerSlot">
 			<button ref="headerToggle" class="resource-usage-header-toggle" type="button" :title="open ? 'Collapse Used by' : 'Expand Used by'" :aria-expanded="open" :aria-controls="contentId" @click="toggleOpen">
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
 			<div v-show="open" :id="contentId" class="resource-usage-content">
 				<div v-if="headered" class="resource-usage-panel-header">
 					<GitBranch :size="18" aria-hidden="true" /><strong>Used by</strong>
-					<button class="icon-button" type="button" aria-label="Collapse Used by" @click="toggleOpen">
+					<button v-if="!inline" class="icon-button" type="button" aria-label="Collapse Used by" @click="toggleOpen">
 						<X :size="18" aria-hidden="true" />
 					</button>
 				</div>

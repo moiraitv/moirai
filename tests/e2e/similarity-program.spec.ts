@@ -161,10 +161,11 @@ test('shows draft sample loading, populated and failed states, and saved list sa
 			await route.fulfill({ response, json: body });
 		});
 		await page.goto('/schedules/programs');
-		const row = page.locator('.program-row').filter({ has: page.getByRole('link', { name: 'Sample program', exact: true }) });
-		await expect(row.getByRole('region', { name: 'Sample matches' }).getByRole('link')).toHaveCount(2);
-		await expect(row.getByText('2 related matches available; requested 5.')).toBeVisible();
-		await row.getByRole('link', { name: 'Sample program', exact: true }).click();
+		await page.getByRole('button', { name: /^Sample program/ }).click();
+		const inspector = page.locator('.program-inspector');
+		await expect(inspector.getByRole('region', { name: 'Sample matches' }).getByRole('link')).toHaveCount(2);
+		await expect(inspector.getByText('2 related matches available; requested 5.')).toBeVisible();
+		await inspector.getByRole('link', { name: 'Edit Program', exact: true }).click();
 		await expect(editorSample.getByRole('link')).toHaveCount(1);
 	}
 	finally {
@@ -248,7 +249,7 @@ test('creates a Theme Program with library filters and preserves edits', async (
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.theme).toBe('Ocean voyages');
 		await page.goto('/schedules/programs?type=theme');
-		await expect(page.getByRole('link', { name: 'Space discovery', exact: true })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Space discovery', exact: true })).toBeVisible();
 	}
 	finally {
 		if (id) {
