@@ -62,6 +62,10 @@ function channelPlaylist(channels: Channel[], publicUrl: string): string {
 		`#EXTM3U url-tvg="${publicUrl}/epg.xml" x-tvg-url="${publicUrl}/epg.xml"`,
 	];
 	for (const channel of channels) {
+		if (channel.enabled === false) {
+			continue;
+		}
+
 		const logo = publicChannelLogoUrl(channel, publicUrl);
 		const attributes = [
 			`channel-id="${m3uText(channel.id)}"`,

@@ -9,6 +9,13 @@ import {
 } from '@shared-source/index.js';
 
 describe('channel external contracts', () => {
+	it('defaults publication on and preserves explicit updates', () => {
+		expect(channelCreateSchema.parse({ number: '1', name: 'Channel' }).enabled).toBe(true);
+		expect(channelUpdateSchema.parse({ enabled: false }).enabled).toBe(false);
+		expect(channelUpdateSchema.parse({ name: 'Renamed' })).not.toHaveProperty('enabled');
+		expect(channelUpdateSchema.safeParse({ enabled: 'false' }).success).toBe(false);
+	});
+
 	it('defaults new channels to Automatic while preserving explicit None', () => {
 		expect(channelCreateSchema.parse({ number: '1', name: 'Automatic' }).video.accel).toBe(
 			'automatic',

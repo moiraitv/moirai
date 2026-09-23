@@ -795,3 +795,46 @@ legend {
 		overflow-wrap: anywhere;
 	}
 }
+
+.channel-enabled-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.channel-enabled-track {
+	width: 2.25rem;
+	height: 1.25rem;
+	padding: 0.1875rem;
+	border-radius: 999px;
+	background: var(--muted);
+}
+
+.channel-enabled-track::before {
+	content: '';
+	display: block;
+	width: 0.875rem;
+	height: 0.875rem;
+	border-radius: 50%;
+	background: white;
+	transition: transform 150ms ease-in-out;
+}
+
+.channel-enabled-toggle[aria-checked='true'] .channel-enabled-track {
+	background: var(--accent);
+}
+
+.channel-enabled-toggle[aria-checked='true'] .channel-enabled-track::before {
+	transform: translateX(1rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.channel-enabled-track::before {
+		transition: none;
+	}
+}

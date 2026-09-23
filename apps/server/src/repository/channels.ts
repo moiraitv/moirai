@@ -23,6 +23,7 @@ export class ChannelRepository {
 		const rows = await this.db.select().from(channels).orderBy(asc(channels.number));
 		return rows.map((row) => ({
 			...row.config,
+			enabled: row.config.enabled ?? true,
 			id: row.id,
 			createdAt: row.createdAt,
 			updatedAt: row.updatedAt,
@@ -33,7 +34,7 @@ export class ChannelRepository {
 	async getChannel(id: string): Promise<Channel | null> {
 		const [row] = await this.db.select().from(channels).where(eq(channels.id, id));
 		return row
-			? { ...row.config, id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt }
+			? { ...row.config, enabled: row.config.enabled ?? true, id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt }
 			: null;
 	}
 
@@ -44,7 +45,7 @@ export class ChannelRepository {
 			.from(channels)
 			.where(eq(channels.numberKey, canonicalChannelNumberKey(number)));
 		return row
-			? { ...row.config, id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt }
+			? { ...row.config, enabled: row.config.enabled ?? true, id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt }
 			: null;
 	}
 

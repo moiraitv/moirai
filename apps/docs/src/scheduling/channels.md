@@ -23,6 +23,8 @@ Choose **New Channel**, or tap anywhere in an existing channel’s left column, 
 
 ![Channel Broadcast profile editor showing the Lineup configuration](/screenshots/channel-editor.png)
 
+Use the **On/Off** switch beside the close button to control whether the channel is published. Switch it **Off** and choose **Save** to remove the channel from the M3U playlist and its channel entry and programming from XMLTV. Its settings and schedule stay available in Moirai. Switch it **On** and save to publish it again. New and existing channels are on by default.
+
 After a successful save, the channel appears in the lineup immediately while its schedule and guide refresh in the background. Any selected logo or fallback video finishes uploading before the editor closes.
 
 If a logo or fallback upload fails after the channel is saved, the error identifies the unfinished asset. Your remaining draft stays open, and retrying Save updates the same channel.

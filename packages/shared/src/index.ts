@@ -442,6 +442,7 @@ export const CHANNEL_NUMBER_PATTERN = '[A-Za-z0-9._\\-]+';
 
 /** Validate the channel create contract at runtime. */
 export const channelCreateSchema = z.object({
+	enabled: z.boolean().default(true),
 	number: z
 		.string()
 		.trim()
@@ -495,7 +496,9 @@ export const channelCreateRequestSchema = channelCreateSchema.extend({
 });
 
 /** Validate the channel update contract at runtime. */
-export const channelUpdateSchema = channelCreateSchema.partial();
+export const channelUpdateSchema = channelCreateSchema.partial().extend({
+	enabled: z.boolean().optional(),
+});
 /** Shared wire contract for channel create. */
 export type ChannelCreate = z.infer<typeof channelCreateSchema>;
 /** Shared wire contract for channel update. */

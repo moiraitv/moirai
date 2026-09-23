@@ -142,6 +142,7 @@ const cropSource = shallowRef<{
 const LOGO_CROP_MAX_WIDTH = 240;
 const LOGO_CROP_MAX_HEIGHT = 260;
 const defaults = (): ChannelCreate => ({
+	enabled: true,
 	encodingProfileId: null,
 	guideTemplateId: null,
 	number: '',
@@ -932,6 +933,11 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 				@submit.prevent="save"
 			>
 				<ResourceEditorHeader close-label="Close channel editor" :disabled="saving || deleting" @close="closeForm">
+					<template #actions>
+						<button class="channel-enabled-toggle" type="button" role="switch" aria-label="Channel enabled" :aria-checked="form.enabled" :disabled="saving || deleting" title="Include this channel and its schedule in M3U and XMLTV after saving" @click="form.enabled = !form.enabled">
+							<span>{{ form.enabled ? 'On' : 'Off' }}</span><span class="channel-enabled-track" aria-hidden="true"></span>
+						</button>
+					</template>
 					<p class="eyebrow">{{ editorMode === 'edit' ? 'Edit' : 'New' }} channel</p>
 					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">{{ editorMode === 'edit' ? 'Edit Channel' : 'Create Channel' }}</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
 				</ResourceEditorHeader>

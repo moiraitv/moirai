@@ -17,7 +17,7 @@ const usageSlotId = useId();
 			<slot />
 		</div>
 		<div class="resource-editor-header-trailing">
-			<div :id="usageSlotId" class="resource-editor-usage-slot"></div>
+			<div :id="usageSlotId" class="resource-editor-usage-slot"><slot name="actions" /></div>
 			<button
 				type="button"
 				class="icon-button resource-editor-close"

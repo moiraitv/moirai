@@ -479,7 +479,7 @@ export class EpgService {
 		]);
 		const templates = await this.repository.guideTemplates.sourcesById();
 		const body = await buildXmltv(
-			channels,
+			channels.filter(channel => channel.enabled !== false),
 			materialized.guide,
 			materialized.catalog,
 			this.publicUrl,

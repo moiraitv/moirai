@@ -87,7 +87,7 @@ export async function guideRead(repository: Repository, request: GuideReadReques
 	};
 	if (request.kind === 'xmltv') {
 		const body = await timeAsyncPhase('compute', () => buildXmltv(
-			channels,
+			channels.filter(channel => channel.enabled !== false),
 			materialized.guide,
 			materialized.catalog,
 			request.publicUrl,

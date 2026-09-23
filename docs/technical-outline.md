@@ -1437,6 +1437,10 @@ within the last 100 guide commits; unavailable history is labeled explicitly. Ge
 images use content-addressed URLs and are cleared on regeneration. Viewing comparisons never changes
 approvals, and builds from source archives remain supported without Git history.
 
+The channel editor’s On/Off draft setting controls M3U and XMLTV publication. Disabled channels
+retain their configuration and internal schedules, but public feeds omit their channel entries and
+programming. The persisted `enabled` setting defaults to true for new and legacy channel configs.
+
 Channel logos can be safe external HTTP(S) URLs or managed PNG files. Managed uploads support an
 unconstrained crop and never upscale beyond the source or channel resolution. Browser and server
 limits are 4096 pixels per edge and 10 MiB encoded output; source selection is limited to 25 MiB and

@@ -1517,6 +1517,39 @@ describe('API', () => {
 		});
 	});
 
+	it('persists publication changes and omits disabled channels and programming from public feeds', async () => {
+		const { app } = await fixture();
+		const created = await app.inject({ method: 'POST', url: '/api/v1/channels',
+			payload: { number: '18', name: 'Publication channel' } });
+		expect(created.statusCode).toBe(201);
+		const channel = created.json();
+		const tvgId = effectiveChannelTvgId(channel);
+		const initial = await app.inject({ url: '/epg.xml' });
+		expect(initial.body).toMatch(new RegExp(`<programme[^>]*channel="${tvgId.replaceAll('.', '\\.')}"`));
+
+		for (const enabled of [false, true]) {
+			const updated = await app.inject({ method: 'PATCH', url: `/api/v1/channels/${channel.id}`, payload: { enabled } });
+			expect(updated.statusCode).toBe(200);
+			expect(updated.json().enabled).toBe(enabled);
+			const renamed = await app.inject({ method: 'PATCH', url: `/api/v1/channels/${channel.id}`, payload: { name: 'Renamed channel' } });
+			expect(renamed.json().enabled).toBe(enabled);
+			const saved = await app.inject({ url: '/api/v1/channels' });
+			expect(saved.json()).toContainEqual(expect.objectContaining({ id: channel.id, enabled }));
+			const playlist = await app.inject({ url: '/iptv/channels.m3u' });
+			expect(playlist.body.includes(tvgId)).toBe(enabled);
+			const xmltv = await app.inject({ url: '/epg.xml', headers: { 'if-none-match': initial.headers.etag! } });
+			if (!enabled) {
+				expect(xmltv.statusCode).toBe(200);
+				expect(xmltv.body).not.toContain(tvgId);
+			}
+			else {
+				const refreshed = await app.inject({ url: '/epg.xml' });
+				expect(refreshed.body).toContain(`<channel id="${tvgId}">`);
+				expect(refreshed.body).toMatch(new RegExp(`<programme[^>]*channel="${tvgId.replaceAll('.', '\\.')}"`));
+			}
+		}
+	}, 30_000);
+
 	it('creates a channel and exposes it through the integrated M3U playlist', async () => {
 		const { app } = await fixture();
 		const created = await app.inject({

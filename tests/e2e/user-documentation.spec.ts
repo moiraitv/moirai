@@ -541,6 +541,14 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	await expect(broadcastEditor.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Moonrise Classics');
 	await expect(broadcastEditor.locator('.fallback-filler-loading')).toBeHidden();
 	await expect(broadcastEditor.locator('.acceleration-prediction')).not.toHaveText('Checking…', { timeout: 45_000 });
+	const enabledSwitch = broadcastEditor.getByRole('switch', { name: 'Channel enabled' });
+	await expect(enabledSwitch).toBeChecked();
+	await enabledSwitch.click();
+	await expect(enabledSwitch).not.toBeChecked();
+	await expect(broadcastEditor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await enabledSwitch.press('Space');
+	await expect(enabledSwitch).toBeChecked();
+	await expect(broadcastEditor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await capture(page, 'channel-editor.png');
 	await captureSection(page, broadcastEditor.locator('.channel-logo-editor'), 'channel-editor-logo.png');
 	await broadcastEditor.getByRole('button', { name: /Channel fallback override/ }).click();
