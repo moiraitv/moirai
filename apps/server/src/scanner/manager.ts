@@ -1,3 +1,4 @@
+import type { ResponsivenessMonitor } from '../operations/responsiveness.js';
 import type { Logger } from 'pino';
 import {
 	isSuppressedScanIssue,
@@ -67,6 +68,7 @@ export class ScannerManager {
 		private readonly purgeRemovedArtwork?: (libraryId: string, itemIds: string[]) => Promise<void>,
 		private readonly logger?: Pick<Logger, 'warn'>,
 		private readonly resourcePressure?: ResourcePressureCoordinator,
+		private readonly responsiveness?: ResponsivenessMonitor,
 	) {}
 
 	/** Source types available to library configuration and capability clients. */
@@ -440,6 +442,7 @@ export class ScannerManager {
 		// Reconcile a successful discovery and purge artwork for confirmed removals.
 		try {
 			signal.throwIfAborted();
+			const finish = this.responsiveness?.begin('scan.reconcile.write');
 			const completed = await this.repository.reconcileScan(
 				run,
 				discovery.groups,
@@ -448,7 +451,7 @@ export class ScannerManager {
 				discovery.traversalComplete,
 				discovery.sourceIdentity,
 				discovery.conflicts,
-			);
+			).finally(() => finish?.());
 			if (completed.removedItemIds.length > 0 && this.purgeRemovedArtwork) {
 				await this.purgeRemovedArtwork(libraryId, completed.removedItemIds).catch(() => undefined);
 			}

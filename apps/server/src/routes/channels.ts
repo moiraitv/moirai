@@ -1,3 +1,6 @@
+import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
+import type { EpgService } from '../guide/epg.js';
+import { invalidateCommittedGuideCache } from '../guide/schedule-guide.js';
 import { channelCreateRequestSchema } from '@moirai/shared';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -26,6 +29,8 @@ import {
 
 /** Services required to manage channels and their logos. */
 interface ChannelRouteDependencies {
+	epg: EpgService;
+	schedulingWorkers: SchedulingWorkerPool;
 	repository: Repository;
 	events: LiveEventHub;
 	channelLogos: ChannelLogoStore;
@@ -36,7 +41,7 @@ interface ChannelRouteDependencies {
 /** Register channel configuration and managed-logo endpoints. */
 export function registerChannelRoutes(
 	app: FastifyInstance,
-	{ repository, events, channelLogos, fallbackFillers, playback }: ChannelRouteDependencies,
+	{ repository, events, channelLogos, fallbackFillers, playback, epg, schedulingWorkers }: ChannelRouteDependencies,
 ): void {
 	// Channel configuration and normalization settings.
 	app.get('/api/v1/channels', {
@@ -48,11 +53,25 @@ export function registerChannelRoutes(
 			errors: [500, 503],
 		}),
 	}, async () => repository.listChannels());
+	const pendingChanges = new Map<string, 'created' | 'updated' | 'deleted'>();
+	let publishTimer: NodeJS.Immediate | undefined;
 	const publishChannelChange = (
 		channelId: string,
 		change: 'created' | 'updated' | 'deleted',
 	): void => {
-		events.publish({ type: 'channel.changed', data: { channelId, change } });
+		// Invalidate cheap read identities immediately; defer rebuilding and live notifications.
+		epg.invalidate();
+		schedulingWorkers.invalidateReads();
+		invalidateCommittedGuideCache();
+		pendingChanges.set(channelId, change);
+		publishTimer ??= setImmediate(() => {
+			publishTimer = undefined;
+			const changes = [...pendingChanges];
+			pendingChanges.clear();
+			for (const [id, operation] of changes) {
+				events.publish({ type: 'channel.changed', data: { channelId: id, change: operation } });
+			}
+		});
 	};
 	app.post('/api/v1/channels', {
 		schema: apiOperation({

@@ -913,6 +913,52 @@ oversized combined guide returns the largest complete local-day range within tha
 both the requested and returned day counts. Scheduling runs in a bounded worker pool with two workers
 and a 32-request queue by default. Saturation returns `503` with `Retry-After`.
 
+Channel schedule and Quick Setup previews send authored inputs to that same pool. Each worker lazily
+opens its own read-only SQLite connection and loads persisted inputs and the scoped catalog in a read
+snapshot, releasing the transaction before timeline generation and response projection. Catalogs stay
+inside the worker; only the preview result returns to the HTTP thread. Preview caches retain the same
+bounded scopes, follow the repository's invalidation revision, and remain separate from catalogs sent
+by background generation jobs. Missing semantic preferences are reported as pending without queuing
+writes; the existing background service prepares saved-program preferences. Explicitly disabled
+workers and in-memory databases use the same preview implementation locally. No schema migration or
+additional dependency is required.
+
+Scheduling overview/status, Quick Setup query filtering, Similar Items/Theme ranking, template and
+persisted-channel previews also run as compact read jobs. Committed guide projection, guide-template
+previews, and XMLTV rendering stay in workers; large guide and overview responses are validated and
+serialized there before HTTP delivery. Authentication and input validation remain in routes. Missing
+committed coverage still requests authoritative materialization before retrying the read. Draft
+semantic preparation is queued by the owning service, never by a read-only worker.
+
+Background materialization prepares catalogs, fingerprints, selection state, and commit payloads in a
+worker. The main process acknowledges ordered pending/failed/commit writes through the existing
+repository transactions and revision checks. The shared pool retains its total queue limit, reserves
+one worker from background work when multiple workers are enabled, and admits background work after
+at most three queued interactive dispatches with one worker. Identical reads and previews share a job;
+disconnected consumers release queued work only when no other consumer needs it. Running authoritative
+work is not cancelled by an HTTP disconnect.
+
+Private playout reads and daily ErsatzTV document generation also use the pool, including fallback-only
+output for unassigned channels. Subtitle/audio asset preparation, configuration reconciliation, and
+atomic file publication remain with the owning playout service. Generation receives the bounded guide
+and prepared selections, without transferring a catalog. Daily fallback clipping rejects out-of-range
+items before constructing Temporal objects, preserving loop phase and exact output. Playout jobs share
+the background capacity reservation, queue limit, and shutdown lifecycle.
+
+Channel persistence invalidates read caches immediately and defers coalesced change notifications and
+playout follow-up beyond its response path. Unassigned channels do not request timeline generation.
+The browser adopts the returned resource immediately, retains created IDs after asset failures, and
+keeps creation chrome stable for the editor session. Save-stage labels cover persistence and selected
+assets only. Guide consumers keep cached entries during refresh, distinguish assigned preparation
+from unassigned rows, and expose persistent failures with retry. Timeline completion and reconnect
+notifications recover authoritative state.
+
+Responsiveness diagnostics use fixed operation labels without request contents. Debug timings cover
+HTTP operations, worker queue/execution, guide reads/computation/serialization, timeline writes, scan
+reconciliation, and maintenance. Event-loop delays of at least 250 ms produce a warning at most once
+per 30 seconds. SQLite writers remain on their owning thread; these measurements expose remaining
+writer stalls without changing the container's three-second health-check timeout.
+
 Catalog loading follows program references. It reads whole libraries only for library-query sources,
 coalesces identical revision reads, builds reusable indexes, and retains at most 32 cached scopes.
 Worker caches distinguish live preview availability from the retained availability used for committed

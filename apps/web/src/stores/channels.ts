@@ -1,8 +1,9 @@
-import { ref, shallowRef } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import {
 	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
 	type Channel,
+	type ChannelTimelineMaterializationStatus,
 	type ScheduleGuide,
 } from '@moirai/shared';
 import { api } from '../api';
@@ -27,6 +28,21 @@ export const useChannelsStore = defineStore('channels', () => {
 	const guideWeekStart = ref('');
 	const guideDays = ref(0);
 	const guideLoading = ref(false);
+	const guideRefreshing = ref(false);
+	const guideError = ref('');
+	const materializations = shallowRef<ChannelTimelineMaterializationStatus[]>([]);
+	const materializationsLoaded = ref(false);
+	const guideRowStates = computed(() => {
+		const statuses = new Map(materializations.value.map(status => [status.channelId, status]));
+		return Object.fromEntries(channels.value.map(channel => {
+			const status = statuses.get(channel.id);
+			const state = status?.health === 'failed' ? 'failed'
+				: !materializationsLoaded.value ? 'loading'
+					: status ? 'preparing' : guideRefreshing.value ? 'loading' : 'unassigned';
+			return [channel.id, { state: guideError.value && state !== 'unassigned' ? 'failed' : state,
+				message: status?.lastError ?? guideError.value }];
+		}));
+	});
 	const guideLoaded = ref(false);
 	const guideStartHistory = ref<string[]>([]);
 	const guidePendingWindowDays = ref<number | null>(null);
@@ -50,8 +66,24 @@ export const useChannelsStore = defineStore('channels', () => {
 		loading.value = false;
 	}
 
+	let pendingChannels: Promise<void> | undefined;
+
+	/** Share concurrent channel refreshes without delaying saves on redundant reads. */
+	function loadChannels(force = false): Promise<void> {
+		if (pendingChannels && !force) {
+			return pendingChannels;
+		}
+		const promise = performChannelLoad().finally(() => {
+			if (pendingChannels === promise) {
+				pendingChannels = undefined;
+			}
+		});
+		pendingChannels = promise;
+		return promise;
+	}
+
 	/** Load channels from the authoritative source and update the shared UI store. */
-	async function loadChannels(): Promise<void> {
+	async function performChannelLoad(): Promise<void> {
 		const sequence = ++channelSequence;
 		if (!loaded.value) {
 			loading.value = true;
@@ -146,13 +178,23 @@ export const useChannelsStore = defineStore('channels', () => {
 			navigation = 'preserve';
 		}
 		const sequence = ++guideSequence;
+		guideRefreshing.value = true;
+		guideError.value = '';
 		const previousStart = guideWeekStart.value;
 		if (!guideLoaded.value || guideWeekStart.value !== startDate) {
 			guideLoading.value = true;
 		}
 		try {
+			const statuses = api.timelineMaterializations().then(result => {
+				if (sequence === guideSequence) {
+					materializations.value = result;
+					materializationsLoaded.value = true;
+				}
+			});
+			// Observe failures immediately while the guide and status reads run together.
+			void statuses.catch(() => undefined);
 			if (days > 1 && (guideWeekStart.value !== startDate || guideDays.value < 1)) {
-				const first = await api.scheduleGuide(startDate, 1);
+				const [first] = await Promise.all([api.scheduleGuide(startDate, 1), statuses]);
 				if (sequence !== guideSequence) {
 					return;
 				}
@@ -167,7 +209,7 @@ export const useChannelsStore = defineStore('channels', () => {
 				error.value = '';
 			}
 
-			const result = await api.scheduleGuide(startDate, days);
+			const [result] = await Promise.all([api.scheduleGuide(startDate, days), statuses]);
 			if (sequence !== guideSequence) {
 				return;
 			}
@@ -196,12 +238,14 @@ export const useChannelsStore = defineStore('channels', () => {
 				return;
 			}
 			guidePendingWindowDays.value = null;
-			error.value = errorMessage(cause);
+			guideError.value = errorMessage(cause);
+			error.value = guideError.value;
 			throw cause;
 		}
 		finally {
 			if (sequence === guideSequence) {
 				guideLoading.value = false;
+				guideRefreshing.value = false;
 			}
 		}
 	}
@@ -259,6 +303,9 @@ export const useChannelsStore = defineStore('channels', () => {
 		guideDays,
 		guideLoading,
 		guideLoaded,
+		guideRefreshing,
+		guideError,
+		guideRowStates,
 		error,
 		loadChannels,
 		acceptSavedChannel,

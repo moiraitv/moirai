@@ -31,6 +31,8 @@ import GuideItemPreview from './GuideItemPreview.vue';
 const props = withDefaults(
 	defineProps<{
 		channels: Channel[];
+		refreshing?: boolean;
+		rowStates?: Record<string, { state: string; message: string }>;
 		guide: ScheduleGuide | null;
 		timeZone: string;
 		startDate: string;
@@ -46,6 +48,8 @@ const props = withDefaults(
 	}>(),
 	{
 		days: 7,
+		refreshing: false,
+		rowStates: () => ({}),
 		emptyMessage: 'No schedule assigned',
 		showTechnicalDetails: false,
 		hourWidth: null,
@@ -58,6 +62,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+	retry: [];
 	inspect: [payload: { id: string; target: HTMLElement }];
 }>();
 
@@ -486,7 +491,7 @@ onBeforeUnmount(() => {
 			<slot name="toolbar"></slot>
 			<div ref="headerScroll" class="guide-header-scroll">
 				<div class="guide-canvas guide-header-canvas">
-					<div class="guide-corner"><TvMinimal :size="18" />Channels</div>
+					<div class="guide-corner"><TvMinimal :size="18" /><span role="status" aria-live="polite">{{ refreshing ? 'Updating guide…' : 'Channels' }}</span></div>
 					<div class="guide-time-header">
 						<div
 							v-for="day in visibleDays"
@@ -556,6 +561,10 @@ onBeforeUnmount(() => {
 											{{ channel.audio.format?.toUpperCase() }}
 										</p>
 										<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)"></slot>
+										<div v-if="guideByChannel.has(channel.id) && rowStates[channel.id]?.state === 'failed'" class="guide-channel-failure">
+											<span role="alert">Guide could not be updated.</span>
+											<button type="button" class="button secondary" @click="emit('retry')">Retry</button>
+										</div>
 										<ScheduleWarningBadge
 											:issues="guideByChannel.get(channel.id)?.issues ?? []"
 											:channel-id="channel.id"
@@ -636,7 +645,14 @@ onBeforeUnmount(() => {
 										class="guide-empty-day"
 										:style="{ left: '8px', width: `${timelineWidth - 16}px` }"
 									>
-										<span>{{ emptyMessage }}</span>
+										<div class="guide-empty-status">
+											<span :role="rowStates[channel.id]?.state === 'failed' ? 'alert' : 'status'">
+												{{ rowStates[channel.id]?.state === 'failed' ? 'Guide could not be loaded.'
+													: rowStates[channel.id]?.state === 'preparing' ? 'Preparing guide…'
+														: rowStates[channel.id]?.state === 'loading' || (!rowStates[channel.id] && refreshing) ? 'Loading guide…' : emptyMessage }}
+											</span>
+											<button v-if="rowStates[channel.id]?.state === 'failed'" type="button" class="button secondary" @click="emit('retry')">Retry</button>
+										</div>
 									</div>
 									<span
 										v-if="currentTimeLeft !== null"

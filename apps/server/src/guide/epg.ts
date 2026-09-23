@@ -1,3 +1,4 @@
+import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { itemGuideEntry } from './projection.js';
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
@@ -420,6 +421,7 @@ export class EpgService {
 		private readonly publicUrl: string,
 		private readonly ensureMaterialized: () => Promise<void> = async () => undefined,
 		private readonly warn: GuideTemplateWarn = () => undefined,
+		private readonly workers?: SchedulingWorkerPool,
 	) {}
 
 	/** Discard the cached XMLTV document after programming changes. */
@@ -455,6 +457,13 @@ export class EpgService {
 
 	/** Generate the XMLTV model for the configured guide window. */
 	private async generate(startDate: string): Promise<EpgDocument> {
+		if (this.workers) {
+			const result = await readCommittedGuideAfterMaterializing(() => this.workers!.read({ kind: 'xmltv', timeZone: this.timeZone, publicUrl: this.publicUrl,
+				startDate, days: XMLTV_EPG_DAYS }), this.ensureMaterialized);
+			result.warnings?.forEach(warning => this.warn(warning.message, warning.extra));
+			return { body: result.body, etag: result.etag!, startDate: result.startDate!, generatedAt: result.generatedAt! };
+		}
+
 		const [channels, materialized] = await Promise.all([
 			this.repository.listChannels(),
 			readCommittedGuideAfterMaterializing(

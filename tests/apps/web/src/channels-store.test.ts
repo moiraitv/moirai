@@ -24,6 +24,7 @@ beforeEach(() => {
 	vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
 	setActivePinia(createPinia());
 	vi.restoreAllMocks();
+	vi.spyOn(api, 'timelineMaterializations').mockResolvedValue([]);
 });
 
 afterEach(() => vi.useRealTimers());
@@ -134,7 +135,7 @@ it('advances stale requests in the scheduling time zone and drops expired naviga
 
 it('does not propagate failures superseded by newer channel, capability, or guide requests', async () => {
 	for (const [method, load] of [
-		['channels', (store: ReturnType<typeof useChannelsStore>) => store.loadChannels()],
+		['channels', (store: ReturnType<typeof useChannelsStore>) => store.loadChannels(true)],
 		['capabilities', (store: ReturnType<typeof useChannelsStore>) => store.loadCapabilities()],
 		['scheduleGuide', (store: ReturnType<typeof useChannelsStore>) => store.loadGuide('2026-08-01')],
 	] as const) {
@@ -202,4 +203,51 @@ it('shares the remaining week after a progressive first day and retries a failed
 	expect(request).toHaveBeenCalledTimes(3);
 	expect(store.guideDays).toBe(7);
 	expect(store.error).toBe('');
+});
+
+it('retains cached guide content during refresh and distinguishes preparing and failed assigned rows', async () => {
+	const store = useChannelsStore();
+	const channel = channelSchema.parse({ id: '00000000-0000-4000-8000-000000000001', number: '1', name: 'Pending',
+		createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' });
+	store.acceptSavedChannel(channel);
+	vi.mocked(api.timelineMaterializations).mockResolvedValue([{ channelId: channel.id, health: 'generating',
+		windowStart: null, windowEnd: null, committedAt: null, pendingSince: null, applyAfter: null, lastError: null }]);
+	const cached = guide('2026-08-01', 1, 1);
+	vi.spyOn(api, 'scheduleGuide').mockResolvedValue(cached);
+	await store.loadGuide('2026-08-01', 1);
+	let finish!: (value: ScheduleGuide) => void;
+	vi.mocked(api.scheduleGuide).mockImplementationOnce(() => new Promise(resolve => {
+		finish = resolve;
+	}));
+	const pending = store.loadGuide('2026-08-01', 1);
+	expect(store.guide).toBe(cached);
+	expect(store.guideLoading).toBe(false);
+	expect(store.guideRefreshing).toBe(true);
+	expect(store.guideRowStates[channel.id]?.state).toBe('preparing');
+	finish(cached);
+	await pending;
+	expect(store.guideRefreshing).toBe(false);
+	vi.mocked(api.scheduleGuide).mockRejectedValueOnce(new Error('Generation failed'));
+	await expect(store.loadGuide('2026-08-01', 1)).rejects.toThrow('Generation failed');
+	expect(store.guide).toBe(cached);
+	expect(store.guideRowStates[channel.id]).toMatchObject({ state: 'failed', message: 'Generation failed' });
+	await store.loadGuide('2026-08-01', 1);
+	expect(store.guideError).toBe('');
+});
+
+it('shares duplicate channel reads and immediately accepts a save over an older response', async () => {
+	const store = useChannelsStore();
+	let finish!: (value: Channel[]) => void;
+	const request = vi.spyOn(api, 'channels').mockImplementation(() => new Promise(resolve => {
+		finish = resolve;
+	}));
+	const a = store.loadChannels();
+	const b = store.loadChannels();
+	expect(request).toHaveBeenCalledTimes(1);
+	const saved = channelSchema.parse({ id: '00000000-0000-4000-8000-000000000001', number: '1', name: 'Saved',
+		createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' });
+	store.acceptSavedChannel(saved);
+	finish([]);
+	await Promise.all([a, b]);
+	expect(store.channels).toEqual([saved]);
 });

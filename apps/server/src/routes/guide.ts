@@ -1,3 +1,5 @@
+import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
+import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import type { FastifyInstance } from 'fastify';
 import { Temporal } from '@js-temporal/polyfill';
 import { z } from 'zod';
@@ -8,14 +10,13 @@ import {
 	timelineMaterializationStatusSchema,
 } from '@moirai/shared/api-contracts';
 import type { AppConfig } from '../config.js';
-import { DuplicateTvgIdError, presentGuideListings, type EpgService } from '../guide/epg.js';
+import { DuplicateTvgIdError, type EpgService } from '../guide/epg.js';
 import type { Repository } from '../repository/index.js';
 import {
 	CommittedGuideRangeError,
 	CommittedGuideUnavailableError,
 	GuideMaterializationLimitError,
 	readCommittedGuideAfterMaterializing,
-	readCommittedScheduleGuide,
 } from '../guide/schedule-guide.js';
 import type { TimelineMaterializer } from '../scheduling/timeline-materializer.js';
 import { parseId } from './params.js';
@@ -42,12 +43,13 @@ interface GuideRouteDependencies {
 	repository: Repository;
 	epg: EpgService;
 	timelineMaterializer: TimelineMaterializer;
+	schedulingWorkers: SchedulingWorkerPool;
 }
 
 /** Register committed guide, materialization, and XMLTV endpoints. */
 export function registerGuideRoutes(
 	app: FastifyInstance,
-	{ config, repository, epg, timelineMaterializer }: GuideRouteDependencies,
+	{ config, repository, epg, timelineMaterializer, schedulingWorkers }: GuideRouteDependencies,
 ): void {
 	// Batch guide data for the SPA timeline views.
 	app.get('/api/v1/schedule-guide', {
@@ -63,34 +65,12 @@ export function registerGuideRoutes(
 		const query = guideRangeQuerySchema.parse(request.query);
 		const startDate = query.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString();
 		try {
-			const materialized = await readCommittedGuideAfterMaterializing(
-				() => readCommittedScheduleGuide(
-					repository,
-					config.timeZone,
-					startDate,
-					query.days,
-					{ includeMediaCatalog: true },
-				),
+			const result = await readCommittedGuideAfterMaterializing(
+				() => schedulingWorkers.read({ kind: 'guide', timeZone: config.timeZone,
+					publicUrl: config.publicUrl, startDate, days: query.days }, workerRequestSignal(reply)),
 				() => timelineMaterializer.runNow(),
 			);
-			const [channels, templates] = await Promise.all([
-				repository.listChannels(),
-				repository.guideTemplates.sourcesById(),
-			]);
-			return await presentGuideListings(
-				channels,
-				materialized.guide,
-				materialized.catalog,
-				config.publicUrl,
-				{
-					sourcesForChannel: (channel) => (
-						channel.guideTemplateId
-							? templates.byId.get(channel.guideTemplateId) ?? templates.defaultSources
-							: templates.defaultSources
-					),
-					fallback: true,
-				},
-			);
+			return sendWorkerJson(reply, result.body);
 		}
 		catch (error) {
 			if (

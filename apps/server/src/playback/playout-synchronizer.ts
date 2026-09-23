@@ -1,3 +1,4 @@
+import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { prepareAudio, type PreparedAudio } from './audio-selection.js';
 import { SubtitleAssets, type PreparedSubtitles } from './subtitle-assets.js';
 import { randomUUID } from 'node:crypto';
@@ -63,6 +64,7 @@ export class PlayoutSynchronizer {
 		private readonly fallbackFillers: FallbackFillerStore,
 		private readonly events: LiveEventPublisher,
 		private readonly logger: FastifyBaseLogger,
+		private readonly workers?: SchedulingWorkerPool,
 	) {
 		this.subtitles = new SubtitleAssets(root, repository);
 	}
@@ -279,13 +281,16 @@ export class PlayoutSynchronizer {
 
 		const startDate = Temporal.Now.plainDateISO(this.timeZone).toString();
 		const guide = await readCommittedGuideAfterMaterializing(
-			() => readCommittedChannelScheduleGuide(
-				this.repository,
-				this.timeZone,
-				channel.id,
-				startDate,
-				XMLTV_EPG_DAYS,
-			),
+			async () => this.workers?.databaseBacked
+				? JSON.parse((await this.workers.read({ kind: 'channel-guide', channelId: channel.id,
+					timeZone: this.timeZone, startDate, days: XMLTV_EPG_DAYS, publicUrl: '' })).body) as Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>
+				: readCommittedChannelScheduleGuide(
+					this.repository,
+					this.timeZone,
+					channel.id,
+					startDate,
+					XMLTV_EPG_DAYS,
+				),
 			this.ensureMaterialized,
 		);
 		const fallback = await this.fallbackFillers.resolve(channel.id);
@@ -303,7 +308,8 @@ export class PlayoutSynchronizer {
 		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
 		return this.withChannelConfiguration(channelId, async () => {
 			await this.beforeSubtitleModeChange(channelId, subtitleMode);
-			const generated = this.channelFiles(channel, guide, fallback, selections, audio);
+			const generated = await this.channelFiles(channel, guide, fallback, selections, audio);
+			const publicationStarted = performance.now();
 
 			for (const [filename, content] of generated) {
 				const destination = path.join(resolvedFolder, filename);
@@ -354,26 +360,24 @@ export class PlayoutSynchronizer {
 				}
 			}
 			this.subtitleModes.set(channelId, subtitleMode);
+			this.logger.debug({ operation: 'playout.publish', durationMs: Math.round(performance.now() - publicationStarted) }, 'Operation completed');
 			return resolvedFolder;
 		});
 	}
 
 	/** Build validated daily files from the generated channel playout paths. */
-	private channelFiles(
+	private async channelFiles(
 		channel: Channel,
 		guide: Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>,
 		fallback: Awaited<ReturnType<FallbackFillerStore['resolve']>>,
 		subtitles?: PreparedSubtitles,
 		audio?: PreparedAudio,
-	): Map<string, string> {
+	): Promise<Map<string, string>> {
 		const files = new Map<string, string>();
-		for (const [relativePath, content] of buildEtvPlayoutFiles(
-			[channel],
-			guide,
-			new Map([[channel.id, fallback]]),
-			subtitles,
-			audio,
-		)) {
+		const input: Parameters<typeof buildEtvPlayoutFiles> = [[channel], guide,
+			new Map([[channel.id, fallback]]), subtitles, audio];
+		const generated = this.workers ? await this.workers.playout(input) : buildEtvPlayoutFiles(...input);
+		for (const [relativePath, content] of generated) {
 			const filename = path.posix.basename(relativePath);
 			if (!PLAYOUT_FILENAME.test(filename)) {
 				throw new Error('Generated an invalid playout filename');

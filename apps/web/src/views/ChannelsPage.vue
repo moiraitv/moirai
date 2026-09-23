@@ -96,6 +96,8 @@ watch(
 const editorLinksReady = ref(false);
 const scheduling = useSchedulingStore();
 const editingId = ref<string>();
+const editorMode = ref<'create' | 'edit'>('create');
+const saveStage = ref('Saving…');
 const showForm = ref(false);
 const encodingProfilesReady = ref(false);
 let leavingPage = false;
@@ -114,6 +116,7 @@ const deleting = ref(false);
 const originalFormSnapshot = ref('');
 const formBaseline = ref<ChannelCreate | null>(null);
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let schedulingRefreshPending = false;
 let fallbackLoadSequence = 0;
 let suppressChannelEventsUntil = 0;
 /** Channel guide row with layout metadata derived for the visible window. */
@@ -646,6 +649,7 @@ function encodingProfilesLoaded(ready: boolean): void {
 
 /** Open a blank channel form. */
 function add() {
+	editorMode.value = 'create';
 	encodingProfilesReady.value = false;
 	Object.assign(form, defaults());
 	resetLogoEditor();
@@ -660,6 +664,7 @@ function add() {
 
 /** Open an existing channel in the editor. */
 function edit(channel: Channel) {
+	editorMode.value = 'edit';
 	const { id, createdAt, updatedAt, ...config } = channel;
 	void id;
 	void createdAt;
@@ -682,6 +687,7 @@ async function save() {
 
 	error.value = '';
 	saving.value = true;
+	saveStage.value = 'Saving channel…';
 	suppressChannelEventsUntil = Date.now() + 5_000;
 	try {
 		const croppedLogo = await renderCroppedLogo();
@@ -696,34 +702,40 @@ async function save() {
 		}
 		channelsStore.acceptSavedChannel(saved);
 		if (croppedLogo) {
+			saveStage.value = 'Saving logo…';
 			saved = await api.uploadChannelLogo(saved.id, croppedLogo);
 			channelsStore.acceptSavedChannel(saved);
 		}
 		else if (priorManagedLogo && removeLogoOnSave.value) {
+			saveStage.value = 'Saving logo…';
 			saved = await api.deleteChannelLogo(saved.id);
 			channelsStore.acceptSavedChannel(saved);
 		}
 		try {
 			if (fallbackFile.value) {
+				saveStage.value = 'Saving fallback video…';
 				fallbackStatus.value = await api.uploadChannelFallbackFiller(saved.id, fallbackFile.value);
 			}
 			else if (removeFallbackOnSave.value && fallbackStatus.value?.overrideConfigured) {
+				saveStage.value = 'Saving fallback video…';
 				fallbackStatus.value = await api.deleteChannelFallbackFiller(saved.id);
 			}
 		}
 		catch (cause) {
 			retainFallbackDraftAfterPartialSave(saved);
 			error.value = `Channel changes were saved, but the fallback filler was not: ${errorMessage(cause)}`;
-			await Promise.allSettled([loadChannels(), scheduling.load(), loadGuide()]);
+			void loadGuide().catch(() => undefined);
 			return;
 		}
 		finishCloseForm();
-		void Promise.all([loadChannels(), scheduling.load(), loadGuide()]).catch((cause) => {
+		void loadGuide().catch((cause) => {
 			error.value = `Channel saved, but refreshing the lineup failed: ${errorMessage(cause)}`;
 		});
 	}
 	catch (cause) {
-		error.value = errorMessage(cause);
+		error.value = editingId.value && saveStage.value === 'Saving logo…'
+			? `Channel changes were saved, but the logo was not: ${errorMessage(cause)}`
+			: errorMessage(cause);
 	}
 	finally {
 		saving.value = false;
@@ -785,12 +797,18 @@ const unsubscribe = liveEvents.subscribe((event) => {
 	}
 
 	if (affectsGuide(event)) {
+		schedulingRefreshPending ||= event.type !== 'channel.changed';
 		if (liveRefreshTimer) {
 			clearTimeout(liveRefreshTimer);
 		}
 		liveRefreshTimer = setTimeout(() => {
 			liveRefreshTimer = undefined;
-			void Promise.all([channelsStore.loadChannels(), scheduling.load(), loadGuide()]);
+			const refreshScheduling = schedulingRefreshPending;
+			schedulingRefreshPending = false;
+			void Promise.all([channelsStore.loadChannels(true),
+				...(refreshScheduling ? [scheduling.load()] : []), loadGuide()]).catch(cause => {
+				guideRefreshError.value = errorMessage(cause);
+			});
 		}, 180);
 	}
 });
@@ -833,7 +851,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 		><button class="button" @click="add"><Plus :size="18" />New Channel</button></PageHeader
 		>
 		<p v-if="error && !showForm" class="notice error">{{ error }}</p>
-		<p v-if="guideRefreshError && !showForm" class="notice error">{{ guideRefreshError }}</p>
+		<p v-if="guideRefreshError && !showForm" class="notice error">{{ guideRefreshError }} <button class="button secondary" type="button" @click="loadGuide()">Retry guide</button></p>
 		<LoadingState v-if="initialLoading" label="Loading channels and guide…" />
 		<div v-else class="async-state-surface">
 			<div class="guide-toolbar">
@@ -870,12 +888,15 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 				ref="guideTimeline"
 				:channels="channels"
 				:guide="guide"
+				:refreshing="channelsStore.guideRefreshing"
+				:row-states="channelsStore.guideRowStates"
 				:time-zone="timeZone"
 				:start-date="weekStart"
 				:days="displayedDays"
 				empty-message="No template assigned"
 				show-technical-details
 				use-entry-titles
+				@retry="loadGuide()"
 			>
 				<template #detail="{ channel }">
 					<small class="channel-schedule-summary">{{ scheduleSummary(channel.id) }}</small>
@@ -911,8 +932,8 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 				@submit.prevent="save"
 			>
 				<ResourceEditorHeader close-label="Close channel editor" :disabled="saving || deleting" @close="closeForm">
-					<p class="eyebrow">{{ editingId ? 'Edit' : 'New' }} channel</p>
-					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">{{ editingId ? 'Edit Channel' : 'Create Channel' }}</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
+					<p class="eyebrow">{{ editorMode === 'edit' ? 'Edit' : 'New' }} channel</p>
+					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">{{ editorMode === 'edit' ? 'Edit Channel' : 'Create Channel' }}</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
 				</ResourceEditorHeader>
 				<div class="resource-editor-scroll">
 					<div class="channel-identity-fields">
@@ -932,7 +953,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<div class="channel-schedule-link">
 						<span>Schedule</span>
 						<RouterLink
-							v-if="editingId && !channelFormDirty"
+							v-if="editorMode === 'edit' && editingId && !channelFormDirty"
 							class="button secondary"
 							:to="`/schedules/channels/${editingId}`"
 						>
@@ -1043,8 +1064,8 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>
 					</SubtitlePreferencesEditor>
 					<AudioPreferencesEditor v-model="form.audioPreferences" />
-					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="!editingId" @ready="encodingProfilesLoaded">
-						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :creating="!editingId" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
+					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="editorMode === 'create'" @ready="encodingProfilesLoaded">
+						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :creating="editorMode === 'create'" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
 					</EncodingProfileSelector>
 					<FormDisclosure v-model:open="guideTemplateExpanded" class="channel-guide-template-disclosure">
 						<template #summary>
@@ -1076,13 +1097,14 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 				<ResourceEditorActionBar
 					:validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''"
 					resource-type="Channel"
-					:show-delete="Boolean(editingId)"
+					:show-delete="editorMode === 'edit'"
 					:busy="saving || deleting"
 					:deleting="deleting"
 					:reset-disabled="!channelFormDirty"
 					:save-disabled="channelSaveDisabled"
 					save-submits
 					:saving="saving"
+					:saving-label="saveStage"
 					@delete="deleteChannel"
 					@reset="resetChannel"
 				/>

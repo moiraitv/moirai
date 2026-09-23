@@ -1,3 +1,4 @@
+import type { ResponsivenessMonitor } from './responsiveness.js';
 import type { Logger } from 'pino';
 import type { ArtworkCache } from '../artwork/artwork-cache.js';
 import type { AppConfig } from '../config.js';
@@ -25,6 +26,7 @@ export class MaintenanceService {
 		private readonly logs: LogService,
 		private readonly config: AppConfig,
 		private readonly logger: Logger,
+		private readonly responsiveness?: ResponsivenessMonitor,
 	) {}
 
 	/** Start periodic database and cache maintenance. */
@@ -45,7 +47,8 @@ export class MaintenanceService {
 			return this.active;
 		}
 
-		this.active = this.run();
+		const finish = this.responsiveness?.begin('maintenance.write');
+		this.active = this.run().finally(() => finish?.());
 		try {
 			await this.active;
 			this.lastRunFailed = false;

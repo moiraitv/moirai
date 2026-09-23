@@ -101,6 +101,7 @@ type BoundarySide = 'entryBoundary' | 'exitBoundary';
 const finiteBoundaryDrift = new Map<string, number>();
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewRevision = 0;
+let previewController: AbortController | undefined;
 let allowRouteLeave = false;
 
 const channelId = computed(() => String(route.params.id ?? ''));
@@ -446,7 +447,9 @@ async function save(): Promise<boolean> {
 		draft.value = channelScheduleConfigSchema.parse(saved);
 		original.value = JSON.stringify(draft.value);
 		try {
-			await Promise.all([scheduling.load(), loadMaterializations()]);
+			void Promise.all([scheduling.load(), loadMaterializations()]).catch(cause => {
+				error.value = `Schedule saved, but status could not be refreshed. ${errorMessage(cause)}`;
+			});
 		}
 		catch (cause) {
 			error.value = `Schedule saved, but timeline status could not be refreshed. ${errorMessage(cause)}`;
@@ -571,13 +574,14 @@ async function generatePreview(revision: number): Promise<void> {
 	}
 
 	previewing.value = true;
+	previewController = new AbortController();
 	try {
 		const result = await api.draftChannelSchedulePreview({
 			channelId: channel.value.id,
 			schedule: channelScheduleConfigSchema.parse(draft.value),
 			startDate: previewDate.value,
 			days: 1,
-		});
+		}, previewController.signal);
 		if (revision === previewRevision) {
 			preview.value = result;
 			error.value = '';
@@ -598,6 +602,7 @@ async function generatePreview(revision: number): Promise<void> {
 /** Coalesce layered draft changes before requesting a new materialized preview. */
 function schedulePreview(delay = PREVIEW_DELAY_MS): void {
 	previewRevision += 1;
+	previewController?.abort();
 	const revision = previewRevision;
 	if (previewTimer !== undefined) {
 		clearTimeout(previewTimer);
@@ -685,6 +690,7 @@ const unsubscribeTimeline = liveEvents.subscribe((event) => {
 onBeforeUnmount(() => {
 	unsubscribeTimeline();
 	previewRevision += 1;
+	previewController?.abort();
 	if (previewTimer !== undefined) {
 		clearTimeout(previewTimer);
 	}

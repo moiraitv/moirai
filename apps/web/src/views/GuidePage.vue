@@ -221,7 +221,7 @@ function scheduleRefresh(): void {
 	}
 	refreshTimer = setTimeout(() => {
 		refreshTimer = undefined;
-		void Promise.all([channelsStore.loadChannels(), loadGuide()]).catch((cause) => {
+		void Promise.all([channelsStore.loadChannels(true), loadGuide()]).catch((cause) => {
 			error.value = errorMessage(cause);
 		});
 	}, 180);
@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 
-		<p v-if="error" class="notice error">{{ error }}</p>
+		<p v-if="error" class="notice error">{{ error }} <button v-if="channelsStore.guideError" class="button secondary" type="button" @click="loadGuide()">Retry guide</button></p>
 		<LoadingState v-if="initialLoading" label="Loading the channel guide…" />
 		<div v-else class="async-state-surface">
 			<p v-if="guide?.segmentLimitApplied" class="notice warning">
@@ -341,12 +341,15 @@ onBeforeUnmount(() => {
 				ref="guideTimeline"
 				:channels="channels"
 				:guide="guide"
+				:refreshing="channelsStore.guideRefreshing"
+				:row-states="channelsStore.guideRowStates"
 				:time-zone="timeZone"
 				:start-date="weekStart"
 				:days="displayedDays"
 				use-entry-titles
 				subtitle-mode="listing"
 				listing-presentation="guide"
+				@retry="loadGuide()"
 			>
 				<template #toolbar>
 					<div class="guide-toolbar">

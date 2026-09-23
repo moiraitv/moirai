@@ -1,3 +1,4 @@
+import { SchedulingWorkerPool } from '@server/scheduling/worker-pool.js';
 import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
@@ -55,7 +56,7 @@ it('previews unsaved settings through HTTP and validates source compatibility an
 	app.setValidatorCompiler(validatorCompiler);
 	app.setSerializerCompiler(responseSerializerCompiler);
 	await app.register(sensible);
-	registerSemanticProgramRoutes(app, f.repository);
+	registerSemanticProgramRoutes(app, f.repository, undefined, new SchedulingWorkerPool(0, 4, { db: f.database.db, repository: f.repository }));
 	try {
 		await f.embeddings();
 		const config = { type: 'similarity', sourceProgramId: f.source.id, quantity: 2, variety: 80 };

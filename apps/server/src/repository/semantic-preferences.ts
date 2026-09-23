@@ -19,8 +19,8 @@ function identity(text: string): string {
 export class SemanticPreferenceRepository {
 	constructor(private readonly db: MoiraiDatabase) {}
 
-	/** Enqueue missing preferences and read their preparation state in one bounded query. */
-	catalog(texts: string[]): NonNullable<SemanticCatalog['preferences']> {
+	/** Read preparation state, optionally queuing missing preferences outside read-only previews. */
+	catalog(texts: string[], enqueueMissing = true): NonNullable<SemanticCatalog['preferences']> {
 		const unique = [...new Set(texts.map((text) => text.trim()).filter(Boolean))];
 		if (!unique.length) {
 			return {};
@@ -30,7 +30,7 @@ export class SemanticPreferenceRepository {
 		const rows = this.db.$client.prepare('SELECT * FROM semantic_preferences WHERE input_hash IN (SELECT value FROM json_each(?))')
 			.all(JSON.stringify(unique.map(identity))) as Array<{ input_hash: string; embedding: Buffer | null; status: 'pending' | 'ready' | 'failed'; error_code: string | null }>;
 		const byHash = new Map(rows.map((row) => [row.input_hash, row]));
-		const queue = this.db.$client.prepare("INSERT INTO semantic_preferences(input_hash,input_text,status) VALUES (?,?,'pending') ON CONFLICT(input_hash) DO UPDATE SET status='pending',embedding=NULL");
+		const queue = enqueueMissing ? this.db.$client.prepare("INSERT INTO semantic_preferences(input_hash,input_text,status) VALUES (?,?,'pending') ON CONFLICT(input_hash) DO UPDATE SET status='pending',embedding=NULL") : null;
 		for (const text of unique) {
 			const row = byHash.get(identity(text));
 			let vector = row?.embedding?.length === EMBEDDING_DIMENSIONS * 4
@@ -38,8 +38,8 @@ export class SemanticPreferenceRepository {
 			if (vector && (!vector.every(Number.isFinite) || Math.abs(vector.reduce((sum, value) => sum + value * value, 0) - 1) > 0.001)) {
 				vector = undefined;
 			}
-			if (!row || (row.status === 'ready' && !vector)) {
-				queue.run(identity(text), text);
+			if (enqueueMissing && (!row || (row.status === 'ready' && !vector))) {
+				queue!.run(identity(text), text);
 				queued = true;
 			}
 			result[text] = vector && row?.status === 'ready' ? { status: 'ready', vector }

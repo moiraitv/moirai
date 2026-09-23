@@ -12,6 +12,7 @@ import type {
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import {
+	channelSchedules,
 	libraries,
 	mediaGroups,
 	mediaItemAliases,
@@ -189,8 +190,13 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	private readonly semanticCatalogs = new Map<string, NonNullable<SchedulingCatalog['semantic']>>();
 	private readonly semanticPreferences = new Map<string, NonNullable<NonNullable<SchedulingCatalog['semantic']>['preferences']>>();
 
-	constructor(db: MoiraiDatabase) {
+	constructor(db: MoiraiDatabase, private readonly readOnlyPreferences = false) {
 		super(db);
+	}
+
+	/** Revision shared with worker-owned preview catalogs after invalidation. */
+	get catalogRevision(): number {
+		return this.schedulingCatalogRevision;
 	}
 
 	/** Invalidate scoped scheduling catalogs after index or source-health changes. */
@@ -291,7 +297,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			const preferenceKey = JSON.stringify(texts);
 			let preferences = this.semanticPreferences.get(preferenceKey);
 			if (!preferences) {
-				preferences = new SemanticPreferenceRepository(this.db).catalog(texts);
+				preferences = new SemanticPreferenceRepository(this.db).catalog(texts, !this.readOnlyPreferences);
 				this.semanticPreferences.set(preferenceKey, preferences);
 				if (this.semanticPreferences.size > 32) {
 					this.semanticPreferences.delete(this.semanticPreferences.keys().next().value!);
@@ -690,7 +696,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	async listTimelineMaterializationStatuses(): Promise<ChannelTimelineMaterializationStatus[]> {
 		const rows = await this.db
 			.select({
-				channelId: timelineMaterializations.channelId,
+				channelId: channelSchedules.channelId,
 				status: timelineMaterializations.status,
 				windowStart: timelineMaterializations.windowStart,
 				windowEnd: timelineMaterializations.windowEnd,
@@ -700,8 +706,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				lastError: timelineMaterializations.lastError,
 				inputFingerprint: timelineMaterializations.inputFingerprint,
 			})
-			.from(timelineMaterializations);
-		return rows.map(publicMaterializationStatus);
+			.from(channelSchedules)
+			.leftJoin(timelineMaterializations, eq(channelSchedules.channelId, timelineMaterializations.channelId));
+		return rows.map(row => row.status === null
+			? { channelId: row.channelId, health: 'generating' as const, windowStart: null, windowEnd: null, committedAt: null, pendingSince: null, applyAfter: null, lastError: null }
+			: publicMaterializationStatus({ ...row, status: row.status, windowStart: row.windowStart!, windowEnd: row.windowEnd!, committedAt: row.committedAt!, inputFingerprint: row.inputFingerprint ?? '' }));
 	}
 
 	/** List committed timeline windows for all channels. */

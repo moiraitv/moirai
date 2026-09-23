@@ -1,3 +1,4 @@
+import { SchedulingWorkerPool } from '@server/scheduling/worker-pool.js';
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
 import { validatorCompiler } from 'fastify-type-provider-zod';
@@ -19,7 +20,7 @@ it('retries failed relevant media and draft concepts once while preserving unrel
 	app.setSerializerCompiler(responseSerializerCompiler);
 	await app.register(sensible);
 	const wake = vi.fn();
-	registerSemanticProgramRoutes(app, f.repository, wake);
+	registerSemanticProgramRoutes(app, f.repository, wake, new SchedulingWorkerPool(0, 4, { db: f.database.db, repository: f.repository }));
 	try {
 		await f.embeddings();
 		const first = selectProgram(f.program.id, f.key, new Map(), await f.context())!;

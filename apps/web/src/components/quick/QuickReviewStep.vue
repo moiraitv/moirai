@@ -28,14 +28,17 @@ const preview = ref<QuickChannelSetupPreviewResult | null>(null);
 const loading = ref(false);
 const previewError = ref('');
 let sequence = 0;
+let controller: AbortController | undefined;
 
 /** Refresh the illustrative review without clearing the last successfully resolved sample. */
 async function refresh(): Promise<void> {
 	const current = ++sequence;
+	controller?.abort();
+	controller = new AbortController();
 	loading.value = true;
 	previewError.value = '';
 	try {
-		const result = await api.previewQuickChannelSetup(props.request);
+		const result = await api.previewQuickChannelSetup(props.request, controller.signal);
 		if (sequence === current) {
 			preview.value = result;
 		}
@@ -54,6 +57,7 @@ async function refresh(): Promise<void> {
 onMounted(() => void refresh());
 onBeforeUnmount(() => {
 	sequence += 1;
+	controller?.abort();
 });
 </script>
 

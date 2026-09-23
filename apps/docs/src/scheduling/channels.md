@@ -25,6 +25,8 @@ Choose **New Channel**, or tap anywhere in an existing channel’s left column, 
 
 After a successful save, the channel appears in the lineup immediately while its schedule and guide refresh in the background. Any selected logo or fallback video finishes uploading before the editor closes.
 
+If a logo or fallback upload fails after the channel is saved, the error identifies the unfinished asset. Your remaining draft stays open, and retrying Save updates the same channel.
+
 ## Lineup: identity and schedule
 
 - **Number** identifies the ![](/icons/tv-minimal.svg) Channel in the lineup. As you type, the editor shows up to three existing channels matching the number prefix and flags a number already in use. Numbers must be distinct; choose stable values because IPTV applications may use them when organizing favorites.

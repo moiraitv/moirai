@@ -423,9 +423,9 @@ export const api = {
 			method: 'POST',
 			body: JSON.stringify(body),
 		}),
-	previewQuickChannelSetup: (body: QuickChannelSetupCreate) =>
+	previewQuickChannelSetup: (body: QuickChannelSetupCreate, signal?: AbortSignal) =>
 		request<QuickChannelSetupPreviewResult>('/api/v1/quick-channel-setups/preview', {
-			method: 'POST', body: JSON.stringify(body),
+			method: 'POST', ...(signal ? { signal } : {}), body: JSON.stringify(body),
 		}),
 	previewQuickChannelQuery: (body: QuickChannelQueryPreviewRequest) =>
 		request<QuickChannelQueryPreviewResult>('/api/v1/quick-channel-setups/query-preview', {
@@ -488,14 +488,14 @@ export const api = {
 		}),
 	deleteChannelSchedule: (id: string) =>
 		request<void>(`/api/v1/channels/${id}/schedule`, { method: 'DELETE' }),
-	draftTimelinePreview: (body: TimelineDraftPreview) =>
+	draftTimelinePreview: (body: TimelineDraftPreview, signal?: AbortSignal) =>
 		request<TimelinePreview>('/api/v1/timeline-preview', {
-			method: 'POST',
+			method: 'POST', ...(signal ? { signal } : {}),
 			body: JSON.stringify(body),
 		}),
-	draftChannelSchedulePreview: (body: ChannelScheduleDraftPreview) =>
+	draftChannelSchedulePreview: (body: ChannelScheduleDraftPreview, signal?: AbortSignal) =>
 		request<TimelinePreview>('/api/v1/channel-schedule-preview', {
-			method: 'POST',
+			method: 'POST', ...(signal ? { signal } : {}),
 			body: JSON.stringify(body),
 		}),
 	scheduleGuide: (startDate: string, days = 7) =>

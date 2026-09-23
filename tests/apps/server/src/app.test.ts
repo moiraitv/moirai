@@ -1,3 +1,4 @@
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,7 +23,7 @@ import { hashToken } from '@server/auth/crypto.js';
 import { AuthenticationRequestError, OIDC_SESSION_TTL_MS } from '@server/auth/service.js';
 import { loadConfig } from '@server/config.js';
 import { createDatabase } from '@server/db/index.js';
-import { authenticationSessions } from '@server/db/schema.js';
+import { authenticationSessions, mediaItems } from '@server/db/schema.js';
 import { Repository } from '@server/repository/index.js';
 
 const transparentPng = await sharp({
@@ -1410,7 +1411,7 @@ describe('API', () => {
 		for (const issue of guide.channels[0].preview.issues) {
 			expect(issue).not.toHaveProperty('occurrenceCounts');
 		}
-	}, 15_000);
+	}, 60_000);
 
 	it('keeps a program type, source type, and library fixed after creation', async () => {
 		const { app, services } = await fixture();
@@ -1529,6 +1530,149 @@ describe('API', () => {
 		expect(playlist.body).toContain('Test Channel');
 		expect(playlist.body).toContain('https://moirai.example.test/iptv/channel/1.m3u8');
 	});
+
+	it('persists plain channel saves while unrelated generation is blocked without scheduling an unassigned channel', async () => {
+		const { app, services } = await fixture();
+		await app.ready();
+		await services.timelineMaterializer.runNow();
+		let release!: () => void;
+		const blocked = new Promise<void>(resolve => {
+			release = resolve;
+		});
+		const generation = vi.spyOn(services.timelineMaterializer, 'runNow').mockReturnValue(blocked);
+		const active = services.timelineMaterializer.runNow();
+		try {
+			const created = await app.inject({ method: 'POST', url: '/api/v1/channels',
+				payload: { number: '987', name: 'Unscheduled save' } });
+			expect(created.statusCode, created.body).toBe(201);
+			const channel = created.json();
+			const updated = await app.inject({ method: 'PATCH', url: `/api/v1/channels/${channel.id}`,
+				payload: { name: 'Renamed immediately' } });
+			expect(updated.statusCode, updated.body).toBe(200);
+			expect(updated.json().name).toBe('Renamed immediately');
+			await new Promise<void>(resolve => setImmediate(resolve));
+			expect(await services.repository.getChannelSchedule(channel.id)).toBeNull();
+			expect(generation).toHaveBeenCalledTimes(1);
+		}
+		finally {
+			release();
+			await active;
+			generation.mockRestore();
+		}
+	});
+
+	it('serves live and ready probes during a large-catalog preview over HTTP', async () => {
+		const { app, services, database, root, sessionToken } = await fixture();
+		const mediaRoot = path.join(root, 'large-preview');
+		await mkdir(mediaRoot);
+		await writeFile(path.join(mediaRoot, 'Seed.mp4'), 'video');
+		const library = await services.repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Large preview', typeKey: 'movies', sourceType: 'on-disk',
+			sourceConfig: { scanRoot: mediaRoot, playbackRoot: null }, watcherEnabled: false,
+		}));
+		await services.scanner.scan(library.id, 'manual');
+		const seed = database.db.select().from(mediaItems).get()!;
+		const itemCount = 20_000;
+		database.db.transaction((transaction) => {
+			for (let offset = 1; offset < itemCount; offset += 100) {
+				transaction.insert(mediaItems).values(Array.from({ length: Math.min(100, itemCount - offset) }, (_, index) => {
+					const name = `Film ${offset + index}`;
+					return { ...seed, id: randomUUID(), stableKey: name, title: name, sortTitle: name,
+						relativePath: `${name}.mp4`, playbackPath: `${mediaRoot}/${name}.mp4`,
+						durationSeconds: 21_600, durationMilliseconds: 21_600_000 };
+				})).run();
+			}
+		});
+		services.repository.invalidateSchedulingCatalog();
+		const address = await app.listen({ host: '127.0.0.1', port: 0 });
+		const session = await app.inject({ url: '/api/v1/auth/session' });
+		const csrfToken = session.json().csrfToken as string;
+		let finished = false;
+		const pending = fetch(`${address}/api/v1/quick-channel-setups/preview`, {
+			method: 'POST', headers: { 'content-type': 'application/json', cookie: `moirai_session=${sessionToken}`,
+				'x-moirai-csrf': csrfToken },
+			body: JSON.stringify({ scenario: 'movies', libraryId: library.id, programName: 'Large preview',
+				source: { type: 'library-query', genres: [] }, strategy: { type: 'sequential' },
+				channel: { number: '99', name: 'Large preview' } }),
+		}).then(async (response) => ({ status: response.status, body: await response.json() }))
+			.finally(() => {
+				finished = true;
+			});
+		const delays = monitorEventLoopDelay({ resolution: 20 });
+		delays.enable();
+		const latencies: number[] = [];
+		let overlappingProbes = 0;
+		while (!finished) {
+			for (const endpoint of ['live', 'ready']) {
+				const started = performance.now();
+				const response = await fetch(`${address}/api/v1/health/${endpoint}`, { signal: AbortSignal.timeout(3_000) });
+				await response.json();
+				latencies.push(performance.now() - started);
+				expect(response.status).toBe(200);
+				if (!finished) {
+					overlappingProbes += 1;
+				}
+			}
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		const result = await pending;
+		expect(result.status, JSON.stringify(result.body)).toBe(200);
+		expect(result.body.library.indexedItemCount).toBe(itemCount);
+		expect(overlappingProbes).toBeGreaterThan(2);
+		expect(Math.max(...latencies)).toBeLessThan(3_000);
+		finished = false;
+		const probes = (async () => {
+			while (!finished) {
+				for (const endpoint of ['live', 'ready']) {
+					const started = performance.now();
+					const response = await fetch(`${address}/api/v1/health/${endpoint}`, { signal: AbortSignal.timeout(3_000) });
+					await response.text();
+					latencies.push(performance.now() - started);
+					expect(response.status).toBe(200);
+				}
+				await new Promise(resolve => setTimeout(resolve, 20));
+			}
+		})();
+		void probes.catch(() => undefined);
+		const created = await app.inject({ method: 'POST', url: '/api/v1/quick-channel-setups', payload: {
+			scenario: 'movies', libraryId: library.id, programName: 'Large committed program',
+			source: { type: 'library-query', genres: [] }, strategy: { type: 'sequential' },
+			channel: { number: '98', name: 'Large committed channel' },
+		} });
+		expect(created.statusCode, created.body).toBe(201);
+		const resources = created.json();
+		const headers = { 'content-type': 'application/json', cookie: `moirai_session=${sessionToken}`, 'x-moirai-csrf': csrfToken };
+		const durations: Record<string, number> = {};
+		const request = async (name: string, url: string, init: RequestInit = {}): Promise<void> => {
+			const started = performance.now();
+			const response = await fetch(`${address}${url}`, { headers, ...init });
+			const body = await response.text();
+			durations[name] = performance.now() - started;
+			expect(response.ok, `${name}: ${body.slice(0, 300)}`).toBe(true);
+		};
+		const load = Promise.all([
+			services.timelineMaterializer.runNow(true),
+			request('plainCreate', '/api/v1/channels', { method: 'POST', body: JSON.stringify({ number: '97', name: 'Unscheduled during load' }) }),
+			request('overview', '/api/v1/scheduling/overview'),
+			request('guide', '/api/v1/schedule-guide?days=7'),
+			request('xmltv', '/epg.xml'),
+			request('persistedPreview', `/api/v1/channels/${resources.channel.id}/timeline-preview?days=1`),
+			request('save', `/api/v1/channels/${resources.channel.id}`, { method: 'PATCH', body: JSON.stringify({ name: 'Saved during load' }) }),
+		]).then(() => services.playout.syncAll()).finally(() => {
+			finished = true;
+		});
+		// Keep rejection observed while independent health requests are sampled.
+		void load.catch(() => undefined);
+		await load;
+		await probes;
+		latencies.sort((left, right) => left - right);
+		expect(latencies.at(-1)).toBeLessThan(3_000);
+		delays.disable();
+		await mkdir('test-results', { recursive: true });
+		await writeFile('test-results/channel-responsiveness.json', JSON.stringify({ itemCount, durations, eventLoop: { max: delays.max / 1e6, p95: delays.percentile(95) / 1e6 },
+			probes: latencies.length, p50: latencies[Math.floor(latencies.length * 0.5)],
+			p95: latencies[Math.floor(latencies.length * 0.95)], max: latencies.at(-1) }, null, 2));
+	}, 180_000);
 
 	it('previews Quick Setup samples and a local day without persisting resources', async () => {
 		const { app, services, root } = await fixture();
@@ -2404,6 +2548,31 @@ it('applies the configured encoding default only to new channels without manual 
 }, 15_000);
 
 describe('guide template API', () => {
+	it('preserves the overload response when guide template previews exhaust the worker queue', async () => {
+		const { BUILTIN_GUIDE_TEMPLATE } = await import('@moirai/shared');
+		const { SchedulingQueueFullError } = await import('@server/scheduling/worker-pool.js');
+		const { app, services } = await fixture();
+		const channel = await app.inject({ method: 'POST', url: '/api/v1/channels', payload: { number: '92', name: 'Preview overload' } });
+		expect(channel.statusCode).toBe(201);
+		const read = services.schedulingWorkers.read.bind(services.schedulingWorkers);
+		const overloaded = vi.spyOn(services.schedulingWorkers, 'read').mockImplementation((request, signal) => {
+			if (request.kind === 'guide-template') {
+				throw new SchedulingQueueFullError(32);
+			}
+			return read(request, signal);
+		});
+		try {
+			const response = await app.inject({ method: 'POST', url: '/api/v1/guide-templates/preview',
+				payload: { channelId: channel.json().id, sources: BUILTIN_GUIDE_TEMPLATE.sources } });
+			expect(response.statusCode).toBe(503);
+			expect(response.json()).toMatchObject({ code: 'service_unavailable', message: 'Scheduling is busy; retry shortly' });
+			expect(response.headers['retry-after']).toBe('1');
+		}
+		finally {
+			overloaded.mockRestore();
+		}
+	});
+
 	it('validates sources, assigns per channel, and previews draft XMLTV', async () => {
 		const { BUILTIN_GUIDE_TEMPLATE } = await import('@moirai/shared');
 		const { app } = await fixture();

@@ -249,7 +249,9 @@ function clipFallbackItem(
 	windowStart: Temporal.Instant,
 	windowEnd: Temporal.Instant,
 ): EtvPlayoutItem[] {
-	if (item.type !== 'local') {
+	if (item.type !== 'local'
+		|| Date.parse(item.finish) <= windowStart.epochMilliseconds
+		|| Date.parse(item.start) >= windowEnd.epochMilliseconds) {
 		return [];
 	}
 	const itemStart = Temporal.Instant.from(item.start);

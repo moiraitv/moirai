@@ -1,7 +1,7 @@
+import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
 import { registerSemanticProgramRoutes } from './semantic-programs.js';
 import { registerProgramGroupRoutes } from './program-groups.js';
 import type { FastifyInstance } from 'fastify';
-import { Temporal } from '@js-temporal/polyfill';
 import { z } from 'zod';
 import {
 	channelScheduleConfigSchema,
@@ -29,17 +29,10 @@ import {
 import type { AppConfig } from '../config.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
-import { schedulingRootProgramIds } from '../scheduling/catalog.js';
-import { schedulingProgramStatuses } from '../scheduling/status.js';
-import { guideTimelinePreview } from '../guide/preview.js';
-import { validateTemplate } from '../scheduling/validation.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
-import { currentTimestamp } from '../time.js';
 import { parseId } from './params.js';
 import { apiOperation, emptyResponseSchema, idParamsSchema, responseContent } from './contracts.js';
 
-/** Synthetic channel identity used for channel-independent template previews. */
-const DRAFT_PREVIEW_CHANNEL_ID = '00000000-0000-4000-8000-000000000001';
 
 /** Bounded local-date window accepted by persisted timeline previews. */
 const timelinePreviewQuerySchema = z.object({
@@ -69,7 +62,7 @@ export function registerSchedulingRoutes(
 	{ config, repository, events, schedulingWorkers, requestEmbeddingWork }: SchedulingRouteDependencies,
 ): void {
 	registerProgramGroupRoutes(app, repository, events);
-	registerSemanticProgramRoutes(app, repository, requestEmbeddingWork);
+	registerSemanticProgramRoutes(app, repository, requestEmbeddingWork, schedulingWorkers);
 	// Reusable program definitions.
 	app.get('/api/v1/programs', {
 		schema: apiOperation({
@@ -327,20 +320,9 @@ export function registerSchedulingRoutes(
 			response: { 200: responseContent('Scheduling overview', 'application/json', schedulingOverviewSchema) },
 			errors: [500, 503],
 		}),
-	}, async () => {
-		const programsPromise = repository.listPrograms();
-		const [programs, templates, channelSchedules, catalog] = await Promise.all([
-			programsPromise,
-			repository.listScheduleTemplates(),
-			repository.listChannelSchedules(),
-			programsPromise.then((programs) => repository.getSchedulingCatalog(programs)),
-		]);
-		return {
-			programs,
-			templates,
-			channelSchedules,
-			programStatuses: schedulingProgramStatuses(programs, catalog),
-		};
+	}, async (request, reply) => {
+		const result = await schedulingWorkers.read({ kind: 'overview' }, workerRequestSignal(reply));
+		return sendWorkerJson(reply, result.body);
 	});
 
 	// Daily template definitions and channel assignments.
@@ -538,46 +520,10 @@ export function registerSchedulingRoutes(
 			response: { 200: responseContent('Duration-aware timeline preview', 'application/json', timelinePreviewSchema) },
 			errors: [400, 404, 422, 500, 503],
 		}),
-	}, async (request) => {
-		const id = parseId(request);
-		if (!(await repository.getChannel(id))) {
-			throw app.httpErrors.notFound('Channel not found');
-		}
-
-		const query = timelinePreviewQuerySchema.parse(request.query);
-		const schedule = await repository.getChannelSchedule(id);
-		if (!schedule) {
-			throw app.httpErrors.notFound('Channel schedule not found');
-		}
-
-		const programsPromise = repository.listPrograms();
-		const [templates, programs, state] = await Promise.all([
-			repository.listScheduleTemplates(),
-			programsPromise,
-			repository.getSelectionState(id),
-		]);
-		const catalog = await repository.getSchedulingCatalog(
-			programs,
-			schedulingRootProgramIds(templates, [schedule]),
-		);
-		const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
-		if (!template) {
-			throw app.httpErrors.notFound('Schedule template not found');
-		}
-
-		const generated = await schedulingWorkers.generate({
-			channelId: id,
-			timeZone: config.timeZone,
-			startDate: query.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString(),
-			days: query.days,
-			schedule,
-			template,
-			templates,
-			programs,
-			catalog,
-			state,
-		});
-		return guideTimelinePreview(generated, templates, programs);
+	}, async (request, reply) => {
+		const result = await schedulingWorkers.read({ kind: 'persisted', id: parseId(request),
+			input: timelinePreviewQuerySchema.parse(request.query), timeZone: config.timeZone }, workerRequestSignal(reply));
+		return sendWorkerJson(reply, result.body);
 	});
 
 	// Preview an unsaved template without mutating persistent playback state.
@@ -590,73 +536,10 @@ export function registerSchedulingRoutes(
 			response: { 200: responseContent('Duration-aware draft preview', 'application/json', timelinePreviewSchema) },
 			errors: [400, 404, 422, 500, 503],
 		}),
-	}, async (request) => {
-		const input = timelineDraftPreviewSchema.parse(request.body);
-		if (input.channelId && !(await repository.getChannel(input.channelId))) {
-			throw app.httpErrors.notFound('Channel not found');
-		}
-
-		const channelId = input.channelId ?? DRAFT_PREVIEW_CHANNEL_ID;
-		const programsPromise = repository.listPrograms();
-		const [programs, templates] = await Promise.all([
-			programsPromise,
-			repository.listScheduleTemplates(),
-		]);
-		const [state, currentSchedule] = input.channelId
-			? await Promise.all([
-				repository.getSelectionState(input.channelId),
-				repository.getChannelSchedule(input.channelId),
-			])
-			: [[], null];
-		validateTemplate(input.template, programs);
-		const timestamp = currentTimestamp();
-		const draftTemplate = { ...input.template, createdAt: timestamp, updatedAt: timestamp };
-		const draftIsAssigned = Boolean(
-			currentSchedule
-			&& (currentSchedule.defaultTemplateId === input.template.id
-				|| currentSchedule.layers.some((layer) => layer.templateId === input.template.id)),
-		);
-		const previewSchedule
-			= draftIsAssigned && currentSchedule
-				? currentSchedule
-				: {
-					channelId,
-					defaultTemplateId: input.template.id,
-					layers: [],
-					defaultFiller: currentSchedule?.defaultFiller ?? null,
-					createdAt: currentSchedule?.createdAt ?? timestamp,
-					updatedAt: timestamp,
-				};
-		const previewTemplates = templates.some((template) => template.id === input.template.id)
-			? templates.map((template) =>
-				template.id === input.template.id
-					? { ...draftTemplate, createdAt: template.createdAt }
-					: template)
-			: [...templates, draftTemplate];
-		const baseTemplate = previewTemplates.find(
-			(template) => template.id === previewSchedule.defaultTemplateId,
-		);
-		if (!baseTemplate) {
-			throw app.httpErrors.notFound('Base schedule template not found');
-		}
-
-		const catalog = await repository.getSchedulingCatalog(
-			programs,
-			schedulingRootProgramIds(previewTemplates, [previewSchedule]),
-		);
-		const generated = await schedulingWorkers.generate({
-			channelId,
-			timeZone: config.timeZone,
-			startDate: input.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString(),
-			days: input.days,
-			schedule: previewSchedule,
-			template: baseTemplate,
-			templates: previewTemplates,
-			programs,
-			catalog,
-			state,
-		});
-		return guideTimelinePreview(generated, previewTemplates, programs);
+	}, async (request, reply) => {
+		const result = await schedulingWorkers.read({ kind: 'template', input: timelineDraftPreviewSchema.parse(request.body),
+			timeZone: config.timeZone }, workerRequestSignal(reply));
+		return sendWorkerJson(reply, result.body);
 	});
 
 	// Preview an unsaved layered channel schedule.
@@ -669,49 +552,9 @@ export function registerSchedulingRoutes(
 			response: { 200: responseContent('Duration-aware layered preview', 'application/json', timelinePreviewSchema) },
 			errors: [400, 404, 422, 500, 503],
 		}),
-	}, async (request) => {
+	}, async (request, reply) => {
 		const input = channelScheduleDraftPreviewSchema.parse(request.body);
-		if (!(await repository.getChannel(input.channelId))) {
-			throw app.httpErrors.notFound('Channel not found');
-		}
-
-		const programsPromise = repository.listPrograms();
-		const [templates, programs, state] = await Promise.all([
-			repository.listScheduleTemplates(),
-			programsPromise,
-			repository.getSelectionState(input.channelId),
-		]);
-		const template = templates.find(
-			(candidate) => candidate.id === input.schedule.defaultTemplateId,
-		);
-		if (!template) {
-			throw app.httpErrors.notFound('Base schedule template not found');
-		}
-
-		const timestamp = currentTimestamp();
-		const draftSchedule = {
-			...input.schedule,
-			channelId: input.channelId,
-			createdAt: timestamp,
-			updatedAt: timestamp,
-		};
-		const catalog = await repository.getSchedulingCatalog(
-			programs,
-			schedulingRootProgramIds(templates, [draftSchedule]),
-		);
-		const generated = await schedulingWorkers.generate({
-			channelId: input.channelId,
-			timeZone: config.timeZone,
-			startDate: input.startDate,
-			days: input.days,
-			schedule: draftSchedule,
-			template,
-			templates,
-			programs,
-			catalog,
-			state,
-		});
-		return guideTimelinePreview(generated, templates, programs);
+		return schedulingWorkers.preview({ kind: 'channel', input, timeZone: config.timeZone }, workerRequestSignal(reply));
 	});
 
 }

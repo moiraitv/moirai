@@ -198,6 +198,17 @@
 	z-index: 1;
 }
 
+.guide-channel-failure {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	color: var(--danger);
+	font-size: 0.75rem;
+}
+
 .danger-icon:hover {
 	color: var(--danger);
 }
@@ -231,14 +242,29 @@
 	position: absolute;
 	top: 12px;
 	bottom: 12px;
-	display: grid;
-	place-items: center;
+	display: flex;
+	align-items: center;
 	border: 1px dashed rgba(91, 113, 130, 0.32);
 	border-radius: 7px;
 	color: #647585;
 	background: rgba(12, 29, 42, 0.42);
 	font-size: 0.68rem;
 }
+
+.guide-channel-track:has(> .guide-empty-day) {
+	overflow: clip;
+}
+
+.guide-empty-status {
+	position: sticky;
+	left: calc(var(--guide-channel-width) + 12px);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	max-width: max(6rem, calc(100vw - var(--guide-channel-width) - 4rem));
+}
+
 
 .current-time-line {
 	position: absolute;

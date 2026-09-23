@@ -1,54 +1,38 @@
-import { semanticSource } from '../semantic/source.js';
-import { refinementTexts } from '../semantic/refinement.js';
+import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
+import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import type { FastifyInstance } from 'fastify';
-import { semanticProgramConfigSchema, type SchedulingProgram } from '@moirai/shared';
+import { semanticProgramConfigSchema } from '@moirai/shared';
 import { schedulingProgramStatusSchema, semanticRetryResultSchema } from '@moirai/shared/api-contracts';
 import type { Repository } from '../repository/index.js';
-import { similarityProgramStatus } from '../semantic/status.js';
 import { apiOperation, responseContent } from './contracts.js';
 
-/** Identity for a read-only draft, never inserted into Program or seed storage. */
-const PREVIEW_PROGRAM_ID = '00000000-0000-4000-8000-000000000002';
 
 /** Expose bounded semantic samples for unsaved editor settings without touching seed state. */
-export function registerSemanticProgramRoutes(app: FastifyInstance, repository: Repository, requestEmbeddingWork?: (includeMedia?: boolean) => void): void {
+export function registerSemanticProgramRoutes(app: FastifyInstance, repository: Repository, requestEmbeddingWork: ((includeMedia?: boolean) => void) | undefined, schedulingWorkers: SchedulingWorkerPool): void {
 	app.post('/api/v1/programs/similarity-preview', {
 		schema: apiOperation({ operationId: 'previewSimilarityProgram', tags: ['Programs'],
 			summary: 'Sample related media for Similar Items or Theme settings', body: semanticProgramConfigSchema,
 			response: { 200: responseContent('Sample matches and embedding status', 'application/json', schedulingProgramStatusSchema) },
 			errors: [400, 500, 503] }),
-	}, async (request) => {
-		const config = semanticProgramConfigSchema.parse(request.body);
-		const programs = await repository.listPrograms();
-		const draft: SchedulingProgram = { id: PREVIEW_PROGRAM_ID, name: 'Sample matches', config,
-			createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-		const catalog = await repository.getSchedulingCatalog([...programs, draft], [draft.id]);
-		const source = semanticSource(config, programs, catalog);
-		if (!source.valid) {
-			throw app.httpErrors.badRequest(source.missing);
-		}
-		if (refinementTexts(config).some((text) => catalog.semantic?.preferences?.[text]?.status === 'pending')) {
+	}, async (request, reply) => {
+		const result = await schedulingWorkers.read({ kind: 'similarity', config: semanticProgramConfigSchema.parse(request.body) }, workerRequestSignal(reply));
+		if (result.preferences?.length) {
+			repository.semantic.preferences.catalog(result.preferences);
 			requestEmbeddingWork?.();
 		}
-		return similarityProgramStatus(draft, programs, catalog);
+		return sendWorkerJson(reply, result.body);
 	});
 	app.post('/api/v1/programs/similarity-retry', {
 		schema: apiOperation({ operationId: 'retrySimilarityEmbeddings', tags: ['Programs'],
 			summary: 'Retry failed embeddings for Similar Items or Theme settings', body: semanticProgramConfigSchema,
 			response: { 200: responseContent('Number of failed embeddings queued', 'application/json', semanticRetryResultSchema) },
 			errors: [400, 500, 503] }),
-	}, async (request) => {
-		const config = semanticProgramConfigSchema.parse(request.body);
-		const programs = await repository.listPrograms();
-		const draft: SchedulingProgram = { id: PREVIEW_PROGRAM_ID, name: 'Retry embeddings', config,
-			createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-		const catalog = await repository.getSchedulingCatalog([...programs, draft], [draft.id]);
-		const source = semanticSource(config, programs, catalog);
-		if (!source.valid) {
-			throw app.httpErrors.badRequest(source.missing);
+	}, async (request, reply) => {
+		const result = await schedulingWorkers.read({ kind: 'similarity', config: semanticProgramConfigSchema.parse(request.body), retry: true }, workerRequestSignal(reply));
+		if (result.preferences?.length) {
+			repository.semantic.preferences.catalog(result.preferences);
 		}
-		const ids = [...source.sourceIds, ...source.items.map((media) => media.id)];
-		const queued = repository.semantic.retryFailed(ids, refinementTexts(config));
+		const queued = repository.semantic.retryFailed(result.retryItemIds ?? [], result.preferences ?? []);
 		if (queued) {
 			repository.invalidateSchedulingCatalog();
 			requestEmbeddingWork?.(true);

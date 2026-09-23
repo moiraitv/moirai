@@ -763,6 +763,7 @@ async function closeEditor(): Promise<void> {
 
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewRevision = 0;
+let previewController: AbortController | undefined;
 let allowRouteLeave = false;
 
 /** Cancel the pending coalesced preview request. */
@@ -781,13 +782,14 @@ async function generatePreview(revision: number): Promise<void> {
 
 	previewQueued.value = false;
 	previewing.value = true;
+	previewController = new AbortController();
 	previewError.value = '';
 	try {
 		const input = timelineDraftPreviewSchema.parse({
 			template: draft.value,
 			days: 1,
 		});
-		const generated = await api.draftTimelinePreview(input);
+		const generated = await api.draftTimelinePreview(input, previewController.signal);
 		if (revision !== previewRevision) {
 			return;
 		}
@@ -810,6 +812,7 @@ async function generatePreview(revision: number): Promise<void> {
 /** Coalesce template changes before requesting a new resolved preview. */
 function requestPreview(delay = PREVIEW_UPDATE_DELAY_MS): void {
 	previewRevision += 1;
+	previewController?.abort();
 	const revision = previewRevision;
 	clearPreviewTimer();
 	if (!draft.value) {
@@ -830,6 +833,7 @@ function requestPreview(delay = PREVIEW_UPDATE_DELAY_MS): void {
 /** Cancel any pending preview debounce and regenerate immediately. */
 function refreshPreviewNow(): void {
 	previewRevision += 1;
+	previewController?.abort();
 	const revision = previewRevision;
 	clearPreviewTimer();
 	if (!draft.value) {
@@ -906,6 +910,7 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
 	previewRevision += 1;
+	previewController?.abort();
 	clearPreviewTimer();
 });
 useDraftProtection(() => editing.value && hasPendingSave.value);

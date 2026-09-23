@@ -139,7 +139,7 @@ export class Repository extends LibraryRepository {
 	private readonly quickChannelSetups: QuickChannelSetupRepository;
 	private readonly viewingPreferences: ViewingPreferenceRepository;
 
-	constructor(private readonly database: MoiraiDatabase) {
+	constructor(private readonly database: MoiraiDatabase, readOnlyPreferences = false) {
 		super(database);
 		this.semantic = new SemanticRepository(database);
 		this.authentication = new AuthenticationRepository(database);
@@ -148,10 +148,15 @@ export class Repository extends LibraryRepository {
 		this.guideTemplates = new GuideTemplateRepository(database);
 		this.catalog = new MediaCatalogRepository(database);
 		this.channels = new ChannelRepository(database);
-		this.scheduling = new SchedulingRepository(database);
+		this.scheduling = new SchedulingRepository(database, readOnlyPreferences);
 		this.settings = new SettingsRepository(database);
 		this.quickChannelSetups = new QuickChannelSetupRepository(database);
 		this.viewingPreferences = new ViewingPreferenceRepository(database);
+	}
+
+	/** Revision used to invalidate independent preview-worker catalog caches. */
+	get schedulingCatalogRevision(): number {
+		return this.scheduling.catalogRevision;
 	}
 
 	/** Run the smallest SQLite query used to verify database readiness. */

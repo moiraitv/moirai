@@ -1,3 +1,5 @@
+import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
+import { SchedulingQueueFullError, type SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import type { FastifyInstance } from 'fastify';
 import { Temporal } from '@js-temporal/polyfill';
 import { z } from 'zod';
@@ -8,13 +10,11 @@ import {
 	guideTemplateSchema,
 } from '@moirai/shared';
 import type { AppConfig } from '../config.js';
-import { previewGuideListings } from '../guide/epg.js';
 import {
 	CommittedGuideRangeError,
 	CommittedGuideUnavailableError,
 	GuideMaterializationLimitError,
 	readCommittedGuideAfterMaterializing,
-	readCommittedScheduleGuide,
 } from '../guide/schedule-guide.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
@@ -29,8 +29,9 @@ export function registerGuideTemplateRoutes(app: FastifyInstance, dependencies: 
 	repository: Repository;
 	events: LiveEventHub;
 	timelineMaterializer: TimelineMaterializer;
+	schedulingWorkers: SchedulingWorkerPool;
 }): void {
-	const { config, repository, events, timelineMaterializer } = dependencies;
+	const { config, repository, events, timelineMaterializer, schedulingWorkers } = dependencies;
 
 	app.get('/api/v1/guide-templates', { schema: apiOperation({
 		operationId: 'listGuideTemplates', tags: ['Guide templates'], summary: 'List reusable XMLTV templates',
@@ -111,28 +112,12 @@ export function registerGuideTemplateRoutes(app: FastifyInstance, dependencies: 
 
 		const startDate = Temporal.Now.plainDateISO(config.timeZone).toString();
 		try {
-			const materialized = await readCommittedGuideAfterMaterializing(
-				() => readCommittedScheduleGuide(
-					repository,
-					config.timeZone,
-					startDate,
-					1,
-					{ includeMediaCatalog: true },
-				),
+			const result = await readCommittedGuideAfterMaterializing(
+				() => schedulingWorkers.read({ kind: 'guide-template', timeZone: config.timeZone,
+					publicUrl: config.publicUrl, startDate, days: 1, preview: input }, workerRequestSignal(reply)),
 				() => timelineMaterializer.runNow(),
 			);
-			const preview = await previewGuideListings(
-				channel,
-				materialized.guide,
-				materialized.catalog,
-				config.publicUrl,
-				input.sources,
-			);
-			return {
-				timeZone: materialized.guide.timeZone,
-				startDate: materialized.guide.startDate,
-				...preview,
-			};
+			return sendWorkerJson(reply, result.body);
 		}
 		catch (error) {
 			if (
@@ -144,6 +129,9 @@ export function registerGuideTemplateRoutes(app: FastifyInstance, dependencies: 
 			if (error instanceof CommittedGuideUnavailableError) {
 				reply.header('Retry-After', '5');
 				throw app.httpErrors.serviceUnavailable(error.message);
+			}
+			if (error instanceof SchedulingQueueFullError) {
+				throw error;
 			}
 			throw app.httpErrors.badRequest(error instanceof Error ? error.message : 'Unable to preview guide template');
 		}

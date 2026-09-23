@@ -1,3 +1,4 @@
+import { ResponsivenessMonitor } from './operations/responsiveness.js';
 import { fileURLToPath } from 'node:url';
 import { EmbeddingService } from './semantic/service.js';
 import { SemanticRepository } from './repository/semantic.js';
@@ -8,7 +9,7 @@ import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { validatorCompiler } from 'fastify-type-provider-zod';
 import { CHANNEL_LOGO_MAX_BYTES, FALLBACK_FILLER_MAX_BYTES } from '@moirai/shared';
 import { ArtworkCache } from './artwork/artwork-cache.js';
@@ -84,6 +85,13 @@ export async function buildApp(
 		}),
 	});
 
+	const responsiveness = new ResponsivenessMonitor(logs.logger);
+	const requestTimings = new WeakMap<FastifyRequest, () => void>();
+	app.addHook('onRequest', async (request) => {
+		requestTimings.set(request, responsiveness.begin(`${request.method} ${request.routeOptions.url ?? 'unmatched'}`));
+	});
+	app.addHook('onResponse', async (request) => requestTimings.get(request)?.());
+	app.addHook('onRequestAbort', async (request) => requestTimings.get(request)?.());
 	const repository = new Repository(db);
 	const authentication = new AuthenticationService(
 		repository,
@@ -137,12 +145,14 @@ export async function buildApp(
 		},
 		logs.logger,
 		resourcePressure,
+		responsiveness,
 	);
 
 	// Construct scheduling, playout, and integrated playback services.
 	const schedulingWorkers = new SchedulingWorkerPool(
 		config.schedulingWorkerCount,
 		config.schedulingWorkerQueueLimit,
+		{ db, repository, responsiveness },
 	);
 	const timelineMaterializer = new TimelineMaterializer(
 		repository,
@@ -159,6 +169,7 @@ export async function buildApp(
 		fallbackFillers,
 		events,
 		logs.logger as FastifyBaseLogger,
+		schedulingWorkers,
 	);
 	const hardwareAcceleration = new HardwareAccelerationResolver(
 		logs.logger as FastifyBaseLogger,
@@ -210,13 +221,14 @@ export async function buildApp(
 	];
 
 	// Connect maintenance, guide generation, and live-event invalidation.
-	const maintenance = new MaintenanceService(repository, artworkCache, logs, config, logs.logger);
+	const maintenance = new MaintenanceService(repository, artworkCache, logs, config, logs.logger, responsiveness);
 	const epg = new EpgService(
 		repository,
 		config.timeZone,
 		config.publicUrl,
 		() => timelineMaterializer.runNow(),
 		(message, extra) => logs.logger.warn(extra ?? {}, message),
+		schedulingWorkers,
 	);
 	const unsubscribeMaterializer = events.subscribe((event) => {
 		if (event.type === 'embeddings.changed') {
@@ -225,6 +237,10 @@ export async function buildApp(
 		timelineMaterializer.handleEvent(event);
 	});
 	const unsubscribeEpg = events.subscribe((event) => {
+		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed'
+			|| event.type === 'embeddings.changed' || event.type === 'scan.changed' || event.type === 'library.changed') {
+			schedulingWorkers.invalidateReads();
+		}
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed') {
 			epg.invalidate();
 			invalidateCommittedGuideCache();
@@ -293,6 +309,7 @@ export async function buildApp(
 		maintenance.start();
 	});
 	app.addHook('onClose', async () => {
+		responsiveness.close();
 		authentication.close();
 		unsubscribeSessionRevocations();
 		unsubscribeMaterializer();

@@ -1,3 +1,4 @@
+import { applyMaterializationWrite, type MaterializationWriter } from './materialization-writes.js';
 import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { StaleSemanticDecisionError } from '../repository/semantic.js';
 import { Temporal } from '@js-temporal/polyfill';
@@ -332,7 +333,13 @@ export class TimelineMaterializer {
 		private readonly events: LiveEventPublisher,
 		private readonly timeZone: string,
 		private readonly workers?: SchedulingWorkerPool,
+		private readonly write: MaterializationWriter = async command => applyMaterializationWrite(repository, command),
 	) {}
+
+	/** Report invalidation observed during an active pass so its owner can retry. */
+	get needsRefresh(): boolean {
+		return this.dirty;
+	}
 
 	/** Return whether the rolling materializer is accepting background work. */
 	health(): { status: 'ready' | 'degraded'; detail?: string } {
@@ -427,7 +434,7 @@ export class TimelineMaterializer {
 		const now = Temporal.Now.instant()
 			.round({ smallestUnit: 'second', roundingMode: 'ceil' })
 			.toString();
-		this.repository.markTimelinePending([channelId], now, now);
+		await this.write({ kind: 'pending', channelIds: [channelId], applyAfter: now, pendingSince: now });
 		this.dirty = true;
 		this.revision += 1;
 		this.events.publish({ type: 'timeline.changed', data: { channelId, status: 'pending' } });
@@ -451,6 +458,15 @@ export class TimelineMaterializer {
 
 	/** Refresh each configured channel using one shared catalog snapshot. */
 	private async materializeAll(): Promise<void> {
+		if (this.workers?.databaseBacked) {
+			const retry = await this.workers.materialize(this.timeZone, this.write, event => this.events.publish(event));
+			if (retry) {
+				this.revision += 1;
+				this.dirty = true;
+			}
+			return;
+		}
+
 		const programsPromise = this.repository.listPrograms();
 		const [schedules, templates, programs, playbackSettings] = await Promise.all([
 			this.repository.listChannelSchedules(),
@@ -458,6 +474,9 @@ export class TimelineMaterializer {
 			programsPromise,
 			this.repository.getPlaybackSettings(),
 		]);
+		if (schedules.length === 0) {
+			return;
+		}
 		const preferenceAsOf = currentTimestamp();
 		const viewingPreferences = playbackSettings.viewingPreferencesEnabled
 			? this.repository.viewingPreferenceScores(preferenceAsOf)
@@ -487,7 +506,7 @@ export class TimelineMaterializer {
 			: priorityDay % orderedSchedules.length;
 		orderedSchedules.push(...orderedSchedules.splice(0, rotation));
 		let index = 0;
-		let ready: (() => void) | null = null;
+		let ready: (() => Promise<void>) | null = null;
 		while (index < orderedSchedules.length || ready) {
 			const upcoming = index < orderedSchedules.length
 				? this.materializeChannel(
@@ -499,8 +518,10 @@ export class TimelineMaterializer {
 					occupiedMedia,
 				)
 				: null;
+			// Observe preparation failures while a previous commit awaits its writer acknowledgement.
+			void upcoming?.catch(() => undefined);
 			if (ready) {
-				ready();
+				await ready();
 			}
 			if (!upcoming) {
 				break;
@@ -512,11 +533,7 @@ export class TimelineMaterializer {
 			catch (error) {
 				ready = null;
 				const message = internalErrorMessage(error);
-				this.repository.markTimelineFailed(
-					orderedSchedules[index - 1]!.channelId,
-					message,
-					currentTimestamp(),
-				);
+				await this.write({ kind: 'failed', channelId: orderedSchedules[index - 1]!.channelId, message, failedAt: currentTimestamp() });
 				this.events.publish({
 					type: 'timeline.changed',
 					data: { channelId: orderedSchedules[index - 1]!.channelId, status: 'failed' },
@@ -534,7 +551,7 @@ export class TimelineMaterializer {
 		sourceCatalog: SchedulingCatalog,
 		viewingPreferences: ViewingPreferenceScores,
 		occupiedMedia: OccupiedMediaInterval[],
-	): Promise<(() => void) | null> {
+	): Promise<(() => Promise<void>) | null> {
 		// Resolve the base template and desired rolling guide window.
 		const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
 		if (!template) {
@@ -578,7 +595,7 @@ export class TimelineMaterializer {
 		) {
 			const applyAfter = startOfDate(today.add({ days: 1 }), this.timeZone);
 			const pendingSince = now.toString();
-			this.repository.markTimelinePending([schedule.channelId], applyAfter, pendingSince);
+			await this.write({ kind: 'pending', channelIds: [schedule.channelId], applyAfter, pendingSince });
 			current = { ...current, health: 'pending', pendingSince, applyAfter };
 			this.events.publish({
 				type: 'timeline.changed',
@@ -777,9 +794,9 @@ export class TimelineMaterializer {
 			desiredEnd,
 			replaceFrom,
 		);
-		return () => {
+		return async () => {
 			try {
-				this.repository.commitMaterializedTimeline({
+				await this.write({ kind: 'commit', input: {
 					expectedCommittedAt: current?.committedAt ?? null,
 					expectedRevision: current?.revision ?? 0,
 					channelId: schedule.channelId,
@@ -794,7 +811,7 @@ export class TimelineMaterializer {
 					segments,
 					issues,
 					committedAt,
-				});
+				} });
 				this.events.publish({
 					type: 'timeline.changed',
 					data: { channelId: schedule.channelId, status: 'ready' },
@@ -807,7 +824,7 @@ export class TimelineMaterializer {
 					return;
 				}
 				const message = internalErrorMessage(error);
-				this.repository.markTimelineFailed(schedule.channelId, message, currentTimestamp());
+				await this.write({ kind: 'failed', channelId: schedule.channelId, message, failedAt: currentTimestamp() });
 				this.events.publish({
 					type: 'timeline.changed',
 					data: { channelId: schedule.channelId, status: 'failed' },
