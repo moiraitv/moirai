@@ -2,7 +2,6 @@ import { expect } from '@playwright/test';
 import { test } from './documentation/fixture';
 import { seedLibrary, seedSchedule } from './documentation/seed';
 import { authenticateAdministrator } from './authentication';
-import { capture } from './documentation/capture';
 import { randomUUID } from 'node:crypto';
 
 test('creates libraries in a protected modal with reset, error recovery, and contextual help', async ({ page, documentationServer }) => {
@@ -12,7 +11,6 @@ test('creates libraries in a protected modal with reset, error recovery, and con
 	const dialog = page.getByRole('dialog', { name: 'Add Library', exact: true });
 	const name = dialog.getByRole('textbox', { name: 'Name', exact: true });
 	await expect(name).toBeFocused();
-	await capture(page, 'library-create.png');
 	await page.setViewportSize({ width: 390, height: 600 });
 	await expect(dialog.getByRole('button', { name: 'Add and Scan' })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

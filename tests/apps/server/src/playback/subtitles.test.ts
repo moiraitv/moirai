@@ -81,20 +81,16 @@ describe('subtitle selection', () => {
 });
 
 describe('Liquid music-video credits', () => {
-	it('renders overlapping channel work beyond worker capacity without dropping credits', async () => {
+	it('renders complete credits with deduplicated metadata beyond worker capacity', async () => {
 		const context = creditContext(item(), channel());
 		const results = await Promise.all(Array.from({ length: creditRenderer.MAX_ACTIVE_CREDIT_RENDERS + 1 }, () => renderCreditTemplate(MUSIC_VIDEO_CREDIT_TEMPLATE, context)));
 		for (const ass of results) {
 			expect(ass).toContain('0:00:07.00,0:00:17.00');
+			expect(ass).toContain('0:02:45.00,0:02:55.00');
+			expect(ass).not.toContain('Artist | Artist');
+			expect(ass).toContain('Director: Director');
 		}
 	}, 15_000);
-	it('renders fixed opening/closing intervals and deduplicated metadata in an isolated worker', async () => {
-		const ass = await renderCreditTemplate(MUSIC_VIDEO_CREDIT_TEMPLATE, creditContext(item(), channel()));
-		expect(ass).toContain('0:00:07.00,0:00:17.00');
-		expect(ass).toContain('0:02:45.00,0:02:55.00');
-		expect(ass).not.toContain('Artist | Artist');
-		expect(ass).toContain('Director: Director');
-	});
 	it('omits opening events on short videos and safely handles absent metadata', async () => {
 		const media = { ...item(), durationSeconds: 10, artists: [], year: null, metadata: {} };
 		const ass = await renderCredits(MUSIC_VIDEO_CREDIT_TEMPLATE, creditContext(media, channel()));

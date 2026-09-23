@@ -14,7 +14,7 @@ import { helpReviewLabel, type HelpReviewReason } from '../../apps/web/src/help-
 import MarkdownIt from 'markdown-it';
 import { userDocsTermBadges } from '../../scripts/user-docs-term-badges';
 
-test('captures setup and authentication', async ({ page }) => {
+test('captures setup and authentication', { tag: '@docs-screenshot' }, async ({ page }) => {
 	await page.goto('/setup');
 	await expect(page.getByRole('heading', { name: 'Create user' })).toBeVisible();
 	await capture(page, 'administrator-setup.png');
@@ -36,7 +36,7 @@ test('captures setup and authentication', async ({ page }) => {
 	await page.getByRole('button', { name: 'Close library editor' }).click();
 
 });
-test('captures libraries and scanning', async ({ page, documentationServer }) => {
+test('captures libraries and scanning', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { libraryId, mediaRoot } = await seedLibrary(page, documentationServer.directory, true);
 	await capture(page, 'library-catalog.png');
 	const historyTrigger = page.getByRole('button', { name: 'Last scan: open scan history' });
@@ -133,7 +133,7 @@ test('captures libraries and scanning', async ({ page, documentationServer }) =>
 	}
 
 });
-test('captures Programs', async ({ page, documentationServer }) => {
+test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { libraryId, sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/programs');
 	await expect(page.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
@@ -275,7 +275,7 @@ test('saves new template defaults with unlimited finish-left boundaries', async 
 	await expect(editor.getByRole('button', { name: 'No Limit', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('captures Templates', async ({ page, documentationServer }) => {
+test('captures Templates', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/templates');
 	await expect(page.getByRole('heading', { name: 'Templates', exact: true })).toBeVisible();
@@ -391,7 +391,7 @@ test('previews individual guide media on Guide and Channels while keeping click 
 	expect(previewRequests.length).toBeGreaterThanOrEqual(2);
 });
 
-test('captures Channel Schedules and Guide', async ({ page, documentationServer }) => {
+test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { template, channel, sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	const scheduleResponse = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
 		headers: requestHeaders,
@@ -516,7 +516,7 @@ test('starts each new channel with encoding and additional subtitles collapsed',
 	}
 });
 
-test('captures channel settings and operations', async ({ page, documentationServer }) => {
+test('captures channel settings and operations', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	await seedSchedule(page, documentationServer.directory);
 	await page.goto('/channels');
 	await expect(page.getByRole('heading', { name: 'Channels', exact: true })).toBeVisible();
@@ -718,7 +718,7 @@ test('keeps guide badge icons compact after production asset processing', async 
 	}
 });
 
-test('captures music-video credit templates and verifies draft actions', async ({ page, documentationServer }) => {
+test('captures music-video credit templates and verifies draft actions', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const csrf = await authenticateAdministrator(page);
 	const root = path.join(documentationServer.directory, 'music');
 	await mkdir(root);
@@ -762,7 +762,7 @@ test('captures music-video credit templates and verifies draft actions', async (
 	await existing.getByRole('button', { name: 'Close credit template' }).click();
 });
 
-test('captures guide templates', async ({ page, documentationServer }) => {
+test('captures guide templates', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	await seedSchedule(page, documentationServer.directory);
 	await page.goto('/playback/guide-templates');
 	await expect(page.getByRole('heading', { name: 'Guide Templates', exact: true })).toBeVisible();
@@ -782,7 +782,7 @@ test('captures guide templates', async ({ page, documentationServer }) => {
 	await editor.getByRole('button', { name: 'Close guide template' }).click();
 });
 
-test('captures encoding profiles and assigns or detaches channel settings', async ({ page }) => {
+test('captures encoding profiles and assigns or detaches channel settings', { tag: '@docs-screenshot' }, async ({ page }) => {
 	const predictionRequests: Array<{ width: number; height: number; ffmpegPath: string | null }> = [];
 	await page.route('**/api/v1/playback/hardware-acceleration/predict', async (route) => {
 		predictionRequests.push(route.request().postDataJSON());
@@ -863,7 +863,7 @@ test('captures encoding profiles and assigns or detaches channel settings', asyn
 	expect(independentSaved.group).toBeNull();
 });
 
-test('chooses built-in defaults and protects presets while allowing custom copies', async ({ page }) => {
+test('chooses built-in defaults and protects presets while allowing custom copies', { tag: '@docs-screenshot' }, async ({ page }) => {
 	const predictionRequests: Array<{ width: number; height: number; ffmpegPath: string | null }> = [];
 	await page.route('**/api/v1/playback/hardware-acceleration/predict', async (route) => {
 		predictionRequests.push(route.request().postDataJSON());
@@ -1385,6 +1385,7 @@ test('opens affected resources from dashboard identity conflicts', async ({ page
 });
 
 test('shows dismissible account success while retaining credential errors', async ({ page }) => {
+	await page.clock.install();
 	await authenticateAdministrator(page);
 	await page.goto('/account');
 	for (const manualDismissal of [true, false]) {
@@ -1397,7 +1398,10 @@ test('shows dismissible account success while retaining credential errors', asyn
 		if (manualDismissal) {
 			await toast.getByRole('button', { name: 'Dismiss notification' }).click();
 		}
-		await expect(toast).toBeHidden({ timeout: 8_000 });
+		else {
+			await page.clock.fastForward(5_500);
+		}
+		await expect(toast).toBeHidden();
 	}
 
 	await page.getByLabel('Current password').fill('an incorrect current password');
@@ -1406,7 +1410,7 @@ test('shows dismissible account success while retaining credential errors', asyn
 	await page.getByRole('button', { name: 'Update Credentials' }).click();
 	const error = page.locator('.account-panel .notice.error');
 	await expect(error).toBeVisible();
-	await page.waitForTimeout(5_500);
+	await page.clock.fastForward(5_500);
 	await expect(error).toBeVisible();
 	await expect(page.locator('.transient-toast')).toHaveCount(0);
 });
@@ -1435,7 +1439,7 @@ test('keeps alphabet navigation reachable with touch targets', async ({ page, br
 	}
 });
 
-test('shows media usage on demand, including library queries, refreshes additions, and links to programs', async ({ page, documentationServer }) => {
+test('shows media usage on demand, including library queries, refreshes additions, and links to programs', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const { libraryId, requestHeaders, template, channel } = await seedSchedule(page, documentationServer.directory);
 	const scheduled = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, { headers: requestHeaders, data: { defaultTemplateId: template.id } });

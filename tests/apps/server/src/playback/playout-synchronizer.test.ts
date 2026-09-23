@@ -11,6 +11,11 @@ import { PlayoutSynchronizer } from '@server/playback/playout-synchronizer.js';
 import type { LiveEventPublisher } from '@server/operations/live-events.js';
 import type { Repository } from '@server/repository/index.js';
 
+/** Create independent log spies for each synchronizer, including publication timing. */
+function loggerFixture(): FastifyBaseLogger {
+	return { error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as unknown as FastifyBaseLogger;
+}
+
 describe('playout synchronizer', () => {
 	it('removes orphaned playout before reconciling deleted-channel fallback state', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-reconcile-'));
@@ -34,7 +39,7 @@ describe('playout synchronizer', () => {
 			vi.fn(async () => undefined),
 			fallbackFillers,
 			{ publish: vi.fn() } as LiveEventPublisher,
-			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+			loggerFixture(),
 		);
 
 		try {
@@ -64,7 +69,7 @@ describe('playout synchronizer', () => {
 			vi.fn(async () => undefined),
 			{} as FallbackFillerStore,
 			events,
-			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+			loggerFixture(),
 		);
 		const perform = vi.spyOn(
 			synchronizer as unknown as {
@@ -109,7 +114,7 @@ describe('playout synchronizer', () => {
 			vi.fn(async () => undefined),
 			{} as FallbackFillerStore,
 			{ publish: vi.fn() } as LiveEventPublisher,
-			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+			loggerFixture(),
 		);
 		const perform = vi.spyOn(
 			synchronizer as unknown as {
@@ -165,7 +170,7 @@ describe('playout synchronizer', () => {
 			ensureMaterialized,
 			{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
 			{ publish: vi.fn() } as LiveEventPublisher,
-			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+			loggerFixture(),
 		);
 		const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue({
 			timeZone: 'UTC',
@@ -212,7 +217,7 @@ describe('playout synchronizer', () => {
 			ensureMaterialized,
 			{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
 			{ publish: vi.fn() } as LiveEventPublisher,
-			{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+			loggerFixture(),
 		);
 		const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide')
 			.mockRejectedValueOnce(new scheduleGuide.CommittedGuideUnavailableError(1))
@@ -257,7 +262,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	}
 	await writeFile(obsolete, 'obsolete');
 	const configured = { ...channelCreateSchema.parse({ number: '1', name: 'Music', subtitleMode: 'convert' }), id: channelId, createdAt: '', updatedAt: '' };
-	const warn = vi.fn();
+	const logger = loggerFixture();
 	const synchronizer = new PlayoutSynchronizer(
 		{ getChannel: async () => configured, listPrograms: async () => [] } as unknown as Repository,
 		linked,
@@ -266,7 +271,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 		async () => undefined,
 		{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
 		{ publish: vi.fn() } as LiveEventPublisher,
-		{ error: vi.fn(), warn } as unknown as FastifyBaseLogger,
+		logger,
 	);
 	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue({} as ScheduleGuide);
 	const selections = new Map([['segment', [{ path: retained }]]]);
@@ -287,7 +292,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 		await rm(retained);
 		await expect(synchronizer.syncChannel(channelId)).resolves.toBeTruthy();
 		expect(synchronizer.channelFailure(channelId)).toBeNull();
-		expect(warn).toHaveBeenCalled();
+		expect(logger.warn).toHaveBeenCalled();
 		expect(synchronizer.subtitleMode(configured)).toBe('burn');
 	}
 	finally {
@@ -308,7 +313,7 @@ it('replaces prior-version playout through normal synchronization while preservi
 		async () => {},
 		{ resolve: async () => ({ path: '/fallback/custom.mp4', durationMilliseconds: 60_000, hasAudio: true }) } as unknown as FallbackFillerStore,
 		{ publish: vi.fn() } as LiveEventPublisher,
-		{ error: vi.fn(), warn: vi.fn() } as unknown as FastifyBaseLogger,
+		loggerFixture(),
 	);
 	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue(guideValue);
 	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());

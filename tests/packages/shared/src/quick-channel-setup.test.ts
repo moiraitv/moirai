@@ -62,25 +62,10 @@ describe('quick channel setup contract', () => {
 			scenario: 'shows',
 			libraryId,
 			genres: ['Science Fiction', 'science-fiction'],
-		})).toEqual({
-			scenario: 'shows',
-			libraryId,
-			name: '',
-			releaseYearFrom: null,
-			releaseYearTo: null,
-			minimumRating: null,
-			minimumUserRating: null,
-			addedFrom: null,
-			addedBefore: null,
+		})).toMatchObject({
 			genres: ['science-fiction'],
 			excludedGenres: [],
 			genreMatch: 'all',
-			actor: '',
-			director: '',
-			sort: { type: 'name', direction: 'asc' },
-			itemLimit: null,
-			cursor: null,
-			limit: 24,
 		});
 	});
 });

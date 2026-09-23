@@ -38,7 +38,7 @@
     "docs:user:review:migrate": "tsx scripts/user-docs.ts migrate",
     "docs:user:review:approve": "tsx scripts/user-docs.ts approve",
     "docs:user:review:check": "tsx scripts/user-docs.ts review-check",
-    "docs:user:screenshots:update": "playwright test --config playwright.docs.config.ts && tsx tests/e2e/documentation/publish.ts",
+    "docs:user:screenshots:update": "playwright test --config playwright.docs.config.ts --grep @docs-screenshot && tsx tests/e2e/documentation/publish.ts",
     "etv:setup": "node scripts/etv-development.mjs setup",
     "etv:build": "node scripts/etv-development.mjs build",
     "etv:check": "tsx scripts/etv-contract.ts check",
