@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
 			</button>
 			<div v-show="open" :id="contentId" class="resource-usage-content">
 				<div v-if="headered" class="resource-usage-panel-header">
-					<GitBranch :size="18" aria-hidden="true" /><strong>Used by</strong>
+					<GitBranch :size="18" aria-hidden="true" /><strong :class="{ eyebrow: inline }">Used by</strong>
 					<button v-if="!inline" class="icon-button" type="button" aria-label="Collapse Used by" @click="toggleOpen">
 						<X :size="18" aria-hidden="true" />
 					</button>

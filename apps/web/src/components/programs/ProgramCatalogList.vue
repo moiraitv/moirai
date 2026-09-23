@@ -66,7 +66,7 @@ defineExpose({ focusProgram });
 </script>
 <template>
 	<div ref="scroll" class="program-management-list" tabindex="-1" aria-label="Programs list">
-		<div ref="heading" class="program-management-columns" aria-hidden="true"><span>Program / Definition</span><span>Preview</span><span>Items</span><span>References</span><span></span></div>
+		<div ref="heading" class="program-management-columns" aria-hidden="true"><span>Program / Definition</span><span>Preview</span><span>Items</span><span>Used by</span><span></span></div>
 		<div role="list" :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
 			<article v-for="row in rows" :key="String(row.key)" :ref="measureRow" :data-index="row.index" :aria-posinset="row.index + 1" :aria-setsize="programs.length" role="listitem" class="program-management-row" :class="{ selected: selected === programs[row.index]!.id }" :style="{ transform: `translateY(${row.start - headingHeight}px)` }" @click="($event.target as Element).closest('button, a') ? undefined : emit('select', programs[row.index]!.id)">
 				<button class="program-management-identity" :aria-label="programs[row.index]!.name" :aria-description="statuses.get(programs[row.index]!.id)?.health" :data-program-id="programs[row.index]!.id" :aria-pressed="selected === programs[row.index]!.id" @keydown="navigateRows($event, row.index)" @click="emit('select', programs[row.index]!.id)">

@@ -47,7 +47,7 @@ The Programs list starts in alphabetical order, ignoring punctuation and leading
 
 Select a Program to inspect its definition, media sample, health, and direct references. Close the drawer with its close button or Escape. Choose **Edit Program** to make any changes.
 
-The **Items** column shows the indexed count; its tooltip reports unavailable items when any exist. The **References** count includes authored uses in Programs, templates, and channel schedules; it is not solely a count of Channels it appears on. **Used by** lists the direct resources. Similar Items and Theme previews show sample matches, while **Current sets** reports the remaining items in each schedule use.
+The **Items** column shows the indexed count; its tooltip reports unavailable items when any exist. The **Used by** count includes authored uses in Programs, templates, and channel schedules; it is not solely a count of Channels it appears on. **Used by** lists the direct resources. Similar Items and Theme previews show sample matches, while **Current sets** reports the remaining items in each schedule use.
 
 ![The programs catalog](/screenshots/programs.png)
 
@@ -134,6 +134,12 @@ Choose **Sequence** when you want to combine existing ![](/icons/list-video.svg)
 3. Set the count for that step and add any remaining steps.
 4. Use the up and down arrows to arrange the steps.
 5. Enable **Repeat sequence** if the sequence should start again after its final step.
+
+The inspector’s **Sequence Configuration** shows each source as a numbered block with a media preview and its configured count: **1 Item**, **2 Items**, and so on. A small **more** tile appears after the thumbnails when the source contains additional items beyond those shown. Select a block to inspect that source Program. The **items per cycle** total adds the configured step counts, including unavailable sources; it does not promise that every item is currently playable.
+
+![Sequence Configuration with numbered source previews and selections per cycle](/screenshots/program-sequence-inspector.png)
+
+The Programs list and inspector show a sample drawn from the Sequence’s source Programs. This source preview includes distinct media across the sources; it does not predict playback order or step counts.
 
 Each referenced ![](/icons/list-video.svg) Program keeps its own media-selection rules. The Sequence controls their order and counts; it does not assign clock times. Place it in a ![](/icons/calendar-range.svg) Template to decide when it runs.
 

@@ -213,6 +213,25 @@ const healthRank: Record<SchedulingProgramHealth, number> = {
 	missing: 4,
 };
 
+/** Sample distinct media across source previews without simulating sequence playback. */
+function sequencePreview(children: SchedulingProgramStatus[]): SchedulingProgramStatus['previewItems'] {
+	const items: SchedulingProgramStatus['previewItems'] = [];
+	const seen = new Set<string>();
+	for (let index = 0; index < PROGRAM_PREVIEW_ITEM_LIMIT; index += 1) {
+		for (const child of children) {
+			const item = child.previewItems[index];
+			if (item && !seen.has(item.id)) {
+				seen.add(item.id);
+				items.push(item);
+				if (items.length === PROGRAM_PREVIEW_ITEM_LIMIT) {
+					return items;
+				}
+			}
+		}
+	}
+	return items;
+}
+
 /** Summarize source eligibility for the scheduling UI without exposing the full catalog. */
 export function schedulingProgramStatuses(
 	programs: SchedulingProgram[],
@@ -264,7 +283,7 @@ export function schedulingProgramStatuses(
 			sourceLabel: `${program.config.entries.length} step sequence`,
 			indexedItemCount: children.reduce((sum, child) => sum + child.indexedItemCount, 0),
 			availableItemCount: children.reduce((sum, child) => sum + child.availableItemCount, 0),
-			previewItems: [],
+			previewItems: sequencePreview(children),
 		};
 		resolved.set(program.id, status);
 		return status;

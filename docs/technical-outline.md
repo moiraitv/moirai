@@ -554,6 +554,10 @@ existing Program editor routes remain unchanged. The shared inspector uses type-
 components, an inline desktop layout, and a focus-trapped drawer on smaller viewports. Only the
 selected Program loads paginated usage details; rows derive reference counts from the overview.
 Semantic previews remain samples rather than committed sets, and inspection does not alter generation.
+Sequence previews sample distinct media across child previews in source order, bounded by the shared
+preview limit, without running selection or changing sequence counts. Sequence inspection also shows
+ordered, numbered source blocks with responsive thumbnails from the loaded status map and a sum of
+configured selections per cycle; source navigation does not fetch additional preview data.
 Inspector deletion uses inline two-step confirmation; list and editor deletion retain their modal confirmation.
 
 A program separates content eligibility from selection behavior. Content sources include:

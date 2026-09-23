@@ -205,7 +205,7 @@ onUnmounted(() => {
 			<Teleport to="body" :disabled="!modal">
 				<Transition name="program-inspection">
 					<div v-if="selected && !editorOpen" :class="modal ? 'program-inspector-backdrop moirai-dialog-backdrop' : 'program-inspector-inline'" @click.self="modal && closeInspector()">
-						<ProgramInspector :program="selected" :programs="programById" :status="statuses.get(selected.id)" :libraries="librariesStore.libraries" :modal="modal" :action-error="error" :deleting="deleting" @close="closeInspector" @select="selectProgram" @delete="deleteProgram($event, true)" @refresh="refreshOverview" />
+						<ProgramInspector :program="selected" :programs="programById" :status="statuses.get(selected.id)" :statuses="statuses" :libraries="librariesStore.libraries" :modal="modal" :action-error="error" :deleting="deleting" @close="closeInspector" @select="selectProgram" @delete="deleteProgram($event, true)" @refresh="refreshOverview" />
 					</div>
 				</Transition>
 			</Teleport>

@@ -65,6 +65,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768
 		const opener = page.getByRole('button', { name: /^Program 001/ });
 		await opener.click();
 		const inspector = page.locator('.program-inspector');
+		await expect(inspector.locator('header .program-subtype-badge')).toHaveText('Based on “Program 000”');
 		await expect(inspector).toContainText('65 / 100');
 		await expect(inspector).toContainText('Current sets');
 		await expect(inspector.getByRole('region', { name: 'Sample matches' })).toBeVisible();
@@ -83,11 +84,17 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768
 		await expect(inspector).toHaveCount(0);
 		await expect(opener).toBeFocused();
 		await page.getByRole('button', { name: /^Program 003/ }).click();
-		await expect(inspector.locator('.program-source-list li')).toHaveText(['Program 0003 items', 'Program 0021 item']);
-		await inspector.getByRole('button', { name: 'Program 002', exact: true }).click();
+		await expect(inspector.locator('header .program-subtype-badge')).toHaveText('2 Programs');
+		await expect(inspector.getByRole('region', { name: 'Source preview' })).toBeVisible();
+		await expect(inspector.getByRole('region', { name: 'Source preview' })).toContainText('Preview movie');
+		await expect(inspector.locator('.program-source-copy')).toHaveText(['Program 0003 Items', 'Program 0021 Item']);
+		await expect(inspector.locator('.program-source-more:visible')).toHaveCount(0);
+		await page.screenshot({ animations: 'disabled', path: `test-results/sequence-inspector-${viewport.width}.png` });
+		await inspector.getByRole('button', { name: '2. Program 002, 1 Item', exact: true }).click();
+		await expect(inspector.locator('header .program-subtype-badge')).toHaveText('Prompt: Space discovery');
 		await expect(inspector).toContainText('Space discovery');
 		await page.goBack();
-		await expect(inspector).toContainText('Source Programs');
+		await expect(inspector).toContainText('Sequence Configuration');
 	});
 }
 
@@ -294,4 +301,47 @@ test('disarms inspector deletion on selection change and outside interaction, an
 	expect(attempts).toBe(1);
 	release();
 	await expect(inspector).toHaveCount(0);
+});
+
+test('renders counted Sequence blocks with bounded source previews and missing-source fallback', async ({ page }) => {
+	const sequence = { ...programs[3]!, config: { type: 'sequence', repeat: true, entries: [
+		{ id: randomUUID(), programId: sourceId, count: 1 },
+		{ id: randomUUID(), programId: sourceId, count: 2 },
+		{ id: randomUUID(), programId: 'missing', count: 10 },
+		{ id: randomUUID(), programId: programs[5]!.id, count: 3 },
+		{ id: randomUUID(), programId: programs[2]!.id, count: 1 },
+	] } };
+	const nested = { ...programs[2]!, name: 'A very long nested source Program title that must stay on one line', config: { type: 'sequence', repeat: false, entries: [{ id: randomUUID(), programId: sourceId, count: 10 }] } };
+	const previews = Array.from({ length: 4 }, (_, index) => ({ id: `sample-${index}`, libraryId, title: `Sample ${index}`, artworkUrl: null, availability: 'available' }));
+	await page.route('**/api/v1/scheduling/overview', route => route.fulfill({ json: {
+		programs: [programs[0], sequence, programs[5], nested], templates: [], channelSchedules: [],
+		programStatuses: [sourceId, sequence.id, nested.id].map(programId => ({ programId, health: 'ready', sourceLabel: '', indexedItemCount: 4, availableItemCount: 4, previewItems: previews })),
+	} }));
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto(`/schedules/programs?selected=${sequence.id}`);
+	const section = page.locator('.program-sequence-configuration');
+	await expect(section.locator('.eyebrow')).toHaveCSS('text-transform', 'uppercase');
+	await expect(section.locator('.program-sequence-total')).toHaveText('17 items per cycle');
+	await expect(section.locator('.program-source-index')).toHaveText(['1', '2', '3', '4', '5']);
+	await expect(section.locator('.program-source-copy small')).toHaveText(['1 Item', '2 Items', '10 Items', '3 Items', '1 Item']);
+	await expect(section.getByRole('button', { name: '3. Missing Program, 10 Items' })).toBeDisabled();
+	await expect(section.locator('.program-source-placeholder')).toHaveCount(2);
+	for (const [width, count] of [[350, 3], [320, 2], [280, 1]]) {
+		await section.evaluate((element, value) => {
+			element.style.width = `${value}px`;
+		}, width!);
+		await expect(section.locator('li').first().locator('.program-mini-preview > span:visible')).toHaveCount(count!);
+		await expect(section.locator('li').last().locator('.program-mini-preview > span:visible')).toHaveCount(count!);
+		await expect(section.locator('li').first().locator('.program-source-more')).toBeVisible();
+	}
+	await expect(section.locator('li').last().locator('strong')).toHaveCSS('text-overflow', 'ellipsis');
+	await expect(section.locator('li').last().locator('strong')).toHaveAttribute('title', nested.name);
+	await section.getByRole('button', { name: `5. ${nested.name}, 1 Item` }).focus();
+	await page.keyboard.press('Enter');
+	await expect(page.locator('#program-inspector-title')).toHaveText(nested.name);
+	await expect(section.locator('.program-sequence-total')).toHaveText('10 items per cycle');
+	await expect(section).toContainText('Plays the sequence once');
+	nested.config.entries[0]!.count = 1;
+	await page.reload();
+	await expect(section.locator('.program-sequence-total')).toHaveText('1 item per cycle');
 });

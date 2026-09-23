@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SchedulingCatalog, SchedulingProgram, SelectedMediaSort } from '@moirai/shared';
+import { PROGRAM_PREVIEW_ITEM_LIMIT } from '@moirai/shared';
 import { schedulingProgramStatuses } from '@server/scheduling/status.js';
 
 const program: SchedulingProgram = {
@@ -204,4 +205,26 @@ describe('scheduling program status', () => {
 			availableItemCount: 1,
 		});
 	});
+});
+
+it('samples bounded distinct previews across sequence sources and nested sequences', () => {
+	const fixture = catalog('available');
+	const original = fixture.media[0]!;
+	fixture.media = Array.from({ length: PROGRAM_PREVIEW_ITEM_LIMIT * 2 }, (_, index) => ({ ...original, id: `media-${index}`, title: `Film ${index}` }));
+	const source = (id: string, itemIds: string[]): SchedulingProgram => ({ ...program, id, config: { type: 'content', source: { type: 'collection', libraryId: original.libraryId, itemIds, sort: { type: 'manual', itemIds } }, strategy: { type: 'sequential' } } });
+	const first = source('first', fixture.media.slice(0, PROGRAM_PREVIEW_ITEM_LIMIT).map(item => item.id));
+	const second = source('second', fixture.media.slice(PROGRAM_PREVIEW_ITEM_LIMIT).map(item => item.id));
+	const sequence = (id: string, ids: string[]): SchedulingProgram => ({ ...program, id, config: { type: 'sequence', repeat: true, entries: ids.map((programId, index) => ({ id: `step-${index}`, programId, count: 2 })) } });
+	const mixed = sequence('mixed', [first.id, second.id, first.id]);
+	const nested = sequence('nested', ['missing', mixed.id]);
+	const empty = sequence('empty', ['missing', 'empty']);
+	const statuses = schedulingProgramStatuses([nested, mixed, first, second, empty], fixture);
+	const preview = statuses[1]!.previewItems;
+	expect(preview).toHaveLength(PROGRAM_PREVIEW_ITEM_LIMIT);
+	expect(new Set(preview.map(item => item.id)).size).toBe(PROGRAM_PREVIEW_ITEM_LIMIT);
+	expect(preview.slice(0, 4).map(item => item.id)).toEqual(['media-0', `media-${PROGRAM_PREVIEW_ITEM_LIMIT}`, 'media-1', `media-${PROGRAM_PREVIEW_ITEM_LIMIT + 1}`]);
+	expect(statuses[0]!.previewItems).toEqual(preview);
+	expect(statuses[0]!.health).toBe('missing');
+	expect(statuses[4]!.previewItems).toEqual([]);
+	expect(statuses[1]!.indexedItemCount).toBe(PROGRAM_PREVIEW_ITEM_LIMIT * 3);
 });

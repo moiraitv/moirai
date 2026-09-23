@@ -13,7 +13,7 @@ const libraryName = computed(() => {
 </script>
 <template>
 	<section v-if="config" class="program-inspector-section">
-		<h3>Definition</h3>
+		<h3 class="eyebrow">Definition</h3>
 		<p>{{ status?.sourceLabel }}</p>
 		<dl><dt>Source Library</dt><dd>{{ libraryName }}</dd><dt>Selection</dt><dd>{{ programValueLabel(config.strategy.type) }}</dd>
 			<template v-if="config.source.type === 'collection'"><dt>Selected items</dt><dd>{{ config.source.itemIds.length }}</dd><dt>Order</dt><dd>{{ config.source.sort.type }}</dd></template>

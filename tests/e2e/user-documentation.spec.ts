@@ -134,7 +134,7 @@ test('captures libraries and scanning', { tag: '@docs-screenshot' }, async ({ pa
 
 });
 test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
-	const { libraryId, sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
+	const { libraryId, sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/programs');
 	await expect(page.getByRole('heading', { name: 'Programs', exact: true })).toBeVisible();
 	await page.locator(`[data-program-id="${sequenceProgramIds[1]}"]`).click();
@@ -192,6 +192,17 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	const carousel = await sample.locator('.program-carousel').boundingBox();
 	expect(carousel!.x).toBe(quantity!.x);
 	await page.screenshot({ path: 'test-results/program-similarity-edit.png' });
+	const sequenceResponse = await page.request.post('/api/v1/programs', { headers: requestHeaders, data: {
+		name: 'Evening Cinema Sequence', config: { type: 'sequence', repeat: true, entries: sequenceProgramIds.map((programId, index) => ({ id: randomUUID(), programId, count: index + 1 })) },
+	} });
+	expect(sequenceResponse.ok()).toBe(true);
+	const sequence = await sequenceResponse.json() as { id: string };
+	await page.goto(`/schedules/programs?selected=${sequence.id}`);
+	const configuration = page.locator('.program-sequence-configuration');
+	await expect(configuration.locator('.program-source-block')).toHaveCount(3);
+	await configuration.scrollIntoViewIfNeeded();
+	await captureSection(page, configuration, 'program-sequence-inspector.png');
+
 
 });
 test('sorts Programs by name ignoring leading articles and punctuation', async ({ page, documentationServer }) => {

@@ -49,7 +49,7 @@ async function retry(): Promise<void> {
 </script>
 <template>
 	<section v-if="config" class="program-inspector-section">
-		<h3>Definition</h3>
+		<h3 class="eyebrow">Definition</h3>
 		<template v-if="config.type === 'similarity'"><h4>Source Program</h4><button v-if="programs.has(config.sourceProgramId)" type="button" class="button secondary" @click="emit('select', config.sourceProgramId)">{{ programs.get(config.sourceProgramId)?.name }}</button><p v-else>Missing source Program</p></template>
 		<template v-else><h4>Prompt</h4><p class="program-prompt">{{ config.theme }}</p><p>Source Library: {{ libraryName }}</p></template>
 		<h4>Generation settings</h4>
