@@ -1270,6 +1270,13 @@ also update `latest`. Prereleases and tags containing a hyphen leave `latest` un
 build enforces the production guide review gate. Full application verification and screenshot
 refresh remain required release preparation steps documented in `CONTRIBUTING.md`.
 
+Production builds run `security:audit` before documentation approval checks and compilation.
+The npm audit covers runtime, development, and optional dependencies and fails on any reported
+vulnerability, including low severity, or an unsuccessful audit request. Docker uses this same gate;
+production builds require access to the npm advisory service.
+The Transformers.js 3.8.1 dependency uses a scoped Sharp 0.35.4 override to remove vulnerable
+image libraries while retaining ONNX runtime support for Intel macOS development.
+
 ## API and web application
 
 ### API boundaries

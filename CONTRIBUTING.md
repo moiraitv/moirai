@@ -170,7 +170,7 @@ Run these commands from the repository root after the release's UI and documenta
    npm run build:production
    ```
 
-   Production and Docker builds fail while any guide page is unreviewed. Ordinary `npm run build` remains draft-friendly. The production build rebuilds the bundled guide with the latest review state.
+   Production and Docker builds run `npm run security:audit` before compilation and fail on any reported vulnerability (including low severity) in runtime, development, or optional dependencies. They also fail if the audit service cannot be reached or any guide page is unreviewed. Resolve dependency advisories before retrying; the release build requires access to the npm advisory service. Ordinary `npm run build` remains draft-friendly. The production build rebuilds the bundled guide with the latest review state.
 
 **The review gate is not a screenshot-freshness check.** It validates approval of the files currently on disk; it does not determine whether an old screenshot still matches changed UI code. Regenerating screenshots and visually reviewing them before release is therefore a required contributor step, not something the production build performs automatically.
 
