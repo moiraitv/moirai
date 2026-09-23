@@ -1,3 +1,4 @@
+import { ETV_PLAYOUT_VERSION } from '@ersatztv-source/index.js';
 import { channelCreateSchema, type ScheduleGuide } from '@moirai/shared';
 import * as scheduleGuide from '@server/guide/schedule-guide.js';
 import { randomUUID } from 'node:crypto';
@@ -301,7 +302,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	}
 });
 
-it('replaces prior-version playout through normal synchronization while preserving fallback content', async () => {
+it.each(['0.0.3', '0.0.4'])('replaces %s playout through normal synchronization while preserving fallback content', async (version) => {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-upgrade-'));
 	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Upgrade' }), id: randomUUID(), createdAt: '', updatedAt: '' };
 	const guideValue: ScheduleGuide = { timeZone: 'UTC', startDate: '2026-09-13', requestedDays: 1, days: 1, segmentLimitApplied: false, channels: [] };
@@ -321,11 +322,11 @@ it('replaces prior-version playout through normal synchronization while preservi
 		const folder = await synchronizer.syncChannel(channel.id);
 		const file = path.join(folder, (await readdir(folder)).find((name) => name.endsWith('.json'))!);
 		const current = JSON.parse(await readFile(file, 'utf8'));
-		await writeFile(file, JSON.stringify({ ...current, version: 'https://ersatztv.org/playout/version/0.0.3' }));
+		await writeFile(file, JSON.stringify({ ...current, version: `https://ersatztv.org/playout/version/${version}` }));
 
 		await synchronizer.syncChannel(channel.id);
 		const updated = JSON.parse(await readFile(file, 'utf8'));
-		expect(updated.version).toBe('https://ersatztv.org/playout/version/0.0.4');
+		expect(updated.version).toBe(ETV_PLAYOUT_VERSION);
 		expect(updated.items.length).toBeGreaterThan(0);
 		expect(updated.items).toEqual(current.items);
 		expect(updated.items[0].source.path).toBe('/fallback/custom.mp4');

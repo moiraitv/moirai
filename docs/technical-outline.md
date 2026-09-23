@@ -1109,16 +1109,18 @@ the gap is intentional dead air.
 ### ErsatzTV-Next integration
 
 Moirai owns channel configuration and maps it through a compatibility adapter pinned to ErsatzTV-Next
-revision `11a9fe8f8f383eab2de83f2173019cde34726830`. The adapter retains only the channel and playout
+revision `f6350a0ad9077290c0fbad7ea3feacaef71f0ca3`. The adapter retains only the channel and playout
 schemas used by the integrated worker; vendored files retain upstream MIT attribution.
-Generated playout uses schema `0.0.4`; the worker also accepts existing `0.0.3` documents.
+Generated playout uses schema `0.0.5`; the worker also accepts existing `0.0.3` and `0.0.4` documents.
 Deploy the application and engine together. On rollback, stop workers and regenerate playout with
-the restored application before tuning because the previous engine rejects `0.0.4`.
+the restored application before tuning because the previous engine rejects `0.0.5`.
 
 The worker probes HDR10 metadata from containers and, when needed, a bounded first-frame probe
 (with a five-second timeout). Existing settings gain QSV HDR10 tone mapping, legacy Intel capability
 detection, hardware padding/filter fusion, CUDA/libplacebo optimization, and AMF capability detection
-and scaling where supported. Moirai continues to omit probe hints so worker probing remains active.
+and scaling where supported. The worker also handles display rotation, AAC surround audio, AMF tone
+mapping and MPEG-2 decoding, optional VAAPI device/driver selection, and optimized canvas overlay
+conversion. Moirai continues to omit probe hints so worker probing remains active.
 
 `MOIRAI_DEBUG` enables engine fallback error cards for all channels after a server restart. It defaults
 to false, accepts trimmed case-insensitive `true`/`false` or `1`/`0`, treats empty values as false, and
@@ -1253,7 +1255,8 @@ npm run etv:sync   # Deliberately refresh the compatibility snapshot
 
 The production image derives from the immutable official ErsatzTV-Next image digest recorded in the
 Dockerfile and builds the Node application around its `/app/ersatztv-channel` executable. The pinned
-upstream image currently supports `linux/amd64` only. The development submodule is excluded from the
+upstream image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`; Moirai releases
+continue to target `linux/amd64`. The development submodule is excluded from the
 Docker build context.
 
 Publishing a GitHub release triggers `.github/workflows/publish-image.yml` to build that tagged

@@ -21,10 +21,9 @@ RUN npm run build:production
 
 FROM node:24-bookworm-slim AS node-runtime
 
-# ErsatzTV Next revision 11a9fe8f8f383eab2de83f2173019cde34726830. The
-# upstream image currently publishes linux/amd64 only; pinning the index prevents
-# an unnoticed engine change.
-FROM ghcr.io/ersatztv/next@sha256:7d622e0d4febabca102386c15682d4410b5abf494a654387f997ed36b3fbc7b1 AS runtime
+# ErsatzTV Next revision f6350a0ad9077290c0fbad7ea3feacaef71f0ca3. The
+# upstream image index is pinned to prevent an unnoticed engine change.
+FROM ghcr.io/ersatztv/next@sha256:050a18b8be4e10f7c0dd09168ecdd7b54f7d9be75926340e6b13c24ff75db75a AS runtime
 USER root
 ENV NODE_ENV=production \
     HOME=/home/ersatztv \

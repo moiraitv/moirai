@@ -115,5 +115,5 @@ it.each([false, true])('validates fallback error cards when enabled=%s', (enable
 
 it('defaults to private fallback diagnostics and emits the current playout version', () => {
 	expect(toEtvChannelConfig(channel())).toMatchObject({ fallback: { show_error: false } });
-	expect(toEtvPlayout([])).toMatchObject({ version: 'https://ersatztv.org/playout/version/0.0.4' });
+	expect(toEtvPlayout([])).toMatchObject({ version: ETV_PLAYOUT_VERSION });
 });
