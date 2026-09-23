@@ -207,6 +207,12 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		this.semanticPreferences.clear();
 	}
 
+	/** Discard cached semantic decisions after resetting one channel's generated history. */
+	override resetChannelScheduleState(channelId: string): void {
+		super.resetChannelScheduleState(channelId);
+		this.invalidateSchedulingCatalog();
+	}
+
 	/** Drop cached seed history after deleting a channel's schedule and generated state. */
 	override async deleteChannelSchedule(channelId: string): Promise<boolean> {
 		const deleted = await super.deleteChannelSchedule(channelId);

@@ -155,6 +155,12 @@ function fixture() {
 				};
 			}
 		}),
+		resetChannelScheduleState: vi.fn(() => {
+			segments = [];
+			state = [];
+			materialization = null;
+			schedule.generationSeed = randomUUID();
+		}),
 		markTimelineFailed: vi.fn(),
 		commitMaterializedTimeline: vi.fn((commit: TimelineCommit) => {
 			segments = [
@@ -804,6 +810,72 @@ describe('durable timeline materializer', () => {
 				.filter((entry) => entry.segment.start >= '2026-08-23T07:00:00Z')
 				.every((entry) => entry.segment.mediaItemId === null),
 		).toBe(true);
+	});
+
+	it.each(['shuffle', 'random', 'weighted-random'] as const)('fully resets %s state and refreshes only implicit seeds', async (type) => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-08-22T12:30:00Z'));
+		const test = fixture();
+		const program = test.programs[0]!;
+		if (program.config.type !== 'content') {
+			throw new Error('Expected content fixture');
+		}
+		program.config.strategy = { type, seed: '' };
+		const materializer = new TimelineMaterializer(test.repository, test.events, 'America/Los_Angeles');
+		await materializer.runNow();
+		const prior = test.segments().map(({ segment }) => segment.mediaItemId);
+		await materializer.regenerate(test.channelId);
+		const refreshed = test.segments().map(({ segment }) => segment.mediaItemId);
+		expect(refreshed).not.toEqual(prior);
+		expect(test.materialization()?.baseState).toEqual([]);
+		expect(test.repository.resetChannelScheduleState).toHaveBeenCalledWith(test.channelId);
+
+		program.config.strategy = { type, seed: 'explicit-user-seed' };
+		await materializer.regenerate(test.channelId);
+		const seeded = test.segments().map(({ segment }) => segment.mediaItemId);
+		await materializer.regenerate(test.channelId);
+		expect(test.segments().map(({ segment }) => segment.mediaItemId)).toEqual(seeded);
+		expect(program.config.strategy).toMatchObject({ seed: 'explicit-user-seed' });
+	});
+
+	it('waits for active generation before clearing state', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-08-22T12:30:00Z'));
+		const test = fixture();
+		let release!: () => void;
+		const gate = new Promise<void>(resolve => {
+			release = resolve;
+		});
+		vi.spyOn(test.repository, 'getSchedulingCatalog').mockImplementationOnce(async () => {
+			await gate;
+			return test.catalog;
+		});
+		const materializer = new TimelineMaterializer(test.repository, test.events, 'America/Los_Angeles');
+		const initial = materializer.runNow();
+		const reset = materializer.regenerate(test.channelId);
+		expect(test.repository.resetChannelScheduleState).not.toHaveBeenCalled();
+		release();
+		await Promise.all([initial, reset]);
+		expect(test.repository.resetChannelScheduleState).toHaveBeenCalledOnce();
+		expect(test.repository.commitMaterializedTimeline).toHaveBeenCalledTimes(2);
+		expect(test.materialization()?.health).toBe('ready');
+	});
+
+	it('starts sequential programming over instead of retaining rolling progress', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-08-22T12:30:00Z'));
+		const test = fixture();
+		const materializer = new TimelineMaterializer(test.repository, test.events, 'America/Los_Angeles');
+		await materializer.runNow();
+		vi.setSystemTime(new Date('2026-08-23T12:30:00Z'));
+		await materializer.runNow(true);
+		expect(test.materialization()?.baseState.length).toBeGreaterThan(0);
+
+		await materializer.regenerate(test.channelId);
+
+		expect(test.materialization()?.baseState).toEqual([]);
+		expect(test.segments()[0]?.segment.mediaItemId).toBe(test.catalog.media[0]!.id);
+		expect(test.materialization()?.health).toBe('ready');
 	});
 
 	it('applies pending configuration after the current item without replacing it', async () => {

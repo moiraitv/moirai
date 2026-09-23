@@ -18,6 +18,7 @@ import {
 	GuideMaterializationLimitError,
 	readCommittedGuideAfterMaterializing,
 } from '../guide/schedule-guide.js';
+import type { PlaybackEngine } from '../playback/playback-engine.js';
 import type { TimelineMaterializer } from '../scheduling/timeline-materializer.js';
 import { parseId } from './params.js';
 import {
@@ -39,6 +40,7 @@ const guideSegmentParamsSchema = z.object({ channelId: z.uuid(), segmentId: z.uu
 
 /** Services required to serve guide data and XMLTV output. */
 interface GuideRouteDependencies {
+	playback: PlaybackEngine;
 	config: AppConfig;
 	repository: Repository;
 	epg: EpgService;
@@ -49,7 +51,7 @@ interface GuideRouteDependencies {
 /** Register committed guide, materialization, and XMLTV endpoints. */
 export function registerGuideRoutes(
 	app: FastifyInstance,
-	{ config, repository, epg, timelineMaterializer, schedulingWorkers }: GuideRouteDependencies,
+	{ config, repository, epg, timelineMaterializer, schedulingWorkers, playback }: GuideRouteDependencies,
 ): void {
 	// Batch guide data for the SPA timeline views.
 	app.get('/api/v1/schedule-guide', {
@@ -178,6 +180,25 @@ export function registerGuideRoutes(
 		await timelineMaterializer.applyNow(id);
 		const status = await repository.getTimelineMaterializationStatus(id);
 		return reply.status(202).send(status);
+	});
+
+	app.post('/api/v1/channels/:id/materialization/regenerate', {
+		schema: apiOperation({
+			operationId: 'regenerateChannelSchedule',
+			tags: ['Guide'],
+			summary: 'Reset channel scheduling history and generate fresh programming',
+			params: idParamsSchema,
+			response: { 202: responseContent('Regenerated materialization state', 'application/json', timelineMaterializationStatusSchema.nullable()) },
+			errors: [400, 404, 422, 500, 503],
+		}),
+	}, async (request, reply) => {
+		const id = parseId(request);
+		if (!(await repository.getChannelSchedule(id))) {
+			throw app.httpErrors.notFound('Channel schedule not found');
+		}
+
+		await playback.regenerateSchedule(id, () => timelineMaterializer.regenerate(id));
+		return reply.status(202).send(await repository.getTimelineMaterializationStatus(id));
 	});
 
 	// Public, cache-aware XMLTV output for IPTV clients.

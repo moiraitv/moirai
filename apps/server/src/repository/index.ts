@@ -403,6 +403,11 @@ export class Repository extends LibraryRepository {
 		return this.scheduling.setChannelSchedule(channelId, config);
 	}
 
+	/** Reset generated history and unseeded randomness while retaining the authored channel schedule. */
+	resetChannelScheduleState(channelId: string): void {
+		this.scheduling.resetChannelScheduleState(channelId);
+	}
+
 	/** Delete a channel's authored schedule and generated playback state. */
 	async deleteChannelSchedule(channelId: string): Promise<boolean> {
 		return this.scheduling.deleteChannelSchedule(channelId);

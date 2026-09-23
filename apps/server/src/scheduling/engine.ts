@@ -189,10 +189,20 @@ function primaryFitSeconds(
 	return availableSeconds + Math.min(slotDrift, boundary.maxDriftSeconds);
 }
 
+/** Apply the channel regeneration seed only to programs without an explicit authored seed. */
+function generationProgram(program: SchedulingProgram, seed?: string): SchedulingProgram {
+	const config = program.config;
+	if (!seed || config.type !== 'content' || !('seed' in config.strategy) || config.strategy.seed) {
+		return program;
+	}
+
+	return { ...program, config: { ...config, strategy: { ...config.strategy, seed } } };
+}
+
 /** Materialize a timeline plus the continuation data required for an atomic durable commit. */
 export function generateTimelineDetailed(input: GenerateTimelineInput): TimelineGeneration {
 	// Initialize reusable indexes, selection state, issue tracking, and output limits.
-	const programs = new Map(input.programs.map((program) => [program.id, program]));
+	const programs = new Map(input.programs.map((program) => [program.id, generationProgram(program, input.schedule.generationSeed)]));
 	let state = new Map(input.state.map((record) => [record.consumerKey, structuredClone(record)]));
 	const issues: RecordedTimelineIssue[] = [];
 	const issueKeys = new Set<string>();

@@ -518,10 +518,39 @@ test('starts each new channel with encoding and additional subtitles collapsed',
 });
 
 test('captures channel settings and operations', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
-	await seedSchedule(page, documentationServer.directory);
+	const { channel, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/channels');
 	await expect(page.getByRole('heading', { name: 'Channels', exact: true })).toBeVisible();
 	await capture(page, 'channels.png');
+	const regenerate = page.getByRole('button', { name: 'Regenerate schedule for Moonrise Classics', exact: true });
+	await expect(regenerate).toBeDisabled();
+	const assigned = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
+		headers: requestHeaders, data: { defaultTemplateId: template.id },
+	});
+	expect(assigned.ok()).toBe(true);
+	await expect(regenerate).toBeEnabled();
+	const regenerationPath = `/api/v1/channels/${channel.id}/materialization/regenerate`;
+	let regenerationRequests = 0;
+	page.on('request', request => {
+		if (new URL(request.url()).pathname === regenerationPath && request.method() === 'POST') {
+			regenerationRequests += 1;
+		}
+	});
+	await regenerate.click();
+	const confirmation = page.getByRole('alertdialog', { name: 'Regenerate Schedule?' });
+	await expect(confirmation).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Edit Channel', exact: true })).toBeHidden();
+	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+	expect(regenerationRequests).toBe(0);
+	await regenerate.click();
+	const regenerated = page.waitForResponse(response => new URL(response.url()).pathname === regenerationPath);
+	await confirmation.getByRole('button', { name: 'Regenerate Schedule', exact: true }).click();
+	expect((await regenerated).status()).toBe(202);
+	expect(regenerationRequests).toBe(1);
+	const resetSchedule = await page.request.get(`/api/v1/channels/${channel.id}/schedule`);
+	expect((await resetSchedule.json()).generationSeed).toBeTruthy();
+	await expect(page.getByRole('status').filter({ hasText: /Schedule regeneration queued|Schedule regenerated/ })).toBeVisible();
+
 	await page.goto('/settings');
 	await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 	await expect(page.locator('.fallback-filler-loading')).toBeHidden();

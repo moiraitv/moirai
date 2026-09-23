@@ -426,6 +426,28 @@ export class TimelineMaterializer {
 		}
 	}
 
+	/** Serialize a full state reset with active generation, then rebuild from the saved templates. */
+	async regenerate(channelId: string): Promise<void> {
+		while (this.active) {
+			await this.active;
+		}
+
+		this.dirty = true;
+		this.revision += 1;
+		const operation = Promise.resolve().then(async () => {
+			this.repository.resetChannelScheduleState(channelId);
+			this.events.publish({ type: 'timeline.changed', data: { channelId, status: 'pending' } });
+			await this.materializeAll();
+		});
+		this.active = operation;
+		try {
+			await operation;
+		}
+		finally {
+			this.active = null;
+		}
+	}
+
 	/** Apply pending schedule configuration after the current committed item. */
 	async applyNow(channelId: string): Promise<void> {
 		if (this.active) {

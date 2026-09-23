@@ -14,6 +14,47 @@ import { PlayoutSynchronizer } from '@server/playback/playout-synchronizer.js';
 import type { Repository } from '@server/repository/index.js';
 
 describe('playback engine fallback changes', () => {
+	it.each([true, false])('resets schedule with consumers stopped and resumes only prior active playback (%s)', async (active) => {
+		const channel = { id: randomUUID() } as Channel;
+		const order: string[] = [];
+		const playout = { syncChannel: vi.fn(async () => {
+			order.push('sync');
+			return '/playout';
+		}) } as unknown as PlayoutSynchronizer;
+		const engine = new PlaybackEngine(
+			{} as Repository,
+			playout,
+			{ publish: vi.fn() },
+			{ warn: vi.fn() } as unknown as FastifyBaseLogger,
+			{} as HardwareAccelerationResolver,
+			'/engine',
+			'/streams',
+			'http://localhost',
+			1_000,
+			1_000,
+		);
+		const internals = engine as unknown as { sessions: Map<string, unknown>; stop(id: string): Promise<void> };
+		if (active) {
+			internals.sessions.set(channel.id, {});
+		}
+		vi.spyOn(internals, 'stop').mockImplementation(async () => {
+			order.push('stop');
+			internals.sessions.delete(channel.id);
+		});
+		vi.spyOn(engine, 'restart').mockImplementation(async () => {
+			order.push('restart');
+		});
+
+		await engine.regenerateSchedule(channel.id, async () => {
+			expect(internals.sessions.has(channel.id)).toBe(false);
+			await expect(engine.ensureSession(channel)).rejects.toThrow('regenerating');
+			await expect(engine.regenerateSchedule(channel.id, async () => {})).rejects.toThrow('regenerating');
+			order.push('reset');
+		});
+
+		expect(order).toEqual(active ? ['stop', 'reset', 'sync', 'restart'] : ['stop', 'reset', 'sync']);
+	});
+
 	it('moves active and inactive channels before a global override is removed', async () => {
 		const active = randomUUID();
 		const inactive = randomUUID();
@@ -99,6 +140,87 @@ describe('playback engine fallback changes', () => {
 		expect(playout.syncChannel).toHaveBeenCalledWith(inactive);
 	});
 });
+
+it.each(['delayed exit', 'shutdown timeout', 'restart failure'] as const)(
+	'keeps schedule regeneration safe and playback recoverable after %s',
+	async (scenario) => {
+		vi.useFakeTimers();
+		try {
+			const channel = { id: randomUUID(), subtitleMode: 'convert' as const, video: { accel: null } };
+			const playout = {
+				syncChannel: vi.fn(async () => '/playout'),
+				channelFailure: () => null,
+			} as unknown as PlayoutSynchronizer;
+			const engine = new PlaybackEngine(
+				{ getChannel: async () => channel } as unknown as Repository,
+				playout,
+				{ publish: vi.fn() },
+				{ warn: vi.fn() } as unknown as FastifyBaseLogger,
+				{} as HardwareAccelerationResolver,
+				'/engine',
+				'/streams',
+				'http://localhost',
+				1_000,
+				1_000,
+			);
+			const child = new EventEmitter();
+			const session = { channel, child, state: 'ready', rejectReady: vi.fn() };
+			const internals = engine as unknown as {
+				running: boolean;
+				sessions: Map<string, unknown>;
+				observeExit(session: unknown): void;
+				signal(session: unknown, signal: string): void;
+				startSession(channel: Channel): Promise<void>;
+			};
+			internals.running = true;
+			internals.sessions.set(channel.id, session);
+			internals.observeExit(session);
+			const signal = vi.spyOn(internals, 'signal').mockImplementation(() => {});
+			const start = vi.spyOn(internals, 'startSession').mockResolvedValue();
+			if (scenario === 'restart failure') {
+				start.mockRejectedValueOnce(new Error('Temporary startup failure'));
+			}
+			const regenerate = vi.fn(async () => {
+				expect(internals.sessions.has(channel.id)).toBe(false);
+			});
+
+			const operation = engine.regenerateSchedule(channel.id, regenerate);
+			const result = scenario === 'shutdown timeout'
+				? expect(operation).rejects.toThrow('schedule was not regenerated')
+				: scenario === 'restart failure'
+					? expect(operation).rejects.toThrow('Temporary startup failure')
+					: expect(operation).resolves.toBeUndefined();
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(signal).toHaveBeenCalledWith(session, 'SIGKILL');
+			expect(regenerate).not.toHaveBeenCalled();
+			expect(playout.syncChannel).not.toHaveBeenCalled();
+			await engine.handlePlayoutChange(channel.id);
+			expect(start).not.toHaveBeenCalled();
+
+			if (scenario === 'shutdown timeout') {
+				await vi.advanceTimersByTimeAsync(1_000);
+				await result;
+				expect(regenerate).not.toHaveBeenCalled();
+				expect(playout.syncChannel).not.toHaveBeenCalled();
+			}
+			child.emit('exit', null, 'SIGKILL');
+			await result;
+			if (scenario !== 'shutdown timeout') {
+				expect(regenerate).toHaveBeenCalledOnce();
+				expect(playout.syncChannel).toHaveBeenCalledOnce();
+			}
+
+			await engine.handlePlayoutChange(channel.id);
+			expect(start).toHaveBeenCalledWith(channel, undefined);
+			expect(start).toHaveBeenCalledTimes(scenario === 'restart failure' ? 2 : 1);
+			await engine.handlePlayoutChange(channel.id);
+			expect(start).toHaveBeenCalledTimes(scenario === 'restart failure' ? 2 : 1);
+		}
+		finally {
+			vi.useRealTimers();
+		}
+	},
+);
 
 it('stops incompatible subtitle workers before publication and resumes them after synchronization', async () => {
 	const channel = { id: randomUUID(), subtitleMode: 'convert' as const };

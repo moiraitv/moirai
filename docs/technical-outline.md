@@ -851,6 +851,17 @@ stores:
 - per-segment selection-state transitions;
 - the continuation cursor at the end of the window.
 
+The Channels list confirms a full reset through the channel materialization regeneration endpoint.
+The materializer serializes the reset with active generation, clears only that channel’s timeline,
+selection state, continuation, guide occurrences, and semantic seed history, and rebuilds its saved
+template stack from empty state. A server-managed UUID in the schedule config supplies new randomness
+only for programs with an empty authored seed; explicit seeds remain authoritative. Saves retain this
+UUID, and legacy configs without it keep their prior behavior until regeneration. No schema migration
+or extra normal-read query is needed. Active channel playback stops before reset and resumes from
+fresh playout; failures retain the reset state for normal reconciliation rather than restoring history.
+Other channels’ history and shared program/template definitions are retained. Apply After Current Item keeps
+its existing state-preserving behavior. Channels without a schedule cannot invoke regeneration.
+
 Window rolls preserve overlapping advertised entries and generate only the uncovered tail. Occupancy
 and existing-window reads omit media snapshots. Channel generation is pipelined across the scheduling
 worker pool so one channel can generate while the previous channel commits, while occupancy from

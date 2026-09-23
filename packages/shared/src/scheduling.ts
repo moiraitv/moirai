@@ -878,6 +878,7 @@ export interface ChannelScheduleLayer extends Omit<
 
 /** Validate the channel schedule config contract at runtime. */
 export const channelScheduleConfigSchema = z.object({
+	generationSeed: z.uuid().optional().describe('Server-managed randomness for unseeded programs; preserved on schedule saves.'),
 	defaultTemplateId: z.uuid(),
 	layers: z.array(channelScheduleLayerSchema).max(MAX_CHANNEL_SCHEDULE_LAYERS).default([]),
 	defaultFiller: fillerConfigSchema.nullable().default(null),

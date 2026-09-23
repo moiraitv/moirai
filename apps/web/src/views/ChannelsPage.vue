@@ -45,6 +45,7 @@ import { loadChannelLogoImage, renderChannelLogoPng } from '../channel-logo-imag
 import { calendarDateSpan, dateKey, formatDateKey, shiftDateKey } from '../date-key';
 import { errorMessage } from '../error-message';
 import GuideTimeline from '../components/GuideTimeline.vue';
+import ChannelRegenerateButton from '../components/ChannelRegenerateButton.vue';
 import DisabledActionHint from '../components/DisabledActionHint.vue';
 import FallbackFillerEditor from '../components/FallbackFillerEditor.vue';
 import LoadingState from '../components/LoadingState.vue';
@@ -903,6 +904,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<small class="channel-schedule-summary">{{ scheduleSummary(channel.id) }}</small>
 				</template>
 				<template #actions="{ channel }">
+					<ChannelRegenerateButton :channel="channel" :disabled="!scheduling.loaded || !scheduleByChannel.has(channel.id)" @completed="loadGuide()" @error="error = $event" />
 					<button
 						class="icon-button guide-channel-edit"
 						:aria-label="`Edit ${channel.name}`"

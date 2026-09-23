@@ -508,6 +508,11 @@ export const api = {
 		),
 	timelineMaterializations: () =>
 		request<ChannelTimelineMaterializationStatus[]>('/api/v1/scheduling/materializations'),
+	regenerateChannelSchedule: (id: string) =>
+		request<ChannelTimelineMaterializationStatus | null>(
+			`/api/v1/channels/${id}/materialization/regenerate`,
+			{ method: 'POST' },
+		),
 	applyChannelTimelineNow: (id: string) =>
 		request<ChannelTimelineMaterializationStatus>(
 			`/api/v1/channels/${id}/materialization/apply-now`,

@@ -95,7 +95,8 @@ function pendingAcceleration(channel: Channel): PlaybackSessionAcceleration {
  * and failure state to clients.
  */
 export class PlaybackEngine {
-	private readonly subtitleRestarts = new Set<string>();
+	private readonly playoutRestarts = new Set<string>();
+	private readonly scheduleResets = new Set<string>();
 	private readonly sessions = new Map<string, ActiveSession>();
 	private readonly starts = new Map<string, Promise<void>>();
 	private readonly reservations = new Set<string>();
@@ -123,7 +124,7 @@ export class PlaybackEngine {
 		playout.beforeSubtitleModeChange = async (id, mode) => {
 			const session = this.sessions.get(id);
 			if (session && session.subtitleMode !== mode) {
-				this.subtitleRestarts.add(id);
+				this.playoutRestarts.add(id);
 				await this.stop(id);
 			}
 		};
@@ -290,6 +291,10 @@ export class PlaybackEngine {
 
 	/** Start or reuse one channel worker, waiting until its HLS output is ready. */
 	async ensureSession(channel: Channel, client?: PlaybackClientObservation): Promise<void> {
+		if (this.scheduleResets.has(channel.id)) {
+			throw new PlaybackUnavailableError('Channel schedule is regenerating');
+		}
+
 		const current = this.sessions.get(channel.id);
 		if (current) {
 			if (client) {
@@ -422,19 +427,19 @@ export class PlaybackEngine {
 		await session.ready;
 	}
 
-	/** Resume after subtitle publication, retaining failed restarts for reconciliation to retry. */
+	/** Resume after playout changes, retaining failed restarts for reconciliation to retry. */
 	async handlePlayoutChange(channelId: string): Promise<void> {
-		if (!this.subtitleRestarts.has(channelId)) {
+		if (!this.playoutRestarts.has(channelId) || this.scheduleResets.has(channelId)) {
 			return;
 		}
 		await this.starts.get(channelId)?.catch(() => undefined);
 		const channel = await this.repository.getChannel(channelId);
 		if (channel && this.running) {
 			await this.ensureSession(channel);
-			this.subtitleRestarts.delete(channelId);
+			this.playoutRestarts.delete(channelId);
 		}
 		else if (!channel) {
-			this.subtitleRestarts.delete(channelId);
+			this.playoutRestarts.delete(channelId);
 		}
 	}
 
@@ -468,6 +473,33 @@ export class PlaybackEngine {
 		if (session.configDigest !== this.configDigest(channel, config)) {
 			session.state = 'stale';
 			this.events.publish({ type: 'playback.changed', data: { channelId, reason: 'stale' } });
+		}
+	}
+
+	/** Stop consumers before a schedule reset and resume previously active playback from fresh playout. */
+	async regenerateSchedule(channelId: string, regenerate: () => Promise<void>): Promise<void> {
+		if (this.scheduleResets.has(channelId)) {
+			throw new PlaybackUnavailableError('Channel schedule is regenerating');
+		}
+
+		this.scheduleResets.add(channelId);
+		let resume = false;
+		try {
+			await this.starts.get(channelId)?.catch(() => undefined);
+			resume = this.sessions.has(channelId);
+			if (resume) {
+				this.playoutRestarts.add(channelId);
+			}
+			await this.stopBeforeScheduleReset(channelId);
+			await regenerate();
+			await this.playout.syncChannel(channelId);
+		}
+		finally {
+			this.scheduleResets.delete(channelId);
+		}
+		if (resume) {
+			await this.restart(channelId);
+			this.playoutRestarts.delete(channelId);
 		}
 	}
 
@@ -630,6 +662,27 @@ export class PlaybackEngine {
 		if (this.sessions.get(channelId) === session) {
 			this.signal(session, 'SIGKILL');
 		}
+	}
+
+	/** Require confirmed worker exit before destructive schedule changes, with a bounded kill wait. */
+	private async stopBeforeScheduleReset(channelId: string): Promise<void> {
+		await this.stop(channelId);
+		const session = this.sessions.get(channelId);
+		if (!session) {
+			return;
+		}
+
+		await new Promise<void>((resolve, reject) => {
+			const exited = () => {
+				clearTimeout(timeout);
+				resolve();
+			};
+			const timeout = setTimeout(() => {
+				session.child.removeListener('exit', exited);
+				reject(new PlaybackUnavailableError('Channel worker has not exited; schedule was not regenerated'));
+			}, this.stopGraceMs);
+			session.child.once('exit', exited);
+		});
 	}
 
 	/** Send a signal to the whole Unix process group or the direct child elsewhere. */

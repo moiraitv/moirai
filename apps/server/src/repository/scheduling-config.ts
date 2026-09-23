@@ -813,6 +813,7 @@ export class SchedulingConfigurationRepository {
 		);
 		await this.assertLayerIdentitiesAvailable(channelId, config.layers.map((layer) => layer.id));
 		const current = await this.getChannelSchedule(channelId);
+		config = { ...config, generationSeed: current?.generationSeed };
 		const timestamp = currentTimestamp();
 		this.db.transaction((tx) => {
 			tx.insert(channelSchedules)
@@ -889,6 +890,20 @@ export class SchedulingConfigurationRepository {
 		}
 	}
 
+	/** Clear one channel's generated history and assign fresh randomness without changing its templates. */
+	resetChannelScheduleState(channelId: string): void {
+		this.db.transaction((tx) => {
+			tx.delete(materializedTimelineSegments).where(eq(materializedTimelineSegments.channelId, channelId)).run();
+			tx.delete(timelineMaterializations).where(eq(timelineMaterializations.channelId, channelId)).run();
+			tx.delete(selectionStates).where(eq(selectionStates.channelId, channelId)).run();
+			tx.delete(similaritySeeds).where(eq(similaritySeeds.channelId, channelId)).run();
+			tx.update(channelSchedules).set({
+				config: sql`json_set(${channelSchedules.config}, '$.generationSeed', ${randomUUID()})`,
+				updatedAt: currentTimestamp(),
+			}).where(eq(channelSchedules.channelId, channelId)).run();
+		});
+	}
+
 	/** Delete a channel's template stack, timeline, cursors, and semantic decisions atomically. */
 	async deleteChannelSchedule(channelId: string): Promise<boolean> {
 		return this.db.transaction((tx) => {
@@ -946,6 +961,7 @@ export class SchedulingConfigurationRepository {
 			for (const channelId of selectedIds) {
 				const current = currentByChannel.get(channelId);
 				const config: ChannelScheduleConfig = {
+					generationSeed: current?.generationSeed,
 					defaultTemplateId: templateId,
 					layers: current?.layers ?? [],
 					defaultFiller: current?.defaultFiller ?? null,

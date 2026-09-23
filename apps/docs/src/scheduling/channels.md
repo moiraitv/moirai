@@ -13,6 +13,8 @@ A ![](/icons/tv-minimal.svg) Channel combines a viewer-facing number and name wi
 
 Each row shows the channel number centered below its logo, or a TV icon when no logo is set. The timeline shows six hours at a time; scroll horizontally to see later programming.
 
+To rebuild one channel’s programming from scratch, click its **Regenerate schedule** button, then confirm **Regenerate Schedule** in the dialog. This clears the channel’s generated timeline, selection progress, and scheduling history while keeping its saved templates and settings. Random and shuffled programs use fresh randomness unless you set an explicit seed; explicitly seeded programs restart from that seed, and ordered programs start over. Active playback restarts and may be interrupted.
+
 Hover over an individual media item, or focus it with the keyboard, to preview its details. Click it for full guide details.
 
 ![The channels page](/screenshots/channels.png)

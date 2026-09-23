@@ -177,6 +177,11 @@
 	height: 30px;
 }
 
+.guide-channel-regenerate {
+	position: relative;
+	z-index: 1;
+}
+
 .guide-channel-edit::after {
 	content: '';
 	position: absolute;
