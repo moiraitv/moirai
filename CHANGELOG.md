@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 - 2026-09-23
+
+### New
+
+- **Programs** now uses a compact, searchable list with type, subtype, and usage filters, sorting, media previews, and indexed item counts. Select a program to open its inspector beside the list on desktop or in a drawer on smaller screens. 
+  - Program inspectors show type-specific definitions, source libraries, availability, and **Used by** references.
+  - Sequence programs show media samples from their sources. **Sequence Configuration** lists numbered source blocks with thumbnails, configured item counts, and an **items per cycle** total. Select a block to inspect that source program.
+- Channels have an **On/Off** switch to control publication in M3U and XMLTV. Turning a channel off keeps its settings and schedule available in Moirai.
+- **Regenerate schedule** rebuilds one channel from scratch while preserving its templates and settings. It resets selection progress and scheduling history, uses fresh randomness unless an explicit seed is set, and restarts active playback after confirmation.
+
+### Improvements
+
+- Channel saves, schedule previews, guide generation, and XMLTV rendering do more work in the background so the interface remains responsive with large libraries and lineups.
+- The guide keeps existing listings visible during refresh, shows **Preparing guide…** for newly assigned channels, and offers **Retry** for persistent failures. It refreshes when generation finishes or a connection is restored.
+- The bundled ErsatzTV-Next engine has been updated with improvements for rotated video, AAC surround audio, AMD tone mapping and MPEG-2 decoding, and overlay rendering.
+
+### Changes
+
+- The guide and XMLTV feed now default to seven local days, with one extra day generated internally. Set `MOIRAI_GUIDE_DAYS` from `1` to `14` to adjust the horizon and its processing cost. Existing generated programming ages out naturally when the horizon is shortened.
+- Production and Docker builds now check dependencies for known vulnerabilities and stop on any reported severity or an unsuccessful audit request. The vulnerable Sharp image-processing dependency has been updated while preserving Intel Mac embedding support.
+- The updated playback engine uses a newer playout format. When rolling back, stop playback workers and regenerate playout with the restored application before tuning channels.
+
+### Fixes
+
+- Remounting a network share no longer invalidates unchanged media-probe and subtitle caches solely because filesystem device or inode identifiers changed. Existing cache keys refresh once after upgrading; previously ignored scan findings may need to be reviewed again.
+- Retrying a failed logo or fallback upload after creating a channel updates the saved channel instead of creating another one. The editor preserves the remaining draft and identifies the unfinished asset.
+
 ## 0.2.0 - 2026-09-21
 
 ### New
