@@ -793,19 +793,20 @@ describe('API', () => {
 		const { app, services } = await fixture();
 		const libraryId = randomUUID();
 		const listMediaGenres = vi.spyOn(services.repository, 'listMediaGenres').mockResolvedValue([
-			{ key: 'drama', name: 'Drama', count: 4, excludeCount: 7 },
+			{ key: 'drama', name: 'Drama', count: 4, primaryCount: 2, excludeCount: 7 },
 		]);
 
 		const response = await app.inject({
-			url: `/api/v1/libraries/${libraryId}/media-genres?genreMatch=all&genres=drama&genres=science-fiction&genres=drama&excludedGenres=comedy`,
+			url: `/api/v1/libraries/${libraryId}/media-genres?genreMatch=all&genres=drama&genres=science-fiction&genres=drama&primaryGenres=adventure&primaryGenres=Adventure&excludedGenres=comedy`,
 		});
 
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toEqual([
-			{ key: 'drama', name: 'Drama', count: 4, excludeCount: 7 },
+			{ key: 'drama', name: 'Drama', count: 4, primaryCount: 2, excludeCount: 7 },
 		]);
 		expect(listMediaGenres).toHaveBeenCalledWith(libraryId, {
 			genres: ['drama', 'science-fiction'],
+			primaryGenres: ['adventure'],
 			excludedGenres: ['comedy'],
 		});
 

@@ -1,3 +1,4 @@
+import { runMigrationsInWorker } from '@server/db/migrations.js';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -63,6 +64,7 @@ async function upgradeFrom(
 	priorTag: string,
 	seed: DatabaseStep,
 	verify: DatabaseStep,
+	worker = false,
 ): Promise<void> {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'moirai-migration-'));
 	const databasePath = path.join(root, 'data', 'moirai.sqlite');
@@ -80,6 +82,9 @@ async function upgradeFrom(
 		priorDatabase.close();
 		priorDatabase = undefined;
 
+		if (worker) {
+			await runMigrationsInWorker(databasePath, migrationsDir, () => {});
+		}
 		currentDatabase = createDatabase(databasePath, migrationsDir);
 		expect(migrationMarkers(currentDatabase.sqlite)).toEqual(
 			journal.entries.map((entry) => entry.when),
@@ -797,4 +802,25 @@ it('adds preference caching while retaining existing semantic seeds and unrelate
 		sqlite.prepare("INSERT INTO semantic_preferences(input_hash,input_text,status) VALUES ('hash','slow sci-fi','pending')").run();
 		expect(sqlite.prepare('SELECT status FROM semantic_preferences').get()).toEqual({ status: 'pending' });
 	});
+});
+
+it.each([false, true])('backfills primary genres without changing metadata (worker: %s)', async (worker) => {
+	const values = [
+		{ genres: ['Sci-Fi', 'Drama'] },
+		{ genres: ['Comedy', 'Drama'], primaryGenre: 'Drama' },
+		{ genres: ['---', 'Drama'] },
+		{},
+	];
+	await upgradeFrom('0036_ignored_media_issues', (sqlite) => {
+		insertLibrary(sqlite);
+		values.forEach((metadata, index) => {
+			insertMediaItem(sqlite, `primary-${index}`);
+			sqlite.prepare('UPDATE media_items SET metadata = ? WHERE id = ?')
+				.run(JSON.stringify(metadata), `primary-${index}`);
+		});
+	}, (sqlite) => {
+		const rows = sqlite.prepare('SELECT metadata, primary_genre_key AS primaryGenre FROM media_items ORDER BY id').all() as Array<{ metadata: string; primaryGenre: string | null }>;
+		expect(rows.map(row => row.primaryGenre)).toEqual(['science-fiction', 'drama', 'drama', null]);
+		expect(rows.map(row => JSON.parse(row.metadata))).toEqual(values);
+	}, worker);
 });

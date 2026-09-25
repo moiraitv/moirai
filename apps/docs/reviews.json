@@ -3,415 +3,415 @@
   "reviews": {
     "welcome": {
       "digest": "8085f3030c774bbbc9400d895a04c8a89acb6dcfd960c8065747cb33b412d930",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "089ab56f72bbc84d4ddc06a3564d07bcac7290a939e3deafd7cda1e0a19cabdb",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "cba22fcbc1e58f3d0a4f092f9ff0a46d9b0340d4364abcb42fd8293037091b64",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "glossary": {
       "digest": "d1138112b87ded6467ffb5734b8d5cf2d88d43f0c475d7372241b135fd90a026",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "e728fba9eeea641d77976860dbc575642e1c88ed34cca57848e3c37beac12fd0",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "c0c96b86e2bb6a8f17a5da7bb118df64083e8a8b20412dda4278a254f1dffed2",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "access.initial": {
       "digest": "243804d6e0592b3bca82c35761c5ee85ad2444117fcc9a87d44aa537601e00e5",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "167944290f68cbf168e91d0a27ab1120b75a82263763011cbf2e2ac4006b297b",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "c846e4dc4503f2d71916b44bb6ff62d9a5c0f5ed080d47d6aa4d0fa8a8f89e24",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "installation.docker": {
       "digest": "86f2a631bfd00444b1d3da5709cca2436d8ffac40f3a6c44edd4726cfbbb0048",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "86f2a631bfd00444b1d3da5709cca2436d8ffac40f3a6c44edd4726cfbbb0048",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "getting-started.first-channel": {
-      "digest": "543d6d9ab66d7e373b5f43033507993fb2da3cf7707d99f99c47c888da5f7417",
-      "reviewedAt": "2026-09-24T14:07:55.220Z",
+      "digest": "490b9c1c597863dade1f47396354bbb1b600a3423d3e35269386728fb1aa1d34",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "b2e0afef8ef4384f09f395040568d1d93145fb1eb0a64263bcbcdfcb54c503b8",
-          "reviewedAt": "2026-09-24T14:07:55.220Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "2e35e2610e33d73892d405b10a2d40a81aed57b8590b31bcedee80e054551df0",
-          "reviewedAt": "2026-09-24T14:07:55.220Z"
+          "digest": "9d6363e0d8668a28e2f3a07c0f508242beff71f6ef38168dd81ddbf42847b190",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "c0c96b86e2bb6a8f17a5da7bb118df64083e8a8b20412dda4278a254f1dffed2",
-          "reviewedAt": "2026-09-24T14:07:55.220Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "libraries.manage": {
-      "digest": "5acd0bf59da92e1aa59358ea96a229fc0585c1a56bde16351e766310f567a8fd",
-      "reviewedAt": "2026-09-21T20:51:36.023Z",
+      "digest": "da01c911536d1250526de020a6100ad8711d5778ba2cf009972770296ed39576",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "5538d701026930d4c4a14837985a7533c7f94a883abca1df51e191a0697eeef2",
-          "reviewedAt": "2026-09-21T20:51:36.023Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "410033f12b37ae0aca61399d19d6f121ae9b2a0a9dc32345ec3c425a74b66ae4",
-          "reviewedAt": "2026-09-21T20:51:36.023Z"
+          "digest": "784ac494675972b81f1ad8dcda9123bb5bbc96e504e70fb78ea2b360590d1367",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "b7de0ac7171638ed763c01109e08eb02e28218b0f3b1c1f21b81cdad54fa9051",
-          "reviewedAt": "2026-09-21T20:51:36.023Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "libraries.file-naming": {
-      "digest": "f695c3e97781ecae752e308327938f419367f3b61ef1fa5e2aa0fb74d7799a62",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "digest": "4304caa61b2f9ed288aac0424f1b8369ed1dd5edd40d41438ff1bba1714a9501",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
-          "digest": "924942cdf11e716bab3cb6b4a9f5904cb4f051d0a465a2652dc262515d09ea33",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "digest": "8368431c87cef0ff68dc83fe597c115d8992ef2ac88379455a43d0ea6c71f32c",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "78fdcad21d6f7f331d720083adc3247feba65a4056a449a58bc4f0eea590fcb3",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "libraries.browse": {
-      "digest": "f9dc71498f6049330c776b4c3c53aa1593a1ff315348ddf9a664779035f769cd",
-      "reviewedAt": "2026-09-21T22:06:46.890Z",
+      "digest": "7438cd8c479e347430dbae529daf4fe6d0bd31e79d658f787cef67191133b4cb",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
-          "digest": "3da6a152d85747878b9d1f1acbff256d7b60f884f51227ab8ace3cff18c9e0f7",
-          "reviewedAt": "2026-09-21T22:06:46.890Z"
+          "digest": "3984249cdaa1f3a271fde6debd2dcc0ec83d2d1f0ba3d10ea018d0804b2a3b47",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "525f50c8a6bc5320dceb6293010c8c97825441d12ad4272904ba799cffff2bfb",
-          "reviewedAt": "2026-09-21T22:06:46.890Z"
+          "digest": "c1be08702b4d994620c84cef90dda94fac0f189fdd23b6e28d88cc0bf3f55d0d",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "3079781336ef3296ee88b0a293c4b8b0375eb3a70b0fb77fb3b2841f6da63982",
-          "reviewedAt": "2026-09-21T22:06:46.890Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "libraries.reconciliation": {
       "digest": "ac02575027ba2ccd00a901e8247bf6473780fcc55a02205518da7e499ca7455b",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "af0d1f68306142885fa858294b003555ca21cf6fc1f71b637efeb425436e4184",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "f1013154e062780a06a4dcb18f088a6c899246ce723548268be874a54fb1135d",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "scheduling.programs": {
-      "digest": "d8fb873bd260886ecb6de9237ee7d597e1169fbac73aed7ebd0823c247805c7b",
-      "reviewedAt": "2026-09-25T20:28:39.319Z",
+      "digest": "71d6862fc1a801d95111df3ad48639bb7ed356a5243c51ec35c4ca8ef340728a",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
-          "digest": "400d1a90235fdd4cacefd96bc91d534027f7f613aa8599679879ea880096cac0",
-          "reviewedAt": "2026-09-25T20:28:39.319Z"
+          "digest": "9771ad87fe938f7ece23135d31f5e104ab6d03ec433704bee2ffef8335aee2f4",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "d77598946da8cdaf37e1263c665a8b3ac3cc30d64cdea76616be5bd3c38d912b",
-          "reviewedAt": "2026-09-25T20:28:39.319Z"
+          "digest": "6fd55f0c8dcfac365ec8df56e05f8c13399472f34b57a72ab537612a862e5f9e",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "32a693030975c023899b0762b834d7cbf61b9064b42f0c0d12917b4cee2798c5",
-          "reviewedAt": "2026-09-25T20:28:39.319Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "scheduling.templates": {
       "digest": "1302498e175aa73733a7aa65faf4239415db59caa182f0ddd63c1fe76196710e",
-      "reviewedAt": "2026-09-24T14:07:55.220Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "befbdeec170cb2df543866de89827167e2533e0afc2fb23d8dcd53303e4cfc4f",
-          "reviewedAt": "2026-09-24T14:07:55.220Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "8cdafc8ebb3b3b2f6e7b1d0651ff69265654495a92dff088fedf3c67ceb75f57",
-          "reviewedAt": "2026-09-24T14:07:55.220Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "77e7f9e755bc98703e597c75539151dd4e9e9dda009c4d470bc792157e7432b3",
-          "reviewedAt": "2026-09-24T14:07:55.220Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "scheduling.channel-schedules": {
-      "digest": "88578ee96a05abbb8fdb91c27f960bfa266e1bc62934092f6550853367d4c7df",
-      "reviewedAt": "2026-09-23T01:04:03.462Z",
+      "digest": "024e4ec8a3c8fcd68b0d0b5cc421c7e9dec9ec098bbc0168f2d9ed728ec5b6aa",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "5a2619600f856a7e1c8e4d7e27b9b6153a01fcb4d64f7d77d96e8b666ea37805",
-          "reviewedAt": "2026-09-23T01:04:03.462Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "181c788359e1337fff3a6b822ce7035208d8fd3f4b80d46e43208b6979080522",
-          "reviewedAt": "2026-09-23T01:04:03.462Z"
+          "digest": "d9f19198ad1c8b40f8627ef4a75758739f27b24cb1d3e80b45c03b5c15594764",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "be623b546599e8d5c7f3a82d81c3a8316126a49270e66d44d31d27207933c493",
-          "reviewedAt": "2026-09-23T01:04:03.462Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "channels.manage": {
-      "digest": "b54e1230641b7d2c06b73bf7e0a58c1ddb5824e7c3e7ce85019fd5aed769fd65",
-      "reviewedAt": "2026-09-23T23:08:06.522Z",
+      "digest": "99f6930b5359549950fa97c0902c5b02408b89a3d2bfd6038b6853efc9a7a982",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "1a5cc6b103a94e223e1e0a270af9747b2da896413aa6f9cf0580ecb099bde826",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "7f81c5dc58105f8c708735c8ba77af18d2bc333900a7b6915bf22e71540710ef",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "digest": "a8d6277963ce0777fc3a64cfb646560f3ee30edb1903592b44408a186b848342",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "3267327b63bf3fa93928dfa06a3b8c1135a7d6db406ebc82d82608a36c3a2b49",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "playback.guide": {
-      "digest": "1d41d1243e0264b3bd6f2e5c307e29a7b94ffb844033b45db1a97dc4f8df5e7a",
-      "reviewedAt": "2026-09-23T23:08:06.522Z",
+      "digest": "f5477890e239b662de71c4a16784e397e59d289b0f41600854464d9fb3aa801c",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "ccdac36af28fd83d845add4347b015b040bfcf357bc8acc5b1ef6c0db9cac24e",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "7e10d876a42fd269b3d003ca4028725227bc026b8829dd6bcfa00b9ef7b8cb39",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "digest": "4719bb5b774d8f283fa1383105b2ccc6862960b0cb4bce83aff26bb1f3a73469",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "ae932c322c289595d8bdcd210d6aa29ef9b8f72cab9da767a637df9ecc25dd09",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "playback.settings": {
-      "digest": "9949177be33c188294d3c0d093091dbe059c2d584d45eb7f7c96c6717a85b512",
-      "reviewedAt": "2026-09-21T04:56:04.006Z",
+      "digest": "584766a9a0df340c0c82d5d1204677ffe2306e13def93fa5f6873018453a5e3b",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "1484cc8a3c412785e2d751e1d924bd62046305b8ee019a9050b22f7c02897a2a",
-          "reviewedAt": "2026-09-21T04:56:04.006Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "df55538413db5515815507f94372b87584be0985b1c28b004c6f91d0810bf660",
-          "reviewedAt": "2026-09-21T04:56:04.006Z"
+          "digest": "200950bbbd068171cd912b336fa635cd418d639b57255ed64c3c6e286eb354f5",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-21T04:56:04.006Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "operations.status": {
-      "digest": "da7161c88c9a5b2a9a0afadce4dd69f35ee77a41b6a4ce6882357d99aabadd8f",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "digest": "3057a0ee25ac8aa8dec978e9f3bfb7af9a342af0daba3d4e19351a50f3387a4b",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "f8708b24e8c252e0868cd8389d693a957cab1c778eb58c85f04b0e1d0c023899",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "a102589e0f5d32f0984c591cd5fa97e3138a705ca69f199164e432f8417d6268",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "digest": "43d2de1d16c59a29f0ca3fa3a5eae7cef0a9f3d54451148ee3812ffb9f29a31a",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "operations.account": {
       "digest": "0b200fb35c6be6daaf5d49538c268daadc7b829c02c475fa6bcd05c18df6cb21",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "35414194eb80292f0aab70f0c6c3f070efbc63ce2d5f271594e1495b61217634",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "582e03a2a465d947c5f2335636a2919ab07ac6726494530e8634b9c53ec295b6",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "operations.troubleshooting": {
       "digest": "32bed54b9d8ef55d8acf5e2cc3265afb26d4b49c2e31d075b82a308161d6f9dd",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "8cc92fa6f7ec0a050b3f424edbcf3a181d7d76d643af0f33eb5d22fb5d9346d9",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "ae932c322c289595d8bdcd210d6aa29ef9b8f72cab9da767a637df9ecc25dd09",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "operations.configuration": {
       "digest": "e7286599b64cf80f799dcc01471ab97e7f662b1bed606a77d7200f5ace204cbf",
-      "reviewedAt": "2026-09-23T23:08:06.522Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "e7286599b64cf80f799dcc01471ab97e7f662b1bed606a77d7200f5ace204cbf",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-23T23:08:06.522Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "playback.credit-templates": {
-      "digest": "49a1bd7ca1be4fac1a3ad9194dee6105b4335e496ad738710944277475161f88",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "digest": "91c29abf2eb3f85b4f954ad08dcc9e990b6fda8d65a756259e0097c8c1b0743c",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "5fbc98a4844e6859284f97da3c9a85468108a2e7fa332a20a3f4eaf1651b0c66",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "37f87a94b73877e87223d6be825f01aad7e2cdf4ceca0584ffd7944eb626115a",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "digest": "9b817cc1d681d92d92531819af23f15b8f0f69d7a21158ba4bacbf3c9d9d02d1",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "playback.encoding-profiles": {
-      "digest": "fb114302a07ebe9e38477f42f6c363d27930d6716077d3dfd7dbe23b596bae05",
-      "reviewedAt": "2026-09-19T16:42:47.399Z",
+      "digest": "aeda6cc3bd42e4e7944a5340e01d5a56e755917671c57029c8dd88a7e6414562",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "ba5eb5633babaee1bd9b14460ae3d1a6f8d1c9be562c5f9cc3dbf1ff2d39cea1",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "f5ee94220a6a0f39a64b021ef063b75f3e933d303c4f72df6de355a001190e90",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "digest": "cccb9b9ee57b4259b24c6dfa47963a62dceac11a114cedd6a7d78ad80da099ed",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-19T16:42:47.399Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "playback.guide-templates": {
       "digest": "03c8fa8ba9bf9234306f7352ef6ffe7a5fdad9707f741aa6819d650fe211bdd0",
-      "reviewedAt": "2026-09-20T17:10:45.554Z",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "7812aa6fdbe058fd1cf227d2e3378b59c232bbbc9f475c8f7e619b3ca3d880a1",
-          "reviewedAt": "2026-09-20T17:10:45.554Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
           "digest": "76ff593498ec94e0e11d52795a65ad84b85ddcf6cfac20e45a49308e5bd4f47e",
-          "reviewedAt": "2026-09-20T17:10:45.554Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-20T17:10:45.554Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     },
     "scheduling.example-schedules": {
-      "digest": "54165684c68c298e4d5528ed0b371437a4578ceb6c8b1ed1e417b1ab1ffd73b3",
-      "reviewedAt": "2026-09-25T20:28:39.319Z",
+      "digest": "34d18be32ad99aa14d49897966f1bc28d0e566932972d0d646d9bfd344d53a0c",
+      "reviewedAt": "2026-09-25T22:11:12.241Z",
       "components": {
         "text": {
           "digest": "46960c9461af5989ba6f9a63d776e27b45758e27217ce16cbda75e1dc291df0a",
-          "reviewedAt": "2026-09-25T20:28:39.319Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "screenshots": {
-          "digest": "e58b57097c8e040a965fdc50825a906da54630062cc9720436eb3c0f91ca326a",
-          "reviewedAt": "2026-09-25T20:28:39.319Z"
+          "digest": "d5ed2a8cb82c0a8d4a62f9839b6d0c927a33763f10bb7c61681b2f9c6fc877bb",
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-09-25T20:28:39.319Z"
+          "reviewedAt": "2026-09-25T22:11:12.241Z"
         }
       }
     }

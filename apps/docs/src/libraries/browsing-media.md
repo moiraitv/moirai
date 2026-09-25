@@ -21,13 +21,13 @@ When browsing by title, select a letter above the catalog to jump to that sectio
 
 ![An indexed media library](/screenshots/library-catalog.png)
 
-The filter editor can include or exclude genres and apply facts such as actors, directors, ratings, and dates when those values exist in the source metadata. An empty result means nothing matches the whole active filter; it does not mean the library is empty.
+The filter editor can require a primary genre, include a genre, or exclude a genre and apply facts such as actors, directors, ratings, and dates when those values exist in the source metadata. An empty result means nothing matches the whole active filter; it does not mean the library is empty.
 
 Select ![Filter media](/icons/funnel.svg) above the catalog to open these controls, then choose **Apply Filters** to update the results. **Clear All** clears the choices in the filter editor without clearing the main search. The title filter remains title-only and narrows the broad search results.
 
 ![Filter media editor showing genre choices, title search, release year, and added-date controls](/screenshots/library-filters.png)
 
-The same filters are available in Quick Setup and program library queries. Use **Match all** when every selected genre must be present or **Match any** when one is enough; excluded genres remove matching items. Release-year and indexed-date filters answer different questions: when the media was released versus when Moirai added it to the catalog.
+The same filters are available in Quick Setup and program library queries. Each genre has a star for **Primary**, a checkmark for **Has**, and an X for **Doesn’t Have**. **Primary** matches the item’s primary genre; **Has** matches the genre anywhere in its metadata; **Doesn’t Have** excludes items containing that genre. Click the selected button again to clear that rule. Use **Match all** to require every selected rule or **Match any** when one Primary or Has rule is enough. Exclusions are available only with Match all and are cleared when switching to Match any. Each item has one primary genre, so requiring multiple primary genres with Match all produces no matches. The first valid genre listed in the metadata is primary unless an explicit [Moirai NFO marker](/libraries/media-file-naming) overrides it. Release-year and indexed-date filters answer different questions: when the media was released versus when Moirai added it to the catalog.
 
 Use **Duration → From** and **To** to filter by playback length. Enter hours, minutes, and seconds; either end can be left blank or provide both limits include the exact duration entered. Blank components within an entered upper or lower bound count as zero.
 

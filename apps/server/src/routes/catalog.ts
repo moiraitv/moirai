@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import type { FastifyInstance, RouteHandlerMethod } from 'fastify';
 import { z } from 'zod';
 import {
+	canonicalGenreKey,
 	genreMatchSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	MAX_EXPLICIT_MEDIA_ITEMS,
@@ -49,7 +50,7 @@ const genreKeysQuerySchema = z
 		z.array(z.string().trim().min(1).max(120)).max(MAX_MEDIA_GENRE_RULES),
 	])
 	.default([])
-	.transform((value) => [...new Set(Array.isArray(value) ? value : [value])]);
+	.transform((value) => [...new Set((Array.isArray(value) ? value : [value]).map(canonicalGenreKey))].sort());
 
 /** Optional 0–10 rating threshold that treats an empty query field as omitted. */
 const optionalRatingQuerySchema = z.preprocess(
@@ -83,6 +84,7 @@ const mediaBrowseQuerySchema = z.object({
 	addedFrom: z.iso.datetime({ offset: true }).optional(),
 	addedBefore: z.iso.datetime({ offset: true }).optional(),
 	genres: genreKeysQuerySchema,
+	primaryGenres: genreKeysQuerySchema,
 	excludedGenres: genreKeysQuerySchema,
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
@@ -92,6 +94,7 @@ const mediaBrowseQuerySchema = z.object({
 /** Genre rules used to calculate contextual Match all facet-action counts. */
 const mediaGenreFacetQuerySchema = z.object({
 	genres: genreKeysQuerySchema,
+	primaryGenres: genreKeysQuerySchema,
 	excludedGenres: genreKeysQuerySchema,
 	genreMatch: genreMatchSchema.default('any'),
 }).superRefine(validateMediaGenreRules);
@@ -174,7 +177,7 @@ export function registerCatalogRoutes(
 		return repository.listMediaGenres(
 			parseId(request),
 			query.genreMatch === 'all'
-				? { genres: query.genres, excludedGenres: query.excludedGenres }
+				? { genres: query.genres, primaryGenres: query.primaryGenres, excludedGenres: query.excludedGenres }
 				: null,
 		);
 	});

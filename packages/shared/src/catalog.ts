@@ -101,25 +101,26 @@ export const mediaSortSchema = z.enum(['title', 'date-added', 'genre']);
 export const sortDirectionSchema = z.enum(['asc', 'desc']);
 /** Validate the genre match contract at runtime. */
 export const genreMatchSchema = z.enum(['any', 'all']);
-/** Maximum number of genre requirements and exclusions accepted by one catalog query. */
+/** Maximum number of primary, membership, and exclusion rules accepted by one catalog query. */
 export const MAX_MEDIA_GENRE_RULES = 100;
 
-/** Validate and deduplicate authored catalog genre keys while preserving their first-seen order. */
+/** Canonicalize, deduplicate, and sort set-like catalog filter keys. */
 const catalogGenreKeysSchema = z.array(z.string().trim().min(1).max(120))
 	.max(MAX_MEDIA_GENRE_RULES)
 	.default([])
 	.transform((values) => [...new Set(values.map(canonicalGenreKey))].sort());
 
-/** Required and disallowed genre keys accepted by catalog filtering contracts. */
+/** Primary, required, and disallowed genre keys accepted by catalog filtering contracts. */
 export interface MediaGenreRules {
 	genres: string[];
+	primaryGenres: string[];
 	excludedGenres: string[];
 	genreMatch: 'any' | 'all';
 }
 
 /** Report contradictory or over-sized genre rules at their shared contract boundary. */
 export function validateMediaGenreRules(value: MediaGenreRules, context: z.RefinementCtx): void {
-	if (value.genres.length + value.excludedGenres.length > MAX_MEDIA_GENRE_RULES) {
+	if (value.genres.length + value.primaryGenres.length + value.excludedGenres.length > MAX_MEDIA_GENRE_RULES) {
 		context.addIssue({
 			code: 'custom',
 			path: ['genres'],
@@ -135,7 +136,10 @@ export function validateMediaGenreRules(value: MediaGenreRules, context: z.Refin
 		});
 	}
 
-	const included = new Set(value.genres);
+	const included = new Set([...value.genres, ...value.primaryGenres]);
+	if (value.primaryGenres.some((genre) => value.genres.includes(genre))) {
+		context.addIssue({ code: 'custom', path: ['primaryGenres'], message: 'A genre can have only one rule' });
+	}
 	if (value.excludedGenres.some((genre) => included.has(genre))) {
 		context.addIssue({
 			code: 'custom',
@@ -170,6 +174,7 @@ export const catalogProgramItemFilterShape = {
 	addedFrom: z.iso.datetime({ offset: true }).nullable().default(null),
 	addedBefore: z.iso.datetime({ offset: true }).nullable().default(null),
 	genres: catalogGenreKeysSchema,
+	primaryGenres: catalogGenreKeysSchema,
 	excludedGenres: catalogGenreKeysSchema,
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
@@ -253,11 +258,12 @@ export interface MediaSourcePickerResult {
 	pagination: MediaBrowseResult['pagination'];
 }
 
-/** One normalized genre with its inclusion count and optional exclusion-action count. */
+/** One genre with primary and membership counts, plus an optional contextual exclusion count. */
 export interface MediaGenreFacet {
 	key: string;
 	name: string;
 	count: number;
+	primaryCount: number;
 	excludeCount: number | null;
 }
 

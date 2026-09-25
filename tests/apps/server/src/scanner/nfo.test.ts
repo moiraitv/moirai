@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseKodiNfo } from '@server/scanner/nfo.js';
+import { primaryGenreKey } from '@server/scanner/catalog-metadata.js';
 import {
 	MAX_METADATA_LIST_ITEMS,
 	MAX_METADATA_PEOPLE_ITEMS,
@@ -212,4 +213,34 @@ describe('parseKodiNfo', () => {
 		});
 		expect(result.invalidFields).toEqual(expect.arrayContaining(['year', 'season', 'rating']));
 	});
+});
+
+it('preserves source order while recording the first valid explicit primary marker', () => {
+	const parsed = parseKodiNfo(`<movie><title>Marked</title>
+		<genre>Comedy</genre><genre primary="true">---</genre>
+		<genre primary="true">Sci-Fi</genre><genre primary="true">Drama</genre>
+		<genre>Comedy</genre></movie>`);
+	expect(parsed.genres).toEqual(['Comedy', '---', 'Sci-Fi', 'Drama']);
+	expect(parsed.metadata.primaryGenre).toBe('Sci-Fi');
+	expect(parseKodiNfo('<movie><genre primary="false">Drama</genre></movie>').metadata.primaryGenre).toBeUndefined();
+});
+
+it('recognizes a marker on a duplicate genre with different source spelling', () => {
+	expect(parseKodiNfo('<movie><genre>Comedy</genre><genre>Drama</genre><genre primary="true">drama</genre></movie>').metadata.primaryGenre).toBe('drama');
+});
+
+it.each(['<genre primary="true"/>', '<genre primary="true"> </genre>'])('ignores empty primary markers: %s', (marker) => {
+	const fallback = parseKodiNfo(`<movie>${marker}<genre>Drama</genre>${marker}</movie>`);
+	expect(fallback.genres).toEqual(['Drama']);
+	expect(fallback.metadata.primaryGenre).toBeUndefined();
+	expect(primaryGenreKey({ ...fallback.metadata, genres: fallback.genres })).toBe('drama');
+
+	const marked = parseKodiNfo(`<movie><genre>Drama</genre>${marker}<genre primary="true">Comedy</genre></movie>`);
+	expect(marked.genres).toEqual(['Drama', 'Comedy']);
+	expect(marked.metadata.primaryGenre).toBe('Comedy');
+	expect(primaryGenreKey({ ...marked.metadata, genres: marked.genres })).toBe('comedy');
+
+	const empty = parseKodiNfo(`<movie>${marker}</movie>`);
+	expect(empty.genres).toEqual([]);
+	expect(primaryGenreKey({ ...empty.metadata, genres: empty.genres })).toBeNull();
 });

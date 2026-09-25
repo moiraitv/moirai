@@ -188,17 +188,17 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Actor').fill('Ada');
 	const dramaRule = page.getByRole('group', { name: 'Drama rule' });
 	const scienceFictionRule = page.getByRole('group', { name: 'Science Fiction rule' });
-	await expect(dramaRule.getByRole('button', { name: /Require Drama, 2 matching/ })).toBeVisible();
-	await expect(dramaRule.getByRole('button', { name: /Disallow Drama, 0 matching/ })).toBeVisible();
+	await expect(dramaRule.getByRole('button', { name: /Has Drama, 2 matching/ })).toBeVisible();
+	await expect(dramaRule.getByRole('button', { name: /Doesn’t Have Drama, 0 matching/ })).toBeVisible();
 	const requiredScienceFiction = waitForGenreFacets(['science-fiction']);
-	await scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }).click();
+	await scienceFictionRule.getByRole('button', { name: /Has Science Fiction/ }).click();
 	await requiredScienceFiction;
 	await expect(page.getByText('Updating genre counts…')).toBeHidden();
-	await expect(dramaRule.getByRole('button', { name: /Require Drama, 1 matching/ })).toBeVisible();
+	await expect(dramaRule.getByRole('button', { name: /Has Drama, 1 matching/ })).toBeVisible();
 	const excludedDrama = waitForGenreFacets(['science-fiction'], ['drama']);
-	await dramaRule.getByRole('button', { name: /Disallow Drama/ }).click();
+	await dramaRule.getByRole('button', { name: /Doesn’t Have Drama/ }).click();
 	await excludedDrama;
-	await expect(dramaRule.getByRole('button', { name: /Disallow Drama, 0 matching/ }))
+	await expect(dramaRule.getByRole('button', { name: /Doesn’t Have Drama, 0 matching/ }))
 		.toHaveAttribute('aria-pressed', 'true');
 	await page.getByRole('button', { name: 'Apply filters' }).click();
 	await expect(page).toHaveURL(/genre=science-fiction/);
@@ -209,23 +209,23 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: /Filter/ }).click();
 	await restoredExcludedGenres;
 	await page.getByRole('radio', { name: /Match any/ }).check();
-	await expect(page.getByRole('checkbox', { name: /Science Fiction 1/ })).toBeChecked();
-	await expect(page.getByRole('checkbox', { name: /Drama 2/ })).not.toBeChecked();
+	await expect(scienceFictionRule.getByRole('button', { name: /Has Science Fiction/ })).toHaveAttribute('aria-pressed', 'true');
+	await expect(dramaRule.getByRole('button', { name: /Has Drama/ })).toHaveAttribute('aria-pressed', 'false');
 	const refreshedContextualGenres = waitForGenreFacets(['science-fiction']);
 	await page.getByRole('radio', { name: /Match all/ }).check();
 	await refreshedContextualGenres;
-	await expect(dramaRule.getByRole('button', { name: /Disallow Drama/ }))
+	await expect(dramaRule.getByRole('button', { name: /Doesn’t Have Drama/ }))
 		.toHaveAttribute('aria-pressed', 'false');
 	const neutralGenres = waitForGenreFacets([]);
-	await scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }).click();
+	await scienceFictionRule.getByRole('button', { name: /Has Science Fiction/ }).click();
 	await neutralGenres;
-	await expect(scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }))
+	await expect(scienceFictionRule.getByRole('button', { name: /Has Science Fiction/ }))
 		.toHaveAttribute('aria-pressed', 'false');
 	const restoredScienceFiction = waitForGenreFacets(['science-fiction']);
-	await scienceFictionRule.getByRole('button', { name: /Require Science Fiction/ }).click();
+	await scienceFictionRule.getByRole('button', { name: /Has Science Fiction/ }).click();
 	await restoredScienceFiction;
 	const requiredDrama = waitForGenreFacets(['science-fiction', 'drama']);
-	await dramaRule.getByRole('button', { name: /Require Drama/ }).click();
+	await dramaRule.getByRole('button', { name: /Has Drama/ }).click();
 	await requiredDrama;
 	await page.getByRole('button', { name: 'Apply filters' }).click();
 	await expect(page).toHaveURL(/actor=Ada/);
@@ -253,6 +253,46 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Apply filters' }).click();
 	await expect(page).not.toHaveURL(/minimumRating=/);
 	await expect(page).not.toHaveURL(/minimumUserRating=/);
+
+	// Primary rules persist in the route, distinguish secondary genres, and remain usable on mobile.
+	await page.getByRole('button', { name: /Filter/ }).click();
+	const originalViewport = page.viewportSize()!;
+	for (const width of [480, 768, 1440]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect.poll(() => page.locator('.genre-choice-row').evaluateAll(rows => rows.every(row => {
+			const bounds = row.getBoundingClientRect();
+			const control = row.querySelector('.genre-rule-split')!.getBoundingClientRect();
+			return control.left >= bounds.left && control.right <= bounds.right;
+		}))).toBe(true);
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	const primaryDrama = dramaRule.getByRole('button', { name: /Primary genre Drama/ });
+	await expect(page.locator('.genre-choice-name').filter({ hasText: /^Drama$/ })).toBeVisible();
+	await primaryDrama.focus();
+	await page.keyboard.press('Space');
+	await expect(primaryDrama).toHaveAttribute('aria-pressed', 'true');
+	await primaryDrama.click();
+	await expect(primaryDrama).toHaveAttribute('aria-pressed', 'false');
+	await primaryDrama.click();
+	await expect.poll(async () => page.getByRole('dialog', { name: 'Filter media' }).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+	await page.getByRole('button', { name: 'Apply filters' }).click();
+	await expect(page).toHaveURL(/primaryGenre=drama/);
+	await expect(mediaCard).toBeHidden();
+	await expect(page.locator('.media-card').filter({ hasText: 'Companion Fixture' })).toBeVisible();
+	await page.reload();
+	await page.getByRole('button', { name: /Filter/ }).click();
+	await expect(primaryDrama).toHaveAttribute('aria-pressed', 'true');
+	await page.getByRole('radio', { name: /Match any/ }).check();
+	await expect(dramaRule.getByRole('button', { name: /Doesn’t Have Drama/ })).toBeDisabled();
+	await scienceFictionRule.getByRole('button', { name: /Has Science Fiction/ }).click();
+	await page.getByRole('button', { name: 'Apply filters' }).click();
+	await expect(mediaCard).toBeVisible();
+	await page.getByRole('button', { name: /Filter/ }).click();
+	await page.getByRole('button', { name: 'Clear All' }).click();
+	await page.getByRole('button', { name: 'Apply filters' }).click();
+	await expect(page).not.toHaveURL(/primaryGenre=/);
+	await page.setViewportSize(originalViewport);
+
 	await expect(mediaCard).toContainText('2026');
 	await expect(mediaCard).not.toContainText(/S\d+E\d+/);
 	await expect(mediaCard.locator('.card-menu-icon')).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { registerPrimaryGenreMigration } from './primary-genre-migration.js';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -72,6 +73,7 @@ export function applyNextMigration(
 	sqlite: Database.Database,
 	migrationsDir: string,
 ): MigrationProgress {
+	registerPrimaryGenreMigration(sqlite);
 	sqlite.exec(`CREATE TABLE IF NOT EXISTS __drizzle_migrations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		hash text NOT NULL,

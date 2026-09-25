@@ -1,3 +1,4 @@
+import { registerPrimaryGenreMigration } from './primary-genre-migration.js';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -29,6 +30,7 @@ export function createDatabase(databasePath: string, migrationsDir: string) {
 		sqlite.pragma('journal_mode = WAL');
 	}
 
+	registerPrimaryGenreMigration(sqlite);
 	const db = drizzle(sqlite, { schema: { ...schema, ...semanticSchema } });
 	migrate(db, { migrationsFolder: migrationsDir });
 	ensureCatalogSearchDeferTable(sqlite);

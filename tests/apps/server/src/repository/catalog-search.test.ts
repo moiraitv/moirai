@@ -152,6 +152,7 @@ describe('catalog search persist', () => {
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
+			primaryGenres: [],
 			excludedGenres: [],
 			genreMatch: 'any',
 			actor: '',

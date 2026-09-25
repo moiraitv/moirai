@@ -208,6 +208,7 @@ export const mediaItems = sqliteTable(
 			.notNull()
 			.default('available'),
 		lastObservedAt: text('last_observed_at'),
+		primaryGenreKey: text('primary_genre_key'),
 		metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
 		artworkRelativePath: text('artwork_relative_path'),
 		posterRelativePath: text('poster_relative_path'),
@@ -221,6 +222,7 @@ export const mediaItems = sqliteTable(
 	},
 	(table) => [
 		uniqueIndex('media_items_library_relative_path').on(table.libraryId, table.relativePath),
+		index('media_items_library_primary_genre_idx').on(table.libraryId, table.primaryGenreKey),
 		index('media_items_library_group_idx').on(table.libraryId, table.groupId),
 		index('media_items_library_title_idx').on(table.libraryId, table.sortTitle),
 		index('media_items_library_added_idx').on(table.libraryId, table.dateAddedAt),

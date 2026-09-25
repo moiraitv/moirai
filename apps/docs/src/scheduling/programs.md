@@ -67,7 +67,7 @@ When browsing inside a show, season, artist, or album in the media picker, use *
 
 ### Use a library query
 
-Library queries share the catalog filters: title, release year, indexed date, rating, actors, directors, and included or excluded genres. Music-video queries also support Artist and Album. Choose **Configure Filters** to refine the matches. Order the query by title/episode, indexed date, or release date, in either direction, and optionally limit the ordered set. The media carousel updates as scanning adds or changes matching items.
+Library queries share the catalog filters: title, release year, indexed date, rating, actors, directors, and primary, included, or excluded genres. Music-video queries also support Artist and Album. Choose **Configure Filters** to refine the matches. Order the query by title/episode, indexed date, or release date, in either direction, and optionally limit the ordered set. The media carousel updates as scanning adds or changes matching items.
 
 The item limit applies before unusable or unavailable media is excluded. If some of the limited items cannot play, Moirai does not replace them with matches outside that limit. Query ordering defines the candidate set; the selection strategy below controls playback through that set.
 

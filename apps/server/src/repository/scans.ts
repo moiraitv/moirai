@@ -1,3 +1,4 @@
+import { primaryGenreKey } from '../scanner/catalog-metadata.js';
 import { applyMediaIssueIgnores } from './ignored-media-issues.js';
 import { persistTailAssessments } from './media-tail-assessments.js';
 import { randomUUID } from 'node:crypto';
@@ -473,7 +474,11 @@ export abstract class ScanRepository {
 
 				// Upsert media rows and replace normalized metadata only when an item changed.
 				for (const item of items) {
-					const { genres, people, aliasIds, ...indexedItem } = item;
+					const { genres, people, aliasIds, ...sourceItem } = item;
+					const indexedItem = {
+						...sourceItem,
+						primaryGenreKey: item.primaryGenreKey ?? primaryGenreKey(item.metadata) ?? primaryGenreKey({}, genres.map((genre) => genre.name)),
+					};
 					void aliasIds;
 					tx.delete(mediaItemAliases).where(eq(mediaItemAliases.aliasId, item.id)).run();
 					const prior = previous.get(item.relativePath);

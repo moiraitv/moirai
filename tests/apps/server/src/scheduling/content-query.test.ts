@@ -158,3 +158,15 @@ describe('duration bounds in scheduling', () => {
 		expect(mediaMatchesLibraryQuery({ ...media, durationSeconds }, source({ minimumDurationSeconds, maximumDurationSeconds }))).toBe(expected);
 	});
 });
+
+it('combines primary and membership rules with the selected matching mode', () => {
+	const candidate = { ...media, primaryGenreKey: 'comedy' };
+	expect(mediaMatchesLibraryQuery(candidate, source({ primaryGenres: ['comedy'] }))).toBe(true);
+	expect(mediaMatchesLibraryQuery(candidate, source({ primaryGenres: ['science-fiction'] }))).toBe(false);
+	expect(mediaMatchesLibraryQuery(candidate, source({ primaryGenres: ['comedy'], genres: ['science-fiction'] }))).toBe(true);
+	expect(mediaMatchesLibraryQuery(candidate, source({ primaryGenres: ['comedy', 'science-fiction'] }))).toBe(false);
+	expect(mediaMatchesLibraryQuery(candidate, source({ primaryGenres: ['comedy', 'science-fiction'], genreMatch: 'any' }))).toBe(true);
+	expect(mediaMatchesLibraryQuery(candidate, source({ primaryGenres: ['drama'], genres: ['science-fiction'], genreMatch: 'any' }))).toBe(true);
+	expect(mediaMatchesLibraryQuery({ ...candidate, primaryGenreKey: null }, source({ primaryGenres: ['comedy'] }))).toBe(false);
+	expect(libraryQueryStateSource(source({ primaryGenres: [] }))).toEqual(libraryQueryStateSource(source()));
+});

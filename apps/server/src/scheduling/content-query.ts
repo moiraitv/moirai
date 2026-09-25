@@ -18,7 +18,7 @@ export function libraryQueryStateSource(source: LibraryQuerySource): Record<stri
 		if (value == null || value === '') {
 			return false;
 		}
-		if (key === 'excludedGenres' && Array.isArray(value) && value.length === 0) {
+		if ((key === 'excludedGenres' || key === 'primaryGenres') && Array.isArray(value) && value.length === 0) {
 			return false;
 		}
 		if (key === 'genreMatch' && value === 'all') {
@@ -63,6 +63,7 @@ export function mediaMatchesLibraryQuery(
 		&& !source.addedFrom
 		&& !source.addedBefore
 		&& source.genres.length === 0
+		&& (source.primaryGenres ?? []).length === 0
 		&& (source.excludedGenres ?? []).length === 0
 		&& !source.actor
 		&& !source.director
@@ -110,12 +111,12 @@ export function mediaMatchesLibraryQuery(
 		|| Date.parse(media.dateAddedAt) >= Date.parse(source.addedBefore))) {
 		return false;
 	}
-	if (
-		source.genres.length > 0
-		&& ((source.genreMatch ?? 'all') === 'all'
-			? !source.genres.every((genre) => media.genres.includes(genre))
-			: !source.genres.some((genre) => media.genres.includes(genre)))
-	) {
+	const genreMatches = [
+		...source.genres.map((genre) => media.genres.includes(genre)),
+		...(source.primaryGenres ?? []).map((genre) => media.primaryGenreKey === genre),
+	];
+	if (genreMatches.length > 0 && ((source.genreMatch ?? 'all') === 'all'
+		? !genreMatches.every(Boolean) : !genreMatches.some(Boolean))) {
 		return false;
 	}
 	if ((source.excludedGenres ?? []).some((genre) => media.genres.includes(genre))) {

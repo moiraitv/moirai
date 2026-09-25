@@ -1,4 +1,9 @@
 @media (max-width: 1220px) {
+	.genre-choices {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		background: rgba(7, 19, 30, 0.58);
+	}
+
 	.programs-intro,
 	.templates-intro {
 		grid-template-columns: 1fr;
@@ -546,7 +551,7 @@
 	}
 
 	.genre-choices {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: 1fr;
 		background: rgba(7, 19, 30, 0.58);
 	}
 
@@ -989,8 +994,8 @@
 
 	.genre-choices label,
 	.genre-choice-row {
-		min-height: 50px;
-		padding-inline: 10px;
+		min-height: 58px;
+		padding-inline: 0;
 	}
 
 	.filter-modal-footer {

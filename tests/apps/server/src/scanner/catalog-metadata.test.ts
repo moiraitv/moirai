@@ -1,3 +1,4 @@
+import { primaryGenreKey } from '@server/scanner/catalog-metadata.js';
 import { describe, expect, it } from 'vitest';
 import {
 	catalogSortTitle,
@@ -94,4 +95,13 @@ describe('catalog metadata normalization', () => {
 	it('preserves an authored sort title instead of applying article handling', () => {
 		expect(catalogSortTitle('The Matrix', 'Custom Matrix Order')).toBe('Custom Matrix Order');
 	});
+});
+
+it('resolves primary genres without sorting or accepting an override outside the source genres', () => {
+	expect(primaryGenreKey({ genres: ['---', 'Sci-Fi', 'Drama', 'science fiction'] })).toBe('science-fiction');
+	expect(primaryGenreKey({ genres: ['Comedy', 'Drama'], primaryGenre: 'drama' })).toBe('drama');
+	expect(primaryGenreKey({ genres: ['Comedy', 'Drama'], primaryGenre: 'Horror' })).toBe('comedy');
+	expect(primaryGenreKey({ genres: [null, '', '---'] })).toBeNull();
+	expect(primaryGenreKey({})).toBeNull();
+	expect(primaryGenreKey({}, ['Rock', 'Pop'])).toBe('rock');
 });

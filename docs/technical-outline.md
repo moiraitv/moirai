@@ -1445,8 +1445,13 @@ unmounted title or genre anchors retain virtual positions so sticky navigation c
 them without rendering every card on the page.
 
 The library filter presents genre rules first and defaults to Match all, where each genre can be
-neutral, required, or explicitly disallowed. Its contextual facets predict the result of either
-action. Match any retains simple inclusion checkboxes and static library totals. Additional filters
+neutral, primary, required, or explicitly disallowed. Its contextual facets predict the result of
+replacing that genre’s rule with each action. Match any accepts either primary or inclusion rules
+and shows static library totals; switching to it clears exclusions. Primary genre keys are indexed
+on media items, using the first valid source genre unless a Moirai-specific NFO
+`<genre primary="true">` marker overrides it. Multiple markers use the first valid marked genre.
+An additive migration backfills ordered stored metadata; unknown legacy ordering remains null
+until scanning refreshes it. Browse and scheduling filters share these rules. Additional filters
 cover title, release and indexed dates, minimum indexed popular and user ratings, actors, and
 directors. Items without the selected rating value do not satisfy a minimum-rating filter.
 
@@ -1503,7 +1508,7 @@ initial scan. Dynamic queries remain valid while that scan is empty, while expli
 season choices appear as the index fills. Library queries show every currently indexed match through
 an incrementally loaded, horizontally windowed carousel and refresh the loaded range after
 programming-affecting scan events. Quick Setup and the full Program editor share the library catalog's
-title, release-year, indexed-date, rating, actor, director, and include/exclude genre filters. Dynamic
+title, release-year, indexed-date, rating, actor, director, and primary/include/exclude genre filters. Dynamic
 queries can order matches by title/episode, indexed date, or release date in either direction and
 optionally limit the resulting ordered set before excluding unavailable or unmeasured media, so
 playback never substitutes items outside the previewed limit. Programs evaluate those choices

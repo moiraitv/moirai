@@ -330,16 +330,16 @@ test('refreshes Match any genres while Quick Setup remains open during indexing'
 	await page.getByRole('button', { name: 'Configure Filters' }).click();
 	const filters = page.getByRole('dialog', { name: 'Filter media' });
 	await filters.getByRole('radio', { name: /Match any/ }).check();
-	await expect(filters.getByRole('checkbox', { name: /Drama/ })).toHaveCount(0);
+	await expect(filters.getByRole('button', { name: /Has Drama/ })).toHaveCount(0);
 	await writeFile(path.join(mediaRoot, 'New Drama.nfo'), '<movie><title>New Drama</title><genre>Drama</genre></movie>');
 	await writeFile(path.join(mediaRoot, 'New Drama.mp4'), 'fixture');
 	const scan = await page.request.post(`/api/v1/libraries/${library.id}/scans`, {
 		headers: { 'X-Moirai-CSRF': csrfToken },
 	});
 	expect(scan.ok()).toBe(true);
-	const drama = filters.getByRole('checkbox', { name: /Drama/ });
+	const drama = filters.getByRole('button', { name: /Has Drama/ });
 	await expect(drama).toBeVisible({ timeout: 30_000 });
-	await drama.check();
+	await drama.click();
 	await filters.getByRole('button', { name: 'Apply Filters' }).click();
 	await expect(page.getByLabel('Currently matching media')).toContainText('New Drama');
 });

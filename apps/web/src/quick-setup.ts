@@ -144,6 +144,7 @@ export function quickSourceSummary(source: QuickChannelSetupCreate['source']): s
 			source.addedFrom,
 			source.addedBefore,
 			...source.genres,
+			...source.primaryGenres,
 			...source.excludedGenres,
 			source.actor,
 			source.director,

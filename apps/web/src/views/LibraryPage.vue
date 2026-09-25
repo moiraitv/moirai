@@ -245,7 +245,7 @@ const activeFilterCount = computed(
 			queryString('minimumRating'),
 			queryString('minimumUserRating'),
 			queryString('addedFrom') || queryString('addedTo') || dateWindow.value,
-			queryStrings('genre').length || queryStrings('excludeGenre').length ? 'genre' : '',
+			queryStrings('genre').length || queryStrings('primaryGenre').length || queryStrings('excludeGenre').length ? 'genre' : '',
 			queryString('actor'),
 			queryString('director'),
 		].filter(Boolean).length,
@@ -427,6 +427,7 @@ function currentMediaQuery(): MediaQuery {
 		addedFrom: windowBounds.addedFrom ?? localDay(queryString('addedFrom')),
 		addedBefore: windowBounds.addedBefore ?? localDay(queryString('addedTo'), true),
 		genres: queryStrings('genre'),
+		primaryGenres: queryStrings('primaryGenre'),
 		excludedGenres: queryStrings('excludeGenre'),
 		genreMatch: queryString('genreMatch') === 'any' ? 'any' : 'all',
 		actor: queryString('actor') || undefined,
@@ -962,6 +963,7 @@ function openFilters(): void {
 	filterDraft.addedFrom = queryString('addedFrom');
 	filterDraft.addedTo = queryString('addedTo');
 	filterDraft.genres = queryStrings('genre');
+	filterDraft.primaryGenres = queryStrings('primaryGenre');
 	filterDraft.excludedGenres = queryStrings('excludeGenre');
 	filterDraft.genreMatch = queryString('genreMatch') === 'any' ? 'any' : 'all';
 	filterDraft.actor = queryString('actor');
@@ -986,8 +988,9 @@ async function applyFilters(draft: LibraryFilterDraft): Promise<void> {
 		addedTo: draft.addedTo || undefined,
 		dateWindow: undefined,
 		genre: draft.genres.length ? draft.genres : undefined,
+		primaryGenre: draft.primaryGenres.length ? draft.primaryGenres : undefined,
 		excludeGenre: draft.excludedGenres.length ? draft.excludedGenres : undefined,
-		genreMatch: (draft.genres.length || draft.excludedGenres.length)
+		genreMatch: (draft.genres.length || draft.primaryGenres.length || draft.excludedGenres.length)
 			&& draft.genreMatch === 'any' ? 'any' : undefined,
 		actor: draft.actor || undefined,
 		director: draft.director || undefined,

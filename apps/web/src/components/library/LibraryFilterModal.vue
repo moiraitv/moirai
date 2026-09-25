@@ -26,6 +26,7 @@ const localDraft = reactive<LibraryFilterDraft>({
 	minimumDuration: { ...props.draft.minimumDuration },
 	maximumDuration: { ...props.draft.maximumDuration },
 	genres: [...props.draft.genres],
+	primaryGenres: [...props.draft.primaryGenres],
 	excludedGenres: [...props.draft.excludedGenres],
 });
 const durationErrorId = useId();
@@ -35,7 +36,7 @@ const genreCountsLoading = ref(false);
 const genreCountsError = ref(false);
 const displayedGenres = computed(() => contextualGenres.value ?? props.genres);
 const selectedGenreRuleCount = computed(
-	() => localDraft.genres.length + localDraft.excludedGenres.length,
+	() => localDraft.genres.length + localDraft.primaryGenres.length + localDraft.excludedGenres.length,
 );
 const genreRuleLimitReached = computed(
 	() => selectedGenreRuleCount.value >= MAX_MEDIA_GENRE_RULES,
@@ -61,14 +62,18 @@ function applyDraft(): void {
 		minimumDuration: { ...localDraft.minimumDuration },
 		maximumDuration: { ...localDraft.maximumDuration },
 		genres: [...localDraft.genres],
+		primaryGenres: [...localDraft.primaryGenres],
 		excludedGenres: localDraft.genreMatch === 'all'
 			? [...localDraft.excludedGenres]
 			: [],
 	});
 }
 
-/** Return the active Match all rule for one genre. */
-function genreRule(key: string): 'include' | 'exclude' | null {
+/** Return the active genre rule for one genre. */
+function genreRule(key: string): 'primary' | 'include' | 'exclude' | null {
+	if (localDraft.primaryGenres.includes(key)) {
+		return 'primary';
+	}
 	if (localDraft.genres.includes(key)) {
 		return 'include';
 	}
@@ -76,20 +81,24 @@ function genreRule(key: string): 'include' | 'exclude' | null {
 	return localDraft.excludedGenres.includes(key) ? 'exclude' : null;
 }
 
-/** Activate, switch, or clear one required/disallowed genre rule. */
-function toggleGenreRule(key: string, rule: 'include' | 'exclude'): void {
+/** Activate, switch, or clear one primary, required, or disallowed genre rule. */
+function toggleGenreRule(key: string, rule: 'primary' | 'include' | 'exclude'): void {
 	const current = genreRule(key);
 	if (current === null && genreRuleLimitReached.value) {
 		return;
 	}
 
+	localDraft.primaryGenres = localDraft.primaryGenres.filter((genre) => genre !== key);
 	localDraft.genres = localDraft.genres.filter((genre) => genre !== key);
 	localDraft.excludedGenres = localDraft.excludedGenres.filter((genre) => genre !== key);
 	if (current === rule) {
 		return;
 	}
 
-	if (rule === 'include') {
+	if (rule === 'primary') {
+		localDraft.primaryGenres.push(key);
+	}
+	else if (rule === 'include') {
 		localDraft.genres.push(key);
 	}
 	else {
@@ -105,10 +114,10 @@ function genreRuleDisabled(key: string): boolean {
 /** Describe a prospective genre action for assistive technology. */
 function genreActionLabel(
 	genre: MediaGenreFacet,
-	rule: 'include' | 'exclude',
+	rule: 'primary' | 'include' | 'exclude',
 ): string {
-	const count = rule === 'include' ? genre.count : genre.excludeCount;
-	const action = rule === 'include' ? 'Require' : 'Disallow';
+	const count = rule === 'primary' ? genre.primaryCount : rule === 'include' ? genre.count : genre.excludeCount;
+	const action = rule === 'primary' ? 'Primary genre' : rule === 'include' ? 'Has' : 'Doesn’t Have';
 	return count === null
 		? `${action} ${genre.name}`
 		: `${action} ${genre.name}, ${countLabel(count, 'matching item')}`;
@@ -136,6 +145,7 @@ async function refreshGenreCounts(): Promise<void> {
 		const facets = await api.mediaGenres(props.libraryId, {
 			genreMatch: 'all',
 			genres: localDraft.genres,
+			primaryGenres: localDraft.primaryGenres,
 			excludedGenres: localDraft.excludedGenres,
 		}, controller.signal);
 		if (genreCountsController === controller) {
@@ -167,6 +177,7 @@ watch(
 		() => props.genres,
 		() => localDraft.genreMatch,
 		() => localDraft.genres.join('\u0000'),
+		() => localDraft.primaryGenres.join('\u0000'),
 		() => localDraft.excludedGenres.join('\u0000'),
 	],
 	() => void refreshGenreCounts(),
@@ -199,25 +210,25 @@ onUnmounted(() => genreCountsController?.abort());
 					<section class="filter-genres" aria-labelledby="filter-genres-title">
 						<div class="filter-genres-header">
 							<div class="filter-genres-copy">
-								<div><h3 id="filter-genres-title">Genres</h3><p>Select genres to require or disallow in your results.</p></div>
+								<div><h3 id="filter-genres-title">Genres</h3><p>Choose a primary genre, any matching genre, or a genre to exclude.</p></div>
 							</div>
 							<fieldset class="genre-match">
 								<legend class="sr-only">Genre matching behavior</legend>
-								<label><input ref="genreMatchInput" v-model="localDraft.genreMatch" type="radio" value="any" /><span><strong>Match any</strong><small>Results with any selected genre</small></span></label>
-								<label><input v-model="localDraft.genreMatch" type="radio" value="all" /><span><strong>Match all</strong><small>Results with all selected genres</small></span></label>
+								<label><input ref="genreMatchInput" v-model="localDraft.genreMatch" type="radio" value="any" /><span><strong>Match any</strong><small>Results matching any selected rule</small></span></label>
+								<label><input v-model="localDraft.genreMatch" type="radio" value="all" /><span><strong>Match all</strong><small>Results matching every selected rule</small></span></label>
 							</fieldset>
 						</div>
 						<fieldset class="genre-choices" :aria-busy="genreCountsLoading">
 							<legend class="sr-only">Select genres</legend>
 							<template v-for="genre in displayedGenres" :key="genre.key">
-								<div v-if="localDraft.genreMatch === 'all'" class="genre-choice-row">
+								<div class="genre-choice-row">
 									<div class="genre-rule-split" role="group" :aria-label="`${genre.name} rule`">
-										<button type="button" :class="{ active: genreRule(genre.key) === 'include' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'include'" :aria-label="genreActionLabel(genre, 'include')" @click="toggleGenreRule(genre.key, 'include')"><Check :size="16" aria-hidden="true" /><small>{{ genre.count.toLocaleString() }}</small></button>
-										<button type="button" class="exclude" :class="{ active: genreRule(genre.key) === 'exclude' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'exclude'" :aria-label="genreActionLabel(genre, 'exclude')" @click="toggleGenreRule(genre.key, 'exclude')"><X :size="16" aria-hidden="true" /><small>{{ genre.excludeCount?.toLocaleString() ?? '—' }}</small></button>
+										<button type="button" :class="{ active: genreRule(genre.key) === 'primary' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'primary'" :aria-label="genreActionLabel(genre, 'primary')" title="Primary" @click="toggleGenreRule(genre.key, 'primary')"><Star :size="16" aria-hidden="true" /><small>{{ genre.primaryCount.toLocaleString() }}</small></button>
+										<button type="button" :class="{ active: genreRule(genre.key) === 'include' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'include'" :aria-label="genreActionLabel(genre, 'include')" title="Has" @click="toggleGenreRule(genre.key, 'include')"><Check :size="16" aria-hidden="true" /><small>{{ genre.count.toLocaleString() }}</small></button>
+										<button type="button" class="exclude" :class="{ active: genreRule(genre.key) === 'exclude' }" :disabled="localDraft.genreMatch === 'any' || genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'exclude'" :aria-label="genreActionLabel(genre, 'exclude')" title="Doesn’t Have" @click="toggleGenreRule(genre.key, 'exclude')"><X :size="16" aria-hidden="true" /><small>{{ genre.excludeCount?.toLocaleString() ?? '—' }}</small></button>
 									</div>
 									<span class="genre-choice-name">{{ genre.name }}</span>
 								</div>
-								<label v-else><input v-model="localDraft.genres" type="checkbox" :value="genre.key" :disabled="!localDraft.genres.includes(genre.key) && genreRuleLimitReached" /><span>{{ genre.name }}</span><small>{{ genre.count.toLocaleString() }}</small></label>
 							</template>
 							<p v-if="displayedGenres.length === 0" class="genre-choices-empty">No genres have been indexed for this library.</p>
 						</fieldset>

@@ -140,6 +140,8 @@ Afterlight Station (2026).mkv
 Afterlight Station (2026).nfo
 ```
 
+Moirai treats the first valid genre listed in metadata as the primary genre. To override that order, use `<genre primary="true">Drama</genre>`. This attribute is a Moirai extension, not part of standard Kodi NFO syntax. If multiple valid genres are marked primary, the first marked genre wins. Otherwise the first valid genre remains primary. Synchronize the library after changing the metadata. For music videos, NFO genres come before embedded tag genres.
+
 For shows, use `tvshow.nfo` in the series folder, `season.nfo` in the season folder, and matching NFO files beside individual episodes. These describe different levels of the collection.
 
 Moirai uses NFO values before filename-derived values when they are supplied. A better filename will not override an incorrect NFO title or episode number. Technical playback information, including duration, comes from inspecting the media rather than trusting descriptive NFO metadata.

@@ -236,6 +236,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		addedFrom: catalogProgramItemFilterShape.addedFrom.removeDefault().optional(),
 		addedBefore: catalogProgramItemFilterShape.addedBefore.removeDefault().optional(),
 		genres: catalogProgramItemFilterShape.genres,
+		primaryGenres: catalogProgramItemFilterShape.primaryGenres.optional(),
 		excludedGenres: catalogProgramItemFilterShape.excludedGenres.optional(),
 		genreMatch: catalogProgramItemFilterShape.genreMatch.removeDefault().optional(),
 		actor: catalogProgramItemFilterShape.actor.removeDefault().optional(),
@@ -248,6 +249,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		validateMediaDurationRange(source, context);
 		validateMediaGenreRules({
 			genres: source.genres,
+			primaryGenres: source.primaryGenres ?? [],
 			excludedGenres: source.excludedGenres ?? [],
 			genreMatch: source.genreMatch ?? 'all',
 		}, context);
@@ -978,6 +980,7 @@ export interface SchedulableMedia {
 	trackNumber?: number | null;
 	discNumber?: number | null;
 	multipartStatus?: 'none' | 'complete' | 'incomplete' | 'ambiguous';
+	primaryGenreKey?: string | null;
 	genres: string[];
 	genreNames: string[];
 	/** Indexed keyword labels used by explicit semantic exclusions. */

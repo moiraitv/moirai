@@ -707,6 +707,8 @@ describe('discoverOnDisk', () => {
 			artists: ['Tagged Artist', 'Guest Artist'],
 		});
 		expect(result.items[0]?.genres.map((genre) => genre.name)).toEqual(['Rock', 'Live']);
+		expect(result.items[0]?.primaryGenreKey).toBe('rock');
+		expect(result.items[0]?.metadata.genres).toEqual(['Rock', 'Live']);
 	});
 
 	it('ignores symlinked item and show sidecars outside the library root', async () => {
@@ -840,4 +842,24 @@ it('refreshes container-duration caches and retains mismatch warnings on cached 
 	expect(cached.issues).toContainEqual(expect.objectContaining({
 		path: relativePath, code: 'media_audio_video_duration_mismatch', severity: 'warning',
 	}));
+});
+
+it('refreshes primary markers and keeps NFO genres ahead of music tag fallbacks', async () => {
+	const fixture = await library('music-videos');
+	const root = fixture.sourceConfig.scanRoot;
+	await writeFile(path.join(root, 'Song.mp4'), 'video');
+	const nfoPath = path.join(root, 'Song.nfo');
+	await writeFile(nfoPath, '<musicvideo><genre>Jazz</genre><genre>Live</genre></musicvideo>');
+	const probeMedia = vi.fn().mockResolvedValue({
+		durationMilliseconds: 60_000, fileSizeBytes: 5, container: 'mp4', streams: [], resolution: null,
+		tags: { genre: 'Rock; Live' },
+	});
+	const first = await discoverOnDisk(fixture, { probeMedia });
+	expect(first.items[0]?.primaryGenreKey).toBe('jazz');
+	expect(first.items[0]?.genres.map(genre => genre.key)).toEqual(['jazz', 'live', 'rock']);
+	await writeFile(nfoPath, '<musicvideo><genre>Jazz</genre><genre primary="true">Live</genre></musicvideo>');
+	const second = await discoverOnDisk(fixture, { probeMedia });
+	expect(second.items[0]?.primaryGenreKey).toBe('live');
+	expect(second.items[0]?.id).toBe(first.items[0]?.id);
+	expect(second.items[0]?.fingerprint).not.toBe(first.items[0]?.fingerprint);
 });

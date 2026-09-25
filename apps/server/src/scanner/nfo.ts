@@ -1,3 +1,4 @@
+import { normalizeGenre, normalizeGenres } from './catalog-metadata.js';
 import { XMLParser } from 'fast-xml-parser';
 import {
 	MAX_METADATA_LIST_ITEMS,
@@ -39,14 +40,16 @@ function first(value: unknown): unknown {
 	return Array.isArray(value) ? value[0] : value;
 }
 
-/** Extract a scalar string from an NFO parser value. */
+/** Extract scalar NFO text, ignoring structured or empty attributed elements. */
 function rawStringValue(value: unknown): string | null {
 	const selected = first(value);
-	if (selected && typeof selected === 'object' && '#text' in selected) {
-		return String((selected as Record<string, unknown>)['#text']);
-	}
+	const text = selected && typeof selected === 'object'
+		? (selected as Record<string, unknown>)['#text']
+		: selected;
 
-	return selected === undefined || selected === null ? null : String(selected);
+	return typeof text === 'string' || typeof text === 'number' || typeof text === 'boolean'
+		? String(text)
+		: null;
 }
 
 /** Truncate untrusted text to its documented storage or output limit. */
@@ -311,6 +314,16 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 		return raw ? raw.slice(0, maximum) : null;
 	};
 	const genres = limitedList('genres', uniqueStrings(root.genre));
+
+	// Honor Moirai primary markers without reordering the authored genre list.
+	const genreKeys = new Set(normalizeGenres(genres).map((genre) => genre.key));
+	const genreEntries = Array.isArray(root.genre) ? root.genre : [root.genre];
+	const primaryGenre = genreEntries.find((entry) => {
+		const value = boundedText(entry);
+		return entry && typeof entry === 'object' && String(entry['@_primary']).toLowerCase() === 'true'
+			&& value && genreKeys.has(normalizeGenre(value)?.key ?? '');
+	});
+
 	const limitedPeople = (name: string, values: string[]): string[] => {
 		if (values.length > MAX_METADATA_PEOPLE_ITEMS) {
 			truncatedFields.push(name);
@@ -381,6 +394,7 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 			countries: limitedList('countries', countries),
 			resolution,
 			genres,
+			...(primaryGenre ? { primaryGenre: boundedText(primaryGenre) } : {}),
 			directors,
 			actors: cast,
 			tags: limitedList('tags', uniqueStrings(root.tag)),

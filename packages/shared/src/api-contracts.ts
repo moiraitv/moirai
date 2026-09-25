@@ -280,6 +280,7 @@ export const mediaGenreFacetSchema = z.object({
 	key: z.string(),
 	name: z.string(),
 	count: z.number().int().nonnegative(),
+	primaryCount: z.number().int().nonnegative(),
 	excludeCount: z.number().int().nonnegative().nullable(),
 });
 

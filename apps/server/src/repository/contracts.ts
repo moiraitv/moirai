@@ -55,6 +55,7 @@ export type ProgramItemAppendResult
 /** Required and disallowed genre rules used to predict Match all facet actions. */
 export interface MediaGenreFacetSelection {
 	genres: string[];
+	primaryGenres: string[];
 	excludedGenres: string[];
 }
 
@@ -219,6 +220,7 @@ export interface DiscoveredItem {
 	fingerprint: string;
 	fileModifiedAt: string;
 	titleBucket: string;
+	primaryGenreKey?: string | null;
 	genres: Array<{ key: string; name: string }>;
 	people: Array<{
 		personType: 'actor' | 'director';

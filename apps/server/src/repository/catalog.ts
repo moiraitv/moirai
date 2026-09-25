@@ -132,20 +132,28 @@ export class MediaCatalogRepository {
 			conditions.push('i.date_added_at < ?');
 			conditionParams.push(query.addedBefore);
 		}
+
+		// Combine primary and membership requirements using the same positive matching mode.
+		const positiveRules: string[] = [];
 		if (query.genres.length > 0) {
 			const placeholders = query.genres.map(() => '?').join(', ');
+			positiveRules.push(query.genreMatch === 'all'
+				? `(SELECT COUNT(DISTINCT fg.genre_key) FROM media_item_genres fg WHERE fg.item_id = i.id AND fg.genre_key IN (${placeholders})) = ?`
+				: `EXISTS (SELECT 1 FROM media_item_genres fg WHERE fg.item_id = i.id AND fg.genre_key IN (${placeholders}))`);
+			conditionParams.push(...query.genres);
 			if (query.genreMatch === 'all') {
-				conditions.push(
-					`(SELECT COUNT(DISTINCT fg.genre_key) FROM media_item_genres fg WHERE fg.item_id = i.id AND fg.genre_key IN (${placeholders})) = ?`,
-				);
-				conditionParams.push(...query.genres, query.genres.length);
+				conditionParams.push(query.genres.length);
 			}
-			else {
-				conditions.push(
-					`EXISTS (SELECT 1 FROM media_item_genres fg WHERE fg.item_id = i.id AND fg.genre_key IN (${placeholders}))`,
-				);
-				conditionParams.push(...query.genres);
+		}
+		if (query.primaryGenres.length > 0) {
+			positiveRules.push(query.genreMatch === 'all' && query.primaryGenres.length > 1
+				? '0' : `i.primary_genre_key IN (${query.primaryGenres.map(() => '?').join(', ')})`);
+			if (query.genreMatch !== 'all' || query.primaryGenres.length === 1) {
+				conditionParams.push(...query.primaryGenres);
 			}
+		}
+		if (positiveRules.length > 0) {
+			conditions.push(`(${positiveRules.join(query.genreMatch === 'all' ? ' AND ' : ' OR ')})`);
 		}
 		if (query.excludedGenres.length > 0) {
 			const placeholders = query.excludedGenres.map(() => '?').join(', ');
@@ -211,6 +219,7 @@ export class MediaCatalogRepository {
 			|| query.addedFrom
 			|| query.addedBefore
 			|| query.genres.length
+			|| query.primaryGenres.length
 			|| query.excludedGenres.length,
 		);
 		const flattenHierarchy = hasFilters || query.sort !== 'title';
@@ -551,6 +560,7 @@ export class MediaCatalogRepository {
 				addedFrom: null,
 				addedBefore: null,
 				genres: [],
+				primaryGenres: [],
 				excludedGenres: [],
 				genreMatch: 'any',
 				actor: '',

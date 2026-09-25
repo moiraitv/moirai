@@ -114,6 +114,7 @@ test('captures libraries and scanning', { tag: '@docs-screenshot' }, async ({ pa
 		return Boolean(bounds && bounds.y >= 0 && bounds.y + bounds.height <= page.viewportSize()!.height);
 	}).toBe(true);
 	await filters.locator('.filter-modal-body').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }));
+	await expect(filters.locator('.genre-choice-name').first()).toBeVisible();
 	await capture(page, 'library-filters.png');
 	await filters.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(filters).toBeHidden();

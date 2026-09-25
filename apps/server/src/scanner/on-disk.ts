@@ -29,6 +29,7 @@ import type {
 import {
 	catalogSortTitle,
 	normalizeGenres,
+	primaryGenreKey,
 	normalizePeople,
 	ON_DISK_METADATA_VERSION,
 	titleBucket,
@@ -744,12 +745,13 @@ export async function discoverOnDisk(
 						? 'movie'
 						: 'other';
 		const itemArtworkFingerprint = await artworkFingerprint(scanRoot, artwork);
-		const genres = normalizeGenres([
+		const sourceGenres = [
 			...(nfo.parsed?.genres ?? []),
 			...(library.typeKey === 'music-videos'
 				? (probeTags.genre ?? '').split(/\s*;\s*/).filter(Boolean)
 				: []),
-		]);
+		];
+		const genres = normalizeGenres(sourceGenres);
 		const people = normalizePeople(
 			nfo.parsed?.directors ?? [],
 			nfo.parsed?.actors ?? [],
@@ -831,6 +833,7 @@ export async function discoverOnDisk(
 			metadataStatus: nfo.status,
 			metadata: {
 				...(nfo.parsed?.metadata ?? {}),
+				genres: sourceGenres,
 				externalIds,
 				artists,
 				album: nfo.parsed?.metadata.album ?? probeTags.album
@@ -854,6 +857,7 @@ export async function discoverOnDisk(
 			fileModifiedAt: mediaInfo.mtime.toISOString(),
 			titleBucket: titleBucket(sortTitle),
 			genres,
+			primaryGenreKey: primaryGenreKey(nfo.parsed?.metadata ?? {}, genres.map((genre) => genre.name)),
 			people,
 		});
 		return 'complete';

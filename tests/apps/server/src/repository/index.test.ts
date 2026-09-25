@@ -917,43 +917,48 @@ describe('Repository scan reconciliation', () => {
 			true,
 		);
 		expect(await repository.listMediaGenres(library.id)).toEqual([
-			{ key: 'drama', name: 'Drama', count: 2, excludeCount: null },
-			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: null },
+			{ key: 'drama', name: 'Drama', count: 2, primaryCount: 1, excludeCount: null },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, primaryCount: 1, excludeCount: null },
 		]);
 		expect(await repository.listMediaGenres(library.id, {
 			genres: [],
+			primaryGenres: [],
 			excludedGenres: [],
 		})).toEqual([
-			{ key: 'drama', name: 'Drama', count: 2, excludeCount: 0 },
-			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+			{ key: 'drama', name: 'Drama', count: 2, primaryCount: 1, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, primaryCount: 1, excludeCount: 1 },
 		]);
 		expect(await repository.listMediaGenres(library.id, {
 			genres: ['science-fiction'],
+			primaryGenres: [],
 			excludedGenres: [],
 		})).toEqual([
-			{ key: 'drama', name: 'Drama', count: 1, excludeCount: 0 },
-			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+			{ key: 'drama', name: 'Drama', count: 1, primaryCount: 0, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, primaryCount: 1, excludeCount: 1 },
 		]);
 		expect(await repository.listMediaGenres(library.id, {
 			genres: ['drama', 'science-fiction'],
+			primaryGenres: [],
 			excludedGenres: [],
 		})).toEqual([
-			{ key: 'drama', name: 'Drama', count: 1, excludeCount: 0 },
-			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+			{ key: 'drama', name: 'Drama', count: 1, primaryCount: 0, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, primaryCount: 1, excludeCount: 1 },
 		]);
 		expect(await repository.listMediaGenres(library.id, {
 			genres: [],
+			primaryGenres: [],
 			excludedGenres: ['science-fiction'],
 		})).toEqual([
-			{ key: 'drama', name: 'Drama', count: 1, excludeCount: 0 },
-			{ key: 'science-fiction', name: 'Science Fiction', count: 1, excludeCount: 1 },
+			{ key: 'drama', name: 'Drama', count: 1, primaryCount: 1, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 1, primaryCount: 1, excludeCount: 1 },
 		]);
 		expect(await repository.listMediaGenres(library.id, {
 			genres: ['missing'],
+			primaryGenres: [],
 			excludedGenres: [],
 		})).toEqual([
-			{ key: 'drama', name: 'Drama', count: 0, excludeCount: 0 },
-			{ key: 'science-fiction', name: 'Science Fiction', count: 0, excludeCount: 0 },
+			{ key: 'drama', name: 'Drama', count: 0, primaryCount: 0, excludeCount: 0 },
+			{ key: 'science-fiction', name: 'Science Fiction', count: 0, primaryCount: 0, excludeCount: 0 },
 		]);
 		const baseQuery = {
 			parentId: null,
@@ -971,6 +976,7 @@ describe('Repository scan reconciliation', () => {
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
+			primaryGenres: [],
 			excludedGenres: [],
 			genreMatch: 'any' as const,
 			actor: '',
@@ -1047,6 +1053,7 @@ describe('Repository scan reconciliation', () => {
 			...baseQuery,
 			pageSize: 10,
 			genres: ['drama'],
+			primaryGenres: [],
 			excludedGenres: ['science-fiction'],
 			genreMatch: 'all',
 		});
@@ -1257,6 +1264,7 @@ describe('Repository scan reconciliation', () => {
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
+			primaryGenres: [],
 			excludedGenres: [],
 			genreMatch: 'all',
 			actor: '',
@@ -1319,6 +1327,7 @@ describe('Repository scan reconciliation', () => {
 			addedFrom: null,
 			addedBefore: null,
 			genres: [],
+			primaryGenres: [],
 			excludedGenres: [],
 			genreMatch: 'any',
 			actor: '',

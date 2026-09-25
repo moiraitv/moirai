@@ -1,7 +1,7 @@
 export { catalogSortTitle } from '@moirai/shared';
 
 /** Version used to invalidate indexed metadata when normalization behavior changes. */
-export const ON_DISK_METADATA_VERSION = 11;
+export const ON_DISK_METADATA_VERSION = 12;
 
 /** Canonical genre key paired with its preferred display name. */
 export interface NormalizedGenre {
@@ -135,4 +135,13 @@ export function normalizePeople(
 		add({ personType: 'actor', ...actor });
 	}
 	return [...people.values()];
+}
+
+/** Resolve an explicit primary genre or the first valid genre without sorting source metadata. */
+export function primaryGenreKey(metadata: Record<string, unknown>, sourceGenres?: string[]): string | null {
+	const values = sourceGenres ?? (Array.isArray(metadata.genres)
+		? metadata.genres.filter((value): value is string => typeof value === 'string') : []);
+	const genres = normalizeGenres(values);
+	const explicit = typeof metadata.primaryGenre === 'string' ? normalizeGenre(metadata.primaryGenre) : null;
+	return (explicit && genres.some((genre) => genre.key === explicit.key) ? explicit.key : genres[0]?.key) ?? null;
 }

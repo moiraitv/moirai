@@ -20,6 +20,7 @@ export interface LibraryFilterDraft {
 	addedFrom: string;
 	addedTo: string;
 	genres: string[];
+	primaryGenres: string[];
 	excludedGenres: string[];
 	genreMatch: GenreMatch;
 	actor: string;
@@ -41,6 +42,7 @@ export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 		addedFrom: '',
 		addedTo: '',
 		genres: [],
+		primaryGenres: [],
 		excludedGenres: [],
 		genreMatch: 'all',
 		actor: '',
@@ -61,6 +63,7 @@ export function emptyCatalogProgramItemFilter(): CatalogProgramItemFilter {
 		addedFrom: null,
 		addedBefore: null,
 		genres: [],
+		primaryGenres: [],
 		excludedGenres: [],
 		genreMatch: 'all',
 		actor: '',
@@ -113,6 +116,9 @@ export function catalogProgramItemFilterSummary(
 
 	if (filter.name) {
 		labels.push(`Title: ${compactFilterValue(filter.name)}`);
+	}
+	if (filter.primaryGenres.length > 0) {
+		labels.push(`Primary (${filter.genreMatch}): ${genreList(filter.primaryGenres)}`);
 	}
 	if (filter.genres.length > 0) {
 		labels.push(`${filter.genreMatch === 'any' ? 'Any genre' : 'All genres'}: ${genreList(filter.genres)}`);
@@ -197,6 +203,7 @@ export function libraryFilterDraft(filter: CatalogProgramItemFilter): LibraryFil
 		addedFrom: localDateValue(filter.addedFrom),
 		addedTo: localDateValue(filter.addedBefore, true),
 		genres: [...filter.genres],
+		primaryGenres: [...filter.primaryGenres],
 		excludedGenres: [...filter.excludedGenres],
 		genreMatch: filter.genreMatch,
 		actor: filter.actor,
@@ -221,6 +228,7 @@ export function catalogProgramItemFilter(
 		addedFrom: localDateInstant(draft.addedFrom),
 		addedBefore: localDateInstant(draft.addedTo, true),
 		genres: [...draft.genres],
+		primaryGenres: [...draft.primaryGenres],
 		excludedGenres: draft.genreMatch === 'all' ? [...draft.excludedGenres] : [],
 		genreMatch: draft.genreMatch,
 		actor: draft.actor.trim(),
@@ -247,6 +255,7 @@ export function catalogProgramQuery(query: MediaQuery): CatalogProgramItemQuery 
 		addedFrom: query.addedFrom ?? null,
 		addedBefore: query.addedBefore ?? null,
 		genres: query.genres ?? [],
+		primaryGenres: query.primaryGenres ?? [],
 		excludedGenres: query.excludedGenres ?? [],
 		genreMatch: query.genreMatch ?? 'all',
 		actor: query.actor ?? '',

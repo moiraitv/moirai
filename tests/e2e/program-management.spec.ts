@@ -13,7 +13,7 @@ const programs: SchedulingProgram[] = Array.from({ length: 300 }, (_, index) => 
 }));
 programs[1]!.config = { type: 'similarity', sourceProgramId: sourceId, variety: 65, quantity: 20 };
 programs[2]!.config = { type: 'theme', libraryId, theme: 'Space discovery', variety: 35, quantity: 10 };
-programs[4]!.config = { type: 'content', source: { type: 'library-query', libraryId, kinds: [], genres: ['drama'], releaseYearFrom: 2000 }, strategy: { type: 'sequential' } };
+programs[4]!.config = { type: 'content', source: { type: 'library-query', libraryId, kinds: [], genres: ['drama'], primaryGenres: ['comedy'], releaseYearFrom: 2000 }, strategy: { type: 'sequential' } };
 programs[5]!.config = { type: 'content', source: { type: 'group-collection', libraryId, groupIds: [randomUUID(), randomUUID()] }, strategy: { type: 'sequential' } };
 programs[3]!.config = { type: 'sequence', entries: [{ id: randomUUID(), programId: sourceId, count: 3 }, { id: randomUUID(), programId: programs[2]!.id, count: 1 }], repeat: true };
 
@@ -198,6 +198,7 @@ test('filters Content definitions and summarizes query and group selections', as
 	await page.getByRole('button', { name: 'Program 004', exact: true }).click();
 	await expect(page.locator('.program-inspector')).toContainText('Years: 2000+');
 	await expect(page.locator('.program-inspector')).toContainText('All genres: drama');
+	await expect(page.locator('.program-inspector')).toContainText('Primary (all): comedy');
 	await page.getByLabel('Filter Content definition').selectOption('groups');
 	await expect(page.locator('.program-management-row')).toHaveCount(1);
 	await page.getByRole('button', { name: 'Program 005', exact: true }).click();

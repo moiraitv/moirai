@@ -427,6 +427,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						fanartRelativePath: mediaItems.fanartRelativePath,
 						fingerprint: mediaItems.fingerprint,
 						availability: mediaItems.availability,
+						primaryGenreKey: mediaItems.primaryGenreKey,
 						dateAddedAt: mediaItems.dateAddedAt,
 					})
 					.from(mediaItems)
@@ -575,6 +576,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					trackNumber: item.trackNumber,
 					discNumber: item.discNumber,
 					multipartStatus: item.multipartStatus,
+					primaryGenreKey: item.primaryGenreKey,
 					genres: genreMap.get(item.id) ?? [],
 					genreNames: genreNameMap.get(item.id) ?? [],
 					tags: metadataStrings(metadata, 'tags'),

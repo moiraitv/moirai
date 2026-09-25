@@ -124,6 +124,7 @@ export interface MediaQuery {
 	addedFrom?: string | undefined;
 	addedBefore?: string | undefined;
 	genres?: string[] | undefined;
+	primaryGenres?: string[] | undefined;
 	excludedGenres?: string[] | undefined;
 	genreMatch?: GenreMatch | undefined;
 	actor?: string | undefined;
@@ -133,6 +134,7 @@ export interface MediaQuery {
 /** Genre rules used to request contextual facet-action counts. */
 export interface MediaGenreFacetQuery {
 	genres?: string[] | undefined;
+	primaryGenres?: string[] | undefined;
 	excludedGenres?: string[] | undefined;
 	genreMatch?: GenreMatch | undefined;
 }

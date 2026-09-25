@@ -1,3 +1,5 @@
+import { normalizeGenre } from '../scanner/catalog-metadata.js';
+import { listGenreFacets } from './genre-facets.js';
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type {
 	LibraryContentPreview,
@@ -37,12 +39,6 @@ import {
 } from './catalog-records.js';
 import type { RawGroupRow, RawItemRow } from './catalog-records.js';
 
-/** SQL and bound values for one dynamic genre-key set CTE. */
-interface GenreSetCte {
-	sql: string;
-	params: string[];
-}
-
 /** Raw row returned by the bounded library-overview carousel query. */
 interface RawLibraryContentPreviewRow {
 	libraryId: string;
@@ -53,21 +49,6 @@ interface RawLibraryContentPreviewRow {
 	metadata: string | Record<string, unknown> | null;
 	artworkRelativePath: string | null;
 	fingerprint: string | null;
-}
-
-/** Build a parameterized SQLite CTE for a possibly empty set of genre keys. */
-function genreSetCte(name: string, values: string[]): GenreSetCte {
-	if (values.length === 0) {
-		return {
-			sql: `${name}(genre_key) AS (SELECT CAST(NULL AS TEXT) WHERE 0)`,
-			params: [],
-		};
-	}
-
-	return {
-		sql: `${name}(genre_key) AS (VALUES ${values.map(() => '(?)').join(', ')})`,
-		params: values,
-	};
 }
 
 /**
@@ -142,100 +123,13 @@ export class CatalogAssetsRepository {
 
 	/**
 	 * List every normalized genre in one library. A contextual selection returns the result counts
-	 * for making each genre required or disallowed while treating that genre's prior rule as neutral.
+	 * for making each genre primary, required, or disallowed while treating that genre's prior rule as neutral.
 	 */
 	async listMediaGenres(
 		libraryId: string,
 		selection: MediaGenreFacetSelection | null = null,
 	): Promise<MediaGenreFacet[]> {
-		if (!selection) {
-			return this.db.$client
-				.prepare(
-					'SELECT genre_key AS key, genre_name AS name, COUNT(*) AS count, NULL AS excludeCount FROM media_item_genres WHERE library_id = ? GROUP BY genre_key, genre_name ORDER BY genre_name COLLATE NOCASE',
-				)
-				.all(libraryId) as MediaGenreFacet[];
-		}
-
-		const genres = [...new Set(selection.genres)];
-		const excludedGenres = [...new Set(selection.excludedGenres)];
-		const required = genreSetCte('required_genres', genres);
-		const excluded = genreSetCte('excluded_genres', excludedGenres);
-		return this.db.$client
-			.prepare(
-				`WITH ${required.sql}, ${excluded.sql},
-				item_stats AS (
-					SELECT items.id,
-						COUNT(DISTINCT CASE WHEN required_genres.genre_key IS NOT NULL THEN memberships.genre_key END) AS required_count,
-						COUNT(DISTINCT CASE WHEN excluded_genres.genre_key IS NOT NULL THEN memberships.genre_key END) AS excluded_count
-					FROM media_items items
-					LEFT JOIN media_item_genres memberships ON memberships.item_id = items.id
-					LEFT JOIN required_genres ON required_genres.genre_key = memberships.genre_key
-					LEFT JOIN excluded_genres ON excluded_genres.genre_key = memberships.genre_key
-					WHERE items.library_id = ?
-					GROUP BY items.id
-				),
-				facets AS (
-					SELECT genre_key, genre_name
-					FROM media_item_genres
-					WHERE library_id = ?
-					GROUP BY genre_key, genre_name
-				),
-				current_eligible AS (
-					SELECT id FROM item_stats
-					WHERE required_count = ${genres.length} AND excluded_count = 0
-				),
-				current_total AS (
-					SELECT COUNT(*) AS count FROM current_eligible
-				),
-				current_counts AS (
-					SELECT memberships.genre_key, COUNT(*) AS count
-					FROM current_eligible
-					JOIN media_item_genres memberships ON memberships.item_id = current_eligible.id
-					GROUP BY memberships.genre_key
-				),
-				include_counts AS (
-					SELECT memberships.genre_key, COUNT(*) AS count
-					FROM item_stats
-					JOIN media_item_genres memberships ON memberships.item_id = item_stats.id
-					LEFT JOIN excluded_genres ON excluded_genres.genre_key = memberships.genre_key
-					WHERE item_stats.required_count = ${genres.length}
-						AND (
-							item_stats.excluded_count = 0
-							OR (excluded_genres.genre_key IS NOT NULL AND item_stats.excluded_count = 1)
-						)
-					GROUP BY memberships.genre_key
-				),
-				included_exclude_counts AS (
-					SELECT required_genres.genre_key, COUNT(item_stats.id) AS count
-					FROM required_genres
-					JOIN item_stats
-						ON item_stats.required_count = ${genres.length - 1}
-						AND item_stats.excluded_count = 0
-					WHERE NOT EXISTS (
-						SELECT 1 FROM media_item_genres membership
-						WHERE membership.item_id = item_stats.id
-							AND membership.genre_key = required_genres.genre_key
-					)
-					GROUP BY required_genres.genre_key
-				)
-				SELECT facets.genre_key AS key, facets.genre_name AS name,
-					COALESCE(include_counts.count, 0) AS count,
-					CASE
-						WHEN required_genres.genre_key IS NOT NULL
-							THEN COALESCE(included_exclude_counts.count, 0)
-						WHEN excluded_genres.genre_key IS NOT NULL THEN current_total.count
-						ELSE current_total.count - COALESCE(current_counts.count, 0)
-					END AS excludeCount
-				FROM facets
-				LEFT JOIN include_counts ON include_counts.genre_key = facets.genre_key
-				LEFT JOIN current_counts ON current_counts.genre_key = facets.genre_key
-				LEFT JOIN included_exclude_counts ON included_exclude_counts.genre_key = facets.genre_key
-				LEFT JOIN required_genres ON required_genres.genre_key = facets.genre_key
-				LEFT JOIN excluded_genres ON excluded_genres.genre_key = facets.genre_key
-				CROSS JOIN current_total
-				ORDER BY facets.genre_name COLLATE NOCASE`,
-			)
-			.all(...required.params, ...excluded.params, libraryId, libraryId) as MediaGenreFacet[];
+		return listGenreFacets(this.db.$client, libraryId, selection);
 	}
 
 	/** Return selected media in request order using canonical or authored response identifiers. */
@@ -357,6 +251,9 @@ export class CatalogAssetsRepository {
 		const [row] = await this.db
 			.select({
 				id: mediaItems.id,
+				primaryGenreKey: mediaItems.primaryGenreKey,
+				primaryGenre: sql<string | null>`(SELECT genre_name FROM media_item_genres
+					WHERE item_id = ${mediaItems.id} AND genre_key = ${mediaItems.primaryGenreKey} LIMIT 1)`,
 				title: mediaItems.title,
 				year: mediaItems.year,
 				plot: mediaItems.plot,
@@ -370,30 +267,19 @@ export class CatalogAssetsRepository {
 			return null;
 		}
 
-		const sourceGenres = metadataStrings(row.metadata, 'genres');
-		const [actors, fallbackGenres] = await Promise.all([
-			this.db
-				.select({ name: mediaItemPeople.name })
-				.from(mediaItemPeople)
-				.where(and(
-					eq(mediaItemPeople.itemId, canonicalId),
-					eq(mediaItemPeople.personType, 'actor'),
-				))
-				.orderBy(
-					asc(sql<number>`${mediaItemPeople.sortOrder} IS NULL`),
-					asc(mediaItemPeople.sortOrder),
-					asc(mediaItemPeople.name),
-				)
-				.limit(3),
-			sourceGenres.length === 0
-				? this.db
-					.select({ name: mediaItemGenres.genreName })
-					.from(mediaItemGenres)
-					.where(eq(mediaItemGenres.itemId, canonicalId))
-					.orderBy(asc(mediaItemGenres.genreName))
-					.limit(1)
-				: Promise.resolve([]),
-		]);
+		const actors = await this.db
+			.select({ name: mediaItemPeople.name })
+			.from(mediaItemPeople)
+			.where(and(
+				eq(mediaItemPeople.itemId, canonicalId),
+				eq(mediaItemPeople.personType, 'actor'),
+			))
+			.orderBy(
+				asc(sql<number>`${mediaItemPeople.sortOrder} IS NULL`),
+				asc(mediaItemPeople.sortOrder),
+				asc(mediaItemPeople.name),
+			)
+			.limit(3);
 
 		return {
 			id: row.id,
@@ -407,7 +293,8 @@ export class CatalogAssetsRepository {
 				cacheVersion(row.metadata, row.fingerprint),
 			),
 			rating: metadataNumber(row.metadata, 'rating'),
-			primaryGenre: sourceGenres[0] ?? fallbackGenres[0]?.name ?? null,
+			primaryGenre: metadataStrings(row.metadata, 'genres')
+				.find((genre) => normalizeGenre(genre)?.key === row.primaryGenreKey) ?? row.primaryGenre,
 			actors: actors.map((actor) => actor.name),
 		};
 	}
