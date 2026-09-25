@@ -129,3 +129,5 @@ Use the resolved preview to see actual start and finish times rather than relyin
 Save the ![](/icons/calendar-range.svg) Template, then assign it through a ![](/icons/tv-minimal-play.svg) [Channel Schedule](/scheduling/channel-schedules). Saving a ![](/icons/calendar-range.svg) Template alone does not assign it to a ![](/icons/tv-minimal.svg) Channel.
 
 Keep templates focused on a reusable daily structure. Date-specific choices belong in channel schedule layers rather than copies of nearly identical templates.
+
+See [Example schedules](/scheduling/example-schedules) for movie channels, genre double features, sitcom rotations, and cartoon lineups.

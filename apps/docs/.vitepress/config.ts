@@ -59,6 +59,7 @@ export default defineConfig({
 				text: 'Build a schedule',
 				items: [
 					{ text: 'Programs', link: '/scheduling/programs' },
+					{ text: 'Example schedules', link: '/scheduling/example-schedules' },
 					{ text: 'Templates', link: '/scheduling/templates' },
 					{ text: 'Channel schedules', link: '/scheduling/channel-schedules' },
 					{ text: 'Channels', link: '/scheduling/channels' },

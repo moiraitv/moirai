@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import SequenceGuidePreview from './SequenceGuidePreview.vue';
+import type { SequenceOrdering } from '@moirai/shared';
+import SequenceOrderingEditor from './SequenceOrderingEditor.vue';
 import ResourceUsage from '../ResourceUsage.vue';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
@@ -224,10 +227,12 @@ const form = reactive({
 	selectedGroupIds: [] as string[],
 	strategy: 'sequential' as 'sequential' | 'shuffle' | 'random' | 'weighted-random',
 	seed: '',
+	sequenceOrdering: 'ordered' as SequenceOrdering['type'],
 	repeat: true,
 	entries: [] as Array<{ id: string; programId: string; count: number }>,
 });
 const originalSnapshot = ref(JSON.stringify(form));
+const previewProgramNames = computed(() => new Map(programs.value.map(program => [program.id, program.name])));
 const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot.value);
 
 /** Initialize the form from an existing program or safe defaults for a new content rule. */
@@ -260,6 +265,7 @@ function resetForm(program?: SchedulingProgram): void {
 	form.selectedGroupIds = [];
 	form.strategy = 'sequential';
 	form.seed = '';
+	form.sequenceOrdering = 'ordered';
 	form.repeat = true;
 	form.entries = [];
 	selectedItemOrdering.reset();
@@ -307,6 +313,8 @@ function resetForm(program?: SchedulingProgram): void {
 		form.seed = 'seed' in program.config.strategy ? program.config.strategy.seed : '';
 	}
 	if (program?.config.type === 'sequence') {
+		form.sequenceOrdering = program.config.ordering?.type ?? 'ordered';
+		form.seed = program.config.ordering && 'seed' in program.config.ordering ? program.config.ordering.seed : '';
 		form.repeat = program.config.repeat;
 		form.entries = cloneContractValue(program.config.entries);
 	}
@@ -674,6 +682,13 @@ function changeSourcePage(page: number): void {
 	void loadSourceOptions();
 }
 
+/** Serialize only settings used by the selected sequence ordering mode. */
+function sequenceOrdering(): SequenceOrdering {
+	return form.sequenceOrdering === 'shuffled-blocks' || form.sequenceOrdering === 'shuffled-allocations'
+		? { type: form.sequenceOrdering, seed: form.seed }
+		: { type: form.sequenceOrdering };
+}
+
 /** Append a sequence entry using the first program other than the one being edited. */
 function addSequenceEntry(): void {
 	const candidate = programs.value.find((program) => program.id !== editingId.value);
@@ -704,7 +719,7 @@ function payload(): ProgramCreate {
 	if (form.type === 'sequence') {
 		return {
 			name: form.name,
-			config: { type: 'sequence', entries: form.entries, repeat: form.repeat, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences },
+			config: { type: 'sequence', ordering: sequenceOrdering(), entries: form.entries, repeat: form.repeat, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences },
 		};
 	}
 
@@ -1160,10 +1175,12 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 								@move="moveEntry"
 								@remove="form.entries.splice($event, 1)"
 							/>
+							<SequenceOrderingEditor v-if="form.type === 'sequence'" v-model="form.sequenceOrdering" v-model:seed="form.seed" />
+							<SequenceGuidePreview v-if="form.type === 'sequence'" :config="payload().config" :program-id="editingId ?? undefined" :program-names="previewProgramNames" />
 							<FormDisclosure v-model:open="subtitlesOpen" class="program-subtitle-disclosure">
 								<template #summary>
 									<div class="program-section-heading">
-										<span>{{ form.type === 'content' ? 3 : 2 }}</span>
+										<span>{{ form.type === 'content' || form.type === 'sequence' ? 3 : 2 }}</span>
 										<div class="program-section-heading-copy">
 											<strong>Audio and subtitles — optional</strong>
 											<p class="program-section-description">Override inherited audio and subtitle settings for this program.</p>

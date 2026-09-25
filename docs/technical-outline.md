@@ -773,6 +773,24 @@ Program: Weeknight Mix
   repeat
 ```
 
+Sequences default to authored order and also support shuffled blocks, shuffled allocations with exact
+per-entry quotas, and proportional balanced rotation. Shuffle modes accept stable seeds and inherit
+channel regeneration randomness when unseeded. Balanced rotation avoids the previous entry when
+another remains, breaking proportional-deficit ties by authored order. Counts measure leaf selections,
+including nested sequences. Parent cycle state is bounded by entry count and persists independently
+of child cursors. Shuffled blocks retain the active block on filler fit rejection, allowing the filler
+policy to leave a gap or truncate without interleaving another block. Explicit Ordered and legacy
+omitted ordering preserve existing progress, including preference-bearing legacy fingerprints; ordering
+changes restart the parent cycle without resetting child episode progress. User-guide example schedules
+cover movie shuffles, genre double features, sitcom rotations, all four sequence modes, and a weekend
+template variation.
+Sequence editor and inspector previews generate a fresh sample day through the read-only scheduling
+worker, scoped to reachable saved child Programs and an unsaved parent configuration. A four-hour
+viewport scrolls across the local day, including DST variations. Optional sequence-entry paths on
+timeline segments distinguish duplicate references and nested selections. Automatic refresh keys
+exclude names and presentation preferences; previews never persist resources or advance channel state.
+
+
 Selecting shows includes their descendant seasons. Selecting seasons includes their episodes.
 Overlapping selections are deduplicated, and sequential episodes are ordered by season and episode
 metadata. Missing references remain authored so they can recover later.

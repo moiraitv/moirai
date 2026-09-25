@@ -5,6 +5,11 @@ import { fileURLToPath } from 'node:url';
 /** Complete authored screenshot inventory; partial captures must never be published. */
 export const screenshotNames = [
 	'account.png',
+	'example-movie-shuffle.png',
+	'example-double-features.png',
+	'example-sitcom-rotation.png',
+	'example-weekend-template.png',
+	'example-weekend-schedule.png',
 	'administrator-setup.png',
 	'channel-editor-audio.png',
 	'channel-editor-audio-selection.png',
@@ -46,6 +51,9 @@ export const screenshotNames = [
 	'media-item-usage.png',
 	'program-content-create.png',
 	'program-sequence-create.png',
+	'program-sequence-ordering.png',
+	'program-sequence-guide.png',
+	'program-sequence-inspector.png',
 	'program-similarity-create.png',
 	'program-theme-create.png',
 	'program-subtitles.png',

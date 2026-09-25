@@ -2,10 +2,13 @@
 import { computed } from 'vue';
 import { FileText } from '@lucide/vue';
 import type { SchedulingProgram, SchedulingProgramStatus } from '@moirai/shared';
+import SequenceGuidePreview from './SequenceGuidePreview.vue';
 import SequenceSourcePreview from './SequenceSourcePreview.vue';
 const props = defineProps<{ program: SchedulingProgram; programs: Map<string, SchedulingProgram>; statuses: Map<string, SchedulingProgramStatus> }>();
 const emit = defineEmits<{ select: [id: string] }>();
+const programNames = computed(() => new Map([...props.programs].map(([id, program]) => [id, program.name])));
 const entries = computed(() => props.program.config.type === 'sequence' ? props.program.config.entries : []);
+const orderingLabel = computed(() => props.program.config.type === 'sequence' ? ({ ordered: 'Ordered', 'shuffled-blocks': 'Shuffled blocks', 'shuffled-allocations': 'Shuffled allocations', 'balanced-rotation': 'Balanced rotation' }[props.program.config.ordering?.type ?? 'ordered']) : 'Ordered');
 const cycleCount = computed(() => entries.value.reduce((sum, entry) => sum + entry.count, 0));
 /** Describe the configured selections for one step without simulating playback. */
 function itemCountLabel(count: number): string {
@@ -16,6 +19,7 @@ function itemCountLabel(count: number): string {
 	<section v-if="program.config.type === 'sequence'" class="program-inspector-section program-sequence-configuration">
 		<h3 class="eyebrow">Sequence Configuration</h3>
 		<p class="program-sequence-total">{{ cycleCount }} {{ cycleCount === 1 ? 'item' : 'items' }} per cycle</p>
+		<p>{{ orderingLabel }} · Steps shown in authored order</p>
 		<ol class="program-source-list">
 			<li v-for="(entry, index) in entries" :key="entry.id">
 				<button type="button" class="program-source-block" :disabled="!programs.has(entry.programId)" :aria-label="`${index + 1}. ${programs.get(entry.programId)?.name ?? 'Missing Program'}, ${itemCountLabel(entry.count)}`" @click="emit('select', entry.programId)">
@@ -26,6 +30,7 @@ function itemCountLabel(count: number): string {
 				</button>
 			</li>
 		</ol>
-		<p>{{ program.config.repeat ? 'Repeats the sequence in configured order.' : 'Plays the sequence once in configured order.' }}</p>
+		<p>{{ program.config.repeat ? 'Repeats after each cycle.' : 'Plays the sequence once.' }}</p>
+		<SequenceGuidePreview :config="program.config" :program-id="program.id" :program-names="programNames" />
 	</section>
 </template>

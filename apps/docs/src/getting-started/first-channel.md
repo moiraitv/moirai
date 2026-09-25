@@ -59,3 +59,5 @@ For finer control over individual resources or an existing setup, follow these s
    ![Guide page showing playlist and XMLTV addresses with Copy URL buttons](/screenshots/guide.png)
 
 The dashboard reports whether playback is ready. If the guide contains gaps or playback is degraded, start with [Troubleshooting](/operations/troubleshooting).
+
+See [Example schedules](/scheduling/example-schedules) for movie channels, genre double features, sitcom rotations, and cartoon lineups.

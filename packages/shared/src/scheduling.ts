@@ -299,6 +299,16 @@ export const sequenceEntrySchema = z.object({
 /** Shared wire contract for sequence entry. */
 export type SequenceEntry = z.infer<typeof sequenceEntrySchema>;
 
+/** Ordering of counted sequence steps, independent of child media selection. */
+export const sequenceOrderingSchema = z.discriminatedUnion('type', [
+	z.object({ type: z.literal('ordered') }),
+	z.object({ type: z.literal('shuffled-blocks'), seed: z.string().trim().max(200).default('') }),
+	z.object({ type: z.literal('shuffled-allocations'), seed: z.string().trim().max(200).default('') }),
+	z.object({ type: z.literal('balanced-rotation') }),
+]);
+/** Authored ordering rules; omitted configuration retains legacy ordered playback. */
+export type SequenceOrdering = z.infer<typeof sequenceOrderingSchema>;
+
 /** Maximum media entries embedded in one Program sample carousel. */
 export const PROGRAM_PREVIEW_ITEM_LIMIT = 12;
 
@@ -338,6 +348,31 @@ export const themeProgramConfigSchema = similarityProgramConfigSchema.omit({ sou
 /** Settings accepted by semantic previews and immutable recommendation decisions. */
 export const semanticProgramConfigSchema = z.discriminatedUnion('type', [similarityProgramConfigSchema, themeProgramConfigSchema]);
 
+/** Counted child Programs and their parent ordering and presentation preferences. */
+export const sequenceProgramConfigSchema = z.object({
+	type: z.literal('sequence'),
+	subtitlePreferences: subtitlePreferencesSchema.optional(),
+	audioPreferences: audioPreferencesSchema.optional(),
+	entries: z
+		.array(sequenceEntrySchema)
+		.min(1)
+		.max(100)
+		.refine((entries) => new Set(entries.map((entry) => entry.id)).size === entries.length, {
+			message: 'Sequence entry identifiers must be unique',
+		}),
+	repeat: z.boolean().default(true),
+	ordering: sequenceOrderingSchema.optional(),
+});
+
+/** Scheduling-only inputs for a fresh sample day, independent of channel progress. */
+export const sequencePreviewSchema = z.object({
+	id: z.uuid(),
+	config: sequenceProgramConfigSchema.omit({ audioPreferences: true, subtitlePreferences: true }),
+	startDate: z.iso.date().optional(),
+});
+/** Validated request for a Sequence's illustrative guide preview. */
+export type SequencePreview = z.infer<typeof sequencePreviewSchema>;
+
 /** Validate the program config contract at runtime. */
 export const programConfigSchema = z.discriminatedUnion('type', [
 	similarityProgramConfigSchema,
@@ -349,19 +384,7 @@ export const programConfigSchema = z.discriminatedUnion('type', [
 		source: contentSourceSchema,
 		strategy: selectionStrategySchema,
 	}),
-	z.object({
-		type: z.literal('sequence'),
-		subtitlePreferences: subtitlePreferencesSchema.optional(),
-		audioPreferences: audioPreferencesSchema.optional(),
-		entries: z
-			.array(sequenceEntrySchema)
-			.min(1)
-			.max(100)
-			.refine((entries) => new Set(entries.map((entry) => entry.id)).size === entries.length, {
-				message: 'Sequence entry identifiers must be unique',
-			}),
-		repeat: z.boolean().default(true),
-	}),
+	sequenceProgramConfigSchema,
 ]);
 /** Shared wire contract for program config. */
 export type ProgramConfig = z.infer<typeof programConfigSchema>;
@@ -911,7 +934,18 @@ export type SelectionStateValue
 		}
 		| { type: 'random'; counter: number; lastItemId: string | null }
 		| { type: 'weighted-random'; counter: number; lastItemId: string | null }
-		| { type: 'sequence'; entryIndex: number; selectedInEntry: number; completed: boolean };
+		| {
+			type: 'sequence';
+			entryIndex: number;
+			selectedInEntry: number;
+			completed: boolean;
+			rotation?: {
+				cycle: number;
+				remaining: number[];
+				order: number[];
+				lastEntry: number | null;
+			} | undefined;
+		};
 
 /** Shared wire contract for selection state record. */
 export interface SelectionStateRecord {
@@ -1093,6 +1127,8 @@ export type ChannelScheduleDraftPreview = z.infer<typeof channelScheduleDraftPre
 
 /** Shared wire contract for timeline segment. */
 export interface TimelineSegment {
+	/** Entry identities from the outermost Sequence to the selected leaf. */
+	sequenceEntryPath?: string[] | undefined;
 	programAncestry?: string[] | undefined;
 	id: string;
 	role: 'primary' | 'filler' | 'dead-air';

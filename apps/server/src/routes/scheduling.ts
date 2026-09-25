@@ -4,6 +4,7 @@ import { registerProgramGroupRoutes } from './program-groups.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+	sequencePreviewSchema,
 	channelScheduleConfigSchema,
 	channelScheduleDraftPreviewSchema,
 	MAX_TIMELINE_PREVIEW_DAYS,
@@ -63,6 +64,14 @@ export function registerSchedulingRoutes(
 ): void {
 	registerProgramGroupRoutes(app, repository, events);
 	registerSemanticProgramRoutes(app, repository, requestEmbeddingWork, schedulingWorkers);
+	app.post('/api/v1/programs/sequence-preview', {
+		schema: apiOperation({ operationId: 'previewSequenceProgram', tags: ['Schedule previews'],
+			summary: 'Preview a fresh sample day for an unsaved Sequence', body: sequencePreviewSchema,
+			response: { 200: responseContent('Sequence sample day', 'application/json', timelinePreviewSchema) },
+			errors: [400, 422, 500, 503] }),
+	}, async (request, reply) => schedulingWorkers.preview({ kind: 'sequence',
+		input: sequencePreviewSchema.parse(request.body), timeZone: config.timeZone }, workerRequestSignal(reply)));
+
 	// Reusable program definitions.
 	app.get('/api/v1/programs', {
 		schema: apiOperation({

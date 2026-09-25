@@ -101,3 +101,18 @@ export async function assertProgramColors(page: Page, ids: string[]): Promise<vo
 		}
 	}
 }
+
+/** Capture an editor through its last relevant control, excluding lower scrolling content. */
+export async function captureThrough(page: Page, section: Locator, lastControl: Locator, name: string): Promise<void> {
+	await section.scrollIntoViewIfNeeded();
+	await prepare(page);
+	const start = await section.boundingBox();
+	const finish = await lastControl.boundingBox();
+	if (!start || !finish) {
+		throw new Error('Recipe capture controls must be visible');
+	}
+	await page.screenshot({
+		path: path.join(captureDirectories.get(page)!, name), animations: 'disabled',
+		clip: { x: start.x, y: start.y, width: start.width, height: finish.y + finish.height - start.y },
+	});
+}

@@ -192,6 +192,9 @@ function primaryFitSeconds(
 /** Apply the channel regeneration seed only to programs without an explicit authored seed. */
 function generationProgram(program: SchedulingProgram, seed?: string): SchedulingProgram {
 	const config = program.config;
+	if (seed && config.type === 'sequence' && config.ordering && 'seed' in config.ordering && !config.ordering.seed) {
+		return { ...program, config: { ...config, ordering: { ...config.ordering, seed } } };
+	}
 	if (!seed || config.type !== 'content' || !('seed' in config.strategy) || config.strategy.seed) {
 		return program;
 	}
@@ -254,7 +257,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 
 	const appendSelectedSegment = (entry: TimelineSegment, selected: SelectionResult): void => {
 		const stateDelta = changedStateRecords(state, selected.state);
-		appendSegment({ ...entry, programAncestry: selected.programAncestry ?? [] }, stateDelta);
+		appendSegment({ ...entry, programAncestry: selected.programAncestry ?? [],
+			...(selected.sequenceEntryPath ? { sequenceEntryPath: selected.sequenceEntryPath } : {}) }, stateDelta);
 		state = selected.state;
 	};
 

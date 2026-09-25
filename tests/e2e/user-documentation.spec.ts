@@ -1,4 +1,8 @@
+import './documentation/sequence-preview';
 import './documentation/duration-filters';
+import './documentation/sequence-ordering';
+import './documentation/example-schedules';
+import './documentation/weekend-schedule';
 import { randomUUID } from 'node:crypto';
 import { rename, mkdir, writeFile, copyFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -7,7 +11,7 @@ import { SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplate } from '@moirai/share
 import { authenticateAdministrator, E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD } from './authentication';
 import { test } from './documentation/fixture';
 import { serveReviewFixture } from './documentation/review-fixture';
-import { capture, captureSection, assertProgramColors } from './documentation/capture';
+import { captureThrough, capture, captureSection, assertProgramColors } from './documentation/capture';
 import { seedLibrary, seedSchedule, normalizeFixtureLogs } from './documentation/seed';
 import { seedSemanticCache } from './documentation/semantic';
 import { helpReviewLabel, type HelpReviewReason } from '../../apps/web/src/help-review';
@@ -161,8 +165,18 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 		await page.locator('.sequence-entry input').nth(index).fill(index === 0 ? '2' : '1');
 	}
 	await expect(page.locator('.sequence-entry')).toHaveCount(3);
-	await capture(page, 'program-sequence-create.png');
+	await page.setViewportSize({ width: 1440, height: 1600 });
+	await expect(page.locator('.sequence-guide-segment').first()).toBeAttached();
+	await expect(page.locator('.sequence-guide-preview').getByRole('status')).toHaveCount(0);
+	await captureThrough(page, page.locator('.program-editor-section').filter({ has: page.locator('.sequence-entry') }), page.locator('.program-playback-state'), 'program-sequence-create.png');
+	await expect(page.getByRole('button', { name: /^Ordered Play/ })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByRole('button', { name: /^Shuffled blocks/ }).click();
+	await page.getByRole('textbox', { name: 'Stable seed' }).fill('cartoon-demo');
+	await captureSection(page, page.locator('.program-editor-section').filter({ has: page.getByRole('button', { name: /^Shuffled blocks/ }) }), 'program-sequence-ordering.png');
+	await page.getByRole('button', { name: /^Balanced rotation/ }).click();
+	await expect(page.getByRole('textbox', { name: 'Stable seed' })).toHaveCount(0);
 
+	await page.setViewportSize({ width: 1440, height: 900 });
 	seedSemanticCache(documentationServer.directory);
 	await page.getByRole('radio', { name: /^Theme/u }).check();
 	await page.getByPlaceholder('e.g. Evening Lineup').fill('Space discovery');
@@ -197,9 +211,12 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	} });
 	expect(sequenceResponse.ok()).toBe(true);
 	const sequence = await sequenceResponse.json() as { id: string };
+	await page.setViewportSize({ width: 1440, height: 1600 });
 	await page.goto(`/schedules/programs?selected=${sequence.id}`);
 	const configuration = page.locator('.program-sequence-configuration');
 	await expect(configuration.locator('.program-source-block')).toHaveCount(3);
+	await expect(configuration.locator('.sequence-guide-segment').first()).toBeAttached();
+	await expect(configuration.getByRole('status')).toHaveCount(0);
 	await configuration.scrollIntoViewIfNeeded();
 	await captureSection(page, configuration, 'program-sequence-inspector.png');
 

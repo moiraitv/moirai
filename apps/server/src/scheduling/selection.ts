@@ -1,3 +1,4 @@
+import { selectSequence } from './sequence-selection.js';
 import { chooseSimilarity } from '../semantic/selection.js';
 import { createHash } from 'node:crypto';
 import {
@@ -25,6 +26,7 @@ import { recordTimelineIssue, type RecordedTimelineIssue } from './timeline-issu
 
 /** Selected media item and the cursor state to persist after playback. */
 export interface SelectionResult {
+	sequenceEntryPath?: string[];
 	programAncestry?: string[];
 	media: SchedulableMedia;
 	state: Map<string, SelectionStateRecord>;
@@ -508,9 +510,20 @@ function legacySetSelectionStateConfig(config: ProgramConfig): unknown | null {
 	};
 }
 
+/** Normalize explicit Ordered while retaining preferences in legacy state fingerprints. */
+function normalizeSequenceOrdering(input: ProgramConfig): ProgramConfig {
+	if (input.type === 'sequence' && input.ordering?.type === 'ordered') {
+		const { ordering: _ordering, ...legacy } = input;
+		void _ordering;
+		return legacy;
+	}
+
+	return input;
+}
+
 /** Exclude presentation preferences and normalize legacy defaults and collection strategy identity. */
 function selectionStateConfig(input: ProgramConfig): unknown {
-	const { subtitlePreferences: _preferences, audioPreferences: _audio, ...config } = input;
+	const { subtitlePreferences: _preferences, audioPreferences: _audio, ...config } = normalizeSequenceOrdering(input);
 	void _preferences;
 	void _audio;
 	if (config.type === 'content' && config.source.type === 'library-query') {
@@ -825,64 +838,7 @@ export function selectProgram(
 		selectionStateConfig(program.config),
 		{ type: 'sequence', entryIndex: 0, selectedInEntry: 0, completed: false },
 		context.now,
-		program.config,
+		normalizeSequenceOrdering(program.config),
 	);
-	const value = record.value as Extract<SelectionStateValue, { type: 'sequence' }>;
-	if (value.completed) {
-		return null;
-	}
-
-	// Walk composite entries until one selects media or the sequence becomes blocked.
-	for (let attempts = 0; attempts < program.config.entries.length; attempts += 1) {
-		const entry = program.config.entries[value.entryIndex];
-		if (!entry) {
-			return null;
-		}
-
-		const selected = selectProgram(
-			entry.programId,
-			`${consumerKey}:entry:${entry.id}`,
-			state,
-			context,
-			fitSeconds,
-			fitMode,
-			[...ancestry, programId],
-		);
-		if (selected) {
-			value.selectedInEntry += 1;
-			if (value.selectedInEntry >= entry.count) {
-				value.selectedInEntry = 0;
-				value.entryIndex += 1;
-				if (value.entryIndex >= program.config.entries.length) {
-					value.entryIndex = 0;
-					value.completed = !program.config.repeat;
-				}
-			}
-			record.updatedAt = context.now;
-			selected.state.set(consumerKey, record);
-			return selected;
-		}
-
-		if (fitSeconds !== null && fitMode === 'first-fit-arbitrary') {
-			return null;
-		}
-
-		if (context.blockedPrograms.has(entry.programId)) {
-			context.blockedPrograms.add(programId);
-			return null;
-		}
-
-		value.selectedInEntry = 0;
-		value.entryIndex += 1;
-		if (value.entryIndex >= program.config.entries.length) {
-			value.entryIndex = 0;
-			if (!program.config.repeat) {
-				value.completed = true;
-				record.updatedAt = context.now;
-				state.set(consumerKey, record);
-				return null;
-			}
-		}
-	}
-	return null;
+	return selectSequence(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectProgram);
 }

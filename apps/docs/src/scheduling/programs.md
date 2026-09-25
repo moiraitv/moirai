@@ -133,15 +133,30 @@ Choose **Sequence** when you want to combine existing ![](/icons/list-video.svg)
 2. In the Sequence editor, choose **Add Step** and select a ![](/icons/list-video.svg) Program.
 3. Set the count for that step and add any remaining steps.
 4. Use the up and down arrows to arrange the steps.
-5. Enable **Repeat sequence** if the sequence should start again after its final step.
+5. Choose **Ordering**: **Ordered** keeps the listed step order; **Shuffled blocks** shuffles steps while keeping their selections together; **Shuffled allocations** mixes selections while keeping each step’s count; **Balanced rotation** spreads selections proportionally and avoids consecutive turns from the same step when possible. Shuffle modes offer an optional **Stable seed**.
+6. Enable **Repeat sequence** to begin another cycle after its allocations finish, otherwise it plays only the sequence and leaves any remaining time empty.
+
+When used as filler, **Shuffled blocks** keeps the current step together even when its next selection cannot fit. **Best fit only** leaves the remaining gap; **Best fit or truncate** can shorten the next selection from that step.
 
 The inspector’s **Sequence Configuration** shows each source as a numbered block with a media preview and its configured count: **1 Item**, **2 Items**, and so on. A small **more** tile appears after the thumbnails when the source contains additional items beyond those shown. Select a block to inspect that source Program. The **items per cycle** total adds the configured step counts, including unavailable sources; it does not promise that every item is currently playable.
 
 ![Sequence Configuration with numbered source previews and selections per cycle](/screenshots/program-sequence-inspector.png)
 
-The Programs list and inspector show a sample drawn from the Sequence’s source Programs. This source preview includes distinct media across the sources; it does not predict playback order or step counts.
+The Programs list and inspector’s source preview show distinct media from the Sequence’s sources; they do not predict playback order or step counts.
 
-Each referenced ![](/icons/list-video.svg) Program keeps its own media-selection rules. The Sequence controls their order and counts; it does not assign clock times. Place it in a ![](/icons/calendar-range.svg) Template to decide when it runs.
+### Preview a Sequence’s day
+
+The Sequence editor and inspector include a **Guide preview** of one sample day, starting with fresh sequence and child progress. Four hours are visible at a time; scroll horizontally to explore the rest of the day. Each selection shows its title and times. Colors and the numbered legend identify the top-level step for easier verification.
+
+![Sequence guide preview with a four-hour view, colored selections, and numbered entry legend](/screenshots/program-sequence-guide.png)
+
+The sample updates automatically when you change steps, counts, repeat, ordering, or an active shuffle seed. Use **Refresh** to manually reload the sample.
+
+This preview does not advance any Channel’s playback progress or predict an existing Channel’s current lineup. A Sequence with **Repeat sequence** disabled leaves a gap after it finishes. Unavailable sources and other scheduling issues appear below the preview.
+
+Each referenced ![](/icons/list-video.svg) Program keeps its own media-selection rules. The Sequence controls how it takes selections from the steps and their counts; it does not assign clock times. The ![](/icons/calendar-range.svg) Template it's placed in decides when it runs.
+
+For complete setup recipes, see [Example schedules](/scheduling/example-schedules). Counts are per cycle, not per day.
 
 ## Preview, save, and delete
 

@@ -1,3 +1,4 @@
+import type { SequencePreview } from '@moirai/shared';
 import type { ProgramConfig, SchedulingProgramStatus } from '@moirai/shared';
 import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
@@ -488,6 +489,10 @@ export const api = {
 		}),
 	deleteChannelSchedule: (id: string) =>
 		request<void>(`/api/v1/channels/${id}/schedule`, { method: 'DELETE' }),
+	sequencePreview: (body: SequencePreview, signal?: AbortSignal) => request<TimelinePreview>('/api/v1/programs/sequence-preview', {
+		method: 'POST', body: JSON.stringify(body), ...(signal ? { signal } : {}),
+	}),
+
 	draftTimelinePreview: (body: TimelineDraftPreview, signal?: AbortSignal) =>
 		request<TimelinePreview>('/api/v1/timeline-preview', {
 			method: 'POST', ...(signal ? { signal } : {}),

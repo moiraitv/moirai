@@ -359,6 +359,7 @@ export type QuickChannelSetupResult = z.infer<typeof quickChannelSetupResultSche
 
 /** One concrete item, filler interval, or dead-air interval in a timeline. */
 export const timelineSegmentSchema = z.object({
+	sequenceEntryPath: z.array(z.uuid()).optional(),
 	id: idSchema,
 	role: z.enum(['primary', 'filler', 'dead-air']),
 	channelId: idSchema,
@@ -418,6 +419,12 @@ export const selectionStateRecordSchema = z.object({
 			type: z.literal('sequence'),
 			entryIndex: z.number().int(),
 			selectedInEntry: z.number().int(),
+			rotation: z.object({
+				cycle: z.number().int().nonnegative(),
+				remaining: z.array(z.number().int().nonnegative()).max(100),
+				order: z.array(z.number().int().nonnegative()).max(100),
+				lastEntry: z.number().int().nonnegative().nullable(),
+			}).optional(),
 			completed: z.boolean(),
 		}),
 	]),

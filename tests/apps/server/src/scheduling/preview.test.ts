@@ -10,7 +10,7 @@ import {
 	channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
 	SECONDS_PER_SCHEDULING_DAY,
 } from '@moirai/shared';
-import { quickChannelSetupPreviewResultSchema } from '@moirai/shared/api-contracts';
+import { timelinePreviewSchema, quickChannelSetupPreviewResultSchema } from '@moirai/shared/api-contracts';
 import { createDatabase } from '@server/db/index.js';
 import { openReadOnlyDatabase } from '@server/db/read-only.js';
 import { guideTimelinePreview } from '@server/guide/preview.js';
@@ -442,3 +442,58 @@ it('uses the configured horizon for worker materialization, XMLTV, and guide bou
 	expect(stops.sort().at(-1)).toBe(`${end.toString().replaceAll('-', '')}000000`);
 	await expect(f.workers.read({ kind: 'guide', ...request, days: guideDays + 1 })).rejects.toThrow(/committed/i);
 }, 30_000);
+
+it.each(['ordered', 'shuffled-blocks', 'shuffled-allocations', 'balanced-rotation'] as const)('previews fresh $0 sequences with distinct entry attribution and no writes', async type => {
+	const f = await setup();
+	const a = randomUUID();
+	const b = randomUUID();
+	const request: Extract<PreviewRequest, { kind: 'sequence' }> = { kind: 'sequence', timeZone: 'UTC', input: {
+		id: randomUUID(), startDate: '2026-09-19', config: {
+			type: 'sequence', repeat: false,
+			ordering: type === 'shuffled-blocks' || type === 'shuffled-allocations' ? { type, seed: 'fixture' } : { type },
+			entries: [{ id: a, programId: f.source.id, count: 2 }, { id: b, programId: f.source.id, count: 1 }],
+		},
+	} };
+	const before = f.database.sqlite.serialize();
+	const result = await f.workers.preview(request);
+	const primary = result.segments.filter(segment => segment.role === 'primary');
+	expect(primary).toHaveLength(3);
+	expect(timelinePreviewSchema.parse(result).segments.filter(segment => segment.role === 'primary').map(segment => segment.sequenceEntryPath)).toEqual(primary.map(segment => segment.sequenceEntryPath));
+	expect(primary.filter(segment => segment.sequenceEntryPath?.[0] === a)).toHaveLength(2);
+	expect(primary.filter(segment => segment.sequenceEntryPath?.[0] === b)).toHaveLength(1);
+	expect(result.segments.some(segment => segment.role === 'dead-air')).toBe(true);
+	expect(await f.workers.preview(request)).toEqual(result);
+	expect(f.database.sqlite.serialize()).toEqual(before);
+	request.input.config.repeat = true;
+	expect((await f.workers.preview(request)).segments.every(segment => segment.role === 'primary')).toBe(true);
+}, 20_000);
+
+it('attributes nested selections to the outer step and rejects cyclic preview drafts', async () => {
+	const f = await setup();
+	const childEntry = randomUUID();
+	const nested = await f.repository.createProgram({ name: 'Nested', config: { type: 'sequence', repeat: true,
+		entries: [{ id: childEntry, programId: f.source.id, count: 2 }] } });
+	const outerEntry = randomUUID();
+	const request: Extract<PreviewRequest, { kind: 'sequence' }> = { kind: 'sequence', timeZone: 'UTC', input: {
+		id: randomUUID(), startDate: '2026-09-19', config: { type: 'sequence', repeat: true,
+			entries: [{ id: outerEntry, programId: nested.id, count: 3 }] },
+	} };
+	const result = await f.workers.preview(request);
+	expect(result.segments.every(segment => JSON.stringify(segment.sequenceEntryPath) === JSON.stringify([outerEntry, childEntry]))).toBe(true);
+	request.input.id = nested.id;
+	await expect(f.workers.preview(request)).rejects.toThrow(/cycle/);
+}, 20_000);
+
+it.each([
+	['2026-03-08', '2026-03-08T05:00:00Z'],
+	['2026-11-01', '2026-11-01T04:00:00Z'],
+])('starts a Sequence sample at local midnight on DST date %s', async (startDate, midnight) => {
+	const f = await setup();
+	const result = await f.workers.preview({ kind: 'sequence', timeZone: 'America/New_York', input: {
+		id: randomUUID(), startDate: startDate!, config: { type: 'sequence', repeat: true,
+			entries: [{ id: randomUUID(), programId: f.source.id, count: 1 }] },
+	} });
+	expect(result.startDate).toBe(startDate);
+	expect(result.days).toBe(1);
+	expect(result.segments[0]!.start).toBe(midnight);
+}, 20_000);

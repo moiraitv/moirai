@@ -1,5 +1,6 @@
+import { prepareSequencePreview } from './sequence-preview.js';
 import type {
-	ChannelScheduleDraftPreview, QuickChannelSetupCreate, SchedulingProgram, TimelinePreview,
+	ChannelScheduleDraftPreview, QuickChannelSetupCreate, SchedulingProgram, TimelinePreview, SequencePreview,
 } from '@moirai/shared';
 import { quickChannelSetupPreviewResultSchema, type QuickChannelSetupPreviewResult } from '@moirai/shared/api-contracts';
 import { ChannelRepository } from '../repository/channels.js';
@@ -16,6 +17,10 @@ import { publicTimelineIssue } from './timeline-issues.js';
 
 /** Small authored inputs sent to a worker without materializing the scheduling catalog. */
 export type PreviewRequest = {
+	kind: 'sequence';
+	input: SequencePreview;
+	timeZone: string;
+} | {
 	kind: 'channel';
 	input: ChannelScheduleDraftPreview;
 	timeZone: string;
@@ -29,6 +34,7 @@ export type PreviewRequest = {
 
 /** Public response associated with each preview job kind. */
 export interface PreviewResults {
+	sequence: TimelinePreview;
 	channel: TimelinePreview;
 	quick: QuickChannelSetupPreviewResult;
 }
@@ -78,7 +84,7 @@ export class PreviewExecutor {
 		try {
 			prepared = job.request.kind === 'channel'
 				? await this.channel(job.request)
-				: await this.quickSetup(job.request);
+				: job.request.kind === 'sequence' ? await this.sequence(job.request) : await this.quickSetup(job.request);
 		}
 		finally {
 			if (snapshot) {
@@ -87,6 +93,12 @@ export class PreviewExecutor {
 		}
 
 		return prepared.project(generateTimelineDetailed(prepared.input));
+	}
+
+	/** Generate a standalone Sequence without reading or advancing channel playback state. */
+	private async sequence(request: Extract<PreviewRequest, { kind: 'sequence' }>): Promise<PreparedPreview> {
+		const input = await prepareSequencePreview(this.scheduling, request.input, request.timeZone);
+		return { input, project: generated => ({ ...generated, issues: generated.issues.map(publicTimelineIssue) }) };
 	}
 
 	/** Load saved programs and selection state for an unsaved layered schedule. */
