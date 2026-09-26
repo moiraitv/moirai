@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 - 2026-09-25
+
+### New
+
+- **Sequence** programs now offer **Ordered**, **Shuffled blocks**, **Shuffled allocations**, and **Balanced rotation** ordering. Shuffle whole steps, mix their selections while preserving each step's count, or spread selections proportionally while avoiding consecutive turns from the same step when possible. Shuffle modes support an optional **Stable seed**.
+- Sequence editors and inspectors include a **Guide preview** of a sample day, with colored selections and a numbered step legend. Scroll through the day in a four-hour view; editor previews update as the sequence changes without advancing channel playback progress.
+- **Primary** genre filters are available in the library, Quick Setup, and program library queries alongside **Has** and **Doesn’t Have** rules. The first valid genre in source metadata is primary unless an NFO `<genre primary="true">` marker overrides it.
+- The user guide includes a section of **Example schedules** for movie shuffles, genre double features, sitcom rotations, cartoon lineups, and weekend variations.
+
+### Improvements
+
+- Genre filter controls keep names aligned and shorten large counts for a more compact layout. Accessible labels retain exact totals.
+- **Sport** and **Sports** now share one **Sports** filter choice. Existing library indexes refresh on their next synchronization; source metadata keeps its original spelling.
+
 ## 0.3.0 - 2026-09-23
 
 ### New
