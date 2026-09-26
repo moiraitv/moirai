@@ -23,6 +23,8 @@ When browsing by title, select a letter above the catalog to jump to that sectio
 
 The filter editor can require a primary genre, include a genre, or exclude a genre and apply facts such as actors, directors, ratings, and dates when those values exist in the source metadata. An empty result means nothing matches the whole active filter; it does not mean the library is empty.
 
+Common genre aliases share one filter choice. For example, **Sport** and **Sports** appear together as **Sports** after the library's next synchronization. Both spellings match the same genre in filters; your source metadata keeps its original spelling.
+
 Select ![Filter media](/icons/funnel.svg) above the catalog to open these controls, then choose **Apply Filters** to update the results. **Clear All** clears the choices in the filter editor without clearing the main search. The title filter remains title-only and narrows the broad search results.
 
 ![Filter media editor showing genre choices, title search, release year, and added-date controls](/screenshots/library-filters.png)

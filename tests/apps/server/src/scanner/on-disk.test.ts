@@ -43,6 +43,23 @@ afterEach(async () => {
 });
 
 describe('discoverOnDisk', () => {
+	it('indexes sport aliases together and retains authored metadata', async () => {
+		const fixture = await library();
+		await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Match.mp4'), 'video');
+		await writeFile(
+			path.join(fixture.sourceConfig.scanRoot, 'Match.nfo'),
+			'<movie><genre>Drama</genre><genre primary="true">Sport</genre><genre>Sports</genre></movie>',
+		);
+
+		const result = await discoverOnDisk(fixture);
+
+		expect(result.items[0]).toMatchObject({
+			genres: [{ key: 'drama', name: 'Drama' }, { key: 'sports', name: 'Sports' }],
+			primaryGenreKey: 'sports',
+			metadata: { genres: ['Drama', 'Sport', 'Sports'], primaryGenre: 'Sport' },
+		});
+	});
+
 	it('retries probes after the inventory and persists only final outcomes and file progress', async () => {
 		const fixture = await library();
 		const names = ['Recovered.mp4', 'Healthy.mp4', 'Exhausted.mp4'];

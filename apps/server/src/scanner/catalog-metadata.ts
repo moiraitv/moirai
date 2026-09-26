@@ -1,7 +1,7 @@
 export { catalogSortTitle } from '@moirai/shared';
 
 /** Version used to invalidate indexed metadata when normalization behavior changes. */
-export const ON_DISK_METADATA_VERSION = 12;
+export const ON_DISK_METADATA_VERSION = 13;
 
 /** Canonical genre key paired with its preferred display name. */
 export interface NormalizedGenre {
@@ -36,6 +36,8 @@ export function titleBucket(value: string): string {
 
 /** Common genre spellings collapsed into stable browse facets. */
 const GENRE_ALIASES = new Map<string, NormalizedGenre>([
+	['sport', { key: 'sports', name: 'Sports' }],
+	['sports', { key: 'sports', name: 'Sports' }],
 	['sci fi', { key: 'science-fiction', name: 'Science Fiction' }],
 	['scifi', { key: 'science-fiction', name: 'Science Fiction' }],
 	['science fiction', { key: 'science-fiction', name: 'Science Fiction' }],

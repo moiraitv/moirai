@@ -61,9 +61,9 @@ describe('quick channel setup contract', () => {
 		expect(quickChannelQueryPreviewRequestSchema.parse({
 			scenario: 'shows',
 			libraryId,
-			genres: ['Science Fiction', 'science-fiction'],
+			genres: ['Science Fiction', 'science-fiction', 'Sport', ' SPORTS '],
 		})).toMatchObject({
-			genres: ['science-fiction'],
+			genres: ['science-fiction', 'sports'],
 			excludedGenres: [],
 			genreMatch: 'all',
 		});

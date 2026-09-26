@@ -8,6 +8,17 @@ import {
 } from '@server/scanner/catalog-metadata.js';
 
 describe('catalog metadata normalization', () => {
+	it('combines sport spellings while preserving primary genre selection and source values', () => {
+		const genres = ['Drama', 'Sport', ' SPORTS ', 'sport'];
+		expect(normalizeGenres(genres)).toEqual([
+			{ key: 'drama', name: 'Drama' },
+			{ key: 'sports', name: 'Sports' },
+		]);
+		expect(primaryGenreKey({ genres, primaryGenre: 'Sports' })).toBe('sports');
+		expect(primaryGenreKey({ genres: ['Sport', 'Drama'] })).toBe('sports');
+		expect(genres).toEqual(['Drama', 'Sport', ' SPORTS ', 'sport']);
+	});
+
 	it('collapses documented genre aliases into one stable facet', () => {
 		expect(normalizeGenres(['Sci-Fi', 'Science Fiction', 'Drama'])).toEqual([
 			{ key: 'science-fiction', name: 'Science Fiction' },
