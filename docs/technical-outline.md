@@ -332,7 +332,9 @@ Moirai normalizes values before persistence:
 - Common genre spelling aliases collapse into stable facets. For example, `Sci-Fi` and
   `Science Fiction`, `Rom-Com` and `Romantic Comedy`, and `TVMovie` and `TV Movie` share their
   respective facets. `Sport` and `Sports` share the `sports` key and `Sports` facet, including
-  saved query normalization; metadata version 13 refreshes existing indexes on their next scan.
+  saved query normalization. `Action & Adventure` and its saved `action-adventure` key resolve to
+  `adventure`, while standalone `Action` stays separate. Metadata version 14 refreshes existing
+  indexes on their next scan.
   Related but distinct genres remain separate.
 - Repeated metadata values and people credits are deduplicated without regard to case.
 - Invalid or out-of-range numeric values are ignored and reported as scan diagnostics.

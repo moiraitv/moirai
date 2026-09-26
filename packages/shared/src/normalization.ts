@@ -14,6 +14,8 @@ export function canonicalGenreKey(value: string): string {
 		.replace(/[-_/]+/g, ' ')
 		.replace(/\s+/g, ' ');
 	const aliases: Record<string, string> = {
+		'action & adventure': 'adventure',
+		'action adventure': 'adventure',
 		sport: 'sports',
 		sports: 'sports',
 		'sci fi': 'science-fiction',

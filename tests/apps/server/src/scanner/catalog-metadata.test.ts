@@ -8,6 +8,16 @@ import {
 } from '@server/scanner/catalog-metadata.js';
 
 describe('catalog metadata normalization', () => {
+	it('combines action and adventure with adventure while keeping action separate', () => {
+		const genres = ['Action & Adventure', 'Adventure', 'Action'];
+		expect(normalizeGenres(genres)).toEqual([
+			{ key: 'adventure', name: 'Adventure' },
+			{ key: 'action', name: 'Action' },
+		]);
+		expect(primaryGenreKey({ genres, primaryGenre: 'Action & Adventure' })).toBe('adventure');
+		expect(primaryGenreKey({ genres })).toBe('adventure');
+	});
+
 	it('combines sport spellings while preserving primary genre selection and source values', () => {
 		const genres = ['Drama', 'Sport', ' SPORTS ', 'sport'];
 		expect(normalizeGenres(genres)).toEqual([
