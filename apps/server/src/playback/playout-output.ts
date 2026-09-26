@@ -20,6 +20,7 @@ export interface PlayoutFallback {
 	path: string;
 	durationMilliseconds: number;
 	hasAudio: boolean;
+	videoStreamIndex?: number;
 }
 
 /** Concrete interval covered by scheduled media before fallback insertion. */
@@ -52,6 +53,7 @@ function playoutItems(
 	date: string,
 	subtitles?: PreparedSubtitles,
 	audio?: PreparedAudio,
+	video?: PreparedAudio,
 ): EtvPlayoutItem[] {
 	const segmentStart = Temporal.Instant.from(segment.start);
 	const segmentFinish = Temporal.Instant.from(segment.finish);
@@ -105,6 +107,7 @@ function playoutItems(
 				path: part.playbackPath,
 				subtitle: subtitles?.get(segment.id)?.[index] ?? null,
 				audioStreamIndex: audio?.get(segment.id)?.[index] ?? null,
+				videoStreamIndex: video?.get(segment.id)?.[index] ?? null,
 				inPointMs: inPointMs === 0 ? null : inPointMs,
 				outPointMs,
 			});
@@ -237,6 +240,7 @@ function fallbackItems(
 			inPointMs: sourceOffsetMs === 0 ? null : sourceOffsetMs,
 			outPointMs: sourceFinishMs,
 			silentAudio: !fallback.hasAudio,
+			videoStreamIndex: fallback.videoStreamIndex ?? null,
 		});
 		cursor = finish;
 		sourceOffsetMs = sourceFinishMs === fallback.durationMilliseconds ? 0 : sourceFinishMs;
@@ -300,6 +304,7 @@ export function buildEtvPlayoutFiles(
 	fallbacks: ReadonlyMap<string, PlayoutFallback> = new Map(),
 	subtitles?: PreparedSubtitles,
 	audio?: PreparedAudio,
+	video?: PreparedAudio,
 ): Map<string, string> {
 	const files = new Map<string, string>();
 	const segmentsByChannel = new Map(
@@ -338,7 +343,7 @@ export function buildEtvPlayoutFiles(
 			const finish = zonedFinish.toInstant();
 			const items = [
 				...segments.flatMap((segment) => {
-					return playoutItems(segment, start, finish, date.toString(), subtitles, audio);
+					return playoutItems(segment, start, finish, date.toString(), subtitles, audio, video);
 				}),
 				...generatedFallback.flatMap((item) => {
 					return clipFallbackItem(item, start, finish);

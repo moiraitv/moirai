@@ -157,6 +157,13 @@ Existing folder-group IDs, song IDs, playback paths, and program selections rema
 use canonical comparison keys while preserving display spelling. Item metadata prefers NFO values,
 then embedded container tags, then filename and folder values.
 
+NFO ingestion honors Unicode markers and XML encoding declarations with fatal decoding. Unsupported
+encodings, conflicting declarations, and malformed declared text become NFO diagnostics instead of
+silently storing replacement characters. Undeclared text first tries strict UTF-8, then chardet 2.2.0
+with confidence at least 80 and a lead of at least 20 over candidates producing different text.
+Only encodings supported by Node's TextDecoder qualify; UTF-32 is explicitly rejected.
+Detection remains heuristic and can reject legitimate short or low-confidence legacy text.
+
 NFO data is never trusted for playback-critical facts. Moirai measures the media file directly with
 `ffprobe` to determine:
 
@@ -175,6 +182,17 @@ immutable sidecar for Burn; Convert passes the embedded stream index to the work
 VobSub sidecars are probed once per track during preparation so language and disposition selection
 passes a concrete stream index to the worker. Failed VobSub probes exclude only that sidecar,
 leaving other subtitle candidates available. Image subtitles remain burned. Logical and part-scoped sidecar offsets follow multipart clipping.
+Text sidecar snapshots normalize to UTF-8 without changing source files, timing, or styling. Unicode
+markers precede strict UTF-8 and the same conservative legacy detection used for undeclared NFOs.
+Text input is limited to 16 MiB; uncertainty and invalid encodings omit only the selected subtitle
+with an actionable preparation issue. Standalone .sub streams are classified before normalization;
+when probing cannot recognize the source encoding, bounded text normalization is followed by
+validation of the UTF-8 snapshot. SUP and VobSub binary assets remain byte-for-byte copies. Snapshot contract version 3 regenerates
+older copies before worker consumption. Preparation tries at most three distinct ranked candidates
+per physical part without relaxing language or forced-only constraints. Per-run caching retains
+successes and failures for repeated segments; failures remain visible even when a later candidate
+succeeds. Generated credits do not participate in subtitle fallback. Snapshot storage is owned by
+`playback/subtitle-snapshots.ts`, separate from selection orchestration.
 
 The Playback management group owns reusable encoding profiles, credit templates, and XMLTV
 guide templates. Credit templates
@@ -259,10 +277,23 @@ font upgrades update only the protected built-in template, preserving authored c
 Convert playlists advertise a neutral subtitle rendition because program languages may
 vary; Burn playlists omit subtitle rendition metadata.
 
-Playback and scheduling duration use the longest valid video-track duration, accepting native
-stream durations or Matroska duration tags. Container, audio, and subtitle durations never supply
-a fallback. Scans report a per-file warning when any measured audio track differs from the video
-duration by more than thirty seconds, including on cached scans, without excluding the item.
+Playback and scheduling use the lowest-index non-artwork video for duration and resolution. Native stream
+measurements take precedence over valid plain Matroska DURATION tags, then language-suffixed tags
+such as DURATION-eng in stable key order. Invalid tags do not hide other valid candidates.
+Track display names prefer plain title, then language-suffixed title tags, then MP4 handler_name.
+All recognized names are also retained as case-insensitively deduplicated title aliases, each bounded
+to 512 characters, for audio preference matching.
+Playout explicitly selects the same real video index for each physical part through the existing
+batched stream-metadata read shared with audio selection. A later video never supplies timing
+or geometry for the selected video. The probe
+requests all stream tags and audio channel counts while retaining its 256 KiB output cap.
+When exactly one non-artwork video exists and its duration is unknown, a valid container duration
+supplies the scheduling fallback; truncated stream lists never qualify. Audio and subtitle durations
+never supply a fallback, and the unmeasured video stream retains a null duration. Scans report a
+per-file warning when any measured audio track differs from a measured video duration by more than
+thirty seconds, including on cached scans, without excluding the item. Container-only timing does
+not qualify for audio/video mismatch warnings or silent-tail assessment. Managed fallback-filler
+uploads still require a measured video-stream duration.
 The library warning banner displays at most ten issues inline; a dedicated dialog shows the full list.
 Before consulting visual caches, each scan suppresses a duration finding when all measured audio
 tracks are at least 95% of the video duration and at most thirty seconds longer. Equality qualifies;
@@ -304,12 +335,13 @@ and Last scan. Automatic suppressions have
 no manual override. Restoration removes the explicit ignore immediately; subsequent scans may apply
 automatic suppression again. Live library events refresh the transactionally updated health state.
 The additive scan-issue contract exposes ignoreState alongside the compatible tail assessment.
-Probe contract version 6 refreshes older cached durations on the next library scan.
+Probe contract version 9 refreshes older successful probe caches on the next library scan, including
+previously omitted audio durations, channel counts, alternate track names, and audio-description flags. Failed probes retry regardless of version.
 
-An NFO runtime does not make an item schedulable. A new or changed file without a finite measured
-video duration of at most 366 days and a usable video stream remains browsable, but scheduling
-excludes it and reports a scan diagnostic. This bound also prevents corrupt probe output from overflowing
-scheduling arithmetic.
+An NFO runtime does not make an item schedulable. A new or changed file without a finite video
+duration or eligible container fallback of at most 366 days and a usable video stream remains
+browsable, but scheduling excludes it and reports a scan diagnostic. This bound also prevents corrupt
+probe output from overflowing scheduling arithmetic.
 
 Successful probes are cached by library and relative path using size, modification time, and probe-contract
 version. Persistent probe and subtitle snapshot keys exclude device/inode identifiers so remounts
@@ -1198,10 +1230,11 @@ daily document still covers every instant without gaps or overlaps.
 
 Each managed scope owns one private asset and metadata pair. Replacements are streamed, probed, and
 staged together before the complete active directory is replaced with rollback protection. Startup
-restores the prior pair if replacement was interrupted. Uploads must contain exactly one video stream,
+restores the prior pair if replacement was interrupted. Uploads must contain exactly one non-artwork video stream,
 and that stream must have a measured duration of at least 30 seconds; a longer audio or container
 duration cannot satisfy this minimum. The minimum does not constrain authored schedule filler such as
-short commercials.
+short commercials. New fallback metadata retains the selected video index for explicit playout;
+startup validation upgrades older metadata atomically using its existing probe, preserving other values.
 Invalid or missing overrides fall through to the next source while remaining visible as management
 warnings. Settings owns the global override; each channel editor owns its optional channel override.
 Removing either override cannot alter the bundled final fallback. A fallback change briefly restarts
@@ -1256,15 +1289,18 @@ appended to the configured committed window.
 Channel and content/sequence program configuration can carry independent optional audio language
 and title preferences. Absent fields inherit through captured program ancestry; null clears an
 inherited preference. No preferences preserves worker defaults. Otherwise selection ranks matching
-language aliases, case-insensitive title substrings, default disposition, descending channel count,
-and stream index, retaining candidates when a preference has no matches. Indexed technical metadata
+language aliases and case-insensitive substrings across display titles and alternate names. Explicit
+title matches may select commentary or audio description. Without a matching title, selection prefers
+tracks not marked with either disposition when available, then default disposition, descending channel
+count, and stream index. Language filtering retains candidates when there are no language matches. Indexed technical metadata
 is fetched in bounded batches only for relevant media; multipart files select independently.
 The playout adapter supplies `tracks.audio.stream_index` alongside existing subtitle selections,
 without changing the worker or overriding generated silence. Missing metadata falls back to worker
 selection. Channel fallback override files retain their existing behavior. Selection cursor identity
 excludes audio preferences, and changes flow through normal playout reconciliation without restarting
-the active item. Probe cache version 4 collects channel counts on the next normal scan; old metadata
-remains usable with unknown counts ranked below known counts. No automatic rescan or database
+the active item. Probe cache version 9 collects alternate names and audio-description flags on the
+next normal scan; old metadata remains usable with absent aliases and dispositions and unknown
+counts ranked below known counts. No automatic rescan or database
 migration is required.
 
 ### Development and production engine builds

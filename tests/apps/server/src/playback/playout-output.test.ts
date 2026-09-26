@@ -621,9 +621,10 @@ describe('ErsatzTV playout output', () => {
 			}],
 		};
 
-		const document = JSON.parse([...buildEtvPlayoutFiles([configured], guide).values()][0]!);
+		const document = JSON.parse([...buildEtvPlayoutFiles(...structuredClone([[configured], guide, new Map(), undefined, undefined, new Map([['multipart', [2, 7]]])] as Parameters<typeof buildEtvPlayoutFiles>)).values()][0]!);
 
 		expect(document.items).toHaveLength(2);
+		expect(document.items.map((item: { tracks: { video: { stream_index: number } } }) => item.tracks.video.stream_index)).toEqual([2, 7]);
 		expect(document.items.map((item: { source: { path: string } }) => item.source.path)).toEqual([
 			'/media/film-cd1.mkv',
 			'/media/film-cd2.mkv',

@@ -50,6 +50,8 @@ describe('media probe output', () => {
 					channels: null,
 					language: null,
 					title: null,
+					titleAliases: [],
+					isAudioDescription: false,
 					isDefault: false,
 					isForced: false,
 					isHearingImpaired: false,
@@ -67,6 +69,8 @@ describe('media probe output', () => {
 					channels: null,
 					language: null,
 					title: null,
+					titleAliases: [],
+					isAudioDescription: false,
 					isDefault: false,
 					isForced: false,
 					isHearingImpaired: false,
@@ -78,7 +82,7 @@ describe('media probe output', () => {
 		});
 	});
 
-	it('uses the longest video duration but never accepts an audio-only file', () => {
+	it('uses the first video duration but never accepts an audio-only file', () => {
 		const video = JSON.stringify({
 			streams: [
 				{ codec_type: 'video', codec_name: 'h264', duration: '10.25' },
@@ -87,7 +91,7 @@ describe('media probe output', () => {
 				{ codec_type: 'subtitle', duration: '20' },
 			],
 		});
-		expect(parseMediaProbeOutput(video, 1).durationMilliseconds).toBe(10_500);
+		expect(parseMediaProbeOutput(video, 1).durationMilliseconds).toBe(10_250);
 		expect(() => parseMediaProbeOutput(JSON.stringify({
 			format: { duration: '10' },
 			streams: [{ codec_type: 'audio', codec_name: 'aac' }],
@@ -132,15 +136,17 @@ describe('media probe output', () => {
 	});
 
 	it.each([undefined, '0', '-1', 'NaN', 'Infinity'])(
-		'rejects unusable video duration %s despite measured container and audio durations',
+		'uses container timing for a single unmeasured video (%s)',
 		(duration) => {
-			expect(() => parseMediaProbeOutput(JSON.stringify({
+			const result = parseMediaProbeOutput(JSON.stringify({
 				format: { duration: '100' },
 				streams: [
 					{ codec_type: 'video', duration },
 					{ codec_type: 'audio', duration: '100' },
 				],
-			}), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+			}), 1);
+			expect(result.durationMilliseconds).toBe(100_000);
+			expect(result.streams[0]?.durationMilliseconds).toBeNull();
 		},
 	);
 
@@ -213,4 +219,126 @@ describe('MediaProbe', () => {
 		});
 		await probe.close();
 	});
+});
+
+
+describe('duration tag variants and container fallback', () => {
+	it.each(['DURATION-eng', 'duration-FRA', 'DuRaTiOn-und'])('accepts %s for video and audio', key => {
+		const result = parseMediaProbeOutput(JSON.stringify({
+			format: { duration: '100' },
+			streams: [
+				{ codec_type: 'video', tags: { [key]: '00:01:05.125000000' } },
+				{ codec_type: 'audio', tags: { [key]: '00:01:04.500000000' } },
+			],
+		}), 1);
+		expect(result.durationMilliseconds).toBe(65_125);
+		expect(result.streams.map(stream => stream.durationMilliseconds)).toEqual([65_125, 64_500]);
+	});
+
+	it.each([
+		[{ 'DURATION-eng': '00:00:20', DURATION: '00:00:10' }, undefined, 10_000],
+		[{ DURATION: '00:00:10', 'DURATION-eng': '00:00:20' }, '5', 5_000],
+		[{ DURATION: 'invalid', 'DURATION-eng': '00:00:20' }, 'N/A', 20_000],
+		[{ DURATION: '00:00:00', 'DURATION-eng': '00:00:20' }, undefined, 20_000],
+		[{ DURATION: '99999:00:00', 'DURATION-eng': '00:00:20' }, undefined, 20_000],
+		[{ 'DURATION-eng': '00:60:00', 'DURATION-fra': '00:00:30' }, undefined, 30_000],
+		[{ 'DURATION-fra': '00:00:30', 'DURATION-eng': '00:00:20' }, undefined, 20_000],
+		[{ 'DURATION-eng': '00:00:20', 'DURATION-fra': '00:00:30' }, undefined, 20_000],
+	])('applies native, plain, then valid suffixed precedence (%j)', (tags, duration, expected) => {
+		const result = parseMediaProbeOutput(JSON.stringify({
+			streams: [{ codec_type: 'video', duration, tags }],
+		}), 1);
+		expect(result.durationMilliseconds).toBe(expected);
+	});
+
+	it.each(['DURATION-extra', 'DURATION-eng-extra', 'OTHER_DURATION', 'DURATION-en'])('ignores unrelated tag %s without borrowing audio duration', key => {
+		expect(() => parseMediaProbeOutput(JSON.stringify({ streams: [
+			{ codec_type: 'video', tags: { [key]: '00:01:00' } },
+			{ codec_type: 'audio', duration: 60 },
+		] }), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+	});
+
+	it.each([undefined, 'N/A', '0', '-1', 'Infinity', 'NaN', true, [], {},
+		MAX_MEDIA_DURATION_MILLISECONDS / 1_000 + 1])('rejects invalid container fallback %j', duration => {
+		expect(() => parseMediaProbeOutput(JSON.stringify({
+			format: { duration }, streams: [{ codec_type: 'video' }],
+		}), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+	});
+
+	it('allows the scheduling limit and ignores attached artwork when counting videos', () => {
+		const result = parseMediaProbeOutput(JSON.stringify({
+			format: { duration: MAX_MEDIA_DURATION_MILLISECONDS / 1_000 },
+			streams: [
+				{ codec_type: 'video', duration: '1', disposition: { attached_pic: 1 } },
+				{ codec_type: 'video' },
+			],
+		}), 1);
+		expect(result.durationMilliseconds).toBe(MAX_MEDIA_DURATION_MILLISECONDS);
+		expect(result.streams[1]?.durationMilliseconds).toBeNull();
+	});
+
+	it('rejects artwork-only media even with valid container timing', () => {
+		expect(() => parseMediaProbeOutput(JSON.stringify({
+			format: { duration: '100' },
+			streams: [{ codec_type: 'video', duration: '100', disposition: { attached_pic: 1 } }],
+		}), 1)).toThrow(expect.objectContaining({ code: 'missing-video' }));
+	});
+
+	it('does not use container timing for multiple unmeasured video tracks', () => {
+		expect(() => parseMediaProbeOutput(JSON.stringify({
+			format: { duration: '100' },
+			streams: [{ codec_type: 'video' }, { codec_type: 'video' }],
+		}), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+	});
+
+	it('does not infer a single video when stream records have been truncated', () => {
+		expect(() => parseMediaProbeOutput(JSON.stringify({
+			format: { duration: '100' },
+			streams: [{ codec_type: 'video' },
+				...Array.from({ length: 100 }, () => ({ codec_type: 'audio' })), { codec_type: 'video' }],
+		}), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+	});
+});
+
+
+it('uses the lowest-index real video for duration and resolution regardless of ordering or default flags', () => {
+	const result = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ index: 8, codec_type: 'video', duration: 200, width: 1920, height: 1080, disposition: { default: 1 } },
+		{ index: 0, codec_type: 'video', duration: 300, width: 400, height: 400, disposition: { attached_pic: 1 } },
+		{ index: 3, codec_type: 'video', duration: 60, width: 640, height: 480 },
+	] }), 1);
+	expect(result.durationMilliseconds).toBe(60_000);
+	expect(result.resolution).toEqual({ width: 640, height: 480 });
+});
+
+it('does not borrow timing or geometry from a later video', () => {
+	expect(() => parseMediaProbeOutput(JSON.stringify({ format: { duration: 200 }, streams: [
+		{ index: 3, codec_type: 'video' }, { index: 8, codec_type: 'video', duration: 200 },
+	] }), 1)).toThrow(expect.objectContaining({ code: 'missing-duration' }));
+	const result = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ index: 3, codec_type: 'video', duration: 60 },
+		{ index: 8, codec_type: 'video', duration: 200, width: 640, height: 480 },
+	] }), 1);
+	expect(result.resolution).toBeNull();
+});
+
+it.each([
+	[{ title: 'Plain', 'TITLE-eng': 'Localized', handler_name: 'Handler' }, 'Plain'],
+	[{ title: ' ', 'TITLE-eng': 'Localized', handler_name: 'Handler' }, 'Localized'],
+	[{ 'TITLE-fra': 'French', 'TITLE-eng': 'English' }, 'English'],
+	[{ 'TITLE-eng': '', handler_name: 'Handler' }, 'Handler'],
+])('normalizes track titles with explicit precedence (%j)', (tags, expected) => {
+	const result = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ codec_type: 'video', duration: 60 }, { codec_type: 'audio', tags },
+	] }), 1);
+	expect(result.streams[1]?.title).toBe(expected);
+});
+
+
+it('retains bounded alternate titles and audio-description dispositions', () => {
+	const result = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ index: 0, codec_type: 'video', duration: '60' },
+		{ index: 1, codec_type: 'audio', tags: { title: ' Main ', 'TITLE-eng': 'main', 'TITLE-fra': 'Original', handler_name: 'English Original' }, disposition: { visual_impaired: 1 } },
+	] }), 100);
+	expect(result.streams[1]).toMatchObject({ title: 'Main', titleAliases: ['Main', 'Original', 'English Original'], isAudioDescription: true });
 });

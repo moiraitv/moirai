@@ -174,11 +174,11 @@ Open the optional **Audio and subtitles** section below the main configuration s
 
 ### Audio selection
 
-Use **Preferred language code** (such as `en` or `eng`) and **Preferred audio title** to override the [Channel's audio preferences](/scheduling/channels). A title matches part of an audio track's name, ignoring case; it is not a regular expression.
+Use **Preferred language code** (such as `en` or `eng`) and **Preferred audio title** to override the [Channel's audio preferences](/scheduling/channels). A title matches part of an audio track's name, ignoring case; it is not a regular expression. Moirai checks plain and language-tagged Matroska track titles and MP4 handler names, including alternate names that are not displayed.
 
 Each field inherits independently from the Channel through enclosing Sequence Programs to the Content Program. Leave a field blank to inherit, or enter `*` to remove the inherited preference for that field. For example, a Sequence can prefer French while a Content Program clears the inherited title preference and keeps French.
 
-Selection prefers matching language, then matching title, then default-flagged tracks, more audio channels, and the lowest stream index. A missing match falls back to other available audio; it does not silence the video. With both effective preferences cleared, the playback engine selects audio normally.
+Selection prefers matching language, then matching title. Without a matching title, it prefers tracks that are not marked as commentary or audio description when available. An explicit title match can still select those tracks. Remaining ties prefer default-flagged tracks, more audio channels, and the lowest stream index. A missing match falls back to other available audio; it does not silence the video. With both effective preferences cleared, the playback engine selects audio normally.
 
 Scheduled filler follows its own captured program ancestry, and multipart videos select each physical file separately. Saving preferences preserves program selection progress and does not restart the current item.
 
@@ -214,7 +214,7 @@ Leave this field blank to **inherit** the language setting. Enter `*` to explici
 
 To select a specific language, enter a two- or three-letter code, such as `en` or `eng` for English, or `fr` or `fra` for French. Equivalent codes match the same language. The language setting is independent of the selection policy, so **Any matching track** still respects an inherited or explicit language restriction.
 
-A specified language is a strict filter. For example, **Forced only** with `en` selects an English forced track; an English non-forced track or a French forced track does not qualify. If no track matches, Moirai omits ordinary subtitles instead of falling back to another language. Tracks with an unknown language do not satisfy an explicit language choice.
+A specified language is a strict filter. For example, **Forced only** with `en` selects an English forced track; an English non-forced track or a French forced track does not qualify. If no track matches, Moirai omits ordinary subtitles instead of falling back to another language. If preparing a matching track fails, Moirai tries up to two further eligible tracks without changing the language or forced-only policy; preparation issues remain visible. Tracks with an unknown language do not satisfy an explicit language choice.
 
 ### Music video credits
 

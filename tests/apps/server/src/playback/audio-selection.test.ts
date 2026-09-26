@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { audioPreferencesSchema, channelCreateSchema, type Channel, type TimelineSegment, type ScheduleGuide } from '@moirai/shared';
-import { audioPreferences, prepareAudio, selectAudio } from '@server/playback/audio-selection.js';
+import { audioPreferences, prepareAudio, prepareMediaStreams, selectAudio, selectVideo } from '@server/playback/audio-selection.js';
 import type { Repository } from '@server/repository/index.js';
 
 const stream = (index: number, language: string, extra = {}) => ({ type: 'audio', index, language, title: null, isDefault: false, channels: 2, ...extra });
@@ -44,7 +44,7 @@ describe('audio selection', () => {
 			['outer', { language: 'fr' }], ['inner', { title: null }], ['leaf', { language: 'ja' }],
 		]))).toEqual({ language: 'ja', title: null });
 	});
-	it('selects different multipart indices with one metadata lookup and skips inactive preferences', async () => {
+	it('selects different multipart indices with one metadata lookup and keeps automatic audio without preferences', async () => {
 		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Audio' }), id: 'channel', audioPreferences: { language: 'fr' } } as Channel;
 		const segment = { id: 'segment', channelId: 'channel', mediaItemId: 'media', playbackParts: [{ playbackPath: '/one' }, { playbackPath: '/two' }] } as TimelineSegment;
 		const guide = { channels: [{ preview: { segments: [segment] } }] } as ScheduleGuide;
@@ -53,8 +53,42 @@ describe('audio selection', () => {
 		expect((await prepareAudio(repository, channel, guide, [])).get('segment')).toEqual([3, 8]);
 		expect(read).toHaveBeenCalledOnce();
 		await prepareAudio(repository, { ...channel, audioPreferences: {} }, guide, []);
-		expect(read).toHaveBeenCalledOnce();
+		expect(read).toHaveBeenCalledTimes(2);
 		read.mockRejectedValueOnce(new Error('unavailable'));
 		expect(await prepareAudio(repository, channel, guide, [])).toEqual(new Map());
 	});
+});
+
+
+it('prepares explicit multipart video selections alongside audio in one batch', async () => {
+	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Video' }), id: 'channel' } as Channel;
+	const segment = { id: 'segment', channelId: 'channel', mediaItemId: 'media', playbackParts: [{ playbackPath: '/one' }, { playbackPath: '/two' }] } as TimelineSegment;
+	const guide = { channels: [{ preview: { segments: [segment] } }] } as ScheduleGuide;
+	const read = vi.fn(async () => new Map([
+		['/one', { streams: [{ type: 'video', index: 0, isAttachedPicture: true }, { type: 'video', index: 5 }, { type: 'video', index: 2 }] }],
+		['/two', { streams: [{ type: 'video', index: 7 }] }],
+	]));
+	const prepared = await prepareMediaStreams({ audioMetadata: read } as unknown as Repository, channel, guide, []);
+	expect(prepared.video.get('segment')).toEqual([2, 7]);
+	expect(prepared.audio.get('segment')).toEqual([null, null]);
+	expect(structuredClone(prepared).video.get('segment')).toEqual([2, 7]);
+	expect(read).toHaveBeenCalledOnce();
+	expect(selectVideo({ streams: [{ type: 'video', index: -1 }] })).toBeNull();
+});
+
+
+it('matches alternate names and honors explicit commentary or description choices', () => {
+	const facts = { streams: [
+		stream(1, 'eng', { title: 'Main', titleAliases: ['Main', 'English Original'] }),
+		stream(2, 'eng', { title: 'Commentary', isCommentary: true, isDefault: true }),
+		stream(3, 'eng', { title: 'Description', isAudioDescription: true, channels: 8 }),
+	] };
+	expect(selectAudio(facts, { title: 'ORIGINAL' })).toBe(1);
+	expect(selectAudio(facts, { language: 'en', title: 'Missing' })).toBe(1);
+	expect(selectAudio(facts, { language: 'en' })).toBe(1);
+	expect(selectAudio(facts, { title: 'Commentary' })).toBe(2);
+	expect(selectAudio(facts, { title: 'Description' })).toBe(3);
+	expect(selectAudio(facts, {})).toBeNull();
+	expect(selectAudio({ streams: facts.streams.slice(1) }, { title: 'Missing' })).toBe(2);
+	expect(selectAudio({ streams: [...facts.streams, stream(4, 'fra', { isCommentary: true })] }, { language: 'fr' })).toBe(4);
 });

@@ -4,10 +4,11 @@ import type { Logger } from 'pino';
 import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
 import { resourceErrorCode, type ResourcePressureCoordinator } from '../operations/resource-pressure.js';
 import { inspectBlackTail, type BlackTailTarget } from './black-tail.js';
+import { primaryVideoStream } from './video-stream.js';
 import { openSourceFile } from './source-file.js';
 
 /** Probe contract version included in cache identities. */
-export const MEDIA_PROBE_VERSION = 6;
+export const MEDIA_PROBE_VERSION = 9;
 /** Maximum ffprobe JSON accepted from one media file. */
 const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 /** Maximum stream records retained from an untrusted container. */
@@ -62,6 +63,8 @@ export interface ProbedMediaStream {
 	channels?: number | null;
 	language: string | null;
 	title: string | null;
+	titleAliases?: string[];
+	isAudioDescription?: boolean;
 	isDefault: boolean;
 	isForced: boolean;
 	isHearingImpaired: boolean;
@@ -152,7 +155,10 @@ export function mediaProbeFingerprint(info: {
 
 /** Parse one positive duration value expressed in seconds. */
 function durationMilliseconds(value: unknown): number | null {
-	const seconds = typeof value === 'number' ? value : Number(value);
+	if (typeof value !== 'number' && typeof value !== 'string') {
+		return null;
+	}
+	const seconds = Number(value);
 	if (!Number.isFinite(seconds) || seconds <= 0) {
 		return null;
 	}
@@ -165,16 +171,40 @@ function durationMilliseconds(value: unknown): number | null {
 		: null;
 }
 
-/** Parse an ffprobe stream duration tag expressed as hours, minutes, and fractional seconds. */
+/** Prefer valid plain duration tags, then language-suffixed tags in stable key order. */
 function taggedDurationMilliseconds(tags: Record<string, unknown> | undefined): number | null {
-	const value = tagged(tags, 'duration');
-	const match = /^(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)$/u.exec(value ?? '');
-	if (!match) {
-		return null;
-	}
+	const candidates = Object.entries(tags ?? {})
+		.filter(([key]) => /^duration(?:-[a-z]{3})?$/iu.test(key))
+		.sort(([left], [right]) => left.length - right.length || left.localeCompare(right, 'en'));
+	for (const [, value] of candidates) {
+		const match = /^(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)$/u.exec(probeTag(value) ?? '');
+		if (!match) {
+			continue;
+		}
 
-	const seconds = Number(match[1]) * 3_600 + Number(match[2]) * 60 + Number(match[3]);
-	return durationMilliseconds(seconds);
+		const seconds = Number(match[1]) * 3_600 + Number(match[2]) * 60 + Number(match[3]);
+		const duration = durationMilliseconds(seconds);
+		if (duration !== null) {
+			return duration;
+		}
+	}
+	return null;
+}
+
+/** Retain alternate track names in display precedence, preserving spelling and bounding each value. */
+function streamTitles(tags: Record<string, unknown> | undefined): string[] {
+	const entries = Object.entries(tags ?? {})
+		.filter(([key]) => /^title-[a-z]{3}$/iu.test(key))
+		.sort(([left], [right]) => left.localeCompare(right, 'en'));
+	const values = [tagged(tags, 'title'), ...entries.map(([, value]) => probeTag(value)), tagged(tags, 'handler_name')];
+	const seen = new Set<string>();
+	return values.filter((value): value is string => {
+		if (!value || seen.has(value.toLowerCase())) {
+			return false;
+		}
+		seen.add(value.toLowerCase());
+		return true;
+	});
 }
 
 /** Prefer a native stream duration while accepting Matroska's equivalent duration tag. */
@@ -189,7 +219,7 @@ function dimension(value: unknown): number | null {
 	return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
 }
 
-/** Validate bounded ffprobe output and derive playback duration solely from video tracks. */
+/** Prefer measured video duration, allowing container timing for a single unmeasured video. */
 export function parseMediaProbeOutput(output: string, fileSizeBytes: number): MediaProbeResult {
 	let document: ProbeDocument;
 	try {
@@ -206,6 +236,7 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 			return [];
 		}
 
+		const titles = streamTitles(stream.tags);
 		return [{
 			index: Number.isInteger(stream.index) && stream.index! >= 0 ? stream.index! : fallbackIndex,
 			type: stream.codec_type as ProbedMediaStream['type'],
@@ -218,7 +249,9 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 			height: stream.codec_type === 'video' ? dimension(stream.height) : null,
 			channels: stream.codec_type === 'audio' ? dimension(stream.channels) : null,
 			language: tagged(stream.tags, 'language')?.toLocaleLowerCase('en-US') ?? null,
-			title: tagged(stream.tags, 'title'),
+			title: titles[0] ?? null,
+			titleAliases: titles,
+			isAudioDescription: disposition(stream.disposition?.visual_impaired),
 			isDefault: disposition(stream.disposition?.default),
 			isForced: disposition(stream.disposition?.forced),
 			isHearingImpaired: disposition(stream.disposition?.hearing_impaired),
@@ -230,15 +263,17 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 		throw new MediaProbeError('missing-video', 'Media file has no usable video stream');
 	}
 
-	const measuredDuration = videoStreams.reduce<number | null>((longest, stream) => {
-		const current = stream.durationMilliseconds;
-		return current !== null && (longest === null || current > longest) ? current : longest;
-	}, null);
+	const primaryVideo = primaryVideoStream(videoStreams)!;
+	const videoDuration = primaryVideo.durationMilliseconds;
+
+	// Container timing is only a fallback; never attribute it to an unmeasured stream.
+	const measuredDuration = videoDuration ?? (videoStreams.length === 1
+		&& document.streams!.length <= MAX_PROBE_STREAMS
+		? durationMilliseconds(document.format?.duration) : null);
 	if (measuredDuration === null) {
-		throw new MediaProbeError('missing-duration', 'Media file has no usable measured video duration');
+		throw new MediaProbeError('missing-duration', 'Media file has no usable video or eligible container duration');
 	}
 
-	const primaryVideo = videoStreams.find((stream) => stream.width && stream.height);
 	return {
 		durationMilliseconds: measuredDuration,
 		fileSizeBytes,
@@ -332,7 +367,7 @@ export class MediaProbe {
 						'-v',
 						'error',
 						'-show_entries',
-						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,duration,start_time:stream_tags=language,title,DURATION:stream_disposition=default,forced,hearing_impaired,comment,attached_pic',
+						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,channels,duration,start_time:stream_tags:stream_disposition=default,forced,hearing_impaired,comment,visual_impaired,attached_pic',
 						'-of',
 						'json',
 						'-fd',

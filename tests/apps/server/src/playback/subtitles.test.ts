@@ -6,13 +6,14 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { channelCreateSchema, MUSIC_VIDEO_CREDIT_TEMPLATE, type Channel, type MediaItem, type MediaSubtitleTrack, type ScheduleGuide, type TimelineSegment } from '@moirai/shared';
-import { selectSubtitle, subtitleLanguageKey } from '@server/playback/subtitle-selection.js';
+import { selectSubtitle, subtitleLanguageKey, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from '@server/playback/subtitle-selection.js';
 import { assTimestamp, escapeAssText, renderCredits } from '@server/playback/credit-render.js';
 import { renderCreditTemplate } from '@server/playback/credit-renderer.js';
 import * as sourceFiles from '@server/media/source-file.js';
 import * as creditRenderer from '@server/playback/credit-renderer.js';
 import { creditContext } from '@server/playback/credit-context.js';
 import { previewCredits } from '@server/playback/credit-preview.js';
+import { MAX_SUBTITLE_TEXT_BYTES } from '@server/media/media-text.js';
 import { SubtitleAssets } from '@server/playback/subtitle-assets.js';
 import { buildEtvPlayoutFiles } from '@server/playback/playout-output.js';
 import type { Repository } from '@server/repository/index.js';
@@ -269,7 +270,7 @@ it('probes multi-language VobSub sidecars and publishes the matching stream inde
 	const configured = channel();
 	const file = path.join(root, 'video.idx');
 	await writeFile(file, 'fixture');
-	await writeFile(path.join(root, 'video.sub'), 'paired fixture');
+	await writeFile(path.join(root, 'video.sub'), Buffer.from([0, 0, 1, 0xba, 0xff, 0x80]));
 	const probe = path.join(root, 'ffprobe');
 	await writeFile(probe, `#!${process.execPath}
 process.stdout.write(JSON.stringify({streams:[{index:0,tags:{language:'fra'}},{index:1,tags:{language:'eng'},disposition:{default:1}}]}));
@@ -285,7 +286,7 @@ process.stdout.write(JSON.stringify({streams:[{index:0,tags:{language:'fra'}},{i
 	const snapshot = selected.get(entry.id)![0]!.path!;
 	expect(snapshot).not.toBe(file);
 	expect(selected.get(entry.id)).toEqual([{ path: snapshot, streamIndex: 1, offsetMs: 0 }]);
-	expect(await readFile(snapshot.replace(/\.idx$/, '.sub'), 'utf8')).toBe('paired fixture');
+	expect(await readFile(snapshot.replace(/\.idx$/, '.sub'))).toEqual(Buffer.from([0, 0, 1, 0xba, 0xff, 0x80]));
 	const documents = [...buildEtvPlayoutFiles([configured], guide(configured, entry), new Map(), selected).values()].map((value) => JSON.parse(value));
 	expect(documents[0].items[0].tracks.subtitle).toMatchObject({ stream_index: 1, source: { path: snapshot } });
 	configured.subtitlePreferences.language = 'es';
@@ -509,4 +510,148 @@ it('closes the source and removes temporary output when streaming fails', async 
 	expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
 	expect(opened!.handle.fd).toBe(-1);
 	expect(await readdir(path.join(root, configured.id, 'subtitles'))).toEqual([]);
+});
+
+
+it.each(['western', 'japanese', 'gb18030', 'big5', 'unicode-ass', 'unicode-sub-le', 'unicode-sub-be'])('normalizes %s subtitles before worker consumption and invalidates old snapshots', async name => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-subtitle-encoding-'));
+	roots.push(root);
+	const configured = channel();
+	configured.subtitlePreferences = { policy: 'any' };
+	const media = item();
+	const ass = '[Script Info]\nScriptType: v4.00+\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour\nStyle: Default,Arial,20,&H00FFFFFF\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\i1}Café{\\i0}\n';
+	const microdvd = '{1}{1}25.0\n{25}{50}Café\n{51}{75}Bonjour\n';
+	const extension = name === 'unicode-ass' ? 'ass' : name.startsWith('unicode-sub') ? 'sub' : 'srt';
+	const expected = extension === 'ass' ? ass : extension === 'sub' ? microdvd : await readFile(`tests/fixtures/media-text/${name}.utf8.txt`, 'utf8');
+	const unicode = Buffer.from(expected, 'utf16le');
+	const raw = name === 'unicode-sub-be' ? Buffer.concat([Buffer.from([0xfe, 0xff]), unicode.swap16()])
+		: name.startsWith('unicode-') ? Buffer.concat([Buffer.from([0xff, 0xfe]), unicode])
+			: await readFile(`tests/fixtures/media-text/${name}.srt`);
+	const file = path.join(root, `video.${extension}`);
+	await writeFile(file, raw);
+	media.subtitleTracks = [track({ sourceType: 'sidecar', format: extension, streamIndex: null, playbackPaths: [file] })];
+	const source = await stat(file);
+	const oldKey = JSON.stringify({ sidecarVersion: 2, sidecar: [{ path: file, size: source.size, modified: source.mtimeMs }] });
+	const directory = path.join(root, configured.id, 'subtitles');
+	await mkdir(directory, { recursive: true });
+	const oldSnapshot = path.join(directory, createHash('sha256').update(oldKey).digest('hex') + `.${extension}`);
+	await writeFile(oldSnapshot, raw);
+	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(root, repository);
+	const entry = segment(configured, media);
+	const prepared = await assets.prepare(configured, guide(configured, entry));
+	expect(assets.issues.get(configured.id)).toEqual([]);
+	const snapshot = prepared.get(entry.id)![0]!.path!;
+	expect(snapshot).not.toBe(oldSnapshot);
+	expect(await readFile(snapshot, 'utf8')).toBe(expected);
+	expect(await readFile(file)).toEqual(raw);
+	const decoded = execFileSync(testFfmpeg, ['-v', 'error', '-i', snapshot, '-map', '0:s:0', '-c:s', 'webvtt', '-f', 'webvtt', '-'], { encoding: 'utf8' });
+	expect(decoded).toContain('00:01.000 --> 00:02.000');
+	expect(decoded).toContain(name === 'japanese' ? '日本語' : name === 'gb18030' ? '这是' : name === 'big5' ? '這是' : name === 'western' ? 'café' : 'Café');
+	if (name === 'western') {
+		expect(decoded).toContain('café');
+	}
+});
+
+it.each(['uncertain', 'oversized'])('omits %s subtitle text with an actionable issue', async kind => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-subtitle-rejected-'));
+	roots.push(root);
+	const configured = channel();
+	configured.subtitlePreferences = { policy: 'any' };
+	const media = item();
+	const file = path.join(root, 'video.srt');
+	await writeFile(file, kind === 'uncertain' ? Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nCaf\xe9\n', 'latin1') : Buffer.alloc(MAX_SUBTITLE_TEXT_BYTES + 1, 65));
+	media.subtitleTracks = [track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file] })];
+	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(root, repository);
+	const entry = segment(configured, media);
+	expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
+	expect(assets.issues.get(configured.id)?.[0]).toContain(kind === 'uncertain' ? 'encoding' : '16 MiB');
+});
+
+
+it.each(['sup', 'sub'])('preserves binary %s snapshots instead of trying to decode them as text', async extension => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-binary-subtitle-'));
+	roots.push(root);
+	const configured = channel();
+	configured.subtitlePreferences = { policy: 'any' };
+	const probe = path.join(root, 'ffprobe');
+	await writeFile(probe, `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({streams:[{index:0,codec_name:'dvd_subtitle'}]}));\n`, { mode: 0o755 });
+	configured.ffprobePath = probe;
+	const file = path.join(root, `video.${extension}`);
+	const bytes = Buffer.from([0, 0, 1, 0xba, 0xff, 0x80]);
+	await writeFile(file, bytes);
+	const media = item();
+	media.subtitleTracks = [track({ sourceType: 'sidecar', format: extension, codec: null, streamIndex: null, playbackPaths: [file] })];
+	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(root, repository);
+	const entry = segment(configured, media);
+	const prepared = await assets.prepare(configured, guide(configured, entry));
+	expect(assets.issues.get(configured.id)).toEqual([]);
+	expect(await readFile(prepared.get(entry.id)![0]!.path!)).toEqual(bytes);
+});
+
+
+it.each(['recover', 'forced', 'language', 'part', 'limit'])('keeps subtitle fallback bounded and eligible: %s', async scenario => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-subtitle-fallback-'));
+	roots.push(root);
+	const configured = channel();
+	configured.subtitlePreferences = { policy: scenario === 'forced' ? 'forced' : 'default', language: 'en' };
+	const media = item();
+	const valid = path.join(root, 'valid.srt');
+	await writeFile(valid, '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
+	const broken = [];
+	for (let i = 0; i < (scenario === 'limit' ? MAX_SUBTITLE_PREPARATION_ATTEMPTS : 1); i++) {
+		const file = path.join(root, `broken-${i}.srt`);
+		await writeFile(file, Buffer.from('Caf\xe9', 'latin1'));
+		broken.push(track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file], relativePaths: [`broken-${i}.srt`], isDefault: true, isForced: true }));
+	}
+	media.subtitleTracks = [...broken, { ...broken[0]!, id: randomUUID() }, track({
+		sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [valid], relativePaths: ['valid.srt'],
+		language: scenario === 'language' ? 'fra' : 'eng', partNumber: scenario === 'part' ? 2 : 1,
+	})];
+	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(root, repository);
+	const entry = segment(configured, media);
+	const repeated = { ...entry, id: randomUUID() };
+	const schedule = guide(configured, entry);
+	schedule.channels[0]!.preview.segments.push(repeated);
+	const opened = vi.spyOn(sourceFiles, 'openSourceFile');
+	const prepared = await assets.prepare(configured, schedule);
+	if (scenario === 'recover') {
+		expect(await readFile(prepared.get(entry.id)![0]!.path!, 'utf8')).toContain('Hello');
+		expect(prepared.get(repeated.id)).toEqual(prepared.get(entry.id));
+	}
+	else {
+		expect(prepared.get(entry.id)).toEqual([null]);
+		expect(prepared.get(repeated.id)).toEqual([null]);
+	}
+	expect(opened).toHaveBeenCalledTimes(broken.length + (scenario === 'recover' ? 1 : 0));
+	expect(assets.issues.get(configured.id)?.length).toBeGreaterThan(0);
+});
+
+it('falls back within forced multipart candidates while preserving whole-file offsets', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-multipart-subtitles-'));
+	roots.push(root);
+	const configured = channel();
+	configured.subtitlePreferences = { policy: 'forced', language: 'en' };
+	const media = item();
+	const whole = path.join(root, 'whole.srt');
+	const first = path.join(root, 'first.srt');
+	const broken = path.join(root, 'broken.srt');
+	await writeFile(whole, '1\n00:01:31,000 --> 00:01:32,000\nWhole file\n');
+	await writeFile(first, '1\n00:00:01,000 --> 00:00:02,000\nFirst part\n');
+	await writeFile(broken, Buffer.from('Caf\xe9', 'latin1'));
+	const sidecar = (file: string, partNumber: number | null) => track({ sourceType: 'sidecar', streamIndex: null, format: 'srt', playbackPaths: [file], partNumber, isForced: true });
+	media.subtitleTracks = [sidecar(whole, null)];
+	media.parts = [first, broken].map((file, index) => ({ number: index + 1, kind: 'part', relativePath: `part${index + 1}.mkv`, playbackPath: `/part${index + 1}.mkv`, durationSeconds: 90, subtitleTracks: [sidecar(file, index + 1)] }));
+	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(root, repository);
+	const entry = { ...segment(configured, media), playbackParts: media.parts.map(part => ({ playbackPath: part.playbackPath, durationSeconds: 90 })) };
+	const prepared = await assets.prepare(configured, guide(configured, entry));
+	const choices = prepared.get(entry.id)!;
+	expect(choices.map(choice => choice?.offsetMs)).toEqual([0, 90_000]);
+	expect(await readFile(choices[0]!.path!, 'utf8')).toContain('First part');
+	expect(await readFile(choices[1]!.path!, 'utf8')).toContain('Whole file');
+	expect(assets.issues.get(configured.id)?.[0]).toContain('encoding');
 });

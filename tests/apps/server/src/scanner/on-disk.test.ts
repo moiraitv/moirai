@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
 import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
-import { MEDIA_PROBE_VERSION, MediaProbeError, parseMediaProbeOutput } from '@server/media/media-probe.js';
+import { MEDIA_PROBE_VERSION, MediaProbeError, mediaProbeFingerprint, parseMediaProbeOutput } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 import { MAX_MEDIA_SCAN_ATTEMPTS } from '@server/scanner/scan-queue.js';
 
@@ -879,4 +879,60 @@ it('refreshes primary markers and keeps NFO genres ahead of music tag fallbacks'
 	expect(second.items[0]?.primaryGenreKey).toBe('live');
 	expect(second.items[0]?.id).toBe(first.items[0]?.id);
 	expect(second.items[0]?.fingerprint).not.toBe(first.items[0]?.fingerprint);
+});
+
+
+it.each([6, 7, 8])('refreshes version %s successful probes and reuses fallback timing without false health findings', async version => {
+	const fixture = await library();
+	const relativePath = 'Untagged.mkv';
+	const file = path.join(fixture.sourceConfig.scanRoot, relativePath);
+	await writeFile(file, 'video');
+	const info = await stat(file);
+	const oldFingerprint = createHash('sha256').update([version, info.size, info.mtimeMs].join(':')).digest('hex');
+	const probeMedia = vi.fn(async () => parseMediaProbeOutput(JSON.stringify({
+		format: { duration: '100' },
+		streams: [{ codec_type: 'video', start_time: '0' }, { codec_type: 'audio', duration: '60', start_time: '0', tags: { title: 'Main', handler_name: 'Original' }, disposition: { visual_impaired: 1 } }],
+	}), 5));
+	const inspectTail = vi.fn(async () => 'mostly-black' as const);
+	const first = await discoverOnDisk(fixture, { probeMedia, inspectTail, probeCache: new Map([[relativePath, {
+		relativePath, probeFingerprint: oldFingerprint, durationMilliseconds: 60_000,
+		probeStatus: 'complete', probeUpdatedAt: '2026-01-01T00:00:00Z', probeErrorCode: null,
+		technicalMetadata: { streams: [] },
+	}]]) });
+	const item = first.items[0]!;
+	expect(probeMedia).toHaveBeenCalledOnce();
+	expect(item).toMatchObject({ durationMilliseconds: 100_000, probeStatus: 'complete' });
+	expect(item.probeFingerprint).not.toBe(oldFingerprint);
+	expect(item.technicalMetadata.streams).toEqual([
+		expect.objectContaining({ type: 'video', durationMilliseconds: null }),
+		expect.objectContaining({ type: 'audio', durationMilliseconds: 60_000, titleAliases: ['Main', 'Original'], isAudioDescription: true }),
+	]);
+	probeMedia.mockClear();
+	const cached = await discoverOnDisk(fixture, { probeMedia, inspectTail, probeCache: new Map([[relativePath, item]]) });
+	expect(probeMedia).not.toHaveBeenCalled();
+	expect(cached.items[0]?.durationMilliseconds).toBe(100_000);
+	for (const result of [first, cached]) {
+		expect(result.issues.some(issue => issue.code === 'media_audio_video_duration_mismatch')).toBe(false);
+	}
+	expect(inspectTail).not.toHaveBeenCalled();
+});
+
+it('retries unchanged failed probes even when the current fingerprint matches', async () => {
+	const fixture = await library();
+	const relativePath = 'Recovered.mkv';
+	const file = path.join(fixture.sourceConfig.scanRoot, relativePath);
+	await writeFile(file, 'video');
+	const fingerprint = mediaProbeFingerprint(await stat(file));
+	const probeMedia = vi.fn(async () => parseMediaProbeOutput(JSON.stringify({
+		streams: [{ codec_type: 'video', tags: { 'DURATION-eng': '00:01:00' } }],
+	}), 5));
+	const result = await discoverOnDisk(fixture, { probeMedia, probeCache: new Map([[relativePath, {
+		relativePath, probeFingerprint: fingerprint, durationMilliseconds: null, probeStatus: 'failed',
+		probeUpdatedAt: '2026-01-01T00:00:00Z', probeErrorCode: 'missing-duration', technicalMetadata: {},
+	}]]) });
+	expect(probeMedia).toHaveBeenCalledOnce();
+	expect(result.items[0]).toMatchObject({
+		probeFingerprint: fingerprint, probeStatus: 'complete', probeErrorCode: null, durationMilliseconds: 60_000,
+	});
+	expect(result.issues.some(issue => issue.code === 'media_missing_duration')).toBe(false);
 });

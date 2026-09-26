@@ -1,5 +1,6 @@
 import type { BlackTailTarget, BlackTailResult } from '../media/black-tail.js';
 import type { ScanIssue } from '@moirai/shared';
+import { primaryVideoStream } from '../media/video-stream.js';
 import type { MediaProbeResult } from '../media/media-probe.js';
 
 /** Allow up to thirty seconds of padding or track-end differences without a warning. */
@@ -7,8 +8,17 @@ export const MEDIA_DURATION_MISMATCH_TOLERANCE_MILLISECONDS = 30_000;
 /** Audio may end up to five percent before the scheduled video ends. */
 export const MEDIA_DURATION_SHORTFALL_RATIO = 0.05;
 
+/** Require independent video timing before comparing audio against the scheduled duration. */
+function hasMeasuredVideoDuration(probe: MediaProbeResult): boolean {
+	return primaryVideoStream(probe.streams)?.durationMilliseconds != null;
+}
+
 /** Test every measured audio duration independently of track starts and ending alignment. */
 export function withinDurationTolerance(probe: MediaProbeResult): boolean {
+	if (!hasMeasuredVideoDuration(probe)) {
+		return false;
+	}
+
 	const audio = probe.streams.filter(stream => stream.type === 'audio' && stream.durationMilliseconds !== null);
 	return audio.length > 0 && audio.every(stream =>
 		stream.durationMilliseconds! >= probe.durationMilliseconds * (1 - MEDIA_DURATION_SHORTFALL_RATIO)
@@ -20,6 +30,10 @@ export const SILENT_TAIL_AUDIO_ALIGNMENT_TOLERANCE_MILLISECONDS = 30_000;
 
 /** Report measured audio tracks that differ materially from the scheduled video duration. */
 export function mediaDurationHealthIssues(probe: MediaProbeResult, relativePath: string): ScanIssue[] {
+	if (!hasMeasuredVideoDuration(probe)) {
+		return [];
+	}
+
 	const mismatched = probe.streams.filter((stream) => stream.type === 'audio'
 		&& stream.durationMilliseconds !== null
 		&& Math.abs(stream.durationMilliseconds - probe.durationMilliseconds)
@@ -42,7 +56,7 @@ export function mediaDurationHealthIssues(probe: MediaProbeResult, relativePath:
 export function silentTailTarget(probe: MediaProbeResult) {
 	const audio = probe.streams.filter(stream => stream.type === 'audio');
 	const video = probe.streams.filter(stream => stream.type === 'video' && !stream.isAttachedPicture);
-	if (video.length !== 1 || !audio.length || audio.some(stream => stream.durationMilliseconds === null)) {
+	if (video.length !== 1 || video[0]!.durationMilliseconds === null || !audio.length || audio.some(stream => stream.durationMilliseconds === null)) {
 		return null;
 	}
 	const durations = audio.map(stream => stream.durationMilliseconds!);

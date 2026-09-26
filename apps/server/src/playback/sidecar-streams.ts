@@ -9,6 +9,7 @@ const execute = promisify(execFile);
 const streamsSchema = z.object({
 	streams: z.array(z.object({
 		index: z.number().int().nonnegative(),
+		codec_name: z.string().optional(),
 		tags: z.object({ language: z.string().optional() }).optional(),
 		disposition: z.object({ default: z.number().optional(), forced: z.number().optional() }).optional(),
 	})),
@@ -22,12 +23,13 @@ export async function probeSidecarStreams(
 ): Promise<MediaSubtitleTrack[]> {
 	const { stdout } = await execute(ffprobePath, [
 		'-v', 'error', '-select_streams', 's', '-show_entries',
-		'stream=index:stream_tags=language:stream_disposition=default,forced', '-of', 'json', file,
+		'stream=index,codec_name:stream_tags=language:stream_disposition=default,forced', '-of', 'json', file,
 	], { timeout: 30_000, maxBuffer: 1_048_576 });
 	const document = streamsSchema.parse(JSON.parse(stdout));
 	return document.streams.map((stream) => ({
 		...track,
 		streamIndex: stream.index,
+		codec: stream.codec_name ?? track.codec,
 		language: stream.tags?.language ?? track.language,
 		isDefault: stream.disposition?.default === 1 || track.isDefault,
 		isForced: stream.disposition?.forced === 1 || track.isForced,

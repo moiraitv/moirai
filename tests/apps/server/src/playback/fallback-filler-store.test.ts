@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FALLBACK_FILLER_MIN_DURATION_MILLISECONDS } from '@moirai/shared';
-import type { MediaProbe, MediaProbeResult } from '@server/media/media-probe.js';
+import { parseMediaProbeOutput, type MediaProbe, type MediaProbeResult } from '@server/media/media-probe.js';
 import {
 	FallbackFillerStore,
 	FallbackFillerValidationError,
@@ -441,4 +441,39 @@ describe('fallback filler store', () => {
 			overrideError: expect.stringContaining('unavailable'),
 		});
 	});
+});
+
+
+it('rejects container-only duration for managed fallback uploads', async () => {
+	const probe = vi.fn(async () => parseMediaProbeOutput(JSON.stringify({
+		format: { duration: '60', format_name: 'matroska,webm' },
+		streams: [{ codec_type: 'video' }],
+	}), 12));
+	const { store } = await fixture(probe);
+	await expect(store.store({ type: 'global' }, 'untagged.mkv', Readable.from(Buffer.alloc(12))))
+		.rejects.toBeInstanceOf(FallbackFillerValidationError);
+});
+
+
+it('retains the real video index with artwork and upgrades legacy metadata at startup', async () => {
+	const result = probed(false);
+	result.streams[0]!.index = 2;
+	result.streams.unshift({ ...result.streams[0]!, index: 0, isAttachedPicture: true });
+	const probe = vi.fn(async () => result);
+	const { root, store } = await fixture(probe);
+	await store.store({ type: 'global' }, 'artwork.mp4', Readable.from(Buffer.alloc(12)));
+	expect(await store.resolve(crypto.randomUUID())).toMatchObject({ source: 'global', videoStreamIndex: 2 });
+	const metadataPath = path.join(root, 'managed', 'global', 'current', 'metadata.json');
+	const original = JSON.parse(await readFile(metadataPath, 'utf8'));
+	delete original.videoStreamIndex;
+	await writeFile(metadataPath, JSON.stringify(original));
+	const restarted = new FallbackFillerStore(
+		path.join(root, 'managed'),
+		path.resolve('apps/server/assets'),
+		{ probe } as unknown as MediaProbe,
+		{ warn: vi.fn() },
+	);
+	await restarted.start([]);
+	expect(await restarted.resolve(crypto.randomUUID())).toMatchObject({ source: 'global', videoStreamIndex: 2 });
+	expect(JSON.parse(await readFile(metadataPath, 'utf8'))).toEqual({ ...original, videoStreamIndex: 2 });
 });

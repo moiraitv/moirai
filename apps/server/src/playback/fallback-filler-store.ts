@@ -52,6 +52,7 @@ const storedFallbackFillerSchema = z.object({
 		height: z.number().int().positive(),
 	}).nullable(),
 	hasAudio: z.boolean(),
+	videoStreamIndex: z.number().int().nonnegative().optional(),
 	updatedAt: z.iso.datetime({ offset: true }).nullable(),
 });
 
@@ -74,6 +75,7 @@ export interface ResolvedFallbackFiller {
 	path: string;
 	durationMilliseconds: number;
 	hasAudio: boolean;
+	videoStreamIndex?: number;
 }
 
 /** Open effective fallback content returned to an authenticated preview route. */
@@ -137,7 +139,7 @@ function fallbackContentType(result: MediaProbeResult, originalExtension: string
 
 /** Return the measured duration of the only video stream accepted for fallback playback. */
 function fallbackVideoDuration(result: MediaProbeResult): number | null {
-	const videoStreams = result.streams.filter((stream) => stream.type === 'video');
+	const videoStreams = result.streams.filter((stream) => stream.type === 'video' && !stream.isAttachedPicture);
 	if (videoStreams.length !== 1) {
 		throw new FallbackFillerValidationError(
 			'Fallback filler must contain exactly one video stream',
@@ -261,6 +263,7 @@ export class FallbackFillerStore {
 				path: effective.path,
 				durationMilliseconds: effective.stored.durationMilliseconds,
 				hasAudio: effective.stored.hasAudio,
+				...(effective.stored.videoStreamIndex === undefined ? {} : { videoStreamIndex: effective.stored.videoStreamIndex }),
 			};
 		});
 	}
@@ -352,6 +355,7 @@ export class FallbackFillerStore {
 					durationMilliseconds,
 					resolution: probed.resolution,
 					hasAudio: probed.streams.some((stream) => stream.type === 'audio'),
+					videoStreamIndex: probed.streams.find(stream => stream.type === 'video' && !stream.isAttachedPicture)!.index,
 					updatedAt: currentTimestamp(),
 				};
 				await rename(temporaryAsset, path.join(stagedDirectory, ASSET_NAME));
@@ -545,12 +549,26 @@ export class FallbackFillerStore {
 		try {
 			const probed = await this.mediaProbe.probe(this.currentPath(scope), ASSET_NAME);
 			const durationMilliseconds = fallbackVideoDuration(probed);
+			const videoStreamIndex = probed.streams.find(stream => stream.type === 'video' && !stream.isAttachedPicture)!.index;
 			if (
 				durationMilliseconds !== lookup.stored.durationMilliseconds
+				|| (lookup.stored.videoStreamIndex !== undefined && lookup.stored.videoStreamIndex !== videoStreamIndex)
 				|| probed.fileSizeBytes !== lookup.stored.fileSizeBytes
 				|| probed.streams.some((stream) => stream.type === 'audio') !== lookup.stored.hasAudio
 			) {
 				throw new Error('Managed fallback probe does not match its metadata');
+			}
+
+			if (lookup.stored.videoStreamIndex === undefined) {
+				const metadataPath = path.join(this.currentPath(scope), METADATA_NAME);
+				const temporary = `${metadataPath}.tmp`;
+				try {
+					await writeFile(temporary, JSON.stringify({ ...lookup.stored, videoStreamIndex }), { mode: 0o600 });
+					await rename(temporary, metadataPath);
+				}
+				finally {
+					await rm(temporary, { force: true });
+				}
 			}
 		}
 		catch (error) {

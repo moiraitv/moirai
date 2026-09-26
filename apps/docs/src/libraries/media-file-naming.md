@@ -165,6 +165,10 @@ Moirai recognizes additional primary-image names, including `folder`, `cover`, a
 
 The source article also describes fanart, banners, logos, disc art, and other artwork used by media centers. Keeping these files may help with library portability, but it does not mean Moirai displays each category separately. Start with a poster or episode thumbnail and check the catalog after scanning.
 
+## Text encoding for NFO files
+
+Save NFO files as UTF-8 when possible, but Moirai can also read UTF-16 and supported encodings declared in the XML header. Conflicting declarations, unsupported encodings, and malformed text are reported as metadata errors.
+
 ## Name subtitle sidecars
 
 Match the full video basename, then append a language code and an optional flag:
@@ -178,7 +182,9 @@ Afterlight Station (2026).eng.forced.srt
 
 Here, `eng` identifies English and `spa` identifies Spanish. A `forced` track typically supplies translations for selected dialogue or signs; `default` expresses a preferred track. Subtitles can also be embedded inside the video, which keeps them together when copying the file.
 
-Moirai inventories embedded and matching sidecar subtitle tracks. Channel and Program settings select tracks by language and policy; discovery alone does not enable them. Sidecar names can include `forced`, `default`, `sdh`, `hi`, `cc`, and `commentary` flags. Use two- or three-letter language codes, such as `en` or `eng`. For VobSub (`.idx`/`.sub`) pairs containing multiple languages, Moirai inspects the streams and passes the selected stream to playback. Keep both files together. Moirai copies selected sidecars into its playback storage and checks those copies before playback; unreadable subtitles are reported and omitted so the video can continue without them. Test the Channel with your playback settings and IPTV client.
+Text subtitles are prepared as UTF-8 copies; original files, timings, and styling are preserved. UTF-8 and UTF-16 are supported automatically, and Moirai attempts to detect other supported encodings. Detection can remain uncertain even for a valid file, especially with short captions. If preparation reports an encoding error, convert the subtitle file to UTF-8 and retry playback preparation. Text subtitle files are limited to 16 MiB. Binary SUP and VobSub subtitles are copied without text conversion.
+
+Moirai inventories embedded and matching sidecar subtitle tracks. Channel and Program settings select tracks by language and policy; discovery alone does not enable them. Sidecar names can include `forced`, `default`, `sdh`, `hi`, `cc`, and `commentary` flags. Use two- or three-letter language codes, such as `en` or `eng`. For VobSub (`.idx`/`.sub`) pairs containing multiple languages, Moirai inspects the streams and passes the selected stream to playback. Keep both files together. Moirai copies selected sidecars into its playback storage and checks those copies before playback; unreadable subtitles are reported, and Moirai tries other eligible tracks before continuing without subtitles. Test the Channel with your playback settings and IPTV client.
 
 ## Organize music videos and other material
 

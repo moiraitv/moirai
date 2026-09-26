@@ -1,3 +1,4 @@
+import { decodeMediaText } from '../media/media-text.js';
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { MAX_NFO_BYTES, type ScanIssue } from '@moirai/shared';
@@ -84,7 +85,7 @@ export async function readNfo(
 	try {
 		const source = await readObservedNfo(scanRoot, nfoPath, inputs, signal);
 		return {
-			parsed: parseKodiNfo(source.content.toString('utf8')),
+			parsed: parseKodiNfo(decodeMediaText(source.content, true)),
 			path: source.path,
 			status: 'complete',
 			issue: null,
@@ -122,7 +123,7 @@ export async function readGroupNfo(
 ): Promise<ParsedNfo | null> {
 	try {
 		const source = await readObservedNfo(scanRoot, file, inputs, signal);
-		const parsed = parseKodiNfo(source.content.toString('utf8'));
+		const parsed = parseKodiNfo(decodeMediaText(source.content, true));
 		if (parsed.truncatedFields.length > 0) {
 			issues.push({
 				path: normalizeRelative(scanRoot, file),

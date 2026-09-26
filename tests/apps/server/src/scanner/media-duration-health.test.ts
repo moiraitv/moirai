@@ -162,3 +162,35 @@ it('leaves only the three audited outliers outside percentage tolerance', () => 
 	] }), 1)));
 	expect(active.map(entry => entry.title)).toEqual(['Stargate (1994)', 'The Elephant Man (1980)', 'Three Kings (1999)']);
 });
+
+
+it('never treats container fallback as measured video or inspects its tail', async () => {
+	const probe = parseMediaProbeOutput(JSON.stringify({
+		format: { duration: '100' },
+		streams: [
+			{ codec_type: 'video', start_time: '0' },
+			{ codec_type: 'video', duration: '100', disposition: { attached_pic: 1 } },
+			{ codec_type: 'audio', duration: '60', start_time: '0' },
+		],
+	}), 1);
+	const inspect = vi.fn(async () => 'mostly-black' as const);
+	expect(mediaDurationHealthIssues(probe, 'film.mkv')).toEqual([]);
+	expect(withinDurationTolerance(probe)).toBe(false);
+	expect(silentTailTarget(probe)).toBeNull();
+	await expect(assessDurationHealth(probe, {
+		root: '/', file: '/film.mkv', relativePath: 'film.mkv', fingerprint: 'identity',
+		cached: { fingerprint: 'identity', result: 'mostly-black', accepted: false }, inspect,
+		signal: undefined,
+	})).resolves.toEqual([]);
+	expect(inspect).not.toHaveBeenCalled();
+});
+
+it('reports mismatches from language-suffixed audio and video duration tags', () => {
+	const probe = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ codec_type: 'video', tags: { 'DURATION-eng': '00:10:00' } },
+		{ codec_type: 'audio', tags: { 'DURATION-fra': '00:05:00' } },
+	] }), 1);
+	expect(mediaDurationHealthIssues(probe, 'film.mkv')).toEqual([
+		expect.objectContaining({ code: 'media_audio_video_duration_mismatch' }),
+	]);
+});

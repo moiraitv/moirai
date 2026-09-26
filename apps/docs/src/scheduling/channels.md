@@ -104,9 +104,9 @@ These settings are available either by using `Custom` for the channel or with a 
 Use **Audio selection** to prefer an audio language or track title. Both fields are optional; leave them blank to keep automatic audio selection.
 
 - **Preferred language code:** enter two or three letters, such as `en` or `eng`. Equivalent language codes match the same language.
-- **Preferred audio title:** enter part of the audio track's title, such as `Original` or `Commentary`. Matching ignores case and does not use regular expressions.
+- **Preferred audio title:** enter part of the audio track's title, such as `Original` or `Commentary`. Matching checks alternate localized names and MP4 handler names too, ignores case, and does not use regular expressions.
 
-Moirai first prefers the requested language, then a matching title within those tracks. If either preference has no matches, it keeps the remaining available tracks. It then prefers a track marked default, followed by the track with the most audio channels, and finally the lowest stream index. These are preferences: an unavailable language does not silence the video. With neither preference set, the playback engine keeps its normal selection.
+Moirai first prefers the requested language, then a matching title within those tracks. If either preference has no matches, it keeps the remaining available tracks. Without a matching title, it first prefers tracks that are not marked as commentary or audio description when available. An explicit title match can still select those tracks. Remaining ties prefer a track marked default, followed by the track with the most audio channels, and finally the lowest stream index. These are preferences: an unavailable language does not silence the video. With neither preference set, the playback engine keeps its normal selection.
 
 [Programs](/scheduling/programs) can override either field, including within nested sequences. Audio settings apply separately to each file of a multipart video. Channel fallback override files keep their existing audio behavior. Changes take effect as the playback engine consumes updated scheduled items; the current item is not restarted.
 
@@ -160,7 +160,7 @@ Expand **Guide template override** to use a specific XMLTV layout for this ![](/
 
 ### Check the result
 
-Save the Channel and test a video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. Missing tracks, unreadable sidecars, and credit-preparation failures are omitted so Moirai can publish the video without them; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.
+Save the Channel and test a video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. If preparing a subtitle fails, Moirai tries up to two further eligible tracks while retaining your language and forced-only requirements. Failed attempts remain visible in preparation issues. If no candidate succeeds, or credit preparation fails, Moirai publishes the video without that content; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.
 
 ## Save and verify
 

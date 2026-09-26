@@ -13,14 +13,14 @@ export function subtitleLanguageKey(value: string): string {
 	return languageKeys.get(code) ?? code;
 }
 
-/** Select a single track deterministically without falling back to a different language. */
-export function selectSubtitle(
+/** Rank eligible tracks without relaxing language, policy, or physical-part constraints. */
+export function subtitleCandidates(
 	tracks: MediaSubtitleTrack[],
 	preferences: SubtitlePreferences,
 	partNumber: number,
-): MediaSubtitleTrack | null {
+): MediaSubtitleTrack[] {
 	if (!preferences.policy || preferences.policy === 'off') {
-		return null;
+		return [];
 	}
 
 	const candidates = tracks.filter((track) =>
@@ -38,8 +38,24 @@ export function selectSubtitle(
 			|| left.relativePaths.join('/').localeCompare(right.relativePaths.join('/'), 'en')
 			|| left.id.localeCompare(right.id, 'en');
 	});
-	return candidates[0] ?? null;
+	const seen = new Set<string>();
+	return candidates.filter(track => {
+		const key = JSON.stringify([track.sourceType, track.partNumber, track.streamIndex, track.playbackPaths]);
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
 }
+
+/** Keep single-selection callers compatible with the ordered candidate list. */
+export function selectSubtitle(tracks: MediaSubtitleTrack[], preferences: SubtitlePreferences, partNumber: number): MediaSubtitleTrack | null {
+	return subtitleCandidates(tracks, preferences, partNumber)[0] ?? null;
+}
+
+/** Maximum distinct subtitle preparations attempted for one physical part. */
+export const MAX_SUBTITLE_PREPARATION_ATTEMPTS = 3;
 
 /** Image codecs stay in the engine's overlay path even when text is converted to WebVTT. */
 export function isImageSubtitle(track: MediaSubtitleTrack): boolean {

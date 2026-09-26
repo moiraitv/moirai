@@ -55,7 +55,9 @@ After correcting a file, its metadata, or source access, synchronize the library
 
 ### Audio/video duration differences
 
-`media_audio_video_duration_mismatch` means at least one measured audio track differs from the video duration by more than thirty seconds. Playback and scheduling use the video duration, but audio tracks that differ in length significantly from the main video duration can be a sign of incomplete media. Check the reported tracks and watch the affected ending before deciding whether the difference is harmless or the file needs replacing.
+Moirai uses the first video track in stream-index order, excluding embedded cover artwork, for playback, duration, and resolution. Timing from a later video track is not substituted. It reads language-tagged timing in MKV and WebM files. If a file has exactly one video track and no usable video timing, Moirai uses the container's duration instead. This fallback can include audio that runs beyond the video; it does not produce audio/video duration warnings or automatic silent-ending assessments because the video's own duration is unknown.
+
+`media_audio_video_duration_mismatch` means at least one measured audio track differs from the video duration by more than thirty seconds. Playback and scheduling prefer the video duration, but audio tracks that differ in length significantly from the main video duration can be a sign of incomplete media. Check the reported tracks and watch the affected ending before deciding whether the difference is harmless or the file needs replacing.
 
 Moirai automatically suppresses the finding when every measured audio track is no more than 5% shorter than the video and none is more than thirty seconds longer.
 
@@ -103,7 +105,7 @@ For larger differences, Moirai checks short silent endings during library scans 
 
 ### Media inspection unavailable
 
-`media_executable_unavailable` means Moirai could not use ffprobe to measure media. Check the server installation and ffprobe availability, then restart the server if needed and synchronize the library. Filename or NFO runtimes cannot substitute for a measured video duration.
+`media_executable_unavailable` means Moirai could not use ffprobe to measure media. Check the server installation and ffprobe availability, then restart the server if needed and synchronize the library. Filename or NFO runtimes cannot substitute for timing read from the media file.
 
 ### Insufficient resources for media inspection
 
@@ -131,7 +133,7 @@ For larger differences, Moirai checks short silent endings during library scans 
 
 ### No usable video duration
 
-`media_missing_duration` means Moirai could not obtain a valid duration from the video tracks. The item cannot be scheduled using an NFO or container runtime instead. Check the media file and repair or re-export it with valid video timing, then synchronize the library.
+`media_missing_duration` means Moirai could not obtain valid video timing or an eligible container duration. A container duration can be used only when there is exactly one video track, excluding cover artwork. An NFO runtime cannot make the item schedulable because the value is not precise enough. Files recorded in live mode may lack both timing sources, and you'll need to repair or re-export the file with valid timing, then synchronize the library. 
 
 ### Incomplete multipart video
 

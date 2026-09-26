@@ -1,5 +1,5 @@
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
-import { prepareAudio, type PreparedAudio } from './audio-selection.js';
+import { prepareMediaStreams, type PreparedMediaStreams } from './audio-selection.js';
 import { SubtitleAssets, type PreparedSubtitles } from './subtitle-assets.js';
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
@@ -308,11 +308,11 @@ export class PlayoutSynchronizer {
 		}
 		const programs = this.repository.listPrograms();
 		const selections = await this.subtitles.prepare(channel, guide, programs);
-		const audio = await programs.then((items) => prepareAudio(this.repository, channel, guide, items)).catch(() => new Map());
+		const streams = await programs.then((items) => prepareMediaStreams(this.repository, channel, guide, items)).catch(() => ({ audio: new Map(), video: new Map() }));
 		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
 		return this.withChannelConfiguration(channelId, async () => {
 			await this.beforeSubtitleModeChange(channelId, subtitleMode);
-			const generated = await this.channelFiles(channel, guide, fallback, selections, audio);
+			const generated = await this.channelFiles(channel, guide, fallback, selections, streams);
 			const publicationStarted = performance.now();
 
 			for (const [filename, content] of generated) {
@@ -375,11 +375,11 @@ export class PlayoutSynchronizer {
 		guide: Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>,
 		fallback: Awaited<ReturnType<FallbackFillerStore['resolve']>>,
 		subtitles?: PreparedSubtitles,
-		audio?: PreparedAudio,
+		streams?: PreparedMediaStreams,
 	): Promise<Map<string, string>> {
 		const files = new Map<string, string>();
 		const input: Parameters<typeof buildEtvPlayoutFiles> = [[channel], guide,
-			new Map([[channel.id, fallback]]), subtitles, audio];
+			new Map([[channel.id, fallback]]), subtitles, streams?.audio, streams?.video];
 		const generated = this.workers ? await this.workers.playout(input) : buildEtvPlayoutFiles(...input);
 		for (const [relativePath, content] of generated) {
 			const filename = path.posix.basename(relativePath);
