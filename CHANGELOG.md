@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.1 - 2026-09-26
+
+### Improvements
+
+- **Preferred audio title** now matches alternate localized track names and MP4 handler names as well as the displayed title. When no title matches, Moirai prefers tracks that are not marked as commentary or audio description when available. Explicit title matches can still select those tracks.
+- Subtitle preparation tries up to three eligible tracks before continuing without subtitles. Fallback keeps the selected language, forced-only policy, and multipart timing; failed attempts remain visible in preparation issues.
+- NFO files and text subtitles support UTF-16 and additional legacy encodings. NFO XML encoding declarations are honored, and text subtitles are prepared as UTF-8 copies without changing the originals. Uncertain encodings are reported instead of silently replacing characters; binary subtitles remain unchanged.
+- **Action & Adventure** now shares the **Adventure** genre filter choice, including saved filters. Standalone **Action** remains separate. Existing library indexes refresh on their next synchronization.
+
+### Fixes
+
+- MKV files with language-tagged durations, including many MakeMKV rips, are recognized again. When a file has one real video track with no measured duration, its container duration supplies a fallback. Container-only timing no longer produces misleading audio/video duration warnings.
+- Scheduling, resolution detection, and playback consistently use the first video track by stream index, excluding embedded cover images. Uploaded fallback videos can include cover artwork alongside their single real video track.
+- Audio channel counts are now collected for track selection. Cached media measurements and track metadata refresh on the next library synchronization; previously failed probes are retried.
+
 ## 0.4.0 - 2026-09-25
 
 ### New
