@@ -1448,7 +1448,9 @@ them without rendering every card on the page.
 
 The library filter presents genre rules first and defaults to Match all, where each genre can be
 neutral, primary, required, or explicitly disallowed. Its contextual facets predict the result of
-replacing that genre’s rule with each action. Match any accepts either primary or inclusion rules
+replacing that genre’s rule with each action. Fixed-width genre controls keep names aligned; counts
+below 1,000 remain exact and larger counts display thousands rounded to the nearest hundred, while
+accessible labels retain exact totals. Match any accepts either primary or inclusion rules
 and shows static library totals; switching to it clears exclusions. Primary genre keys are indexed
 on media items, using the first valid source genre unless a Moirai-specific NFO
 `<genre primary="true">` marker overrides it. Multiple markers use the first valid marked genre.

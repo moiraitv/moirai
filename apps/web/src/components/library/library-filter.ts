@@ -27,6 +27,15 @@ export interface LibraryFilterDraft {
 	director: string;
 }
 
+/** Show genre totals exactly below 1,000, otherwise as thousands rounded to the nearest hundred. */
+export function genreCountLabel(count: number | null): string {
+	if (count === null) {
+		return '—';
+	}
+
+	return count < 1000 ? String(count) : `${(Math.round(count / 100) / 10).toFixed(1)}k`;
+}
+
 /** Create an independent empty filter draft with the default Match all genre behavior. */
 export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 	return {

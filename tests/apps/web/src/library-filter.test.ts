@@ -6,6 +6,7 @@ import {
 	emptyCatalogProgramItemFilter,
 	emptyLibraryFilterDraft,
 	libraryFilterDraft,
+	genreCountLabel,
 } from '@web/components/library/library-filter';
 
 describe('shared library query filter controls', () => {
@@ -92,5 +93,15 @@ describe('shared library query filter controls', () => {
 			'Rating: 7.5+',
 			'Added: 2026-01-02–2026-03-04',
 		]);
+	});
+});
+
+describe('genre count labels', () => {
+	it.each([
+		[null, '—'], [0, '0'], [1, '1'], [999, '999'],
+		[1000, '1.0k'], [1049, '1.0k'], [1050, '1.1k'], [1149, '1.1k'],
+		[1150, '1.2k'], [9950, '10.0k'], [100000, '100.0k'],
+	] as const)('formats %s as %s', (count, expected) => {
+		expect(genreCountLabel(count)).toBe(expected);
 	});
 });

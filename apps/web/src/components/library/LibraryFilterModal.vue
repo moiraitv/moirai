@@ -9,6 +9,7 @@ import { countLabel } from '../../count-label';
 import { useAnimatedDismissal } from '../../motion';
 import {
 	emptyLibraryFilterDraft,
+	genreCountLabel,
 	type LibraryFilterDraft,
 } from './library-filter';
 
@@ -223,9 +224,9 @@ onUnmounted(() => genreCountsController?.abort());
 							<template v-for="genre in displayedGenres" :key="genre.key">
 								<div class="genre-choice-row">
 									<div class="genre-rule-split" role="group" :aria-label="`${genre.name} rule`">
-										<button type="button" :class="{ active: genreRule(genre.key) === 'primary' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'primary'" :aria-label="genreActionLabel(genre, 'primary')" title="Primary" @click="toggleGenreRule(genre.key, 'primary')"><Star :size="16" aria-hidden="true" /><small>{{ genre.primaryCount.toLocaleString() }}</small></button>
-										<button type="button" :class="{ active: genreRule(genre.key) === 'include' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'include'" :aria-label="genreActionLabel(genre, 'include')" title="Has" @click="toggleGenreRule(genre.key, 'include')"><Check :size="16" aria-hidden="true" /><small>{{ genre.count.toLocaleString() }}</small></button>
-										<button type="button" class="exclude" :class="{ active: genreRule(genre.key) === 'exclude' }" :disabled="localDraft.genreMatch === 'any' || genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'exclude'" :aria-label="genreActionLabel(genre, 'exclude')" title="Doesn’t Have" @click="toggleGenreRule(genre.key, 'exclude')"><X :size="16" aria-hidden="true" /><small>{{ genre.excludeCount?.toLocaleString() ?? '—' }}</small></button>
+										<button type="button" :class="{ active: genreRule(genre.key) === 'primary' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'primary'" :aria-label="genreActionLabel(genre, 'primary')" title="Primary" @click="toggleGenreRule(genre.key, 'primary')"><Star :size="16" aria-hidden="true" /><small>{{ genreCountLabel(genre.primaryCount) }}</small></button>
+										<button type="button" :class="{ active: genreRule(genre.key) === 'include' }" :disabled="genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'include'" :aria-label="genreActionLabel(genre, 'include')" title="Has" @click="toggleGenreRule(genre.key, 'include')"><Check :size="16" aria-hidden="true" /><small>{{ genreCountLabel(genre.count) }}</small></button>
+										<button type="button" class="exclude" :class="{ active: genreRule(genre.key) === 'exclude' }" :disabled="localDraft.genreMatch === 'any' || genreRuleDisabled(genre.key)" :aria-pressed="genreRule(genre.key) === 'exclude'" :aria-label="genreActionLabel(genre, 'exclude')" title="Doesn’t Have" @click="toggleGenreRule(genre.key, 'exclude')"><X :size="16" aria-hidden="true" /><small>{{ genreCountLabel(genre.excludeCount) }}</small></button>
 									</div>
 									<span class="genre-choice-name">{{ genre.name }}</span>
 								</div>
