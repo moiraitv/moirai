@@ -13,6 +13,12 @@ test('creates, validates, reloads and edits Similar Items with only compatible s
 		expect(sourceResponse.ok()).toBe(true);
 		const source = await sourceResponse.json();
 		ids.push(source.id);
+		const aiResponse = await page.request.post('/api/v1/programs', { headers, data: {
+			name: 'AI anchors', config: { type: 'content', source: { type: 'ai', libraryId: randomUUID(), prompt: 'Space adventures', itemIds: [randomUUID()] }, strategy: { type: 'sequential' } },
+		} });
+		expect(aiResponse.ok()).toBe(true);
+		const aiSource = await aiResponse.json();
+		ids.push(aiSource.id);
 		const queryResponse = await page.request.post('/api/v1/programs', { headers, data: {
 			name: 'Incompatible query', config: { type: 'content', source: { type: 'library-query', libraryId: randomUUID() }, strategy: { type: 'sequential' } },
 		} });
@@ -28,7 +34,9 @@ test('creates, validates, reloads and edits Similar Items with only compatible s
 		await page.getByPlaceholder('e.g. Evening Lineup').fill('Semantic recommendations');
 		const select = page.getByLabel('Source Program', { exact: true });
 		await expect(select.locator('option')).not.toContainText(['Incompatible query']);
-		await select.selectOption(source.id);
+		await expect(select.locator('option', { hasText: 'Semantic anchors' })).toHaveCount(1);
+		await expect(select.locator('option', { hasText: 'AI anchors' })).toHaveCount(1);
+		await select.selectOption(aiSource.id);
 		await expect(page.getByLabel('Quantity', { exact: true })).toHaveValue('20');
 		await page.getByLabel('Quantity', { exact: true }).fill('0');
 		await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
@@ -42,13 +50,13 @@ test('creates, validates, reloads and edits Similar Items with only compatible s
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
 		const saved = await (await savedResponse).json();
 		ids.push(saved.id);
-		expect(saved.config).toMatchObject({ type: 'similarity', sourceProgramId: source.id, variety: 75, quantity: 5, softPreferences: 'Slow science fiction', hardExclusions: ['superhero', 'Comedy'], exclusionStrictness: 65 });
+		expect(saved.config).toMatchObject({ type: 'similarity', sourceProgramId: aiSource.id, variety: 75, quantity: 5, softPreferences: 'Slow science fiction', hardExclusions: ['superhero', 'Comedy'], exclusionStrictness: 65 });
 		await page.goto(`/schedules/programs/${saved.id}`);
 		await expect(page.getByLabel('Quantity', { exact: true })).toHaveValue('5');
 		await expect(page.getByLabel('Preferences', { exact: true })).toHaveValue('Slow science fiction');
 		await expect(page.getByLabel('Exclusions', { exact: true })).toHaveValue('superhero, Comedy');
 		await expect(page.getByLabel('Exclusion strictness', { exact: true })).toHaveValue('65');
-		await expect(page.getByLabel('Source Program', { exact: true })).toHaveValue(source.name);
+		await expect(page.getByLabel('Source Program', { exact: true })).toHaveValue(aiSource.name);
 		await expect(page.getByLabel('Source Program', { exact: true })).toHaveJSProperty('readOnly', true);
 		await page.getByLabel('Quantity', { exact: true }).fill('10');
 		await expect(page.getByLabel('Preferences', { exact: true })).toBeVisible();

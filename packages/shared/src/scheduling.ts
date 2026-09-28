@@ -1,3 +1,4 @@
+export * from './ai-selection.js';
 import { audioPreferencesSchema } from './audio.js';
 import { z } from 'zod';
 import { slotGuideSchema, type GuideEntry } from './guide.js';
@@ -203,6 +204,13 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		sort: selectedMediaSortSchema.default({ type: 'date-added', direction: 'asc' }),
 	}),
 	z.object({
+		type: z.literal('ai'),
+		libraryId: z.uuid(),
+		prompt: z.string().trim().min(1).max(2_000),
+		itemIds: selectedMediaItemIdsSchema,
+		sort: selectedMediaSortSchema.default({ type: 'date-added', direction: 'asc' }),
+	}),
+	z.object({
 		type: z.literal('group'),
 		groupId: z.uuid(),
 		includeDescendants: z.boolean().default(true),
@@ -255,11 +263,11 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		}, context);
 	}
 
-	if (source.type !== 'collection') {
+	if (source.type !== 'collection' && source.type !== 'ai') {
 		return;
 	}
 
-	if (source.additionBatches) {
+	if (source.type === 'collection' && source.additionBatches) {
 		const additionOrder = source.additionBatches.flat();
 		if (
 			additionOrder.length !== source.itemIds.length

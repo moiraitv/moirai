@@ -48,6 +48,21 @@ it('persists preference vectors across restart, detects corruption, and distingu
 	}
 });
 
+it('prioritizes requested concepts ahead of older pending drafts within the bounded batch', async () => {
+	const f = await fixture();
+	try {
+		const older = Array.from({ length: PREFERENCE_BATCH_SIZE }, (_, index) => `older concept ${index}`);
+		f.semantic.preferences.catalog([...older, 'current concept']);
+		const pending = f.semantic.preferences.pending(['current concept']);
+		expect(pending).toHaveLength(PREFERENCE_BATCH_SIZE);
+		expect(pending[0]?.text).toBe('current concept');
+		expect(pending.some(item => item.text === older.at(-1))).toBe(false);
+	}
+	finally {
+		await f.close();
+	}
+});
+
 it('applies exclusions to previews and future seeds, preserves active sets, and waits for preferences', async () => {
 	const f = await fixture();
 	try {

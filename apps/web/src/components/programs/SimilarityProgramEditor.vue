@@ -23,10 +23,10 @@ const exclusionStrictness = defineModel<number>('exclusionStrictness', { require
 const exclusionText = defineModel<string>('exclusionText', { required: true });
 const hardExclusions = computed(() => exclusionText.value.split(',').map((text) => text.trim()).filter(Boolean));
 const sources = computed(() => props.programs.filter((program) =>
-	program.config.type === 'content' && program.config.source.type === 'collection'));
+	program.config.type === 'content' && (program.config.source.type === 'collection' || program.config.source.type === 'ai')));
 const sourceLibraryId = computed(() => {
 	const source = sources.value.find((program) => program.id === sourceProgramId.value)?.config;
-	return source?.type === 'content' && source.source.type === 'collection' ? source.source.libraryId : '';
+	return source?.type === 'content' && (source.source.type === 'collection' || source.source.type === 'ai') ? source.source.libraryId : '';
 });
 const retryError = ref('');
 const retrying = ref(false);
@@ -94,10 +94,10 @@ async function retryEmbeddings(): Promise<void> {
 		<label v-if="type === 'similarity'"><span>Source Program</span>
 			<input v-if="readOnlySource" :value="programs.find((program) => program.id === sourceProgramId)?.name ?? 'Missing source Program'" readonly aria-label="Source Program" />
 			<select v-else v-model="sourceProgramId" required aria-label="Source Program" @change="filter = emptyCatalogProgramItemFilter()">
-				<option disabled value="">Select a Specific media items Program</option>
+				<option disabled value="">Select a Specific media items or AI Program</option>
 				<option v-for="source in sources" :key="source.id" :value="source.id">{{ source.name }}</option>
 			</select>
-			<small v-if="sources.length === 0">Create a Content Program with Specific media items first.</small>
+			<small v-if="sources.length === 0">Create a Content Program with Specific media items or an AI selection first.</small>
 		</label>
 		<SimilarityLibraryFilters
 			v-if="type === 'similarity'" v-model="filter" :library-id="sourceLibraryId"

@@ -302,16 +302,16 @@ function candidatesFor(
 	}
 
 	// Filter source members by group ancestry, media kind, and genre constraints.
-	const collectionItemIds = source.type === 'collection' && source.sort.type === 'manual'
+	const collectionItemIds = (source.type === 'collection' || source.type === 'ai') && source.sort.type === 'manual'
 		? source.sort.itemIds
-		: source.type === 'collection'
+		: source.type === 'collection' || source.type === 'ai'
 			? source.itemIds
 			: [];
 	const candidatePool
 		= source.type === 'item'
 			? [mediaById.get(canonicalItemId(source.itemId))]
 				.filter((media): media is SchedulableMedia => Boolean(media))
-			: source.type === 'collection'
+			: source.type === 'collection' || source.type === 'ai'
 				? collectionItemIds.flatMap((itemId) => {
 					const media = mediaById.get(canonicalItemId(itemId));
 					return media ? [media] : [];
@@ -338,7 +338,7 @@ function candidatesFor(
 			);
 		}
 
-		if (config.source.type === 'collection') {
+		if (config.source.type === 'collection' || config.source.type === 'ai') {
 			return (
 				media.libraryId === config.source.libraryId
 				&& config.source.itemIds.some((id) => canonicalItemId(id) === media.id)
@@ -350,7 +350,7 @@ function candidatesFor(
 
 	// Report deleted explicit members separately from a missing source container.
 	let missingMemberMessage: string | null = null;
-	if (source.type === 'collection' && !missingReferenceMessage) {
+	if ((source.type === 'collection' || source.type === 'ai') && !missingReferenceMessage) {
 		const count = source.itemIds.length - matching.length;
 		if (count > 0) {
 			missingMemberMessage = `${countLabel(count, 'selected item')} ${
@@ -371,7 +371,7 @@ function candidatesFor(
 			missingReferenceMessage = 'All selected media groups are no longer indexed.';
 		}
 	}
-	if (source.type === 'collection' && matching.length === 0 && !missingReferenceMessage) {
+	if ((source.type === 'collection' || source.type === 'ai') && matching.length === 0 && !missingReferenceMessage) {
 		missingReferenceMessage = 'All selected items are no longer indexed.';
 	}
 
@@ -397,15 +397,20 @@ function candidatesFor(
 		(media) => !usableDurationSeconds(media.durationSeconds),
 	);
 	const measured = candidates.filter((media) => usableDurationSeconds(media.durationSeconds));
-	const playable = source.type === 'collection'
-		? orderSelectedMedia(
-			measured,
-			source.sort,
-			source.additionBatches?.map((batch) => batch.map(canonicalItemId)),
-		)
-		: source.type === 'library-query'
-			? measured
-			: measured.sort(compareSchedulingMedia);
+	const aiIndexedSort = source.type === 'ai' && source.sort.type === 'date-added' ? source.sort : null;
+	const playable = aiIndexedSort
+		? measured.sort((left, right) => compareLibraryQueryMedia(left, right, aiIndexedSort))
+		: source.type === 'collection' || source.type === 'ai'
+			? orderSelectedMedia(
+				measured,
+				source.sort,
+				source.type === 'collection'
+					? source.additionBatches?.map((batch) => batch.map(canonicalItemId))
+					: undefined,
+			)
+			: source.type === 'library-query'
+				? measured
+				: measured.sort(compareSchedulingMedia);
 	context.candidateCache.set(programId, {
 		playable,
 		missingDuration,

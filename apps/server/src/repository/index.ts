@@ -1,3 +1,4 @@
+import { readAiCatalog } from './ai-catalog.js';
 import { setMediaIssueIgnored } from './ignored-media-issues.js';
 import { listTailAssessments, setSilentEndingAcceptance } from './media-tail-assessments.js';
 import { SemanticRepository } from './semantic.js';
@@ -182,6 +183,17 @@ export class Repository extends LibraryRepository {
 	async browseMedia(libraryId: string, query: MediaBrowseQuery): Promise<MediaBrowseResult> {
 		return this.catalog.browseMedia(libraryId, query);
 	}
+
+	/** Load titles, years, media kinds, and genres, capped for an AI selection prompt. */
+	async listLibraryTitleYears(libraryId: string, limit: number) {
+		return this.catalog.listLibraryTitleYears(libraryId, limit);
+	}
+
+	/** Load full-library identities for local discovery and retrieval, without paid-context truncation. */
+	async aiCatalog(libraryId: string) {
+		return readAiCatalog(this.database, libraryId);
+	}
+
 
 	/** Resolve recursive filtered media identifiers for a selected-items program operation. */
 	resolveProgramItemSelection(

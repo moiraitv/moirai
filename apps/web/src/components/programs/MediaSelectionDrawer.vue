@@ -13,6 +13,7 @@ import { countLabel } from '../../count-label';
 
 const props = defineProps<{
 	selectingGroups: boolean;
+	aiSelection?: boolean;
 	selectionCount: number;
 	selectionLimit: number;
 	loading: boolean;
@@ -31,6 +32,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
 	close: [];
+	retry: [];
 	clear: [];
 	removeItem: [id: string];
 	removeGroup: [id: string];
@@ -43,7 +45,7 @@ const emit = defineEmits<{
 const drawer = ref<HTMLElement>();
 const drawerContent = ref<HTMLElement>();
 const visible = ref(true);
-const manual = computed(() => props.sort.type === 'manual');
+const manual = computed(() => !props.aiSelection && props.sort.type === 'manual');
 const filtered = computed(() => props.search.trim().length > 0);
 const direction = computed(() => props.sort.type === 'manual' ? 'asc' : props.sort.direction);
 const draggableItems = computed({
@@ -87,10 +89,10 @@ onMounted(async () => {
 					<header class="selection-drawer-header">
 						<div>
 							<p class="eyebrow">
-								{{ selectingGroups ? 'Specific media groups' : 'Specific media items' }}
+								{{ aiSelection ? 'AI results' : selectingGroups ? 'Specific media groups' : 'Specific media items' }}
 							</p>
-							<h2 id="selection-drawer-title">Review selection</h2>
-							<p>{{ selectionCount }} of {{ selectionLimit }} selected</p>
+							<h2 id="selection-drawer-title">{{ aiSelection ? 'Review results' : 'Review selection' }}</h2>
+							<p>{{ selectionCount }}<template v-if="!aiSelection"> of {{ selectionLimit }}</template> selected</p>
 						</div>
 						<button type="button" aria-label="Close selection" @click="close">
 							<X :size="21" />
@@ -107,7 +109,7 @@ onMounted(async () => {
 								@input="emit('update:search', ($event.target as HTMLInputElement).value)"
 							/>
 						</label>
-						<label v-if="!selectingGroups">
+						<label v-if="!selectingGroups && !aiSelection">
 							<span>Sort By</span>
 							<select
 								:value="sort.type"
@@ -121,7 +123,7 @@ onMounted(async () => {
 								<option value="manual">Manual</option>
 							</select>
 						</label>
-						<label v-if="!selectingGroups && !manual">
+						<label v-if="!selectingGroups && !manual && !aiSelection">
 							<span>Direction</span>
 							<select
 								:value="direction"
@@ -144,6 +146,10 @@ onMounted(async () => {
 								selectingGroups ? 'Loading selected media groups…' : 'Loading selected media…'
 							"
 						/>
+						<div v-else-if="!loaded" class="notice warning compact-notice" role="alert">
+							Could not load the selection.
+							<button type="button" class="toolbar-button" @click="emit('retry')">Try again</button>
+						</div>
 						<template v-else>
 							<p
 								v-if="selectingGroups ? missingGroupCount > 0 : missingItemCount > 0"
@@ -254,8 +260,8 @@ onMounted(async () => {
 										</span>
 										<TwoStepActionButton
 											class="selected-item-remove"
-											:label="`Remove ${item.title}`"
-											:confirm-label="`Confirm remove ${item.title}`"
+											:label="`${aiSelection ? 'Exclude' : 'Remove'} ${item.title}`"
+											:confirm-label="`Confirm ${aiSelection ? 'exclude' : 'remove'} ${item.title}`"
 											@confirm="emit('removeItem', item.id)"
 										>
 											<Trash2 :size="15" />
@@ -285,7 +291,7 @@ onMounted(async () => {
 					<footer class="selection-drawer-footer">
 						<TwoStepActionButton
 							class="toolbar-button danger-button"
-							:disabled="selectionCount === 0"
+							:disabled="selectionCount === 0 || loading"
 							label="Clear All"
 							confirm-label="Confirm Clear All"
 							confirm-text="Confirm Clear"

@@ -49,6 +49,19 @@ describe('public error policy', () => {
 		expect(JSON.stringify(mapped.body)).not.toContain('early_start_max_drift_seconds');
 	});
 
+	it('keeps an application-authored unavailable message without a short retry', () => {
+		const mapped = publicError(Object.assign(new Error('AI is not configured.'), {
+			statusCode: 503,
+			expose: true,
+		}), REQUEST_ID);
+		expect(mapped).toMatchObject({
+			statusCode: 503,
+			body: { code: 'service_unavailable', message: 'AI is not configured.', requestId: REQUEST_ID },
+			expected: true,
+		});
+		expect(mapped.retryAfter).toBeUndefined();
+	});
+
 	it('preserves expected service-unavailable status without exposing details', () => {
 		const error = Object.assign(new Error('Artwork failed at /Volumes/Private/poster.jpg'), {
 			statusCode: 503,

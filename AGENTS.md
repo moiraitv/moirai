@@ -119,6 +119,11 @@ guidance before running commands. It does not replace these repository guideline
 - When implementing code that may touch the database, avoid changes that permanently increase the number of queries run per request. Run queries only when they are necessary to retrieve or modify data for that request.
 - When extra queries are unavoidable, minimize them and keep their cost scoped to the workflows that need them. Avoid introducing repeated or per-item queries when the data can reasonably be fetched together.
 - Consider performance and documented resource limits in affected workflows, without adding complexity for speculative optimization.
+- Do not assume third-party services will obey requested budgets or timing targets exactly. Allow a
+  small, explicit, bounded overage or finishing grace when safe, so an otherwise valid result is not
+  discarded for a minor overrun. Keep requested budgets unchanged, stop starting additional optional
+  work once the target is reached, and enforce a separate hard ceiling. Record actual usage and
+  overruns without sensitive data. Never relax security limits or explicit user spending caps.
 
 ## Documentation
 

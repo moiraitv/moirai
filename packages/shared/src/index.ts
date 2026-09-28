@@ -1,3 +1,5 @@
+export * from './ai-progress.js';
+export * from './ai-generation.js';
 export * from './audio.js';
 import { audioPreferencesSchema } from './audio.js';
 import { audioNormalizationSchema, videoNormalizationSchema, type ConcreteHardwareAcceleration } from './encoding.js';

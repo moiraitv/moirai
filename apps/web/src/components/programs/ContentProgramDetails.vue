@@ -5,6 +5,18 @@ import type { SchedulingProgram, SchedulingProgramStatus } from '@moirai/shared'
 import { programValueLabel } from './program-catalog';
 const props = defineProps<{ program: SchedulingProgram; status?: SchedulingProgramStatus | undefined; libraries: { id: string; name: string }[] }>();
 const config = computed(() => props.program.config.type === 'content' ? props.program.config : null);
+const orderLabel = computed(() => {
+	const source = config.value?.source;
+	if (source?.type !== 'collection' && source?.type !== 'ai') {
+		return '';
+	}
+	return {
+		'date-added': source.type === 'ai' ? 'Indexed date' : 'Date Added to Program',
+		name: source.type === 'ai' ? 'Title' : 'Name',
+		'release-date': source.type === 'ai' ? 'Release date' : 'Release Date',
+		manual: 'Manual',
+	}[source.sort.type];
+});
 const libraryName = computed(() => {
 	const source = config.value?.source;
 	const id = source && 'libraryId' in source ? source.libraryId : props.status?.previewItems[0]?.libraryId;
@@ -16,7 +28,8 @@ const libraryName = computed(() => {
 		<h3 class="eyebrow">Definition</h3>
 		<p>{{ status?.sourceLabel }}</p>
 		<dl><dt>Source Library</dt><dd>{{ libraryName }}</dd><dt>Selection</dt><dd>{{ programValueLabel(config.strategy.type) }}</dd>
-			<template v-if="config.source.type === 'collection'"><dt>Selected items</dt><dd>{{ config.source.itemIds.length }}</dd><dt>Order</dt><dd>{{ config.source.sort.type }}</dd></template>
+			<template v-if="config.source.type === 'collection' || config.source.type === 'ai'"><dt>Selected items</dt><dd>{{ config.source.itemIds.length }}</dd><dt>Order</dt><dd>{{ orderLabel }}</dd></template>
+			<template v-if="config.source.type === 'ai'"><dt>Prompt</dt><dd>{{ config.source.prompt }}</dd></template>
 			<template v-if="config.source.type === 'group-collection'"><dt>Selected groups</dt><dd>{{ config.source.groupIds.length }}</dd></template>
 			<template v-if="config.source.type === 'library-query'">
 				<template v-if="config.source.itemLimit"><dt>Item limit</dt><dd>{{ config.source.itemLimit }}</dd></template>

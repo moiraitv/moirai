@@ -4,7 +4,7 @@ import type { ProgramConfig, SchedulingCatalog, SchedulingProgram } from '@moira
 /** Resolve semantic source scope consistently for previews, retries, and seed generation. */
 export function semanticSource(config: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>, programs: SchedulingProgram[], catalog: SchedulingCatalog) {
 	const source = config.type === 'similarity' ? programs.find((program) => program.id === config.sourceProgramId) : undefined;
-	const collection = source?.config.type === 'content' && source.config.source.type === 'collection' ? source.config.source : null;
+	const collection = source?.config.type === 'content' && (source.config.source.type === 'collection' || source.config.source.type === 'ai') ? source.config.source : null;
 	const libraryId = config.type === 'theme' ? config.libraryId : collection?.libraryId;
 	const valid = config.type === 'theme' ? Boolean(catalog.libraryAvailability[config.libraryId]) : Boolean(collection);
 	const sourceIds = [...new Set(collection?.itemIds.map((id) => catalog.mediaAliases?.[id] ?? id) ?? [])];
@@ -18,7 +18,7 @@ export function semanticSource(config: Extract<ProgramConfig, { type: 'similarit
 	const anchors = semanticAnchors(config, sourceIds, catalog);
 	return { valid, sourceIds, items, anchors,
 		label: config.type === 'theme' ? `Theme: ${config.theme}` : `Similar to ${source?.name}`,
-		missing: config.type === 'theme' ? 'Missing target library' : 'Missing Specific media items source' };
+		missing: config.type === 'theme' ? 'Missing target library' : 'Missing Specific media items or AI source' };
 }
 
 /** Use the theme vector or source-media vectors as the primary relevance anchors. */

@@ -12,7 +12,9 @@ import type {
 	MediaSourcePickerResult,
 } from '@moirai/shared';
 import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { MoiraiDatabase } from '../db/index.js';
+import { mediaItemGenres, mediaItems } from '../db/schema.js';
 import { addSourceMatch, escapeLike, ftsMatchQuery, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
 import type {
@@ -58,6 +60,34 @@ export class MediaCatalogRepository {
 
 	constructor(private readonly db: MoiraiDatabase) {
 		this.assets = new CatalogAssetsRepository(db);
+	}
+
+	/** Load compact AI catalog metadata in title order, with genres in the same bounded query. */
+	async listLibraryTitleYears(libraryId: string, limit: number): Promise<Array<{
+		id: string;
+		title: string;
+		year: number | null;
+		kind: string;
+		genres: string[];
+	}>> {
+		return this.db
+			.select({
+				id: mediaItems.id,
+				title: mediaItems.title,
+				year: mediaItems.year,
+				kind: mediaItems.kind,
+				genres: sql<string>`(
+					SELECT json_group_array(genre_name) FROM (
+						SELECT ${mediaItemGenres.genreName} AS genre_name FROM ${mediaItemGenres}
+						WHERE ${mediaItemGenres.itemId} = ${mediaItems.id}
+						ORDER BY ${mediaItemGenres.genreKey}
+					)
+				)`.mapWith((value: string): string[] => JSON.parse(value)),
+			})
+			.from(mediaItems)
+			.where(eq(mediaItems.libraryId, libraryId))
+			.orderBy(asc(mediaItems.sortTitle), asc(mediaItems.id))
+			.limit(limit);
 	}
 
 	/** Build one recursive, parameterized item scope from the shared catalog filter contract. */

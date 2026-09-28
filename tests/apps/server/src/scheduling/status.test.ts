@@ -55,6 +55,19 @@ function catalog(availability: 'available' | 'unconfirmed'): SchedulingCatalog {
 }
 
 describe('scheduling program status', () => {
+	it.each(['asc', 'desc'] as const)('previews AI results in indexed-date order (%s)', direction => {
+		const fixture = catalog('available');
+		fixture.media = ['2026-03-01', '2026-01-01', '2026-02-01'].map((dateAddedAt, index) => ({
+			...fixture.media[0]!, id: `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`, dateAddedAt,
+		}));
+		const ai: SchedulingProgram = { ...program, config: { type: 'content', source: { type: 'ai',
+			libraryId: fixture.media[0]!.libraryId, prompt: 'Movies', itemIds: fixture.media.map(item => item.id),
+			sort: { type: 'date-added', direction } }, strategy: { type: 'sequential' } } };
+		const ids = fixture.media.map(item => item.id);
+		expect(schedulingProgramStatuses([ai], fixture)[0]!.previewItems.map(item => item.id))
+			.toEqual(direction === 'asc' ? [ids[1], ids[2], ids[0]] : [ids[0], ids[2], ids[1]]);
+	});
+
 	it('distinguishes a temporarily unavailable item from a missing source reference', () => {
 		expect(schedulingProgramStatuses([program], catalog('unconfirmed'))[0]).toMatchObject({
 			health: 'unavailable',

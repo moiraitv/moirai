@@ -97,7 +97,7 @@ export function schedulingCatalogScope(
 
 		if (program.config.type === 'similarity') {
 			const anchor = byId.get(program.config.sourceProgramId);
-			if (anchor?.config.type === 'content' && anchor.config.source.type === 'collection') {
+			if (anchor?.config.type === 'content' && (anchor.config.source.type === 'collection' || anchor.config.source.type === 'ai')) {
 				libraryIds.add(anchor.config.source.libraryId);
 				sourceLibraryIds.add(anchor.config.source.libraryId);
 			}
@@ -117,7 +117,7 @@ export function schedulingCatalogScope(
 		else if (source.type === 'group') {
 			groupIds.add(source.groupId);
 		}
-		else if (source.type === 'collection') {
+		else if (source.type === 'collection' || source.type === 'ai') {
 			sourceLibraryIds.add(source.libraryId);
 			source.itemIds.forEach((itemId) => itemIds.add(itemId));
 		}

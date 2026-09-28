@@ -186,6 +186,21 @@ export class SemanticRepository {
 		return [...seeds.values()];
 	}
 
+	/** Load only current media vectors for AI retrieval, without scheduling seeds or history. */
+	retrievalVectors(libraryId: string): Record<string, number[]> {
+		const inputs = new Map(this.inputs(undefined, [libraryId]).map(input => [input.id, input]));
+		const rows = this.db.$client.prepare("SELECT e.* FROM media_embeddings e JOIN media_items m ON m.id=e.media_id WHERE m.library_id=? AND e.status='ready'").all(libraryId) as EmbeddingRow[];
+		const vectors: Record<string, number[]> = {};
+		for (const row of rows) {
+			const input = inputs.get(row.media_id);
+			const vector = input && this.current(row, input) ? decode(row) : null;
+			if (vector) {
+				vectors[row.media_id] = vector;
+			}
+		}
+		return vectors;
+	}
+
 	/** Attach current vectors only; a stale cached vector must never enter a new recommendation. */
 	catalog(scope?: { libraryIds: string[]; programIds: string[] }): SemanticCatalog {
 		const inputs = new Map(this.inputs(undefined, scope?.libraryIds).map((input) => [input.id, input]));

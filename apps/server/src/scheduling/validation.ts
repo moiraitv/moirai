@@ -34,8 +34,8 @@ export function validatePrograms(programs: SchedulingProgram[]): void {
 	for (const program of programs) {
 		if (program.config.type === 'similarity') {
 			const source = byId.get(program.config.sourceProgramId);
-			if (source?.config.type !== 'content' || source.config.source.type !== 'collection') {
-				throw new SchedulingValidationError('Similar Items requires a Specific media items Program');
+			if (source?.config.type !== 'content' || (source.config.source.type !== 'collection' && source.config.source.type !== 'ai')) {
+				throw new SchedulingValidationError('Similar Items requires a Specific media items or AI Program');
 			}
 		}
 

@@ -54,3 +54,30 @@ it('keeps legacy similarity programs unfiltered and rejects conflicting genre ru
 	expect(similarityProgramConfigSchema.parse(config).filter).toBeUndefined();
 	expect(similarityProgramConfigSchema.safeParse({ ...config, filter: { genres: ['Comedy'], excludedGenres: ['comedy'] } }).success).toBe(false);
 });
+
+it('uses a saved AI selection as similarity anchors with same-library candidates and vectors', async () => {
+	const f = await fixture();
+	try {
+		await f.embeddings();
+		const source = await f.repository.createProgram({ name: 'AI anchors', config: { type: 'content',
+			source: { type: 'ai', libraryId: f.library.id, prompt: 'Films like this', itemIds: [f.ids[0]!], sort: { type: 'date-added', direction: 'asc' } },
+			strategy: { type: 'sequential' } } });
+		const similar = await f.repository.createProgram({ name: 'Related to AI', config: { type: 'similarity', sourceProgramId: source.id, quantity: 3, variety: 35 } });
+		const context = await f.context();
+		if (similar.config.type !== 'similarity') {
+			throw new Error('Expected Similar Items Program');
+		}
+		const resolved = semanticSource(similar.config, [...context.programs.values()], context.catalog);
+		expect(resolved.valid).toBe(true);
+		expect(resolved.sourceIds).toEqual([f.ids[0]]);
+		expect(resolved.anchors).toHaveLength(1);
+		expect(resolved.items.map(item => item.libraryId)).toEqual(Array(resolved.items.length).fill(f.library.id));
+		expect(resolved.items.map(item => item.id)).not.toContain(f.ids[0]);
+		const selection = selectProgram(similar.id, f.key, new Map(), context);
+		expect(selection?.media.id).toBeDefined();
+		expect(selection?.media.id).not.toBe(f.ids[0]);
+	}
+	finally {
+		await f.close();
+	}
+});

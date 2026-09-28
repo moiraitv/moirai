@@ -194,6 +194,18 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
+	// Application-authored unavailable messages stay visible. A short retry is wrong when the
+	// condition lasts until retained work expires, as with generation capacity.
+	if (normalized.statusCode === 503 && normalized.expose === true) {
+		return response(
+			requestId,
+			503,
+			'service_unavailable',
+			normalized.message,
+			true,
+		);
+	}
+
 	if (normalized.statusCode === 503) {
 		return response(
 			requestId,

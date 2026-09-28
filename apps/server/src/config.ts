@@ -58,6 +58,7 @@ export interface AppConfig {
 	migrationsDir: string;
 	timeZone: string;
 	logto: LogtoConfig | null;
+	ai: { apiKey: string; baseUrl: string; model: string; webSearch: boolean } | null;
 }
 
 /** Logto traditional-web application settings used by the OIDC provider adapter. */
@@ -285,6 +286,35 @@ function resolveLogtoConfig(overrides?: LogtoConfig | null): LogtoConfig | null 
 	return { endpoint: parsed.href.replace(/\/+$/u, ''), appId, appSecret };
 }
 
+/** Keep AI disabled when wholly unset; reject partial configuration without provider defaults. */
+function aiFromEnvironment(): AppConfig['ai'] {
+	const settings = {
+		MOIRAI_AI_API_KEY: process.env.MOIRAI_AI_API_KEY?.trim(),
+		MOIRAI_AI_BASE_URL: process.env.MOIRAI_AI_BASE_URL?.trim(),
+		MOIRAI_AI_MODEL: process.env.MOIRAI_AI_MODEL?.trim(),
+		MOIRAI_AI_WEB_SEARCH: process.env.MOIRAI_AI_WEB_SEARCH?.trim(),
+	};
+	if (Object.values(settings).every(value => !value)) {
+		return null;
+	}
+
+	const missing = Object.entries(settings).filter(([, value]) => !value).map(([name]) => name);
+	if (missing.length > 0) {
+		throw new Error(`AI configuration is incomplete. Define ${missing.join(', ')}.`);
+	}
+	const search = settings.MOIRAI_AI_WEB_SEARCH!.toLowerCase();
+	if (!['true', 'false', '1', '0'].includes(search)) {
+		throw new Error('MOIRAI_AI_WEB_SEARCH must be true, false, 1, or 0');
+	}
+
+	return {
+		apiKey: settings.MOIRAI_AI_API_KEY!,
+		baseUrl: settings.MOIRAI_AI_BASE_URL!.replace(/\/+$/u, ''),
+		model: settings.MOIRAI_AI_MODEL!,
+		webSearch: search === 'true' || search === '1',
+	};
+}
+
 /** Read environment settings and explicit overrides into validated runtime configuration. */
 export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 	const dataDir
@@ -458,5 +488,6 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 		migrationsDir: overrides.migrationsDir ?? resolveFromProjectRoot('drizzle'),
 		timeZone: resolveTimeZone(overrides.timeZone ?? process.env.MOIRAI_TIME_ZONE),
 		logto: resolveLogtoConfig(overrides.logto),
+		ai: overrides.ai === undefined ? aiFromEnvironment() : overrides.ai,
 	};
 }

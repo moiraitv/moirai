@@ -42,8 +42,8 @@ export async function mediaResourceUsage(db: MoiraiDatabase, scheduling: Schedul
 		if (source.type === 'item' && ids.has(source.itemId)) {
 			role = 'Selected item';
 		}
-		else if (source.type === 'collection' && source.libraryId === item.libraryId && source.itemIds.some(value => ids.has(value))) {
-			role = 'Selected items';
+		else if ((source.type === 'collection' || source.type === 'ai') && source.libraryId === item.libraryId && source.itemIds.some(value => ids.has(value))) {
+			role = source.type === 'ai' ? 'AI selection' : 'Selected items';
 		}
 		else if (source.type === 'group' && (source.includeDescendants ? ancestors.has(source.groupId) : source.groupId === item.groupId)) {
 			role = 'Selected group';

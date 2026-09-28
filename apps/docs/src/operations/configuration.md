@@ -45,6 +45,10 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_LOGTO_ENDPOINT` | Unset | Logto tenant origin; enables Logto only when all three Logto values are set |
 | `MOIRAI_LOGTO_APP_ID` | Unset | Traditional-web application ID issued by Logto |
 | `MOIRAI_LOGTO_APP_SECRET` | Unset | Traditional-web application secret; never returned or logged |
+| `MOIRAI_AI_API_KEY` | Unset | API key for AI content selection; required with the other three AI settings |
+| `MOIRAI_AI_BASE_URL` | Unset | Base URL of an OpenAI-compatible endpoint |
+| `MOIRAI_AI_MODEL` | Unset | Model name supported by the configured endpoint |
+| `MOIRAI_AI_WEB_SEARCH` | Unset | Opt into bounded web lookups through a compatible Responses API; accepts `true`, `false`, `1`, or `0` |
 | `MOIRAI_LOG_LEVEL` | `info` | Structured server log level |
 | `MOIRAI_LOG_DIR` | `<data>/logs` | Rotating structured server log directory |
 | `MOIRAI_GUIDE_DAYS` | `7` | Guide and XMLTV horizon in local calendar days, including today; accepts 1–14. One extra day is generated internally. |
@@ -97,3 +101,36 @@ For `MOIRAI_TRUST_PROXY`, supply only the proxy addresses or CIDRs you control. 
 Similar Items Programs use `BAAI/bge-small-en-v1.5` locally on the CPU. Every server build packages the pinned ONNX model, tokenizer, and license in `apps/server/dist/embedding-model`. Container images include that complete server build. Native deployments should copy the entire server `dist` directory, including the model folder. Changing `MOIRAI_DATA_DIR` does not change the bundled model location.
 
 One background worker prepares the library, releases the model after a minute without work, and suspends under system resource pressure. English descriptions give the best results with this model. If the bundle is incomplete, Similar Items may show an error while the rest of Moirai remains available; rebuild or reinstall may be needed to fix it.
+
+## AI content selection
+
+Set all four values (`MOIRAI_AI_API_KEY`, `MOIRAI_AI_BASE_URL`, `MOIRAI_AI_MODEL`, and `MOIRAI_AI_WEB_SEARCH`) to use your chosen OpenAI-compatible service for [AI content selections](/scheduling/programs). There are no AI configuration defaults or provider-specific key fallbacks. Leaving every AI setting unset disables AI; supplying an incomplete set prevents startup and names the missing settings. Keep the API key outside version control. Set `MOIRAI_AI_WEB_SEARCH=false` explicitly for Chat Completions without web search.
+
+Set `MOIRAI_AI_WEB_SEARCH=true` only when your endpoint and model support the Responses API, its built-in `web_search` tool with low search context and the `max_tool_calls` limit. Search requests ask for JSON in the prompt without enabling JSON mode; Moirai validates the complete selection locally before accepting it. This setting works by capability and does not select or detect a particular provider.
+
+Moirai requests at most sixteen hosted tool calls for verification, including page opens. Discovery and initial review use no search. Sixteen is the requested budget, not a guaranteed spending cap: Moirai accepts up to two extra reported calls and logs a warning instead of discarding a valid result. An overrun beyond two calls, or beyond eighteen calls for the generation, stops generation. Generation targets three minutes, with up to two extra minutes to finish reviewing candidates and a hard stop at five minutes. Research is not started after three minutes, but an existing request may finish its research.
+
+Browser reloads do not cancel generation. The server retains completed results for one hour, holds at most 32 jobs, and permits two active jobs per administrator. Restarting the server clears these jobs. Providers may charge for searches; enforcement of the hosted call limit requires provider support.
+
+Moirai uses local matching and model-assisted discovery to shortlist up to 1,000 movie/other-media candidates or 1,500 episode candidates. Review sends compact identities and genres in batches for processing. Filesystem information is not sent.
+
+The repository's `.env.example` contains commented blocks for xAI, OpenAI, and Anthropic. Uncomment one complete block and replace its API-key placeholder. Anthropic's OpenAI compatibility layer uses Chat Completions, ignores JSON-format enforcement, and does not provide the Responses search integration used here; keep web search disabled for that example.
+
+### Choose a model and manage costs
+
+Start with a lower-cost model that supports your chosen endpoint and search settings. For OpenAI, `gpt-6-sol` is a reasonable starting point: it supports Responses and web search at lower token rates than `gpt-6-astra`. Compare selections on several familiar prompts, especially requirements that depend on details missing from plot summaries. A more expensive model is worth using only when its results justify the extra cost for your library. Other compatible providers can be used with the same approach; model names, capabilities, and prices are provider-specific.
+
+For reference, these are OpenAI's standard short-context rates as of September 26, 2026, per million tokens:
+
+| Model | Uncached input | Output |
+| --- | ---: | ---: |
+| `gpt-6-sol` | $2 | $10 |
+| `gpt-6-astra` | $10 | $50 |
+
+Check current pricing and model capabilities before choosing.
+
+OpenAI web search adds $0.01 per billable call plus search-content tokens charged at the model's rates. For example, 100,000 uncached input tokens, 9,000 output tokens, and ten billable searches would cost about **$0.39 with Sol** or **$1.55 with Astra** at those rates. These are estimates, not spending caps; cache writes, service tiers, long-context pricing, and provider billing details can change the total.
+
+To target about $0.50 per generation, try the lower-cost model first while preserving candidate coverage. Keep search enabled for nuanced requirements that metadata cannot reliably establish; disable it for simpler requests when model knowledge and library metadata are sufficient. Local embeddings help rank candidates without paid embedding API calls, but they cannot recover facts absent from their source metadata. Better and more detailed metadata is the best cost-saver.
+
+Saving and playback do not incur generation charges. Generating again does, and failed or cancelled requests may still be billed for work already performed.

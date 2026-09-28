@@ -46,15 +46,15 @@ export function schedulingContentMatches(
 	const byId = catalog.mediaById ?? new Map(catalog.media.map((media) => [media.id, media]));
 	const byLibrary = catalog.mediaByLibrary;
 	const source = config.source;
-	const collectionItemIds = source.type === 'collection' && source.sort.type === 'manual'
+	const collectionItemIds = (source.type === 'collection' || source.type === 'ai') && source.sort.type === 'manual'
 		? source.sort.itemIds
-		: source.type === 'collection'
+		: source.type === 'collection' || source.type === 'ai'
 			? source.itemIds
 			: [];
 	const pool
 		= source.type === 'item'
 			? [byId.get(source.itemId)].filter((media): media is SchedulableMedia => Boolean(media))
-			: source.type === 'collection'
+			: source.type === 'collection' || source.type === 'ai'
 				? collectionItemIds.flatMap((itemId) => {
 					const media = byId.get(itemId);
 					return media ? [media] : [];
@@ -81,7 +81,7 @@ export function schedulingContentMatches(
 			);
 		}
 
-		if (config.source.type === 'collection') {
+		if (config.source.type === 'collection' || config.source.type === 'ai') {
 			return (
 				media.libraryId === config.source.libraryId && config.source.itemIds.includes(media.id)
 			);
@@ -110,9 +110,10 @@ function contentLabel(
 		return catalog.groupTitles[source.groupId] ?? 'Missing group';
 	}
 
-	if (source.type === 'collection') {
+	if (source.type === 'collection' || source.type === 'ai') {
 		const library = catalog.libraryNames[source.libraryId] ?? 'missing library';
-		return `${source.itemIds.length} selected from ${library}`;
+		const prefix = source.type === 'ai' ? 'AI selection' : 'selected';
+		return `${source.itemIds.length} ${prefix} from ${library}`;
 	}
 
 	if (source.type === 'group-collection') {
@@ -147,21 +148,28 @@ function contentStatus(
 		missing = !(source.libraryId in catalog.libraryAvailability);
 	}
 	const sourceMatches = schedulingContentMatches(program.config, catalog);
-	const orderedMatches = source.type === 'collection'
-		? orderSelectedMedia(sourceMatches, source.sort, source.additionBatches)
-		: source.type === 'library-query'
-			? sourceMatches.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort))
-			: sourceMatches.sort(compareSchedulingMedia);
+	const aiIndexedSort = source.type === 'ai' && source.sort.type === 'date-added' ? source.sort : null;
+	const orderedMatches = aiIndexedSort
+		? sourceMatches.sort((left, right) => compareLibraryQueryMedia(left, right, aiIndexedSort))
+		: source.type === 'collection' || source.type === 'ai'
+			? orderSelectedMedia(
+				sourceMatches,
+				source.sort,
+				source.type === 'collection' ? source.additionBatches : undefined,
+			)
+			: source.type === 'library-query'
+				? sourceMatches.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort))
+				: sourceMatches.sort(compareSchedulingMedia);
 	const matches = source.type === 'library-query' && source.itemLimit != null
 		? orderedMatches.slice(0, source.itemLimit)
 		: orderedMatches;
 	const missingCollectionMembers
-		= source.type === 'collection' ? source.itemIds.length - matches.length : 0;
+		= source.type === 'collection' || source.type === 'ai' ? source.itemIds.length - matches.length : 0;
 	const missingGroupMembers
 		= source.type === 'group-collection'
 			? source.groupIds.filter((groupId) => !(groupId in catalog.groupParents)).length
 			: 0;
-	if (source.type === 'collection' && matches.length === 0) {
+	if ((source.type === 'collection' || source.type === 'ai') && matches.length === 0) {
 		missing = true;
 	}
 	if (source.type === 'group-collection' && missingGroupMembers === source.groupIds.length) {

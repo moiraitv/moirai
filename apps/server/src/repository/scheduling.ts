@@ -288,7 +288,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			const programIds = similarities.map((program) => program.id).sort();
 			const sources = new Set(similarities.flatMap((program) => program.config.type === 'similarity' ? [program.config.sourceProgramId] : []));
 			const libraryIds = [...new Set(scopedPrograms.flatMap((program) => sources.has(program.id)
-				&& program.config.type === 'content' && program.config.source.type === 'collection' ? [program.config.source.libraryId] : program.config.type === 'theme' ? [program.config.libraryId] : []))].sort();
+				&& program.config.type === 'content' && (program.config.source.type === 'collection' || program.config.source.type === 'ai') ? [program.config.source.libraryId] : program.config.type === 'theme' ? [program.config.libraryId] : []))].sort();
 			const texts = [...new Set(similarities.flatMap((program) => (program.config.type === 'similarity' || program.config.type === 'theme') ? refinementTexts(program.config) : []))].sort();
 			semanticKey = JSON.stringify([programIds, libraryIds]);
 			semantic = this.semanticCatalogs.get(semanticKey);

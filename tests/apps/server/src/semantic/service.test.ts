@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { LiveEventInput } from '@moirai/shared';
+import type { LiveEvent, LiveEventInput } from '@moirai/shared';
 import { EmbeddingService, MEDIA_EMBEDDING_BATCH_SIZE } from '@server/semantic/service.js';
 import { PREFERENCE_BATCH_SIZE } from '@server/repository/semantic-preferences.js';
 import { fixture } from './fixtures.js';
@@ -15,17 +15,63 @@ it('backfills pending identities asynchronously and reports a missing local mode
 	const service = new EmbeddingService(f.semantic, { publish: (event) => events.push(event) }, path.join(f.root, 'missing-model'));
 	try {
 		vi.useFakeTimers();
+		expect(service.requestPreferences()).toBe('stopped');
 		service.start();
 		expect(events).toEqual([]);
 		await vi.advanceTimersByTimeAsync(2_000);
 		expect(events).toContainEqual({ type: 'embeddings.changed', data: { pending: f.ids.length, failed: 0, status: 'model-missing' } });
 		expect(f.semantic.catalog().preparationError).toContain('matching model is missing');
 		await service.suspend();
+		expect(service.requestPreferences()).toBe('paused');
 		await vi.advanceTimersByTimeAsync(60_000);
 		expect(events).toHaveLength(1);
 		service.resume();
 		await vi.advanceTimersByTimeAsync(60_000);
 		expect(events).toHaveLength(2);
+	}
+	finally {
+		await service.close();
+		vi.useRealTimers();
+		await f.close();
+	}
+});
+
+it('runs background preparation despite scan events arriving faster than the debounce', async () => {
+	const f = await fixture();
+	const events: LiveEventInput[] = [];
+	const service = new EmbeddingService(f.semantic, { publish: event => events.push(event) }, path.join(f.root, 'missing-model'));
+	try {
+		vi.useFakeTimers();
+		service.start();
+		for (let index = 0; index < 8; index += 1) {
+			service.handleEvent({ type: 'scan.changed', data: { status: 'complete', affectsProgramming: true } } as LiveEvent);
+			await vi.advanceTimersByTimeAsync(500);
+		}
+		expect(events).toContainEqual({ type: 'embeddings.changed', data: {
+			pending: f.ids.length, failed: 0, status: 'model-missing',
+		} });
+	}
+	finally {
+		await service.close();
+		vi.useRealTimers();
+		await f.close();
+	}
+});
+
+it('does not reschedule embedding reconciliation for failed scans that preserve media metadata', async () => {
+	const f = await fixture();
+	const events: LiveEventInput[] = [];
+	const service = new EmbeddingService(f.semantic, { publish: event => events.push(event) }, path.join(f.root, 'missing-model'));
+	try {
+		vi.useFakeTimers();
+		service.start();
+		await vi.advanceTimersByTimeAsync(2_000);
+		expect(events).toHaveLength(1);
+		for (let index = 0; index < 8; index += 1) {
+			service.handleEvent({ type: 'scan.changed', data: { status: 'failed', affectsProgramming: true } } as LiveEvent);
+			await vi.advanceTimersByTimeAsync(500);
+		}
+		expect(events).toHaveLength(1);
 	}
 	finally {
 		await service.close();
@@ -56,6 +102,25 @@ it.skipIf(process.env.MOIRAI_EMBEDDING_INTEGRATION !== '1')('backfills an existi
 		await f.close();
 	}
 }, 40_000);
+
+it.skipIf(process.env.MOIRAI_EMBEDDING_INTEGRATION !== '1')('prepares a requested concept first from idle despite older pending drafts', async () => {
+	const f = await fixture();
+	const service = new EmbeddingService(f.semantic, { publish: () => {} }, path.resolve('apps/server/dist/embedding-model'));
+	try {
+		await f.embeddings();
+		const older = Array.from({ length: PREFERENCE_BATCH_SIZE }, (_, index) => `older concept ${index}`);
+		f.semantic.preferences.catalog([...older, 'current concept']);
+		service.start();
+		expect(service.requestPreferences(false, ['current concept'])).toBe('scheduled');
+		await vi.waitFor(() => expect(f.semantic.preferences.catalog(['current concept'], false)['current concept']?.status)
+			.toBe('ready'), { timeout: 10_000, interval: 100 });
+		expect(f.semantic.preferences.catalog([older.at(-1)!], false)[older.at(-1)!]?.status).toBe('pending');
+	}
+	finally {
+		await service.close();
+		await f.close();
+	}
+}, 20_000);
 
 it.skipIf(process.env.MOIRAI_EMBEDDING_INTEGRATION !== '1')('alternates new refinement batches with unfinished library backfill', async () => {
 	const f = await fixture(MEDIA_EMBEDDING_BATCH_SIZE * 3 + 1);

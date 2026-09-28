@@ -71,6 +71,26 @@ Library queries share the catalog filters: title, release year, indexed date, ra
 
 The item limit applies before unusable or unavailable media is excluded. If some of the limited items cannot play, Moirai does not replace them with matches outside that limit. Query ordering defines the candidate set; the selection strategy below controls playback through that set.
 
+### Generate an AI selection
+
+When the server has valid [AI settings](/operations/configuration) configured, **AI** appears as a content source. Choose a library, describe the programs you want, then set **Results** from Few (up to 50) through Most (up to 250) and choose **Generate**. The number is approximate and not guaranteed: Moirai leaves out uncertain matches even when the result is smaller.
+
+Moirai combines local title, genre, and plot matching with model knowledge and optional web research to review a broad shortlist. It reviews up to 1,000 movie/other-media candidates or 1,500 episode candidates, possibly fewer when the requested count is reached or the request-size limit is reached. Results are approximate, so review them before saving. Saving freezes that list, and later scans do not change it. Choose **Generate** again when you want a new list.
+
+Each generation will cost API quota, including work performed before a failure or cancellation. Model choice and search-content tokens can affect cost substantially; the time and search limits are not dollar spending caps. See [Choose a model and manage costs](/operations/configuration) for lower-cost options and an example targeting about $0.50 per generation.
+
+While generating, the activity appears above the estimated percentage and elapsed time. After finishing, the selected count appears beside Generate with coverage such as **36 selected · 1,000 of 3,000 reviewed**. Warnings can identify any failures or limitations.
+
+Choose **Review results** to browse or search the full selection, including results from a saved AI Program. Use **Exclude** on an item, then confirm it to remove it from the draft. Choose **Done**, then **Save** to keep your exclusions. **Reset** restores the saved selection; generating again replaces the selection and may include previously excluded items.
+
+AI drafts, including the name, prompt, requested result count, selection, exclusions, and playback preferences, are saved automatically in your current browser. Close the editor or reload the page, then reopen the same Program (or New Program) to continue. Generation keeps running while the page is closed; reopening reconnects without starting another paid request. Save is unavailable until generation finishes. Browser drafts do not sync between devices. If browser storage is unavailable, keep the page open and use Save.
+
+Describe any requirements and exclusions explicitly, using words such as “only” or “must” for essential features. “Prefer” and “avoid” guide the choices without excluding every title whose details are unknown. A prompt can ask for a dominant theme with a few related picks. The model is instructed to omit uncertain matches instead of filling a quota. Specify a year range when terms such as “modern” would be ambiguous. Selection uses the compact library list, available catalog ratings, and the model's knowledge of each work; a catalog rating may not reflect fan consensus, and the model can still make mistakes.
+
+When [web search is enabled](/operations/configuration), discovery and the first library review use the model's knowledge without searching. A final search verifies those titles with a requested budget of sixteen calls, including opening pages, and a three-minute generation target. Episode research checks the specific episode rather than assuming the whole series qualifies. Uncertain candidates are omitted when evidence or budget is insufficient. Search adds time and may incur provider charges. Without search, the model uses the library metadata and its own knowledge, which may not necessarily be detailed enough for all prompts.
+
+Saving and playback do not perform lookups. Failed, interrupted, or invalid generations preserve your previous selection; partial batches are never applied.
+
 ### Choose the playback order
 
 The **Selection** controls determine how eligible items are consumed:
@@ -84,7 +104,7 @@ The optional **Stable seed** makes randomized choices repeatable. Whether playba
 
 ## Similar Items Programs
 
-Choose **Similar Items** to find media related to a hand-picked Content Program. First create a Content Program whose source is **Specific media items**, then select it as the **Source Program**. Library queries, selected groups, and Sequence Programs cannot be sources.
+Choose **Similar Items** to find media related to a Content Program with **Specific media items** or a saved **AI** selection, then select it as the **Source Program**. The selected items guide similarity; changing that selection affects future sets after the current set finishes. Library queries, selected groups, and Sequence Programs cannot be sources.
 
 Open **Additional filters** below Source Program to restrict which related items can qualify. Use **Configure Filters** for the same genre, year, rating, and other metadata rules as filters elsewhere. Filters apply to candidate matches only; source items still guide similarity even when they do not meet those filters.
 

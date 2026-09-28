@@ -346,7 +346,7 @@ export async function buildApp(
 
 	// Register API domains after their shared dependencies are ready.
 	registerHttpRoutes(app, {
-		requestEmbeddingWork: (includeMedia) => embeddings.requestPreferences(includeMedia),
+		requestEmbeddingWork: (includeMedia, concepts) => embeddings.requestPreferences(includeMedia, concepts),
 		playout,
 		config,
 		authentication,

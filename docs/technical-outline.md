@@ -58,7 +58,7 @@ output of scheduling rules, not the editable schedule itself.
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Channel            | A numbered linear station with presentation, normalization, guide, schedule, and playback configuration.                                         |
 | Program            | A reusable rule defining eligible content and how Moirai selects it. A program is not a concrete guide entry.                                    |
-| Content source     | The eligibility portion of a program, such as selected items, a show, selected seasons, a library query, or another sequence of programs.        |
+| Content source     | The eligibility portion of a program, such as selected items, a show, selected seasons, a library query, a frozen AI selection, or another sequence of programs. |
 | Selection strategy | The reusable ordering behavior applied to eligible content, such as sequential, deterministic shuffle without repeats, or deterministic random.  |
 | Selection state    | Runtime cursor data kept separately from authored configuration. It records progress such as the next episode or remaining shuffle pool.         |
 | Sequence program   | A composite program that selects counted items from other programs in an authored order, then repeats or stops.                                  |
@@ -664,6 +664,86 @@ stored music groups by ID, source key, and parent-scoped identity once per scan;
 removed from lookup buckets to preserve first-match precedence and ambiguity checks without
 repeated catalog-wide searches.
 
+The selection endpoint preserves its JSON response and optionally negotiates SSE using
+`Accept: text/event-stream`. Shared progress/result/error contracts carry normalized activity,
+never provider text or partial matches. Search requests stream Responses events; compatible
+endpoints returning JSON retain generic activity. Chat Completions retains generic activity.
+The editor shows a spinner, elapsed minutes/seconds, and search/batch status. Estimated progress uses
+the shared three-minute target, caps at 99% while running, and reaches 100% only on success. After
+the target, the editor shows finishing-review status while retaining batch position. Result and
+truncation messages remain compact and separate. The legacy JSON/SSE endpoint cancels upstream work on disconnect. The editor instead uses
+administrator-owned generation jobs with idempotent client IDs and one-second status polling.
+These survive browser disconnects; leaving the AI source, resetting, changing the prompt, or cancelling
+aborts the job, including a start that has not been accepted yet.
+Server shutdown cancels running work. Results expire one hour after completion; retention is
+bounded to 32 jobs with two running per administrator. Cancellation frees the retained slot while
+briefly blocking the same ID from starting late. GET and DELETE enforce creator ownership.
+Validated browser drafts retain AI fields, the prompt that produced the current selection, and the job ID under account/program-specific keys.
+Closing retains the draft; saving or resetting clears it. Restoration checks the saved program
+revision and warns about conflicting edits. Save remains blocked while a job is pending. Editing the prompt after generation warns that saving retains the previous selection. Errors or incomplete streams preserve the previous selection. AI selections reuse the full
+selection review drawer with search and two-step draft exclusions. Review fetches indexed cards
+in one batch only when opened; loading failures expose retry without an empty-state claim.
+AI indexed-date ordering uses indexed timestamps in scheduling and status previews.
+Saving persists the remaining IDs, Reset restores the saved IDs, and regeneration replaces the
+edited set without retaining a separate exclusion list.
+The five-step result control requests a ceiling of 50–250 confident matches, defaulting to 100;
+the server validates the choice, asks the model for strongest matches first, and stops once the
+ceiling is reached. Older requests without a ceiling retain their previous behavior. AI Order and
+Direction controls appear only for sequential selection; switching strategies retains their values.
+
+AI generation first interprets the prompt into bounded positive concepts, advisory constraints, and
+up to 100 candidate identities without web search. Identity
+resolution checks the full library, including episode series/year/season/episode context; ambiguous
+identities are not admitted. Two scoped catalog queries load identities, genres, keywords, ratings,
+bounded plot excerpts and hierarchy. Plot excerpts improve local lexical ranking when embeddings
+are incomplete; they are never included in provider candidate rows.
+Current scoped media vectors and cached draft-query vectors reuse the existing local inference service;
+AI concept requests start that service immediately and take priority over older pending drafts.
+Failed scans leave semantic media inputs intact and do not enqueue re-embedding. Repeated relevant
+catalog events may bring the background timer forward but never postpone an already scheduled run,
+so a noisy scanner cannot starve the inference queue.
+Query preparation waits at most ten seconds, never for whole-library backfill. Missing vectors fall
+back to discovery and lexical ranking; coverage distinguishes missing query from media vectors.
+Prompt-free diagnostics record stopped, paused, failed, or timed-out query preparation.
+
+Retrieval fuses positive lexical and embedding ranks without a cosine exclusion threshold. Discovery
+matches are retained first, ten percent of remaining shortlist capacity samples outside the ranked
+head deterministically, and relevance fills the remainder. Limits are 1,000 movie/other items or 1,500
+items for episode libraries. Discovery and exploration precede the ranked tail when byte limits apply.
+The shortlist is approximate; metadata omissions are never treated as proof of feature absence.
+
+Judging uses short request-local references, titles, years, types, genres and available ratings;
+episode series declarations are shared within each batch. Plots and paths remain local. Complete
+UTF-8 rows fit a 128 KiB total candidate budget, at most 500 candidates and 64 KiB per batch.
+With search enabled, discovery and sequential review batches use no tools. Review returns confident
+matches plus at most 30 promising uncertain candidates in total. Verification sends one targeted search
+per candidate batch so episode series references stay unique within that request. Those requests share
+the remaining sixteen-call allowance and stop when the allowance or the result ceiling is exhausted;
+unverified candidates are omitted. A two-call reported overage is
+tolerated per request and across the generation (eighteen calls total); this does not increase
+requested allowances. Larger overruns fail atomically. A shared 180-second target includes
+preparation, discovery and judging, with a 120-second finishing grace and a hard 300-second deadline.
+Research is not started after the target; already-running research may finish. All batch selections must validate before publishing; unknown
+references, failed batches and cancellation leave the editor's previous selection untouched.
+
+The existing JSON/SSE selection response retains its fields and adds optional coverage counts,
+shortlist limitation, query and media embedding availability, and research-budget exhaustion. Progress includes local
+preparation, discovery and batch position. Aggregate diagnostics record requests, reported token
+usage, tool calls and duration, never prompts, catalogs, credentials or provider text. Per-request
+accounting records discovery/review/verification phase, batch, requested allowance and reported tool/token usage;
+reported overruns produce warning logs. Retained jobs preserve typed, application-authored errors
+(including HTTP status/configuration guidance) while hiding unexpected failures and provider bodies.
+The one-shot route does the same on JSON and SSE, and it shares the generation concurrency cap.
+Not-configured and capacity responses keep that application message and do not send Retry-After. The opt-in
+`scripts/evaluate-ai.ts` compares frozen baseline prompting with the pipeline using labelled fixtures
+and local embeddings, reporting retrieval recall separately from selection accuracy and resource use.
+
+AI requires explicit API key, base URL, model and web-search settings, with no provider defaults or
+key fallbacks. Search uses Responses `web_search`, low search context, `max_tool_calls`, and disabled
+response storage. Search-disabled configurations use compatible Chat Completions. There is no
+provider-hostname detection or automatic paid retry. JSON mode is omitted for Responses search and
+custom temperature is omitted for both paths. Saving and playback never call the model.
+
 Selected-items programs retain chronological insertion batches separately from their effective order.
 They default to oldest-added first and may instead order by normalized title, exact release date with
 year fallback, descending variants of those automatic fields, or a manually dragged order. Descending
@@ -692,7 +772,9 @@ timeline change detection, so corrected runtimes stage regeneration at the norma
 The existing semantic preview/retry routes accept either configuration,
 and the existing seed storage retains the originating configuration without a schema migration.
 
-Similar Items programs (`similarity`) reference only Content programs with explicit item collections.
+Similar Items programs (`similarity`) reference Content programs with explicit item collections or
+frozen AI selections. Both use their saved item IDs as semantic anchors and their source library for
+same-kind candidates and embedding scope.
 Update validation rejects changes to the saved source Program ID before persistence; source contents
 and similarity settings remain editable.
 They rank playable same-library, same-kind candidates using normalized BGE-small-en-v1.5 embeddings,

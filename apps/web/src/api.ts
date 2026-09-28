@@ -1,4 +1,7 @@
-import type { SequencePreview } from '@moirai/shared';
+import { type AiProgress, type AiProgressDetails } from '@moirai/shared';
+import { readAiSelection } from './ai-selection-stream';
+import { aiGenerationSchema, type AiGeneration, type AiGenerationRequest } from '@moirai/shared';
+import type { AiContentSelectionRequest, AiContentSelectionResponse, AiStatus, SequencePreview } from '@moirai/shared';
 import type { ProgramConfig, SchedulingProgramStatus } from '@moirai/shared';
 import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
@@ -167,7 +170,7 @@ export class ApiError extends Error {
 }
 
 /** Send an API request and parse its JSON response or throw a typed API error. */
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+async function request<T>(url: string, init?: RequestInit, readResponse?: (response: Response) => Promise<T>): Promise<T> {
 	const requestAuthenticationGeneration = authenticationGeneration;
 	const method = init?.method?.toUpperCase() ?? 'GET';
 	const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method);
@@ -198,7 +201,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 		return undefined as T;
 	}
 
-	return response.json() as Promise<T>;
+	return readResponse ? readResponse(response) : response.json() as Promise<T>;
 }
 
 /** Upload a managed channel logo and return its internal URI. */
@@ -456,6 +459,25 @@ export const api = {
 			method: 'DELETE',
 		}),
 	schedulingOverview: () => request<SchedulingOverview>('/api/v1/scheduling/overview'),
+	aiStatus: () => request<AiStatus>('/api/v1/ai'),
+	startAiGeneration: (body: AiGenerationRequest) => request<AiGeneration>(
+		'/api/v1/ai/generations',
+		{ method: 'POST', body: JSON.stringify(body) },
+		async response => aiGenerationSchema.parse(await response.json()),
+	),
+	aiGeneration: (id: string, signal?: AbortSignal) => request<AiGeneration>(
+		`/api/v1/ai/generations/${id}`,
+		{ ...(signal ? { signal } : {}) },
+		async response => aiGenerationSchema.parse(await response.json()),
+	),
+	cancelAiGeneration: (id: string) => request<void>(`/api/v1/ai/generations/${id}`, { method: 'DELETE' }),
+	selectAiContent: (body: AiContentSelectionRequest, onProgress?: (status: AiProgress, details?: AiProgressDetails) => void, signal?: AbortSignal) =>
+		request<AiContentSelectionResponse>('/api/v1/ai/content-selection', {
+			method: 'POST',
+			headers: { Accept: 'text/event-stream' },
+			...(signal ? { signal } : {}),
+			body: JSON.stringify(body),
+		}, response => readAiSelection(response, onProgress)),
 	createProgram: (body: ProgramCreate) =>
 		request<SchedulingProgram>('/api/v1/programs', {
 			method: 'POST',

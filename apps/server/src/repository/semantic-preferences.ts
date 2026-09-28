@@ -68,9 +68,12 @@ export class SemanticPreferenceRepository {
 		this.db.$client.prepare("UPDATE semantic_preferences SET error_code=? WHERE status='pending'").run(message);
 	}
 
-	/** Read a bounded batch; drafts cannot create an unbounded in-memory inference queue. */
-	pending(): Array<{ hash: string; text: string }> {
-		return this.db.$client.prepare("SELECT input_hash AS hash,input_text AS text FROM semantic_preferences WHERE status='pending' LIMIT ?").all(PREFERENCE_BATCH_SIZE) as Array<{ hash: string; text: string }>;
+	/** Put requested concepts first while retaining the bounded background draft batch. */
+	pending(priorityTexts: string[] = []): Array<{ hash: string; text: string }> {
+		const priorityHashes = JSON.stringify([...new Set(priorityTexts.map(text => text.trim()).filter(Boolean))].map(identity));
+		return this.db.$client.prepare(`SELECT input_hash AS hash,input_text AS text FROM semantic_preferences
+			WHERE status='pending' ORDER BY input_hash IN (SELECT value FROM json_each(?)) DESC, rowid LIMIT ?`)
+			.all(priorityHashes, PREFERENCE_BATCH_SIZE) as Array<{ hash: string; text: string }>;
 	}
 
 	/** Persist normalized output or a durable inference failure for this exact prompt identity. */

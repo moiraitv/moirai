@@ -43,7 +43,7 @@ const timelinePreviewQuerySchema = z.object({
 
 /** Return the explicit item count when a program owns a concrete media collection. */
 function explicitItemCount(config: ProgramConfig | undefined): number | null {
-	return config?.type === 'content' && config.source.type === 'collection'
+	return config?.type === 'content' && (config.source.type === 'collection' || config.source.type === 'ai')
 		? config.source.itemIds.length
 		: null;
 }

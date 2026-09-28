@@ -7,6 +7,8 @@ import type { EmbeddingInput, SemanticRepository } from '../repository/semantic.
 
 /** Maximum media inferences before checking for interactive refinement work. */
 export const MEDIA_EMBEDDING_BATCH_SIZE = 20;
+/** Whether an interactive request reached the local inference queue. */
+export type EmbeddingWakeStatus = 'scheduled' | 'paused' | 'stopped';
 
 /**
  * Own local inference in a child process, releasing it after idle or under resource pressure.
@@ -16,11 +18,13 @@ export class EmbeddingService {
 	private worker: ChildProcess | null = null;
 	private active: Promise<void> | null = null;
 	private timer: NodeJS.Timeout | null = null;
+	private timerDueAt = 0;
 	private idleTimer: NodeJS.Timeout | null = null;
 	private closed = true;
 	private paused = false;
 	private dirty = true;
 	private retryDelay = 2_000;
+	private readonly priorityTexts = new Set<string>();
 
 	constructor(
 		private readonly repository: SemanticRepository,
@@ -36,26 +40,49 @@ export class EmbeddingService {
 
 	/** Schedule reconciliation after catalog edits, including ancestor metadata changes. */
 	handleEvent(event: LiveEvent): void {
-		if (event.type === 'scan.changed' || event.type === 'library.changed' || event.type === 'scheduling.changed') {
+		const changedScan = event.type === 'scan.changed' && event.data.status === 'complete' && event.data.affectsProgramming;
+		if (changedScan || event.type === 'library.changed' || event.type === 'scheduling.changed') {
 			this.dirty = true;
+			if (this.timer && this.timerDueAt <= Date.now() + 2_000) {
+				return;
+			}
 			this.retryDelay = 2_000;
 			if (this.timer) {
 				clearTimeout(this.timer);
 				this.timer = null;
+				this.timerDueAt = 0;
 			}
 			this.kick();
 		}
 	}
 
-	/** Wake pending draft inference without publishing progress before work begins. */
-	requestPreferences(includeMedia = false): void {
+	/** Start requested concepts promptly while ordinary draft work retains its debounce. */
+	requestPreferences(includeMedia = false, concepts: string[] = []): EmbeddingWakeStatus {
 		this.dirty ||= includeMedia;
+		if (this.closed) {
+			return 'stopped';
+		}
+		if (this.paused) {
+			return 'paused';
+		}
+		for (const concept of concepts) {
+			if (concept.trim()) {
+				this.priorityTexts.add(concept.trim());
+			}
+		}
 		if (this.timer) {
 			clearTimeout(this.timer);
 			this.timer = null;
+			this.timerDueAt = 0;
 		}
-		this.retryDelay = 250;
-		this.kick();
+		this.retryDelay = concepts.length ? 0 : 250;
+		if (concepts.length) {
+			this.startRun();
+		}
+		else {
+			this.kick();
+		}
+		return 'scheduled';
 	}
 
 	/** Debounce event bursts and retry missing model bundles without busy looping. */
@@ -65,19 +92,30 @@ export class EmbeddingService {
 		}
 		this.timer = setTimeout(() => {
 			this.timer = null;
-			this.retryDelay = 60_000;
-			this.active = this.run().catch(() => {
-				this.dirty = true;
-				if (!this.closed && !this.paused) {
-					this.repository.preparationError('model-unavailable');
-					this.events.publish({ type: 'embeddings.changed', data: { pending: this.repository.catalog().pendingItemIds.length, failed: 0, status: 'idle' } });
-				}
-			}).finally(() => {
-				this.active = null;
-				this.kick();
-			});
+			this.timerDueAt = 0;
+			this.startRun();
 		}, this.retryDelay);
+		this.timerDueAt = Date.now() + this.retryDelay;
 		this.timer.unref();
+	}
+
+	/** Share one serialized worker run between immediate requests and background retries. */
+	private startRun(): void {
+		if (this.closed || this.paused || this.active) {
+			return;
+		}
+		this.retryDelay = 60_000;
+		this.active = this.run().catch(() => {
+			this.dirty = true;
+			this.priorityTexts.clear();
+			if (!this.closed && !this.paused) {
+				this.repository.preparationError('model-unavailable');
+				this.events.publish({ type: 'embeddings.changed', data: { pending: this.repository.catalog().pendingItemIds.length, failed: 0, status: 'idle' } });
+			}
+		}).finally(() => {
+			this.active = null;
+			this.kick();
+		});
 	}
 
 	/** Run pending inference serially, yielding between items and publishing bounded progress. */
@@ -88,13 +126,15 @@ export class EmbeddingService {
 		if (this.dirty) {
 			this.repository.preferences.reconcile();
 		}
-		const preferences = this.repository.preferences.pending();
+		const preferences = this.repository.preferences.pending([...this.priorityTexts]);
 		const pending = this.dirty ? this.repository.reconcile() : [];
 		if (pending.length === 0 && preferences.length === 0) {
 			this.dirty = false;
+			this.priorityTexts.clear();
 			return;
 		}
 		if (!existsSync(path.join(this.modelPath, 'onnx/model.onnx'))) {
+			this.priorityTexts.clear();
 			this.repository.preparationError('model-missing');
 			this.events.publish({ type: 'embeddings.changed', data: { pending: pending.length + preferences.length, failed: 0, status: 'model-missing' } });
 			return;
@@ -122,7 +162,7 @@ export class EmbeddingService {
 				this.events.publish({ type: 'embeddings.changed', data: {
 					pending: pending.length - index - 1, failed, status: index === pending.length - 1 ? 'idle' : 'working',
 				} });
-				await this.preparePreferences(this.repository.preferences.pending(), pending.length - index - 1);
+				await this.preparePreferences(this.repository.preferences.pending([...this.priorityTexts]), pending.length - index - 1);
 			}
 			await new Promise((resolve) => setTimeout(resolve, 25));
 		}
@@ -135,6 +175,7 @@ export class EmbeddingService {
 				return;
 			}
 			this.repository.preferences.store(preference.hash, await this.infer(preference.text));
+			this.priorityTexts.delete(preference.text);
 			await new Promise((resolve) => setTimeout(resolve, 25));
 		}
 		if (preferences.length) {
@@ -241,6 +282,7 @@ export class EmbeddingService {
 		this.closed = true;
 		if (this.timer) {
 			clearTimeout(this.timer);
+			this.timerDueAt = 0;
 		}
 		await this.retire();
 		await this.active;

@@ -18,6 +18,8 @@ import type { Repository } from '../repository/index.js';
 import type { ScannerManager } from '../scanner/manager.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import type { TimelineMaterializer } from '../scheduling/timeline-materializer.js';
+import type { EmbeddingWakeStatus } from '../semantic/service.js';
+import { registerAiRoutes } from './ai.js';
 import { registerCatalogRoutes } from './catalog.js';
 import { registerAuthenticationRoutes } from './authentication.js';
 import { registerChannelRoutes } from './channels.js';
@@ -44,7 +46,7 @@ export interface HttpRouteDependencies {
 	epg: EpgService;
 	timelineMaterializer: TimelineMaterializer;
 	schedulingWorkers: SchedulingWorkerPool;
-	requestEmbeddingWork?: (includeMedia?: boolean) => void;
+	requestEmbeddingWork?: (includeMedia?: boolean, concepts?: string[]) => EmbeddingWakeStatus | void;
 	logs: LogService;
 	health: HealthService;
 }
@@ -62,6 +64,7 @@ export function registerHttpRoutes(
 	registerEncodingProfileRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);
+	registerAiRoutes(app, dependencies);
 	registerChannelRoutes(app, dependencies);
 	registerQuickChannelSetupRoutes(app, dependencies);
 	registerFallbackFillerRoutes(app, dependencies);

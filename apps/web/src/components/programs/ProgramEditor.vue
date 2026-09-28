@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import ProgramAiSource from './ProgramAiSource.vue';
+import { useAiProgramDraft } from './ai-program-draft';
+import { useAuthenticationStore } from '../../stores/authentication';
 import SequenceGuidePreview from './SequenceGuidePreview.vue';
-import type { SequenceOrdering } from '@moirai/shared';
+import { AI_DEFAULT_RESULT_COUNT, type AiResultCount, type SequenceOrdering } from '@moirai/shared';
 import SequenceOrderingEditor from './SequenceOrderingEditor.vue';
 import ResourceUsage from '../ResourceUsage.vue';
 import { useDraftProtection } from '../../draft-protection';
@@ -73,6 +76,9 @@ const initialLoading = ref(true);
 const saving = ref(false);
 let allowRouteLeave = false;
 const error = ref('');
+const aiConfigured = ref(false);
+const draftRevision = ref(0);
+const authentication = useAuthenticationStore();
 const sourceEntries = ref<MediaSourcePickerEntry[]>([]);
 const sourceLoading = ref(false);
 const sourceLoaded = ref(false);
@@ -131,11 +137,12 @@ const selectedItemOrdering = useSelectedMediaOrderState(
 );
 const filteredSelectedItems = computed(() => {
 	const query = selectedItemSearch.value.trim().toLocaleLowerCase();
+	const items = form.sourceType === 'ai' ? selectedItems.value : selectedItemOrdering.orderedItems.value;
 	if (!query) {
-		return selectedItemOrdering.orderedItems.value;
+		return items;
 	}
 
-	return selectedItemOrdering.orderedItems.value.filter((item) => {
+	return items.filter((item) => {
 		const subtitle = mediaItemSubtitle(selectedLibraryType.value, item) || item.kind;
 		return `${item.title} ${subtitle}`.toLocaleLowerCase().includes(query);
 	});
@@ -160,6 +167,7 @@ const sourceLibraries = computed(() =>
 const sourceTypeLabel = computed(() => ({
 	'library-query': 'Library query',
 	collection: 'Specific media items',
+	ai: 'AI',
 	'group-collection': 'Specific media groups',
 	group: 'Show or season',
 	item: 'Exact item',
@@ -209,7 +217,8 @@ const form = reactive({
 	exclusionText: '',
 	exclusionStrictness: DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS,
 	sourceType: 'library-query' as
-    'library-query' | 'collection' | 'item' | 'group' | 'group-collection',
+    'library-query' | 'collection' | 'item' | 'group' | 'group-collection' | 'ai',
+	aiPrompt: '', aiSelectionPrompt: null as string | null, aiResultLimit: AI_DEFAULT_RESULT_COUNT as AiResultCount,
 	libraryId: '',
 	sourceId: '',
 	includeDescendants: true,
@@ -231,12 +240,15 @@ const form = reactive({
 	repeat: true,
 	entries: [] as Array<{ id: string; programId: string; count: number }>,
 });
-const originalSnapshot = ref(JSON.stringify(form));
+const aiDraft = useAiProgramDraft(form, () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${editingId.value ?? 'new'}`);
+const { generation: aiGeneration, warning: aiDraftWarning } = aiDraft;
+const originalSnapshot = ref(JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT }));
 const previewProgramNames = computed(() => new Map(programs.value.map(program => [program.id, program.name])));
-const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot.value);
+const isDirty = computed(() => JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT }) !== originalSnapshot.value);
 
 /** Initialize the form from an existing program or safe defaults for a new content rule. */
 function resetForm(program?: SchedulingProgram): void {
+	draftRevision.value += 1;
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.name = program?.name ?? '';
@@ -258,6 +270,9 @@ function resetForm(program?: SchedulingProgram): void {
 	form.filter = program?.config.type === 'theme' || program?.config.type === 'similarity' ? catalogProgramItemFilterSchema.parse(program.config.filter ?? {}) : emptyCatalogProgramItemFilter();
 	form.querySort = { type: 'name', direction: 'asc' };
 	form.queryItemLimit = null;
+	form.aiPrompt = '';
+	form.aiSelectionPrompt = null;
+	form.aiResultLimit = AI_DEFAULT_RESULT_COUNT;
 	form.selectedItemIds = [];
 	form.selectedItemSort = 'date-added';
 	form.selectedItemSortDirection = 'asc';
@@ -284,6 +299,15 @@ function resetForm(program?: SchedulingProgram): void {
 				form.filter = catalogProgramItemFilterSchema.parse(source);
 				form.querySort = { ...(source.sort ?? { type: 'name', direction: 'asc' }) };
 				form.queryItemLimit = source.itemLimit ?? null;
+				break;
+			case 'ai':
+				form.libraryId = source.libraryId;
+				form.aiPrompt = source.prompt;
+				form.aiSelectionPrompt = source.prompt.trim();
+				form.selectedItemIds = [...source.itemIds];
+				form.selectedItemSort = source.sort.type;
+				form.selectedItemSortDirection = source.sort.type === 'manual' ? 'asc' : source.sort.direction;
+				form.manualItemIds = source.sort.type === 'manual' ? [...source.sort.itemIds] : [];
 				break;
 			case 'collection':
 				form.libraryId = source.libraryId;
@@ -324,7 +348,12 @@ function resetForm(program?: SchedulingProgram): void {
 	sourceParentId.value = undefined;
 	sourcePage.value = 1;
 	sourceSearch.value = '';
-	originalSnapshot.value = JSON.stringify(form);
+	originalSnapshot.value = JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT });
+}
+
+/** Restore browser-owned AI work after loading the current saved program. */
+function openDraft(program?: SchedulingProgram, restore = true): void {
+	aiDraft.open(program?.updatedAt ?? '', () => resetForm(program), restore);
 }
 
 /** Load genre facets or paged source choices while discarding superseded responses. */
@@ -389,7 +418,8 @@ async function loadSourceOptions(): Promise<void> {
 /** Resolve selected item identifiers into review cards while discarding superseded responses. */
 async function loadSelectedItems(): Promise<void> {
 	const sequence = ++selectedItemsLoadSequence;
-	if (form.sourceType !== 'collection' || !form.libraryId || form.selectedItemIds.length === 0) {
+	if ((form.sourceType !== 'collection' && !(form.sourceType === 'ai' && selectionDrawerOpen.value))
+		|| !form.libraryId || form.selectedItemIds.length === 0) {
 		selectedItems.value = [];
 		selectedItemsLoading.value = false;
 		selectedItemsLoaded.value = true;
@@ -399,7 +429,7 @@ async function loadSelectedItems(): Promise<void> {
 	selectedItemsLoading.value = true;
 	selectedItemsLoaded.value = false;
 	try {
-		const requestedIds = form.selectedItemSort === 'manual'
+		const requestedIds = form.sourceType === 'ai' ? form.selectedItemIds : form.selectedItemSort === 'manual'
 			? form.manualItemIds
 			: selectedItemOrdering.additionOrder.value.itemIds;
 		const items = await api.mediaSelection(form.libraryId, requestedIds);
@@ -409,7 +439,7 @@ async function loadSelectedItems(): Promise<void> {
 		}
 	}
 	catch (cause) {
-		if (sequence === selectedItemsLoadSequence) {
+		if (sequence === selectedItemsLoadSequence && form.sourceType !== 'ai') {
 			error.value = errorMessage(cause);
 		}
 	}
@@ -573,13 +603,16 @@ function removeSelectedGroup(id: string): void {
 /** Open the selection review drawer when the current source has selected entries. */
 async function openSelectionDrawer(): Promise<void> {
 	if (
-		(form.sourceType === 'collection' && form.selectedItemIds.length === 0)
+		((form.sourceType === 'collection' || form.sourceType === 'ai') && form.selectedItemIds.length === 0)
 		|| (form.sourceType === 'group-collection' && form.selectedGroupIds.length === 0)
 	) {
 		return;
 	}
 
 	selectionDrawerOpen.value = true;
+	if (form.sourceType === 'ai') {
+		await loadSelectedItems();
+	}
 }
 
 /** Close the selection review, clear its search, and restore focus to its trigger. */
@@ -635,6 +668,14 @@ function changeSourceLibrary(): void {
 		form.querySort = { type: 'name', direction: 'asc' };
 		form.queryItemLimit = null;
 	}
+	if (form.sourceType === 'ai') {
+		form.aiPrompt = '';
+		form.aiSelectionPrompt = null;
+		form.selectedItemIds = [];
+		form.manualItemIds = [];
+		form.selectedItemSort = 'date-added';
+		form.selectedItemSortDirection = 'asc';
+	}
 }
 
 /** Reset source-specific state and load choices valid for the newly selected source type. */
@@ -645,6 +686,7 @@ async function changeSourceType(): Promise<void> {
 	form.sourceId = '';
 	selectedSourceLabel.value = '';
 	form.selectedItemIds = [];
+	form.aiSelectionPrompt = null;
 	form.manualItemIds = [];
 	selectedItemOrdering.reset();
 	form.selectedGroupIds = [];
@@ -727,8 +769,12 @@ function payload(): ProgramCreate {
 		= form.strategy === 'sequential'
 			? ({ type: 'sequential' } as const)
 			: ({ type: form.strategy, seed: form.seed } as const);
-	if (form.sourceType === 'collection' && form.selectedItemIds.length === 0) {
+	if ((form.sourceType === 'collection' || form.sourceType === 'ai') && form.selectedItemIds.length === 0) {
 		throw new Error('Select at least one media item.');
+	}
+
+	if (form.sourceType === 'ai' && form.selectedItemIds.length === 0) {
+		throw new Error('Generate a selection before saving.');
 	}
 
 	if (form.sourceType === 'group-collection' && form.selectedGroupIds.length === 0) {
@@ -757,14 +803,22 @@ function payload(): ProgramCreate {
 							itemIds: selectedItemOrdering.additionOrder.value.itemIds,
 							sort: selectedItemSort.value,
 						} as const)
-						: ({
-							type: 'library-query',
-							libraryId: form.libraryId,
-							kinds: form.kinds,
-							...form.filter,
-							sort: form.querySort,
-							itemLimit: form.queryItemLimit,
-						} as const);
+						: form.sourceType === 'ai'
+							? ({
+								type: 'ai',
+								libraryId: form.libraryId,
+								prompt: form.aiPrompt.trim(),
+								itemIds: form.selectedItemIds,
+								sort: selectedItemSort.value,
+							} as const)
+							: ({
+								type: 'library-query',
+								libraryId: form.libraryId,
+								kinds: form.kinds,
+								...form.filter,
+								sort: form.querySort,
+								itemLimit: form.queryItemLimit,
+							} as const);
 	return { name: form.name, config: { type: 'content', source, strategy, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
 }
 const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
@@ -772,13 +826,15 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	embedded: () => props.embedded,
 	saving: () => saving.value,
 	resetDraft: (program) => {
-		resetForm(program);
+		aiDraft.clear();
+		openDraft(program, false);
 		error.value = '';
 	},
 	reloadDraft: async () => await Promise.all([
 		loadSourceOptions(), loadSelectedItems(), loadSelectedGroups(),
 	]).then(() => undefined),
 	onDeleted: async () => {
+		aiDraft.clear();
 		await scheduling.load();
 		await leaveEditor();
 	},
@@ -786,7 +842,7 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 });
 
 const programSaveDisabled = computed(() =>
-	saving.value || deleting.value || !isProgramDraftValid(payload)
+	saving.value || deleting.value || Boolean(aiGeneration.value) || !isProgramDraftValid(payload)
 	|| (Boolean(editingId.value) && !isDirty.value));
 
 /** Validate and save the program draft. */
@@ -802,8 +858,9 @@ async function save(stayOnPage = false): Promise<boolean> {
 			? api.updateProgram(editingId.value, payload())
 			: api.createProgram(payload());
 		const saved = await operation;
+		aiDraft.clear();
 		await scheduling.load();
-		originalSnapshot.value = JSON.stringify(form);
+		originalSnapshot.value = JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT });
 		if (stayOnPage) {
 			return true;
 		}
@@ -837,13 +894,23 @@ async function leaveEditor(): Promise<void> {
 
 /** Save, discard, or retain an edited program before closing its editor. */
 async function closeEditor(): Promise<void> {
+	if (form.type === 'content' && form.sourceType === 'ai' && !aiDraftWarning.value && !saving.value && !deleting.value) {
+		aiDraft.persist();
+		if (!aiDraftWarning.value) {
+			await (props.embedded ? emit('close') : leaveEditor());
+			return;
+		}
+	}
 	await closeUnsavedEditor({
 		blocked: saving.value || deleting.value,
 		dirty: isDirty.value,
 		key: `unsaved-program:${editingId.value ?? 'new'}`,
 		message: 'Save this program before closing?',
 		save: () => save(),
-		discard: () => props.embedded ? emit('close') : leaveEditor(),
+		discard: () => {
+			aiDraft.clear();
+			return props.embedded ? emit('close') : leaveEditor();
+		},
 	});
 }
 
@@ -851,6 +918,12 @@ async function closeEditor(): Promise<void> {
 async function confirmRouteLeave(): Promise<boolean> {
 	if (allowRouteLeave || !editorOpen.value) {
 		return true;
+	}
+	if (form.type === 'content' && form.sourceType === 'ai' && !aiDraftWarning.value && !saving.value && !deleting.value) {
+		aiDraft.persist();
+		if (!aiDraftWarning.value) {
+			return true;
+		}
 	}
 	let proceed = false;
 	await closeUnsavedEditor({
@@ -862,6 +935,7 @@ async function confirmRouteLeave(): Promise<boolean> {
 			proceed = await save(true);
 		},
 		discard: () => {
+			aiDraft.clear();
 			proceed = true;
 		},
 	});
@@ -874,7 +948,7 @@ watch(
 	() => [route.params.id, props.programId],
 	() => {
 		const program = programs.value.find((candidate) => candidate.id === editingId.value);
-		resetForm(program);
+		openDraft(program);
 		void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	},
 );
@@ -894,6 +968,11 @@ onMounted(async () => {
 		},
 	);
 	try {
+		void api.aiStatus().then((status) => {
+			aiConfigured.value = status.configured;
+		}).catch(() => {
+			aiConfigured.value = false;
+		});
 		await Promise.all([
 			scheduling.load(),
 			librariesStore.load(),
@@ -901,7 +980,7 @@ onMounted(async () => {
 				? Promise.resolve()
 				: channelsStore.loadCapabilities(),
 		]);
-		resetForm(programs.value.find((program) => program.id === editingId.value));
+		openDraft(programs.value.find((program) => program.id === editingId.value));
 		await Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	}
 	catch (cause) {
@@ -914,7 +993,15 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	unsubscribeLiveEvents?.();
 });
-useDraftProtection(() => editorOpen.value && isDirty.value);
+useDraftProtection(() => editorOpen.value && isDirty.value && (form.sourceType !== 'ai' || Boolean(aiDraftWarning.value)));
+watch(() => [form.type, form.sourceType], () => {
+	if (form.type !== 'content' || form.sourceType !== 'ai') {
+		if (aiGeneration.value) {
+			void api.cancelAiGeneration(aiGeneration.value).catch(() => {});
+			aiGeneration.value = null;
+		}
+	}
+}, { flush: 'sync' });
 </script>
 
 <template>
@@ -945,7 +1032,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 						{{
 							form.type === 'content'
 								? 'Define what content can play and how it should be selected.'
-								: form.type === 'theme' ? 'Find media matching a theme in a target library.' : form.type === 'similarity' ? 'Select related media from a Specific media items Program.' : 'Arrange reusable programs in a custom repeating order.'
+								: form.type === 'theme' ? 'Find media matching a theme in a target library.' : form.type === 'similarity' ? 'Select related media from a Specific media items or AI Program.' : 'Arrange reusable programs in a custom repeating order.'
 						}}
 					</p>
 				</ResourceEditorHeader>
@@ -991,6 +1078,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 												@change="changeSourceType"
 											>
 												<option value="library-query">Library query</option>
+												<option v-if="aiConfigured || form.sourceType === 'ai'" value="ai">AI</option>
 												<option value="collection">Specific media items</option>
 												<option value="group-collection">Specific media groups</option>
 												<option v-if="form.sourceType === 'group'" value="group">
@@ -1025,7 +1113,23 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 											</select></label
 											>
 										</div>
-										<template v-if="form.sourceType === 'library-query'">
+										<p v-if="aiDraftWarning" class="form-error" role="alert">{{ aiDraftWarning }}</p>
+										<ProgramAiSource
+											v-if="form.sourceType === 'ai'" v-model:prompt="form.aiPrompt"
+											v-model:selection-prompt="form.aiSelectionPrompt" v-model:max-results="form.aiResultLimit"
+											v-model:generation="aiGeneration" v-model:item-ids="form.selectedItemIds"
+											v-model:sort-type="form.selectedItemSort" v-model:sort-direction="form.selectedItemSortDirection"
+											:library-id="form.libraryId" :draft-revision="draftRevision" :sequential="form.strategy === 'sequential'"
+										>
+											<template #results="{ generating }">
+												<button
+													ref="selectionReviewButton" type="button" class="toolbar-button"
+													:disabled="generating || form.selectedItemIds.length === 0" @click="openSelectionDrawer">
+													Review results
+												</button>
+											</template>
+										</ProgramAiSource>
+										<template v-else-if="form.sourceType === 'library-query'">
 											<ProgramLibraryQuery
 												v-model="form.filter"
 												v-model:sort="form.querySort"
@@ -1198,7 +1302,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 					v-if="!initialLoading"
 					resource-type="Program"
 					:show-delete="!embedded && Boolean(editingId)" :busy="saving || deleting"
-					:deleting="deleting" :reset-disabled="!isDirty"
+					:deleting="deleting" :reset-disabled="!isDirty && !aiGeneration"
 					:save-disabled="programSaveDisabled" :saving="saving"
 					save-submits
 					@delete="deleteProgram" @reset="resetProgram"
@@ -1208,6 +1312,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 		<MediaSelectionDrawer
 			v-if="selectionDrawerOpen"
 			:selecting-groups="selectingGroups"
+			:ai-selection="form.sourceType === 'ai'"
 			:selection-count="selectionCount"
 			:selection-limit="selectionLimit"
 			:loading="selectingGroups ? selectedGroupsLoading : selectedItemsLoading"
@@ -1230,6 +1335,7 @@ useDraftProtection(() => editorOpen.value && isDirty.value);
 			@move-item="moveSelectedItem"
 			@close="closeSelectionDrawer"
 			@clear="clearSelectedItems"
+			@retry="selectingGroups ? loadSelectedGroups() : loadSelectedItems()"
 			@remove-item="removeSelectedItem"
 			@remove-group="removeSelectedGroup"
 		/>

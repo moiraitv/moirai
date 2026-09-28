@@ -1901,6 +1901,17 @@ describe('schedule timeline engine', () => {
 		expect(result.proposedState.length).toBeGreaterThan(0);
 	});
 
+	it.each(['asc', 'desc'] as const)('orders AI playback by indexed date (%s), independently of model order', direction => {
+		const items = [media(1, 3600, { dateAddedAt: '2026-03-01', title: 'Newest' }),
+			media(2, 3600, { dateAddedAt: '2026-01-01', title: 'Oldest' }),
+			media(3, 3600, { dateAddedAt: '2026-02-01', title: 'Middle' })];
+		const ai = program(10, { type: 'content', source: { type: 'ai', libraryId: uuid(900), prompt: 'Movies',
+			itemIds: items.map(item => item.id), sort: { type: 'date-added', direction } }, strategy: { type: 'sequential' } });
+		const daily = template([{ programId: ai.id, startSeconds: 0 }]);
+		expect(primaryTitles(generateTimeline(input([ai], items, daily))).slice(0, 3))
+			.toEqual(direction === 'asc' ? ['Oldest', 'Middle', 'Newest'] : ['Newest', 'Middle', 'Oldest']);
+	});
+
 	it('uses the selected-media sort for sequential collection playback', () => {
 		const oldestAdded = media(1, 60 * 60, {
 			title: 'Zulu',
