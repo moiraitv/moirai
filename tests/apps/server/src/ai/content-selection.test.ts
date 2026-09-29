@@ -1,9 +1,30 @@
 import { expect, it } from 'vitest';
-import { AI_BATCH_BYTE_LIMIT, AI_BATCH_ITEM_LIMIT, AI_CATALOG_BYTE_LIMIT, candidateBatches, aiDiscoverySchema, parseAiJson } from '@server/ai/content-selection.js';
+import { AI_BATCH_BYTE_LIMIT, AI_BATCH_ITEM_LIMIT, AI_CATALOG_BYTE_LIMIT, candidateBatches, aiDiscoverySchema, localDiscovery, parseAiDiscovery, parseAiJson } from '@server/ai/content-selection.js';
 import { discoveredItems, shortlistCandidates } from '@server/ai/retrieval.js';
 
 const movie = { id: 'known', title: 'Hidden battle', year: 2020, kind: 'movie', genres: ['Drama'] };
 const discovery = { concepts: ['spaceship combat'], constraints: ['No documentaries'], candidates: [{ title: movie.title, year: movie.year }] };
+
+it('accepts one schema-valid JSON object wrapped in prose and rejects conflicting objects', () => {
+	const valid = JSON.stringify(discovery);
+	expect(parseAiJson('I found these candidates:\n' + valid + '\nDone.', aiDiscoverySchema)).toEqual(discovery);
+	expect(() => parseAiJson(valid + '\n' + valid, aiDiscoverySchema)).toThrow('invalid selection');
+	expect(() => parseAiJson('Here is {"concepts":[]} and no valid plan.', aiDiscoverySchema)).toThrow('invalid selection');
+});
+
+it('keeps the first six ranked concepts while still rejecting malformed discovery items', () => {
+	const extra = { concepts: Array.from({ length: 8 }, (_, index) => `concept ${index}`),
+		constraints: [], candidates: [{ title: 'Halloween', year: 1978 }] };
+	expect(parseAiDiscovery(JSON.stringify(extra)).concepts).toEqual(extra.concepts.slice(0, 6));
+	expect(() => parseAiDiscovery(JSON.stringify({ ...extra, candidates: [{ title: 17, year: 1978 }] })))
+		.toThrow('invalid selection');
+});
+
+it('uses positive prompt clauses for local retrieval while keeping exclusions for final review', () => {
+	expect(localDiscovery('Halloween movies. Include witch stories. No comedy. Avoid poorly rated films.').concepts)
+		.toEqual(['Halloween movies', 'Include witch stories']);
+	expect(localDiscovery('No stand-up. Avoid documentaries.').concepts).toEqual(['No stand-up. Avoid documentaries.']);
+});
 
 it('rescues a discovered title with weak embeddings and metadata lacking the required feature', () => {
 	const catalog = Array.from({ length: 3_000 }, (_, i) => ({ ...movie, id: String(i).padStart(5, '0'), title: `Space ${i}`, genres: ['Science Fiction'] }));

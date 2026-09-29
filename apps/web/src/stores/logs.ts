@@ -4,7 +4,7 @@ import type { LogEntry, LogFile, LogLevel } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
 
-/** Preserve the most recently loaded log page across route navigation. */
+/** Preserve loaded log history and pagination across refreshes and route navigation. */
 export const useLogsStore = defineStore('logs', () => {
 	// Retain loaded rows, filters, and pagination while the Logs route is inactive.
 	const entries = ref<LogEntry[]>([]);
@@ -17,39 +17,50 @@ export const useLogsStore = defineStore('logs', () => {
 	const scanLimitReached = ref(false);
 	const activeLevel = ref<LogLevel | ''>('');
 	const activeSearch = ref('');
-	let sequence = 0;
+	let loadSequence = 0;
+	let filterSequence = 0;
 
-	/** Load filtered log entries while ignoring superseded responses. */
+	/** Refresh current logs without dropping loaded history; replace it when filters change. */
 	async function load(level = activeLevel.value, search = activeSearch.value): Promise<void> {
-		const current = ++sequence;
+		const sameFilter = loaded.value && level === activeLevel.value && search === activeSearch.value;
+		const current = ++loadSequence;
+		if (!sameFilter) {
+			filterSequence += 1;
+		}
 		loading.value = true;
 		try {
 			const [page, retainedFiles] = await Promise.all([
 				api.logs({ level: level || undefined, search: search || undefined, limit: 100 }),
 				api.logFiles(),
 			]);
-			if (current !== sequence) {
+			if (current !== loadSequence) {
 				return;
 			}
 
-			entries.value = page.entries;
+			if (sameFilter) {
+				const seen = new Set(page.entries.map(entry => entry.id));
+				entries.value = [...page.entries, ...entries.value.filter(entry => !seen.has(entry.id))];
+			}
+			else {
+				entries.value = page.entries;
+				nextCursor.value = page.nextCursor;
+				scanLimitReached.value = page.scanLimitReached;
+			}
 			files.value = retainedFiles;
-			nextCursor.value = page.nextCursor;
-			scanLimitReached.value = page.scanLimitReached;
 			activeLevel.value = level;
 			activeSearch.value = search;
 			loaded.value = true;
 			error.value = '';
 		}
 		catch (cause) {
-			if (current !== sequence) {
+			if (current !== loadSequence) {
 				return;
 			}
 			error.value = errorMessage(cause);
 			throw cause;
 		}
 		finally {
-			if (current === sequence) {
+			if (current === loadSequence) {
 				loading.value = false;
 			}
 		}
@@ -61,7 +72,7 @@ export const useLogsStore = defineStore('logs', () => {
 			return;
 		}
 
-		const current = sequence;
+		const current = filterSequence;
 		loadingMore.value = true;
 		try {
 			const page = await api.logs({
@@ -70,16 +81,17 @@ export const useLogsStore = defineStore('logs', () => {
 				search: activeSearch.value || undefined,
 				limit: 100,
 			});
-			if (current !== sequence) {
+			if (current !== filterSequence) {
 				return;
 			}
-			entries.value.push(...page.entries);
+			const seen = new Set(entries.value.map(entry => entry.id));
+			entries.value.push(...page.entries.filter(entry => !seen.has(entry.id)));
 			nextCursor.value = page.nextCursor;
 			scanLimitReached.value = page.scanLimitReached;
 			error.value = '';
 		}
 		catch (cause) {
-			if (current === sequence) {
+			if (current === filterSequence) {
 				error.value = errorMessage(cause);
 			}
 		}

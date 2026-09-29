@@ -165,6 +165,7 @@ test('restores incomplete new drafts and clears results when changing libraries'
 	await page.getByLabel('Prompt', { exact: true }).fill('Movies');
 	await page.getByRole('button', { name: 'Generate', exact: true }).click();
 	await expect(page.getByText('6 selected', { exact: true })).toBeVisible();
+	await expect(page.getByText('No matches. Adjust the prompt and try again.')).toBeHidden();
 	await page.getByLabel('Library', { exact: true }).selectOption(libraryIds[1]!);
 	await expect(page.getByText('6 selected', { exact: true })).toBeHidden();
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
@@ -210,17 +211,25 @@ test('shows retained progress, elapsed time and compact coverage on mobile', asy
 	await page.getByRole('button', { name: 'Generate', exact: true }).click();
 	await expect.poll(() => starts).toBe(1);
 	for (const [id, job] of jobs) {
+		jobs.set(id, { ...job, status: 'reviewing', batch: 1, totalBatches: 3 });
+	}
+	await expect(page.locator('.ai-selection-elapsed')).toContainText('15% estimated');
+	for (const [id, job] of jobs) {
 		jobs.set(id, { ...job, startedAt: Date.now() - AI_GENERATION_TARGET_MS / 2, status: 'reviewing', batch: 2, totalBatches: 3 }); 
 	}
 	await expect(page.getByRole('status').filter({ hasText: 'Reviewing candidates… · Batch 2 of 3' })).toBeVisible();
-	await expect(page.locator('.ai-selection-elapsed')).toContainText('50% estimated');
+	await expect(page.locator('.ai-selection-elapsed')).toContainText('41% estimated');
 	for (const [id, job] of jobs) {
 		jobs.set(id, { ...job, startedAt: Date.now() - AI_GENERATION_TARGET_MS - 60_000 });
 	}
-	await expect(page.getByRole('status').filter({ hasText: 'Finishing review… · Batch 2 of 3' })).toBeVisible();
-	await expect(page.locator('.ai-selection-elapsed')).toContainText('99% estimated · 4:');
+	await expect(page.getByRole('status').filter({ hasText: 'Reviewing candidates… · Batch 2 of 3' })).toBeVisible();
+	await expect(page.locator('.ai-selection-elapsed')).toContainText('41% estimated · 4:');
+	for (const [id, job] of jobs) {
+		jobs.set(id, { ...job, status: 'generating', batch: undefined, totalBatches: undefined });
+	}
+	await expect(page.locator('.ai-selection-elapsed')).toContainText('95% estimated');
 	await page.reload();
-	await expect(page.locator('.ai-selection-elapsed')).toContainText('99% estimated');
+	await expect(page.locator('.ai-selection-elapsed')).toContainText('95% estimated');
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.locator('.ai-selection-progress').scrollIntoViewIfNeeded();
@@ -235,10 +244,13 @@ test('shows retained progress, elapsed time and compact coverage on mobile', asy
 	result = { itemIds, unmatched: [], catalogTruncated: true, coverage: {
 		libraryCount: 3000, reviewedCount: 1000, shortlistLimited: true, embeddingsAvailable: false,
 		mediaEmbeddingsAvailable: true, queryEmbeddingsAvailable: false, searchBudgetExhausted: true,
+		reviewStoppedEarly: true, finalReviewIncomplete: true,
 	} };
 	complete();
 	await expect(page.getByText('6 selected · 1,000 of 3,000 reviewed')).toBeVisible();
 	await expect(page.getByText('Some search concepts lacked local embeddings; title, plot, and metadata matching still ran.')).toBeVisible();
+	await expect(page.getByText('Review stopped early. These matches came from completed batches; more titles may qualify.')).toBeVisible();
+	await expect(page.getByText('Final refinement did not finish. These matches came from completed reviews and may need a closer look.')).toBeVisible();
 	await expect(page.getByRole('status').filter({ hasText: '6 selected' })).toContainText('100%');
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.getByRole('button', { name: 'Generate', exact: true }).scrollIntoViewIfNeeded();

@@ -6,103 +6,88 @@ const ai = { apiKey: 'test', baseUrl: 'https://provider.test/v1', model: 'test',
 const catalog = Array.from({ length: 1_100 }, (_, i) => ({ id: String(i).padStart(5, '0'), title: `Movie ${i}`, year: 2020, kind: 'movie', genres: [] }));
 const discovery = { concepts: ['movies'], constraints: [], candidates: [] };
 
-it('caps confident matches at the requested count and skips further paid batches', async () => {
-	let call = 0;
-	const metrics = vi.fn();
-	const fetchImpl = vi.fn<typeof fetch>(async () => {
-		const content = call++ === 0 ? discovery : { matches: Array.from({ length: 60 }, (_, index) => String(index + 1)) };
-		return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
-	});
-	const result = await generateAiSelection({ ...ai, webSearch: false }, 'movies', 'movies', {
-		loadCatalog: async () => catalog, loadVectors: async () => ({ vectors: {}, queries: [], available: false, issue: 'timeout' }), fetchImpl, onMetrics: metrics,
-	}, {}, 50);
-	expect(result.itemIds).toHaveLength(50);
-	expect(result.coverage?.reviewedCount).toBe(500);
-	expect(result.coverage).toMatchObject({ mediaEmbeddingsAvailable: false, queryEmbeddingsAvailable: false });
-	expect(metrics.mock.calls[0]![0]).toMatchObject({ embeddingIssue: 'timeout' });
-	expect(fetchImpl).toHaveBeenCalledTimes(2);
-});
-
-it('reviews confident matches without search and verifies only uncertain candidates', async () => {
-	const bodies: Array<Record<string, any>> = [];
-	const metrics = vi.fn();
+it.each([
+	{ name: 'invalid DeepSeek-style discovery', first: () => Response.json({ choices: [{ message: { content: '{"concepts":[]}' } }] }) },
+	{ name: 'timed-out Grok-style discovery', first: () => {
+		throw new DOMException('timeout', 'TimeoutError');
+	} },
+])('uses local discovery after $name without repeating planning', async ({ first }) => {
 	const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+		if (fetchImpl.mock.calls.length === 1) {
+			return first();
+		}
 		const body = JSON.parse(String(init?.body));
-		bodies.push(body);
-		const rows = body.input?.[1].content.split('\n').filter((line: string) => line.startsWith('[')) ?? [];
-		const refs = rows.map((line: string) => JSON.parse(line)[0]);
-		const content = bodies.length === 1 ? discovery : bodies.length <= 3
-			? { matches: [refs[0]], uncertain: [refs[1], refs[2]] }
-			: { matches: [refs[0]] };
-		const calls = bodies.length === 4 ? 2 : 0;
-		return Response.json({ status: 'completed', usage: { input_tokens: 10, output_tokens: 5 }, output: [
-			...Array.from({ length: calls }, () => ({ type: 'web_search_call' })),
-			{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify(content) }] },
-		] });
+		const refs = body.messages[1].content.split('\n').filter((line: string) => line.startsWith('["'))
+			.map((line: string) => JSON.parse(line)[0]);
+		return Response.json({ choices: [{ message: { content: JSON.stringify({ core: refs.slice(0, 1), supporting: [] }) } }] });
 	});
-	const result = await generateAiSelection(ai, 'movies', 'movies', {
-		loadCatalog: async () => catalog, loadVectors: async () => ({ vectors: {}, queries: [], available: false }), fetchImpl, onMetrics: metrics,
+	const metrics = vi.fn();
+	const result = await generateAiSelection({ ...ai, webSearch: false }, 'Halloween movies', 'movies', {
+		fastLocalReview: true, fetchImpl, onMetrics: metrics,
+		loadCatalog: async () => catalog.slice(0, 125),
+		loadVectors: async () => ({ vectors: {}, queries: [], available: false }),
 	}, {}, 50);
-	expect(bodies).toHaveLength(4);
-	expect(bodies.map(body => body.max_tool_calls)).toEqual([undefined, undefined, undefined, AI_WEB_SEARCH_MAX_TOOL_CALLS]);
-	expect(bodies[0]!).not.toHaveProperty('tools');
-	expect(bodies[1]!).not.toHaveProperty('tools');
-	expect(bodies[2]!).not.toHaveProperty('tools');
-	expect(bodies[3]!.input[1].content.match(/^\[/gmu)).toHaveLength(4);
-	expect(result.itemIds).toHaveLength(3);
-	expect(result.coverage).toMatchObject({ reviewedCount: 1_000, libraryCount: 1_100, searchBudgetExhausted: false });
-	expect(metrics.mock.calls[0]![0]).toMatchObject({ requests: 4, toolCalls: 2,
-		requestUsage: [{ phase: 'discovery', toolCalls: 0 }, { phase: 'review', toolCalls: 0 },
-			{ phase: 'review', toolCalls: 0 }, { phase: 'verification', requestedToolCalls: AI_WEB_SEARCH_MAX_TOOL_CALLS, toolCalls: 2 }],
-	});
+	expect(result.itemIds).toHaveLength(1);
+	expect(result.coverage?.localDiscoveryFallback).toBe(true);
+	expect(fetchImpl).toHaveBeenCalledTimes(3);
+	expect(metrics.mock.calls[0]![0].requestDiagnostics[0]).toMatchObject({ phase: 'discovery',
+		outcome: 'failed' });
 });
 
-it('limits verification to 30 ranked uncertain candidates across review batches', async () => {
-	const bodies: Array<Record<string, any>> = [];
-	const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
-		const body = JSON.parse(String(init?.body));
-		bodies.push(body);
-		const refs = body.input?.[1].content.split('\n').filter((line: string) => line.startsWith('['))
-			.map((line: string) => JSON.parse(line)[0]) ?? [];
-		const content = bodies.length === 1 ? discovery : bodies.length <= 3
-			? { matches: [], uncertain: refs.slice(0, 30) } : { matches: [] };
-		return Response.json({ status: 'completed', output: [
-			{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify(content) }] },
-		] });
-	});
-	await generateAiSelection(ai, 'movies', 'movies', {
-		loadCatalog: async () => catalog, loadVectors: async () => ({ vectors: {}, queries: [], available: false }), fetchImpl,
-	});
-	expect(bodies).toHaveLength(4);
-	expect(bodies[3]!.input[1].content.match(/^\[/gmu)).toHaveLength(30);
-	expect(bodies[3]!).toHaveProperty('max_tool_calls', AI_WEB_SEARCH_MAX_TOOL_CALLS);
-});
-
-it('rejects a provider that searches during discovery', async () => {
-	const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({ status: 'completed', output: [
-		{ type: 'web_search_call' },
-		{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify(discovery) }] },
-	] }));
-	await expect(generateAiSelection(ai, 'movies', 'movies', {
-		loadCatalog: async () => catalog.slice(0, 1), loadVectors: vi.fn(), fetchImpl,
-	})).rejects.toThrow('outside verification');
+it.each([401, 400, 422])('does not hide HTTP %s configuration or authorization failures with local fallback', async status => {
+	const fetchImpl = vi.fn<typeof fetch>(async () => new Response('', { status }));
+	await expect(generateAiSelection({ ...ai, webSearch: false }, 'Halloween movies', 'movies', {
+		fastLocalReview: true, fetchImpl,
+		loadCatalog: async () => catalog.slice(0, 125),
+		loadVectors: vi.fn(),
+	}, {}, 50)).rejects.toThrow(`HTTP ${status}`);
 	expect(fetchImpl).toHaveBeenCalledTimes(1);
 });
 
-it.each(['unknown', 'malformed', 'failed'])('rejects a %s later batch without returning partial matches', async failure => {
-	let call = 0;
-	const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
-		const body = JSON.parse(String(init?.body));
-		const current = call++;
-		if (current === 2 && failure === 'failed') {
-			return new Response('', { status: 500 });
-		}
-		const content = current === 0 ? discovery : current === 2 ? failure === 'unknown' ? { matches: ['999999'] } : {} : { matches: [JSON.parse(body.messages[1].content.split('\n').at(-1))[0]] };
-		return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
+it('does not continue after a spending refusal or user cancellation during discovery', async () => {
+	const refusal = Object.assign(new Error('limit'), { name: 'EvaluationBudgetError' });
+	const fetchImpl = vi.fn<typeof fetch>(async () => {
+		throw refusal;
 	});
-	await expect(generateAiSelection({ ...ai, webSearch: false }, 'movies', 'movies', {
-		loadCatalog: async () => catalog, loadVectors: async () => ({ vectors: {}, queries: [], available: false }), fetchImpl,
-	})).rejects.toThrow();
+	await expect(generateAiSelection({ ...ai, webSearch: false }, 'Halloween movies', 'movies', {
+		fastLocalReview: true, fetchImpl,
+		loadCatalog: async () => catalog.slice(0, 125), loadVectors: vi.fn(),
+	}, {}, 50)).rejects.toBe(refusal);
+	expect(fetchImpl).toHaveBeenCalledTimes(1);
+	const controller = new AbortController();
+	const canceled = vi.fn<typeof fetch>(async () => {
+		controller.abort();
+		throw new DOMException('cancelled', 'AbortError');
+	});
+	await expect(generateAiSelection({ ...ai, webSearch: false }, 'Halloween movies', 'movies', {
+		fastLocalReview: true, fetchImpl: canceled,
+		loadCatalog: async () => catalog.slice(0, 125), loadVectors: vi.fn(),
+	}, { signal: controller.signal }, 50)).rejects.toThrow('Generation cancelled');
+	expect(canceled).toHaveBeenCalledTimes(1);
+});
+
+it('keeps the existing sequential non-search review unless the evaluation path is enabled', async () => {
+	let calls = 0;
+	let active = 0;
+	let maximumActive = 0;
+	const fetchImpl = vi.fn<typeof fetch>(async () => {
+		const current = calls++;
+		if (current === 0) {
+			return Response.json({ choices: [{ message: { content: JSON.stringify(discovery) } }] });
+		}
+		active += 1;
+		maximumActive = Math.max(maximumActive, active);
+		await new Promise(resolve => setTimeout(resolve, 1));
+		active -= 1;
+		return Response.json({ choices: [{ message: { content: '{"matches":[]}' } }] });
+	});
+	const result = await generateAiSelection({ ...ai, webSearch: false }, 'movies', 'movies', {
+		loadCatalog: async () => catalog.slice(0, 600),
+		loadVectors: async () => ({ vectors: {}, queries: [], available: false }), fetchImpl,
+	});
+	expect(result.coverage?.reviewedCount).toBe(600);
+	expect(result.coverage?.reviewStoppedEarly).toBeUndefined();
+	expect(maximumActive).toBe(1);
 	expect(fetchImpl).toHaveBeenCalledTimes(3);
 });
 
@@ -136,12 +121,131 @@ it('applies the total deadline while a provider request is pending', async () =>
 			const result = generateAiSelection(ai, 'movies', 'movies', {
 				loadCatalog: async () => catalog, loadVectors: vi.fn(), fetchImpl,
 			});
-			const rejected = expect(result).rejects.toThrow('timed out after five minutes');
+			const rejected = expect(result).rejects.toThrow('timed out after 7 minutes');
 			await vi.advanceTimersByTimeAsync(AI_REQUEST_TIMEOUT_MS);
 			expect(fetchImpl.mock.calls[0]![1]!.signal!.aborted).toBe(false);
 			await vi.advanceTimersByTimeAsync(AI_GENERATION_GRACE_MS);
 			await rejected;
 			expect(fetchImpl).toHaveBeenCalledTimes(1);
+		}
+		finally {
+			timeout.mockRestore();
+		}
+	}
+	finally {
+		vi.useRealTimers();
+	}
+});
+
+it('uses a saved web-research time limit for the hard deadline', async () => {
+	vi.useFakeTimers();
+	try {
+		const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => new Promise((_resolve, reject) => {
+			init!.signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+		}));
+		const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+			const controller = new AbortController();
+			setTimeout(() => controller.abort(), ms);
+			return controller.signal;
+		});
+		try {
+			const result = generateAiSelection({ ...ai, webSearchTimeLimitMinutes: 10 }, 'movies', 'movies', {
+				loadCatalog: async () => catalog, loadVectors: vi.fn(), fetchImpl,
+			});
+			const rejected = expect(result).rejects.toThrow('timed out after 10 minutes');
+			await vi.advanceTimersByTimeAsync(7 * 60_000);
+			expect(fetchImpl.mock.calls[0]![1]!.signal!.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(3 * 60_000);
+			await rejected;
+		}
+		finally {
+			timeout.mockRestore();
+		}
+	}
+	finally {
+		vi.useRealTimers();
+	}
+});
+
+it('caps the bounded non-search review path at five minutes', async () => {
+	vi.useFakeTimers();
+	try {
+		const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({
+			choices: [{ message: { content: JSON.stringify(discovery) } }],
+		}));
+		const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+			const controller = new AbortController();
+			setTimeout(() => controller.abort(), ms);
+			return controller.signal;
+		});
+		try {
+			const result = generateAiSelection({ ...ai, webSearch: false }, 'movies', 'movies', {
+				loadCatalog: async () => catalog, fetchImpl, fastLocalReview: true,
+				loadVectors: async (_concepts, signal) => new Promise((_resolve, reject) => {
+					signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+				}),
+			}, {}, 200);
+			const rejected = expect(result).rejects.toThrow('timed out after 5 minutes');
+			await vi.advanceTimersByTimeAsync(300_000);
+			await rejected;
+			expect(fetchImpl).toHaveBeenCalledTimes(1);
+		}
+		finally {
+			timeout.mockRestore();
+		}
+	}
+	finally {
+		vi.useRealTimers();
+	}
+});
+
+it('bounds a larger episode shortlist to eight reviews plus discovery and final refinement', async () => {
+	const episodes = Array.from({ length: 1_500 }, (_, index) => ({
+		id: String(index).padStart(5, '0'), title: `Episode ${index}`, year: 2020,
+		kind: 'episode', genres: [] as string[], series: 'Series', season: 1, episode: index + 1,
+	}));
+	let calls = 0;
+	const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+		calls += 1;
+		const body = JSON.parse(String(init?.body));
+		const references = body.messages[1].content.split('\n').filter((line: string) => line.startsWith('['))
+			.map((line: string) => JSON.parse(line)).filter((row: string[]) => row[0] !== 'series');
+		const content = calls === 1 ? discovery : { core: [references[0][0]], supporting: [] };
+		expect(body.max_completion_tokens).toBe(4096);
+		return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
+	});
+	const metrics = vi.fn();
+	const result = await generateAiSelection({ ...ai, webSearch: false }, 'Episodes', 'tv', {
+		loadCatalog: async () => episodes,
+		loadVectors: async () => ({ vectors: {}, queries: [], available: false }),
+		fetchImpl, fastLocalReview: true, requestOptions: { maxCompletionTokens: 4096 }, onMetrics: metrics,
+	}, {}, 200);
+	expect(result.coverage).toMatchObject({ reviewedCount: 1_000, reviewStoppedEarly: true });
+	expect(result.itemIds.length).toBeLessThanOrEqual(200);
+	expect(fetchImpl).toHaveBeenCalledTimes(10);
+	expect(metrics.mock.calls[0]![0].requests).toBe(10);
+});
+
+it('extends only an explicitly requested offline deadline', async () => {
+	vi.useFakeTimers();
+	try {
+		const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => new Promise((_resolve, reject) => {
+			init!.signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+		}));
+		const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+			const controller = new AbortController();
+			setTimeout(() => controller.abort(), ms);
+			return controller.signal;
+		});
+		try {
+			const result = generateAiSelection(ai, 'movies', 'movies', {
+				loadCatalog: async () => catalog, loadVectors: vi.fn(), fetchImpl, timeoutMs: 15 * 60_000,
+			});
+			const rejected = expect(result).rejects.toThrow('timed out after 15 minutes');
+			await vi.advanceTimersByTimeAsync(AI_REQUEST_TIMEOUT_MS + AI_GENERATION_GRACE_MS);
+			expect(fetchImpl.mock.calls[0]![1]!.signal!.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(10 * 60_000);
+			await rejected;
 		}
 		finally {
 			timeout.mockRestore();
@@ -175,6 +279,29 @@ it.each([1, AI_WEB_SEARCH_OVERAGE_TOLERANCE])('accepts a small verification over
 	expect(bodies.map(body => body.max_tool_calls)).toEqual([undefined, undefined, AI_WEB_SEARCH_MAX_TOOL_CALLS]);
 	expect(result.coverage?.searchBudgetExhausted).toBe(true);
 	expect(metrics.mock.calls[0]![0]).toMatchObject({ toolCalls: AI_WEB_SEARCH_MAX_TOOL_CALLS + overage, searchBudgetOverrun: true });
+});
+
+it('uses Anthropic Messages without search for planning and review, then searches for verification', async () => {
+	const bodies: Array<Record<string, any>> = [];
+	const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+		expect(url).toBe('https://api.anthropic.com/v1/messages');
+		const body = JSON.parse(String(init?.body));
+		bodies.push(body);
+		const ref = body.messages[0].content.match(/^\["(\d+)",/mu)?.[1];
+		const content = bodies.length === 1 ? discovery : bodies.length === 2
+			? { matches: [], uncertain: [ref] } : { matches: [ref] };
+		return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(content) }],
+			usage: { server_tool_use: { web_search_requests: bodies.length === 3 ? 2 : 0 } } });
+	});
+	const result = await generateAiSelection({ ...ai, providerId: 'anthropic',
+		baseUrl: 'https://api.anthropic.com/v1', protocol: 'anthropic-messages' }, 'movies', 'movies', {
+		loadCatalog: async () => catalog.slice(0, 1),
+		loadVectors: async () => ({ vectors: {}, queries: [], available: false }), fetchImpl,
+		requestOptions: { protocol: 'anthropic-messages' },
+	});
+	expect(result.itemIds).toHaveLength(1);
+	expect(bodies.map(body => body.tools)).toEqual([undefined, undefined,
+		[{ type: 'web_search_20250305', name: 'web_search', max_uses: AI_WEB_SEARCH_MAX_TOOL_CALLS }]]);
 });
 
 it('omits candidates left unverified when the verification search exhausts the budget', async () => {

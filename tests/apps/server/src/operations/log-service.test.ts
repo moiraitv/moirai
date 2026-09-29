@@ -45,6 +45,23 @@ describe('on-disk logs', () => {
 		});
 	});
 
+	it('keeps entry IDs stable when new lines are appended', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-logs-'));
+		const logs = new LogService(root, 'info', 1024 * 1024, 14, 10 * 1024 * 1024);
+		cleanups.push(async () => {
+			await logs.close();
+			await rm(root, { recursive: true, force: true });
+		});
+		logs.logger.info('Earlier entry');
+		const before = await eventually(() => logs.page({ limit: 20 }), (value) => value.entries.length === 1);
+
+		logs.logger.info('Newer entry');
+		const after = await eventually(() => logs.page({ limit: 20 }), (value) => value.entries.length === 2);
+		expect(after.entries.map((entry) => entry.message)).toEqual(['Newer entry', 'Earlier entry']);
+		expect(after.entries[1]?.id).toBe(before.entries[0]?.id);
+		expect(after.entries[0]?.id).not.toBe(after.entries[1]?.id);
+	});
+
 	it('rejects forged cursors and file traversal', async () => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-logs-'));
 		const logs = new LogService(root, 'silent', 1024, 14, 4096);

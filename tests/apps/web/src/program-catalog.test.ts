@@ -25,6 +25,15 @@ describe('Program management catalog', () => {
 		expect(programDefinition(programs[2]!, new Map())).toContain('Missing Program');
 		expect(programTypeLabel('future')).toBe('future');
 	});
+	it('shows and filters AI Content separately from selected items', () => {
+		const ai: SchedulingProgram = { id: 'ai', name: 'Halloween', createdAt: '', updatedAt: '2026-04-01',
+			config: { type: 'content', source: { type: 'ai', libraryId: 'library', prompt: 'Halloween films', itemIds: ['movie'], sort: { type: 'date-added', direction: 'asc' } }, strategy: { type: 'sequential' } } };
+		const catalog = [...programs, ai];
+		expect(contentSubtype(ai)).toBe('ai');
+		expect(programDefinition(ai, new Map())).toBe('AI');
+		expect(filterPrograms(catalog, new Map(), usages, { ...base, type: 'content', subtype: 'ai' }).map(p => p.id)).toEqual(['ai']);
+		expect(filterPrograms(catalog, new Map(), usages, { ...base, type: 'content', subtype: 'items' }).map(p => p.id)).toEqual(['a']);
+	});
 });
 
 it('only reports unavailable counts for completed previews with a positive deficit', () => {

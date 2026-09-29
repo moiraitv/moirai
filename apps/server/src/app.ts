@@ -9,10 +9,11 @@ import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { validatorCompiler } from 'fastify-type-provider-zod';
 import { CHANNEL_LOGO_MAX_BYTES, FALLBACK_FILLER_MAX_BYTES } from '@moirai/shared';
 import { ArtworkCache } from './artwork/artwork-cache.js';
+import { AiSettingsService } from './ai/settings.js';
 import { registerAuthenticationGuard } from './auth/http.js';
 import { LogtoAuthenticationProvider } from './auth/logto-provider.js';
 import { AuthenticationService } from './auth/service.js';
@@ -38,12 +39,13 @@ import { LibrarySourceRegistry } from './scanner/source-registry.js';
 import { SchedulingWorkerPool } from './scheduling/worker-pool.js';
 import { TimelineMaterializer } from './scheduling/timeline-materializer.js';
 import { publicError } from './routes/public-errors.js';
-import { suppressRoutineRequestLog } from './routes/request-logging.js';
+import { RoutineRequestLogController } from './routes/request-logging.js';
 import { registerHttpRoutes } from './routes/index.js';
 import { responseSerializerCompiler } from './routes/contracts.js';
 
 /** Long-lived services owned by one Fastify application instance. */
 export interface AppServices {
+	aiSettings: AiSettingsService;
 	authentication: AuthenticationService;
 	repository: Repository;
 	scanner: ScannerManager;
@@ -68,6 +70,8 @@ export async function buildApp(
 	config: AppConfig,
 	db: MoiraiDatabase,
 ): Promise<{ app: FastifyInstance; services: AppServices }> {
+	const aiSettings = new AiSettingsService(config.dataDir);
+	await aiSettings.load();
 	// Establish logging and the HTTP shell before constructing dependent services.
 	const logs = new LogService(
 		config.logDir,
@@ -79,10 +83,7 @@ export async function buildApp(
 	const app = Fastify({
 		loggerInstance: logs.logger as FastifyBaseLogger,
 		trustProxy: config.trustedProxies.length > 0 ? config.trustedProxies : false,
-		logController: new LogController({
-			disableRequestLogging: (request) =>
-				suppressRoutineRequestLog(request.method, request.url),
-		}),
+		logController: new RoutineRequestLogController(),
 	});
 
 	const responsiveness = new ResponsivenessMonitor(logs.logger);
@@ -346,6 +347,7 @@ export async function buildApp(
 
 	// Register API domains after their shared dependencies are ready.
 	registerHttpRoutes(app, {
+		aiSettings,
 		requestEmbeddingWork: (includeMedia, concepts) => embeddings.requestPreferences(includeMedia, concepts),
 		playout,
 		config,
@@ -384,6 +386,7 @@ export async function buildApp(
 	return {
 		app,
 		services: {
+			aiSettings,
 			authentication,
 			repository,
 			scanner,

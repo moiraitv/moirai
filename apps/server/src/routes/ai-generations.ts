@@ -7,6 +7,9 @@ import type { EmbeddingWakeStatus } from '../semantic/service.js';
 import { authenticatedSession } from '../auth/http.js';
 import { AiGenerations } from '../ai/generations.js';
 import { generateAiSelection } from '../ai/pipeline.js';
+import { AiRunLogger } from '../ai/run-logging.js';
+import { productionAiRequestOptions } from '../ai/provider.js';
+import type { AiSettingsService } from '../ai/settings.js';
 import { loadAiEmbeddings } from '../ai/embeddings.js';
 import { apiOperation, emptyResponseSchema, idParamsSchema, responseContent } from './contracts.js';
 import { parseId } from './params.js';
@@ -16,9 +19,10 @@ import { parseId } from './params.js';
  * The returned registry also limits one-shot selection so both entry points share one cap.
  */
 export function registerAiGenerationRoutes(app: FastifyInstance, dependencies: {
-	config: AppConfig; repository: Repository; requestEmbeddingWork?: (includeMedia?: boolean, concepts?: string[]) => EmbeddingWakeStatus | void;
+	config: AppConfig; repository: Repository; aiSettings?: AiSettingsService;
+	requestEmbeddingWork?: (includeMedia?: boolean, concepts?: string[]) => EmbeddingWakeStatus | void;
 }): AiGenerations {
-	const { config, repository, requestEmbeddingWork } = dependencies;
+	const { config, repository, aiSettings, requestEmbeddingWork } = dependencies;
 	const jobs = new AiGenerations();
 	app.addHook('onClose', async () => jobs.close());
 	app.post('/api/v1/ai/generations', { schema: apiOperation({
@@ -27,32 +31,45 @@ export function registerAiGenerationRoutes(app: FastifyInstance, dependencies: {
 		response: { 202: responseContent('Generation accepted', 'application/json', aiGenerationSchema) },
 		errors: [400, 401, 409, 503],
 	}) }, async (request, reply) => {
-		const ai = config.ai;
+		const ai = aiSettings?.active() ?? config.ai;
 		if (!ai) {
 			throw Object.assign(new Error('AI is not configured.'), { statusCode: 503, expose: true });
 		}
 		const body = aiGenerationRequestSchema.parse(request.body);
 		const value = jobs.start(authenticatedSession(request).identity.id, body, async activity => {
-			const library = await repository.getLibrary(body.libraryId);
-			if (!library) {
-				throw new AiSelectionError('Library not found.');
+			const runLog = new AiRunLogger(
+				request.log,
+				ai,
+				body.libraryId,
+				body.maxResults ?? null,
+				body.id,
+			);
+			runLog.start();
+			try {
+				const library = await repository.getLibrary(body.libraryId);
+				if (!library) {
+					throw new AiSelectionError('Library not found.');
+				}
+				const result = await generateAiSelection(ai, body.prompt, library.typeKey, {
+					loadCatalog: () => repository.aiCatalog(body.libraryId),
+					loadVectors: (concepts, signal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, signal, requestEmbeddingWork),
+					...(!ai.webSearch ? { fastLocalReview: true } : {}),
+					requestOptions: productionAiRequestOptions(ai),
+					onMetrics: metrics => runLog.setMetrics(metrics),
+				}, { ...activity, onProgress: (status, details) => {
+					runLog.progress(status, details);
+					activity.onProgress?.(status, details);
+				} }, body.maxResults ?? Infinity);
+				result.itemIds = result.itemIds.slice(0, config.maxExplicitMediaItems);
+				runLog.complete(result);
+				return result;
 			}
-			const result = await generateAiSelection(ai, body.prompt, library.typeKey, {
-				loadCatalog: () => repository.aiCatalog(body.libraryId),
-				loadVectors: (concepts, signal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, signal, requestEmbeddingWork),
-				onMetrics: metrics => {
-					if (metrics.searchBudgetOverrun) {
-						request.log.warn({ aiGeneration: metrics }, 'AI generation exceeded its requested search budget');
-					}
-					else {
-						request.log.info({ aiGeneration: metrics }, 'AI generation ended');
-					}
-				},
-			}, activity, body.maxResults);
-			if (result.itemIds.length > config.maxExplicitMediaItems) {
-				throw new AiSelectionError('Too many matches. Narrow the prompt.');
+			catch (cause) {
+				if (!activity.signal?.aborted) {
+					runLog.fail(cause);
+				}
+				throw cause;
 			}
-			return result;
 		});
 		return reply.code(202).send(value);
 	});
@@ -64,7 +81,9 @@ export function registerAiGenerationRoutes(app: FastifyInstance, dependencies: {
 		operationId: 'cancelAiGeneration', tags: ['AI'], summary: 'Cancel a discarded generation', params: idParamsSchema,
 		response: { 204: responseContent('Cancelled', 'application/json', emptyResponseSchema) }, errors: [400, 401, 404],
 	}) }, async (request, reply) => {
-		jobs.cancel(authenticatedSession(request).identity.id, parseId(request));
+		const id = parseId(request);
+		jobs.cancel(authenticatedSession(request).identity.id, id);
+		request.log.info({ aiGeneration: { id } }, 'AI generation cancelled');
 		return reply.code(204).send();
 	});
 	return jobs;

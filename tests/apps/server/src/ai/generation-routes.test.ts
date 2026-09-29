@@ -15,9 +15,21 @@ it('returns a reconnectable result through HTTP and enforces ownership on reads 
 	const owner = randomUUID();
 	const libraryId = randomUUID();
 	const item = { id: randomUUID(), title: 'Movie', year: 2020, kind: 'movie', genres: [] };
-	const fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: JSON.stringify({
-		concepts: ['movies'], constraints: [], candidates: [], matches: ['1'],
-	}) } }] }));
+	let failFinal = false;
+	let failDiscovery = false;
+	const fetchMock = vi.fn(async (_url, init) => {
+		const body = JSON.parse(String(init.body));
+		if (failDiscovery && !body.messages[1].content.includes('Rows:')) {
+			return Response.json({ choices: [{ message: { content: '{"concepts":[]}' } }] });
+		}
+		if (failFinal && body.messages[1].content.includes('priorCore')) {
+			return new Response('', { status: 500 });
+		}
+		const content = body.messages[1].content.includes('Rows:')
+			? { core: ['1'], supporting: [] }
+			: { concepts: ['movies'], constraints: [], candidates: [] };
+		return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
+	});
 	vi.stubGlobal('fetch', fetchMock);
 	const app = Fastify();
 	app.setValidatorCompiler(validatorCompiler);
@@ -36,7 +48,7 @@ it('returns a reconnectable result through HTTP and enforces ownership on reads 
 		} as unknown as Repository,
 	});
 	try {
-		const body = { id: randomUUID(), libraryId, prompt: 'Movies' };
+		const body = { id: randomUUID(), libraryId, prompt: 'Movies', maxResults: 100 };
 		const start = { method: 'POST' as const, url: '/api/v1/ai/generations', payload: body };
 		expect((await app.inject(start)).statusCode).toBe(202);
 		expect((await app.inject(start)).statusCode).toBe(202);
@@ -46,7 +58,30 @@ it('returns a reconnectable result through HTTP and enforces ownership on reads 
 			expect(response.json()).toMatchObject({ state: 'completed', result: { itemIds: [item.id] } });
 			expect(response.headers['cache-control']).toBe('no-store');
 		});
-		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+		failFinal = true;
+		const secondId = randomUUID();
+		expect((await app.inject({ method: 'POST', url: '/api/v1/ai/generations', payload: {
+			id: secondId, libraryId, prompt: 'Movies', maxResults: 100,
+		} })).statusCode).toBe(202);
+		await vi.waitFor(async () => {
+			const response = await app.inject({ method: 'GET', url: `/api/v1/ai/generations/${secondId}` });
+			expect(response.json()).toMatchObject({ state: 'completed', result: {
+				itemIds: [item.id], coverage: { finalReviewIncomplete: true },
+			} });
+		});
+		failFinal = false;
+		failDiscovery = true;
+		const thirdId = randomUUID();
+		expect((await app.inject({ method: 'POST', url: '/api/v1/ai/generations', payload: {
+			id: thirdId, libraryId, prompt: 'Movies', maxResults: 100,
+		} })).statusCode).toBe(202);
+		await vi.waitFor(async () => {
+			const response = await app.inject({ method: 'GET', url: `/api/v1/ai/generations/${thirdId}` });
+			expect(response.json()).toMatchObject({ state: 'completed', result: {
+				itemIds: [item.id], coverage: { localDiscoveryFallback: true },
+			} });
+		});
 		for (const method of ['GET', 'DELETE'] as const) {
 			expect((await app.inject({ method, url, headers: { 'x-test-owner': randomUUID() } })).statusCode).toBe(404);
 		}

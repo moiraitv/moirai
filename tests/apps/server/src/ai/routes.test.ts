@@ -11,18 +11,80 @@ import { publicError } from '@server/routes/public-errors.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('rejects selections above the configured limit and accepts the exact boundary', async () => {
+it('retains uncapped results for requests without a result target', async () => {
+	const libraryId = randomUUID();
+	const owner = randomUUID();
+	const catalog = Array.from({ length: 110 }, (_, index) => ({
+		id: randomUUID(), title: `Movie ${index}`, year: 2026, kind: 'movie', genres: ['Action'],
+	}));
+	vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+		const body = JSON.parse(String(init.body));
+		const content = body.messages[1].content as string;
+		if (!content.includes('Rows:')) {
+			return Response.json({ choices: [{ message: { content: JSON.stringify({
+				concepts: ['movies'], constraints: [], candidates: [],
+			}) } }] });
+		}
+		const refs = content.split('\n').filter(line => line.startsWith('['))
+			.map(line => JSON.parse(line)[0] as string);
+		return Response.json({ choices: [{ message: { content: JSON.stringify({ matches: refs }) } }] });
+	}));
+	const app = Fastify();
+	app.addHook('onRequest', async request => {
+		request.authenticationSession = { identity: { id: owner } } as AuthenticationSessionRecord;
+	});
+	app.setValidatorCompiler(validatorCompiler);
+	app.setSerializerCompiler(responseSerializerCompiler);
+	registerAiRoutes(app, {
+		config: loadConfig({ ai: { apiKey: 'test', baseUrl: 'https://ai.example.test/v1', model: 'test', webSearch: false } }),
+		repository: { getLibrary: async () => ({ id: libraryId, typeKey: 'movies' }),
+			aiCatalog: async () => catalog,
+			semantic: { retrievalVectors: () => ({}), preferences: { catalog: () => ({}) } },
+		} as unknown as Repository,
+	});
+	try {
+		const response = await app.inject({ method: 'POST', url: '/api/v1/ai/content-selection',
+			payload: { libraryId, prompt: 'Movies' } });
+		expect(response.statusCode).toBe(200);
+		expect(response.json().itemIds).toHaveLength(catalog.length);
+		const id = randomUUID();
+		expect((await app.inject({ method: 'POST', url: '/api/v1/ai/generations',
+			payload: { id, libraryId, prompt: 'Movies' } })).statusCode).toBe(202);
+		await vi.waitFor(async () => {
+			const retained = await app.inject({ method: 'GET', url: `/api/v1/ai/generations/${id}` });
+			expect(retained.json().state).toBe('completed');
+			expect(retained.json().result.itemIds).toHaveLength(catalog.length);
+		});
+	}
+	finally {
+		await app.close();
+	}
+});
+
+it('trims selections above the configured limit and accepts the exact boundary', async () => {
 	const limit = 2;
 	const libraryId = randomUUID();
 	const catalog = Array.from({ length: limit + 1 }, (_, index) => ({
 		id: randomUUID(), title: `Movie ${index}`, year: 2026, kind: 'movie', genres: ['Action'],
 	}));
 	let matches = catalog;
+	let failFinal = false;
+	let failDiscovery = false;
 	vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
 		const body = JSON.parse(String(init.body));
+		expect(body.max_completion_tokens).toBe(4096);
+		if (!body.messages[1].content.includes('Rows:')) {
+			if (failDiscovery) {
+				return Response.json({ choices: [{ message: { content: '{"concepts":[]}' } }] });
+			}
+			return Response.json({ choices: [{ message: { content: JSON.stringify({ concepts: ['movies'], constraints: [], candidates: [] }) } }] });
+		}
+		if (failFinal && body.messages[1].content.includes('priorCore')) {
+			return new Response('', { status: 500 });
+		}
 		const rows = body.messages[1].content.split('\n').filter((line: string) => line.startsWith('[')).map((line: string) => JSON.parse(line));
-		return Response.json({ choices: [{ message: { content: JSON.stringify({ concepts: ['movies'], constraints: [], candidates: [],
-			matches: rows.filter((row: string[]) => matches.some(item => item.title === row[1])).map((row: string[]) => row[0]),
+		return Response.json({ choices: [{ message: { content: JSON.stringify({
+			core: rows.filter((row: string[]) => matches.some(item => item.title === row[1])).map((row: string[]) => row[0]), supporting: [],
 		}) } }] });
 	}));
 	const app = Fastify();
@@ -47,15 +109,13 @@ it('rejects selections above the configured limit and accepts the exact boundary
 	});
 	try {
 		const request = { method: 'POST' as const, url: '/api/v1/ai/content-selection',
-			payload: { libraryId, prompt: 'All movies' } };
-		const rejected = await app.inject(request);
-		expect(rejected.statusCode).toBe(422);
-		expect(rejected.json().message).toContain(String(limit));
-		expect(rejected.json().message).toContain('Narrow the prompt');
-		const rejectedStream = await app.inject({ ...request, headers: { accept: 'text/event-stream' } });
-		expect(rejectedStream.statusCode).toBe(200);
-		expect(rejectedStream.body).toContain('"type":"error"');
-		expect(rejectedStream.body).not.toContain('"type":"result"');
+			payload: { libraryId, prompt: 'All movies', maxResults: 100 } };
+		const trimmed = await app.inject(request);
+		expect(trimmed.statusCode).toBe(200);
+		expect(trimmed.json().itemIds).toHaveLength(limit);
+		const trimmedStream = await app.inject({ ...request, headers: { accept: 'text/event-stream' } });
+		expect(trimmedStream.statusCode).toBe(200);
+		expect(trimmedStream.body).toContain('"type":"result"');
 
 		matches = catalog.slice(0, limit);
 		const accepted = await app.inject(request);
@@ -67,6 +127,17 @@ it('rejects selections above the configured limit and accepts the exact boundary
 		const events = streamed.body.trim().split('\n\n').map(line => JSON.parse(line.slice(6)));
 		expect(events.at(-1)).toEqual({ type: 'result', result: accepted.json() });
 		expect(events.some(event => event.type === 'progress' && event.status === 'reviewing')).toBe(true);
+		failFinal = true;
+		const fallback = await app.inject(request);
+		expect(fallback.statusCode).toBe(200);
+		expect(fallback.json()).toMatchObject({ itemIds: expect.arrayContaining(matches.map(item => item.id)),
+			coverage: { finalReviewIncomplete: true } });
+		failFinal = false;
+		failDiscovery = true;
+		const discoveredLocally = await app.inject(request);
+		expect(discoveredLocally.statusCode).toBe(200);
+		expect(discoveredLocally.json()).toMatchObject({ itemIds: expect.arrayContaining(matches.map(item => item.id)),
+			coverage: { localDiscoveryFallback: true } });
 	}
 	finally {
 		await app.close();

@@ -19,6 +19,10 @@ An active channel shows connected playback work and can be restarted from its ac
 
 The **Logs** page presents retained structured server activity. Filter by level or search for the channel, library, request, or error involved. Open an entry for its timestamp and structured context.
 
+Routine successful readiness, playback, and AI generation status checks are omitted to keep the Log readable; failed checks still appear.
+
+Search for **AI generation** to follow a run from start through review or web research to its result. Completed entries show selected and reviewed counts; failed entries show the last stage and a failure category. Prompts, selected titles, provider responses, and API keys are not logged.
+
 ![The logs page](/screenshots/logs.png)
 
 Warnings often describe a recovered or degraded condition. Errors indicate work that did not finish. When asking for support, include the relevant message and time, but remove source paths, addresses, or other private values you do not want to share.

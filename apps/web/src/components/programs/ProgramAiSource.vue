@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AI_GENERATION_TARGET_MS, AI_RESULT_COUNTS, type AiGeneration, type AiProgress, type AiProgressDetails, type AiResultCount, type AiSelectionCoverage } from '@moirai/shared';
+import { AI_RESULT_COUNTS, type AiGeneration, type AiProgress, type AiProgressDetails, type AiResultCount, type AiSelectionCoverage } from '@moirai/shared';
 import { computed, onScopeDispose, ref, watch } from 'vue';
 import { api, ApiError } from '../../api';
 import { errorMessage } from '../../error-message';
@@ -20,7 +20,7 @@ const generating = ref(false);
 const activity = ref<AiProgress>('preparing');
 const elapsed = ref(0);
 const completed = ref(false);
-const estimatedPercent = computed(() => Math.min(99, Math.floor(elapsed.value * 100_000 / AI_GENERATION_TARGET_MS)));
+const progressPercent = ref(0);
 const elapsedLabel = computed(() => `${Math.floor(elapsed.value / 60)}:${String(elapsed.value % 60).padStart(2, '0')}`);
 const coverage = ref<AiSelectionCoverage>();
 const progressDetails = ref<AiProgressDetails>();
@@ -30,9 +30,6 @@ const catalogTruncated = ref(false);
 const activityLabel = computed(() => {
 	const batch = progressDetails.value?.batch
 		? ` · Batch ${progressDetails.value.batch} of ${progressDetails.value.totalBatches}` : '';
-	if (elapsed.value * 1000 >= AI_GENERATION_TARGET_MS) {
-		return `Finishing review…${batch}`;
-	}
 	if (batch) {
 		return `${activity.value === 'searching' ? 'Searching the web' : 'Reviewing candidates'}…${batch}`;
 	}
@@ -43,6 +40,17 @@ let controller: AbortController | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let starting = false;
 let disposed = false;
+
+/** Reserve preparation and final refinement shares around the review batches. */
+function stagePercent(status: AiProgress, details: AiProgressDetails): number {
+	if (details.batch && details.totalBatches) {
+		return Math.min(95, Math.floor(15 + 80 * (details.batch - 1) / details.totalBatches));
+	}
+	if (status === 'generating') {
+		return 95;
+	}
+	return status === 'reviewing' || status === 'searching' ? 15 : status === 'discovering' ? 5 : 0;
+}
 
 /** Disconnect this page without cancelling server-owned work. */
 function disconnect(): void {
@@ -56,6 +64,7 @@ function disconnect(): void {
 function apply(value: AiGeneration): boolean {
 	activity.value = value.status;
 	progressDetails.value = { ...(value.batch ? { batch: value.batch } : {}), ...(value.totalBatches ? { totalBatches: value.totalBatches } : {}) };
+	progressPercent.value = Math.max(progressPercent.value, stagePercent(value.status, progressDetails.value));
 	elapsed.value = Math.max(0, Math.floor((Date.now() - value.startedAt) / 1000));
 	if (value.state === 'running') {
 		return false;
@@ -70,7 +79,7 @@ function apply(value: AiGeneration): boolean {
 		unmatched.value = value.result.unmatched;
 		catalogTruncated.value = value.result.catalogTruncated;
 		coverage.value = value.result.coverage;
-		failure.value = itemIds.value.length ? '' : 'No matches. Adjust the prompt and try again.';
+		failure.value = value.result.itemIds.length ? '' : 'No matches. Adjust the prompt and try again.';
 	}
 	else {
 		failure.value = value.message ?? 'Generation failed. Try again.';
@@ -121,6 +130,7 @@ async function generate(): Promise<void> {
 	generating.value = true;
 	failure.value = '';
 	completed.value = false;
+	progressPercent.value = 0;
 	coverage.value = undefined;
 	catalogTruncated.value = false;
 	unmatched.value = [];
@@ -153,6 +163,7 @@ async function generate(): Promise<void> {
 
 watch(generation, id => {
 	disconnect();
+	progressPercent.value = 0;
 	if (id && !starting) {
 		void follow(id);
 	}
@@ -192,11 +203,11 @@ onScopeDispose(() => {
 		</label>
 		<div class="span-2 ai-result-count">
 			<label for="ai-result-count">Results</label>
-			<input id="ai-result-count" v-model.number="maxResults" type="range" min="50" max="250" step="50" :aria-valuetext="`${resultLabel}, up to ${maxResults} results`" :disabled="generating" />
+			<input id="ai-result-count" v-model.number="maxResults" type="range" min="50" max="250" step="50" :aria-valuetext="`${resultLabel}, about ${maxResults} results`" :disabled="generating" />
 			<div class="ai-result-count-labels" aria-hidden="true">
 				<span v-for="(count, index) in AI_RESULT_COUNTS" :key="count">{{ resultLabels[index] }}</span>
 			</div>
-			<small>Only confident matches are included; the selection may be smaller.</small>
+			<small>This is a target. Results can range from few to many across providers and models; review any modest overage before saving.</small>
 		</div>
 		<div class="span-2 ai-selection-feedback">
 			<div class="ai-selection-action">
@@ -211,7 +222,7 @@ onScopeDispose(() => {
 				<div v-if="generating" class="ai-selection-progress">
 					<span class="loading-spinner" aria-hidden="true"></span>
 					<span role="status">{{ activityLabel }}</span>
-					<span class="ai-selection-elapsed" aria-live="off">{{ estimatedPercent }}% estimated · {{ elapsedLabel }} elapsed</span>
+					<span class="ai-selection-elapsed" aria-live="off">{{ progressPercent }}% estimated · {{ elapsedLabel }} elapsed</span>
 				</div>
 				<small v-else-if="itemIds.length > 0 || coverage" role="status"><span>{{ itemIds.length }} selected<template v-if="coverage"> · {{ coverage.reviewedCount.toLocaleString() }} of {{ coverage.libraryCount.toLocaleString() }} reviewed</template></span><template v-if="completed"> · 100%</template></small>
 				<slot name="results" :generating="generating"></slot>
@@ -220,6 +231,9 @@ onScopeDispose(() => {
 			<p v-if="coverage?.mediaEmbeddingsAvailable === false" class="ai-selection-warning">Some library items lacked local embeddings; title, plot, and metadata matching still ran.</p>
 			<p v-if="coverage && coverage.queryEmbeddingsAvailable === undefined && !coverage.embeddingsAvailable" class="ai-selection-warning">Local embeddings were incomplete; title, plot, and metadata matching still ran.</p>
 			<p v-if="coverage?.searchBudgetExhausted" class="ai-selection-warning">Research limit reached. Some plausible titles may remain unverified.</p>
+			<p v-if="coverage?.reviewStoppedEarly" class="ai-selection-warning">Review stopped early. These matches came from completed batches; more titles may qualify.</p>
+			<p v-if="coverage?.finalReviewIncomplete" class="ai-selection-warning">Final refinement did not finish. These matches came from completed reviews and may need a closer look.</p>
+			<p v-if="coverage?.localDiscoveryFallback" class="ai-selection-warning">Model planning was unavailable. Local prompt matching found candidates for review; some suitable titles may have been missed.</p>
 			<p v-if="catalogTruncated && !coverage" class="ai-selection-warning">Only part of this library was checked.</p>
 			<p v-if="itemIds.length > 0 && selectionPrompt !== prompt.trim()" class="ai-selection-warning" role="status">{{ selectionPrompt === null ? 'These results may be from an earlier prompt.' : 'This prompt has not been generated for the current selection.' }} Save will keep the selected results.</p>
 			<p v-if="failure" class="form-error" role="alert">{{ failure }}</p>

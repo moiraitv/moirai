@@ -136,7 +136,7 @@ it.each([400, 401])('preserves sanitized provider HTTP %i guidance in retained f
 	await vi.waitFor(() => expect(jobs.get('owner', body.id).state).toBe('failed'));
 	const message = jobs.get('owner', body.id).message!;
 	expect(message).toContain(`HTTP ${status}`);
-	expect(message).toContain(status === 400 ? 'disable MOIRAI_AI_WEB_SEARCH' : 'API key');
+	expect(message).toContain(status === 400 ? 'disable web research' : 'API key');
 	expect(message).not.toContain('private upstream');
 	expect(message).not.toContain('secret-key');
 });

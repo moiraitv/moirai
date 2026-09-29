@@ -1,0 +1,21 @@
+{
+  "libraryId": "00000000-0000-4000-8000-000000000000",
+  "prompt": "Create a Halloween-centric playlist. Movies should include explicitly Halloween-themed plots but also do a limited inclusion of others that fit in well. Not all need to be horror as is typical. No stand-up comedy, prefer fiction. Avoid items that weren't well-rated by fans.",
+  "maxResults": 200,
+  "models": [
+    {
+      "name": "Qwen3.5 397B",
+      "apiKey": "env:OPENROUTER_API_KEY",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "qwen/qwen3.5-397b-a17b",
+      "webSearch": false
+    },
+    {
+      "name": "DeepSeek V4 Pro",
+      "apiKey": "env:OPENROUTER_API_KEY",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "webSearch": false
+    }
+  ]
+}

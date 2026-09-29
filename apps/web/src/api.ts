@@ -1,7 +1,7 @@
 import { type AiProgress, type AiProgressDetails } from '@moirai/shared';
 import { readAiSelection } from './ai-selection-stream';
 import { aiGenerationSchema, type AiGeneration, type AiGenerationRequest } from '@moirai/shared';
-import type { AiContentSelectionRequest, AiContentSelectionResponse, AiStatus, SequencePreview } from '@moirai/shared';
+import type { AiContentSelectionRequest, AiContentSelectionResponse, AiStatus, AiSettingsSave, AiSettingsStatus, AiProvider, SequencePreview } from '@moirai/shared';
 import type { ProgramConfig, SchedulingProgramStatus } from '@moirai/shared';
 import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
@@ -460,6 +460,9 @@ export const api = {
 		}),
 	schedulingOverview: () => request<SchedulingOverview>('/api/v1/scheduling/overview'),
 	aiStatus: () => request<AiStatus>('/api/v1/ai'),
+	aiSettings: () => request<AiSettingsStatus>('/api/v1/ai/settings'),
+	saveAiSettings: (body: AiSettingsSave) => request<AiSettingsStatus>('/api/v1/ai/settings', { method: 'PUT', body: JSON.stringify(body) }),
+	forgetAiKey: (provider: AiProvider) => request<AiSettingsStatus>(`/api/v1/ai/settings/${provider}/key`, { method: 'DELETE' }),
 	startAiGeneration: (body: AiGenerationRequest) => request<AiGeneration>(
 		'/api/v1/ai/generations',
 		{ method: 'POST', body: JSON.stringify(body) },

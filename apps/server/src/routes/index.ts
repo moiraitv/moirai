@@ -8,6 +8,7 @@ import type { ArtworkCache } from '../artwork/artwork-cache.js';
 import type { AuthenticationService } from '../auth/service.js';
 import type { ChannelLogoStore } from '../artwork/channel-logo-store.js';
 import type { AppConfig } from '../config.js';
+import type { AiSettingsService } from '../ai/settings.js';
 import type { EpgService } from '../guide/epg.js';
 import type { HealthService } from '../operations/health-service.js';
 import type { LiveEventHub } from '../operations/live-events.js';
@@ -34,6 +35,7 @@ import { registerSystemRoutes } from './system.js';
 /** Services captured by HTTP handlers after route registration. */
 export interface HttpRouteDependencies {
 	config: AppConfig;
+	aiSettings: AiSettingsService;
 	playout: PlayoutSynchronizer;
 	authentication: AuthenticationService;
 	repository: Repository;

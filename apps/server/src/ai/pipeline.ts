@@ -1,9 +1,10 @@
-import { AiSelectionError } from './errors.js';
+import { AiSelectionError, AiTimeoutError, aiFailureCategory, type AiFailureCategory } from './errors.js';
 import { z } from 'zod';
 import type { AiContentSelectionResponse } from '@moirai/shared';
 import type { AppConfig } from '../config.js';
 import { requestAiSelectionText, AI_REQUEST_TIMEOUT_MS, AI_GENERATION_GRACE_MS, AI_WEB_SEARCH_MAX_TOOL_CALLS, AI_WEB_SEARCH_OVERAGE_TOLERANCE, type AiRequestActivity, type AiRequestUsage } from './provider.js';
-import { aiDiscoverySchema, candidateBatches, parseAiJson, type AiCatalogItem } from './content-selection.js';
+import { aiDiscoveryJsonSchema, candidateBatches, localDiscovery, parseAiDiscovery, parseAiJson, type AiCatalogItem } from './content-selection.js';
+import { runFastLocalReview } from './fast-local-review.js';
 import { shortlistCandidates } from './retrieval.js';
 
 /** Instructions separate positive retrieval concepts from constraints requiring final judgment. */
@@ -31,6 +32,12 @@ These candidates were marked uncertain by an earlier review. Use targeted web se
 
 /** At most this many uncertain candidates proceed to paid verification. */
 const AI_VERIFICATION_CANDIDATE_LIMIT = 30;
+/** Non-search requests finish or return validated partial work within five minutes. */
+const AI_LOCAL_GENERATION_LIMIT_MS = 300_000;
+/** Bound planning before candidate review begins. */
+const AI_LOCAL_DISCOVERY_REQUEST_MS = 45_000;
+/** Eight compact review calls cover at most this many non-search candidates. */
+const AI_LOCAL_REVIEW_CANDIDATE_LIMIT = 1_000;
 
 /** Model output references must belong to the current judging batch. */
 const referenceMatchesSchema = z.object({ matches: z.array(z.string().min(1)) });
@@ -46,14 +53,23 @@ export interface AiRetrievalVectors {
 }
 /** Per-request accounting excludes prompts, provider output, and credentials. */
 export interface AiRequestMetrics extends AiRequestUsage {
-	phase: 'discovery' | 'review' | 'verification';
+	phase: 'discovery' | 'review' | 'final' | 'verification';
 	batch?: number;
 	requestedToolCalls: number;
+}
+/** Safe request timing and outcome, without prompts or provider response content. */
+export interface AiRequestDiagnostic {
+	phase: 'discovery' | 'review' | 'final';
+	batch?: number;
+	durationMs: number;
+	outcome: 'completed' | 'failed';
+	category?: AiFailureCategory;
 }
 /** Generation accounting includes individual reported requests for diagnosing provider overruns. */
 export interface AiGenerationMetrics {
 	requests: number;
 	requestUsage: AiRequestMetrics[];
+	requestDiagnostics: AiRequestDiagnostic[];
 	searchBudgetOverrun: boolean;
 	toolCalls: number;
 	inputTokens: number;
@@ -67,8 +83,18 @@ export interface AiGenerationDependencies {
 	loadCatalog: () => Promise<AiCatalogItem[]>;
 	loadVectors: (concepts: string[], signal: AbortSignal) => Promise<AiRetrievalVectors>;
 	fetchImpl?: typeof fetch;
+	/** Offline evaluations may override the production deadline. */
+	timeoutMs?: number;
+	requestOptions?: Pick<AiRequestActivity, 'maxCompletionTokens' | 'reasoningEffort' | 'disableThinking' | 'provider' | 'protocol' | 'chatJsonMode'>;
+	/** Use bounded concurrent review for non-search generation. */
+	fastLocalReview?: boolean;
+	localDiscovery?: boolean;
+	/** A pilot reviews only this many shortlisted candidates without changing catalog retrieval. */
+	evaluationCandidateLimit?: number;
 	onMetrics?: (metrics: AiGenerationMetrics) => void;
 	onCandidates?: (ids: string[]) => void;
+	/** Internal comparison capture after final validation; public selections remain unmodified. */
+	onSelectionTiers?: (tiers: { coreItemIds: string[]; supportingItemIds: string[] }) => void;
 }
 
 /** Discover, retrieve and judge with one deadline and shared hosted-tool budget; publish atomically. */
@@ -81,12 +107,18 @@ export async function generateAiSelection(
 	maxResults = Infinity,
 ): Promise<AiContentSelectionResponse> {
 	const started = Date.now();
-	const signal = AbortSignal.any([AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS + AI_GENERATION_GRACE_MS), ...(activity.signal ? [activity.signal] : [])]);
-	const metrics: AiGenerationMetrics = { requests: 0, requestUsage: [], searchBudgetOverrun: false, toolCalls: 0, inputTokens: 0, outputTokens: 0, usageReported: false, durationMs: 0 };
+	const fastLocalReview = !ai.webSearch && dependencies.fastLocalReview === true && Number.isFinite(maxResults);
+	const timeoutMs = dependencies.timeoutMs ?? (ai.webSearch
+		? ai.webSearchTimeLimitMinutes ? ai.webSearchTimeLimitMinutes * 60_000 : AI_REQUEST_TIMEOUT_MS + AI_GENERATION_GRACE_MS
+		: AI_LOCAL_GENERATION_LIMIT_MS);
+	const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(activity.signal ? [activity.signal] : [])]);
+	const metrics: AiGenerationMetrics = { requests: 0, requestUsage: [], requestDiagnostics: [], searchBudgetOverrun: false, toolCalls: 0, inputTokens: 0, outputTokens: 0, usageReported: false, durationMs: 0 };
+	let fatalUsageError: AiSelectionError | undefined;
 	/** Accumulate reported calls once per completed response, across discovery and every batch. */
 	function usage(value: AiRequestUsage, request: Omit<AiRequestMetrics, keyof AiRequestUsage>): void {
 		if (request.phase !== 'verification' && value.toolCalls > 0) {
-			throw new AiSelectionError('The AI service used search outside verification. Check the provider’s tool-limit support.');
+			fatalUsageError = new AiSelectionError('The AI service used search outside verification. Check the provider’s tool-limit support.');
+			throw fatalUsageError;
 		}
 		metrics.requestUsage.push({ ...request, ...value });
 		metrics.searchBudgetOverrun ||= value.toolCalls > request.requestedToolCalls;
@@ -95,7 +127,8 @@ export async function generateAiSelection(
 		metrics.outputTokens += value.outputTokens ?? 0;
 		metrics.usageReported ||= value.inputTokens !== undefined || value.outputTokens !== undefined;
 		if (metrics.toolCalls > AI_WEB_SEARCH_MAX_TOOL_CALLS + AI_WEB_SEARCH_OVERAGE_TOLERANCE) {
-			throw new AiSelectionError('The AI service exceeded the allowed search overage. Check the provider’s tool-limit support.');
+			fatalUsageError = new AiSelectionError('The AI service exceeded the allowed search overage. Check the provider’s tool-limit support.');
+			throw fatalUsageError;
 		}
 	}
 	try {
@@ -111,12 +144,36 @@ export async function generateAiSelection(
 
 		// Build retrieval concepts without spending research calls.
 		activity.onProgress?.('discovering');
-		metrics.requests += 1;
-		const discovery = parseAiJson(await requestAiSelectionText(ai, [
-			{ role: 'system', content: DISCOVERY_PROMPT },
-			{ role: 'user', content: JSON.stringify({ description: prompt, libraryType: mediaType }) },
-		], dependencies.fetchImpl, { signal, maxToolCalls: 0, onUsage: value => usage(value, { phase: 'discovery', requestedToolCalls: 0 }),
-			onProgress: status => activity.onProgress?.(status === 'searching' ? status : 'discovering') }), aiDiscoverySchema);
+		if (!(fastLocalReview && dependencies.localDiscovery)) {
+			metrics.requests += 1;
+		}
+		let discovery = localDiscovery(prompt);
+		let localDiscoveryFallback = false;
+		if (!(fastLocalReview && dependencies.localDiscovery)) {
+			const requestStarted = Date.now();
+			try {
+				discovery = parseAiDiscovery(await requestAiSelectionText(ai, [
+					{ role: 'system', content: fastLocalReview
+						? DISCOVERY_PROMPT.replace('up to 100 plausible', 'up to 30 strongest plausible') : DISCOVERY_PROMPT },
+					{ role: 'user', content: JSON.stringify({ description: prompt, libraryType: mediaType }) },
+				], dependencies.fetchImpl, { signal: fastLocalReview && dependencies.timeoutMs === undefined
+					? AbortSignal.any([signal, AbortSignal.timeout(AI_LOCAL_DISCOVERY_REQUEST_MS)]) : signal,
+				maxToolCalls: 0, ...dependencies.requestOptions, jsonSchema: aiDiscoveryJsonSchema,
+				onUsage: value => usage(value, { phase: 'discovery', requestedToolCalls: 0 }),
+				onProgress: status => activity.onProgress?.(status === 'searching' ? status : 'discovering') }));
+				metrics.requestDiagnostics.push({ phase: 'discovery', durationMs: Date.now() - requestStarted, outcome: 'completed' });
+			}
+			catch (cause) {
+				const category = aiFailureCategory(cause);
+				metrics.requestDiagnostics.push({ phase: 'discovery', durationMs: Date.now() - requestStarted,
+					outcome: 'failed', category });
+				if (!fastLocalReview || signal.aborted || activity.signal?.aborted || fatalUsageError
+					|| !['invalid-selection', 'timeout', 'rate-limit', 'provider', 'transport'].includes(category)) {
+					throw cause;
+				}
+				localDiscoveryFallback = true;
+			}
+		}
 
 		activity.onProgress?.('preparing');
 		const embeddings = await dependencies.loadVectors(discovery.concepts, signal);
@@ -125,12 +182,37 @@ export async function generateAiSelection(
 		}
 		signal.throwIfAborted();
 		// Review the local shortlist and collect a small verification queue.
-		const batches = candidateBatches(shortlistCandidates(catalog, discovery, embeddings.vectors, embeddings.queries));
+		const shortlisted = shortlistCandidates(catalog, discovery, embeddings.vectors, embeddings.queries);
+		const reviewLimit = Math.min(AI_LOCAL_REVIEW_CANDIDATE_LIMIT, dependencies.evaluationCandidateLimit ?? AI_LOCAL_REVIEW_CANDIDATE_LIMIT);
+		const reviewItems = fastLocalReview ? shortlisted.slice(0, reviewLimit) : shortlisted;
+		const batches = candidateBatches(reviewItems, fastLocalReview ? 125 : undefined).slice(0, fastLocalReview ? 8 : Infinity);
 		dependencies.onCandidates?.(batches.flatMap(batch => batch.map(row => row.item.id)));
 		const itemIds = new Set<string>();
 		const uncertainItems: AiCatalogItem[] = [];
 		let reviewedCount = 0;
-		for (const [index, batch] of batches.entries()) {
+		let reviewStoppedEarly = false;
+		let finalReviewIncomplete = false;
+		let selectedTiers: { coreItemIds: string[]; supportingItemIds: string[] } | undefined;
+		if (fastLocalReview) {
+			const result = await runFastLocalReview({ ai, prompt, constraints: discovery.constraints, batches,
+				maxResults, started, signal,
+				...(activity.signal ? { userSignal: activity.signal } : {}),
+				...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
+				...(dependencies.requestOptions ? { requestOptions: dependencies.requestOptions } : {}),
+				...(activity.onProgress ? { onProgress: activity.onProgress } : {}),
+				onRequest: () => {
+					metrics.requests += 1;
+				},
+				onUsage: (value, phase, batch) => usage(value, { phase, ...(batch ? { batch } : {}), requestedToolCalls: 0 }),
+				onDiagnostic: value => metrics.requestDiagnostics.push(value),
+				onFatalUsage: () => fatalUsageError });
+			result.itemIds.forEach(id => itemIds.add(id));
+			reviewedCount = result.reviewedCount;
+			reviewStoppedEarly = result.reviewStoppedEarly || reviewedCount < reviewItems.length || reviewItems.length < shortlisted.length;
+			finalReviewIncomplete = result.finalReviewIncomplete;
+			selectedTiers = { coreItemIds: result.coreItemIds, supportingItemIds: result.supportingItemIds };
+		}
+		for (const [index, batch] of (fastLocalReview ? [] : batches).entries()) {
 			signal.throwIfAborted();
 			const details = { batch: index + 1, totalBatches: batches.length };
 			activity.onProgress?.('reviewing', details);
@@ -141,7 +223,7 @@ export async function generateAiSelection(
 			const reviewText = await requestAiSelectionText(ai, [
 				{ role: 'system', content: ai.webSearch ? TRIAGE_PROMPT : SELECTION_PROMPT },
 				{ role: 'user', content: `${JSON.stringify({ description: prompt, constraints: discovery.constraints })}\n${Number.isFinite(maxResults) ? `Return up to ${Math.max(0, maxResults - itemIds.size)} of the strongest confident matches, strongest first. Do not pad.\n` : ''}${ai.webSearch ? `Return up to ${uncertainLimit} promising uncertain candidates.\n` : ''}Rows: [reference,title,year,type,genres,rating?] or [reference,title,year,type,genres,seriesRef,season,episode,rating?] for episodes. Series declarations: ["series",seriesRef,title,year].\n${batch.map(row => row.line).join('\n')}` },
-			], dependencies.fetchImpl, { signal, ...(ai.webSearch ? { maxToolCalls: 0 } : {}), onUsage: value => usage(value, { phase: 'review', batch: index + 1, requestedToolCalls: 0 }),
+			], dependencies.fetchImpl, { ...dependencies.requestOptions, signal, ...(ai.webSearch ? { maxToolCalls: 0 } : {}), onUsage: value => usage(value, { phase: 'review', batch: index + 1, requestedToolCalls: 0 }),
 				onProgress: status => activity.onProgress?.(status === 'searching' ? status : 'reviewing', details) });
 			const result = ai.webSearch ? parseAiJson(reviewText, triageSchema)
 				: { ...parseAiJson(reviewText, referenceMatchesSchema), uncertain: [] };
@@ -191,7 +273,7 @@ export async function generateAiSelection(
 				const result = parseAiJson(await requestAiSelectionText(ai, [
 					{ role: 'system', content: VERIFICATION_PROMPT },
 					{ role: 'user', content: `${JSON.stringify({ description: prompt, constraints: discovery.constraints })}\n${Number.isFinite(maxResults) ? `Return up to ${Math.max(0, maxResults - itemIds.size)} verified matches, strongest first. Do not pad.\n` : 'Return verified matches strongest first without padding.\n'}Rows: [reference,title,year,type,genres,rating?] or [reference,title,year,type,genres,seriesRef,season,episode,rating?] for episodes. Series declarations: ["series",seriesRef,title,year].\n${batch.map(row => row.line).join('\n')}` },
-				], dependencies.fetchImpl, { signal, maxToolCalls: remainingToolCalls, onUsage: value => usage(value, { phase: 'verification', batch: index + 1, requestedToolCalls: remainingToolCalls }),
+				], dependencies.fetchImpl, { ...dependencies.requestOptions, signal, maxToolCalls: remainingToolCalls, onUsage: value => usage(value, { phase: 'verification', batch: index + 1, requestedToolCalls: remainingToolCalls }),
 					onProgress: status => activity.onProgress?.(status === 'searching' ? status : 'generating', details) }), referenceMatchesSchema);
 				const byRef = new Map(batch.map(row => [row.ref, row.item.id]));
 				for (const ref of result.matches) {
@@ -206,7 +288,12 @@ export async function generateAiSelection(
 			}
 		}
 		// Publish only after every requested stage has completed and validated.
-		signal.throwIfAborted();
+		if (!fastLocalReview || activity.signal?.aborted) {
+			signal.throwIfAborted();
+		}
+		if (selectedTiers) {
+			dependencies.onSelectionTiers?.(selectedTiers);
+		}
 		const mediaEmbeddingsAvailable = Object.keys(embeddings.vectors).length >= catalog.length;
 		const queryEmbeddingsAvailable = embeddings.queries.length === discovery.concepts.length;
 		return { itemIds: [...itemIds], unmatched: [], catalogTruncated: reviewedCount < catalog.length, coverage: {
@@ -214,11 +301,17 @@ export async function generateAiSelection(
 			embeddingsAvailable: mediaEmbeddingsAvailable && queryEmbeddingsAvailable,
 			mediaEmbeddingsAvailable, queryEmbeddingsAvailable,
 			searchBudgetExhausted: ai.webSearch && metrics.toolCalls >= AI_WEB_SEARCH_MAX_TOOL_CALLS,
+			...(reviewStoppedEarly ? { reviewStoppedEarly: true } : {}),
+			...(finalReviewIncomplete ? { finalReviewIncomplete: true } : {}),
+			...(localDiscoveryFallback ? { localDiscoveryFallback: true } : {}),
 		} };
 	}
 	catch (error) {
 		if (signal.aborted) {
-			throw new AiSelectionError(activity.signal?.aborted ? 'Generation cancelled.' : 'Generation timed out after five minutes. Try a narrower prompt.');
+			if (activity.signal?.aborted) {
+				throw new AiSelectionError('Generation cancelled.');
+			}
+			throw new AiTimeoutError(`Generation timed out after ${Math.ceil(timeoutMs / 60_000)} minutes. Try a narrower prompt.`);
 		}
 		throw error;
 	}

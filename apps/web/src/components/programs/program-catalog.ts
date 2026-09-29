@@ -15,11 +15,11 @@ export function contentSubtype(program: SchedulingProgram): string {
 		return '';
 	}
 	const type = program.config.source.type;
-	return type === 'library-query' ? 'query' : ['group', 'group-collection'].includes(type) ? 'groups' : 'items';
+	return type === 'library-query' ? 'query' : type === 'ai' ? 'ai' : ['group', 'group-collection'].includes(type) ? 'groups' : 'items';
 }
 /** User-facing Content definitions shared by filtering and details. */
 export const contentSubtypeLabels: Record<string, string> = {
-	query: 'Library Query', items: 'Specific Items', groups: 'Specific Groups',
+	query: 'Library Query', ai: 'AI', items: 'Specific Items', groups: 'Specific Groups',
 };
 /** Describe a saved definition without fetching media or computing generated sets. */
 export function programDefinition(program: SchedulingProgram, programs: Map<string, SchedulingProgram>): string {

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS, MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
 import {
 	loadConfig,
@@ -219,55 +219,12 @@ describe('guide horizon configuration', () => {
 	});
 });
 
-describe('explicit AI configuration', () => {
-	const complete = {
-		MOIRAI_AI_API_KEY: 'test-secret',
-		MOIRAI_AI_BASE_URL: 'https://custom.example.test/v1/',
-		MOIRAI_AI_MODEL: 'custom-model',
-		MOIRAI_AI_WEB_SEARCH: 'false',
-	};
-
-	beforeEach(() => {
-		for (const [name, value] of Object.entries(complete)) {
-			vi.stubEnv(name, value);
-		}
-	});
-
-	it('uses only explicit values and normalizes whitespace and the base URL', () => {
-		for (const [name, value] of Object.entries(complete)) {
-			vi.stubEnv(name, `  ${value}  `);
-		}
-		expect(loadConfig().ai).toEqual({ apiKey: 'test-secret', baseUrl: 'https://custom.example.test/v1', model: 'custom-model', webSearch: false });
+describe('AI setup in Settings', () => {
+	it('ignores removed AI environment variables', () => {
+		vi.stubEnv('MOIRAI_AI_API_KEY', 'old-secret');
+		vi.stubEnv('MOIRAI_AI_BASE_URL', 'https://old.example.test/v1');
+		vi.stubEnv('MOIRAI_AI_MODEL', 'old-model');
 		vi.stubEnv('MOIRAI_AI_WEB_SEARCH', 'true');
-		expect(loadConfig().ai?.webSearch).toBe(true);
-	});
-
-	it.each(Object.keys(complete))('fails at startup when %s is missing or blank', name => {
-		for (const value of [undefined, '', '   ']) {
-			vi.stubEnv(name, value);
-			expect(() => loadConfig()).toThrow(name);
-			expect(() => loadConfig()).not.toThrow('test-secret');
-		}
-	});
-
-	it('leaves AI disabled only when all its settings are unset, ignoring the old provider key', () => {
-		for (const name of Object.keys(complete)) {
-			vi.stubEnv(name, undefined);
-		}
-		vi.stubEnv('XAI_API_KEY', 'ignored-provider-key');
 		expect(loadConfig().ai).toBeNull();
-		vi.stubEnv('MOIRAI_AI_MODEL', 'explicit-model');
-		expect(() => loadConfig()).toThrow('MOIRAI_AI_API_KEY');
-	});
-
-	it.each(['1', 'TRUE', '0', 'FALSE'])('accepts the explicit search setting %s', value => {
-		vi.stubEnv('MOIRAI_AI_WEB_SEARCH', value);
-		expect(loadConfig().ai?.webSearch).toBe(['1', 'TRUE'].includes(value));
-	});
-
-	it('rejects an invalid search flag and respects explicit AI overrides', () => {
-		vi.stubEnv('MOIRAI_AI_WEB_SEARCH', 'sometimes');
-		expect(() => loadConfig()).toThrow('MOIRAI_AI_WEB_SEARCH');
-		expect(loadConfig({ ai: null }).ai).toBeNull();
 	});
 });

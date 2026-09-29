@@ -193,7 +193,7 @@ async function listLogFiles(directory: string, activePath = ''): Promise<LogFile
 	}
 }
 
-/** Parse one JSON log line, returning null for malformed input. */
+/** Parse one JSON log line with an ID that remains stable as the file grows. */
 function parseEntry(line: string, file: string, lineIndex: number): LogEntry | null {
 	if (!line || Buffer.byteLength(line) > LOG_LINE_MAX_BYTES) {
 		return null;
@@ -330,7 +330,7 @@ export class LogService {
 			scannedBytes += bytes;
 			const lines = buffer.toString('utf8').split('\n').filter(Boolean).reverse();
 			for (; lineIndex < lines.length; lineIndex += 1) {
-				const entry = parseEntry(lines[lineIndex]!, file.name, lineIndex);
+				const entry = parseEntry(lines[lineIndex]!, file.name, lines.length - lineIndex - 1);
 				if (!entry || (query.level && entry.level !== query.level)) {
 					continue;
 				}

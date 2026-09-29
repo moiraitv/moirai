@@ -686,13 +686,18 @@ in one batch only when opened; loading failures expose retry without an empty-st
 AI indexed-date ordering uses indexed timestamps in scheduling and status previews.
 Saving persists the remaining IDs, Reset restores the saved IDs, and regeneration replaces the
 edited set without retaining a separate exclusion list.
-The five-step result control requests a ceiling of 50–250 confident matches, defaulting to 100;
-the server validates the choice, asks the model for strongest matches first, and stops once the
-ceiling is reached. Older requests without a ceiling retain their previous behavior. AI Order and
-Direction controls appear only for sequential selection; switching strategies retains their values.
+The five-step result control requests a target of 50–250 confident matches, defaulting to 100;
+the server validates the choice, keeps modest overages (up to 20% or 25 items, whichever is
+smaller), and trims larger replies. Fewer suitable matches are accepted. Older requests without a
+result target retain their previous behavior. Providers and models can offer few or many matches.
+AI Order and Direction controls appear only for sequential selection; switching strategies retain
+their values.
 
 AI generation first interprets the prompt into bounded positive concepts, advisory constraints, and
-up to 100 candidate identities without web search. Identity
+up to 100 candidate identities without web search (30 for the non-search fast path). Non-search
+discovery failures use local prompt
+concepts without replaying the paid request; cancellation, authorization, configuration and spending
+failures do not trigger that fallback. Identity
 resolution checks the full library, including episode series/year/season/episode context; ambiguous
 identities are not admitted. Two scoped catalog queries load identities, genres, keywords, ratings,
 bounded plot excerpts and hierarchy. Plot excerpts improve local lexical ranking when embeddings
@@ -715,34 +720,82 @@ The shortlist is approximate; metadata omissions are never treated as proof of f
 Judging uses short request-local references, titles, years, types, genres and available ratings;
 episode series declarations are shared within each batch. Plots and paths remain local. Complete
 UTF-8 rows fit a 128 KiB total candidate budget, at most 500 candidates and 64 KiB per batch.
+Production non-search selection reviews at most 1,000 candidates in 125-candidate batches with
+at most two concurrent requests, then sends a bounded pool of direct and supporting picks through
+one final quality pass. Each request limits completion output to 4,096 tokens.
+An explicit Chat Completions JSON-schema mode sends strict phase-specific schemas where the configured
+endpoint supports them; the default JSON-object and optional prompt-only modes retain local validation.
 With search enabled, discovery and sequential review batches use no tools. Review returns confident
 matches plus at most 30 promising uncertain candidates in total. Verification sends one targeted search
 per candidate batch so episode series references stay unique within that request. Those requests share
 the remaining sixteen-call allowance and stop when the allowance or the result ceiling is exhausted;
 unverified candidates are omitted. A two-call reported overage is
 tolerated per request and across the generation (eighteen calls total); this does not increase
-requested allowances. Larger overruns fail atomically. A shared 180-second target includes
-preparation, discovery and judging, with a 120-second finishing grace and a hard 300-second deadline.
-Research is not started after the target; already-running research may finish. All batch selections must validate before publishing; unknown
-references, failed batches and cancellation leave the editor's previous selection untouched.
+requested allowances. Larger overruns fail atomically. Web-search runs have a 180-second target
+and a per-provider hard deadline of 5, 7, 10, or 15 minutes, defaulting to 7. Research is not started after
+the target; already-running research may finish. Search batches must all validate before
+publishing; unknown references, failed batches and cancellation preserve the previous selection.
+Non-search review stops starting batches after 210 seconds and ends in-flight review by 255 seconds,
+leaving up to 45 seconds for final refinement within a 300-second hard deadline. It reviews its
+shortlist despite early over-selection. Failed review batches do not prevent later batches from
+running. If two completed invalid batches leave no validated work, one simplified 80-candidate
+rescue may run before the review cutoff; ambiguous requests are never replayed. Completed batches
+can yield a marked partial result. If final refinement fails or
+times out, validated batch picks are published with a separate warning; valid empty final output
+remains authoritative. User cancellation never publishes work.
+All providers validate one complete JSON object, including when it is surrounded by prose, and
+reject conflicting or unknown references.
 
 The existing JSON/SSE selection response retains its fields and adds optional coverage counts,
-shortlist limitation, query and media embedding availability, and research-budget exhaustion. Progress includes local
+shortlist limitation, optional local-discovery fallback, incomplete review and final refinement,
+query and media embedding availability, and research-budget exhaustion. Progress includes local
 preparation, discovery and batch position. Aggregate diagnostics record requests, reported token
 usage, tool calls and duration, never prompts, catalogs, credentials or provider text. Per-request
 accounting records discovery/review/verification phase, batch, requested allowance and reported tool/token usage;
+non-search diagnostics also record safe phase outcomes, failure categories and request durations;
 reported overruns produce warning logs. Retained jobs preserve typed, application-authored errors
 (including HTTP status/configuration guidance) while hiding unexpected failures and provider bodies.
 The one-shot route does the same on JSON and SSE, and it shares the generation concurrency cap.
 Not-configured and capacity responses keep that application message and do not send Retry-After. The opt-in
 `scripts/evaluate-ai.ts` compares frozen baseline prompting with the pipeline using labelled fixtures
 and local embeddings, reporting retrieval recall separately from selection accuracy and resource use.
+`scripts/compare-ai-models.ts` runs the same prompt through multiple explicit provider configurations
+against one development library opened read-only. It shares cached media vectors, infers query vectors
+in memory, and reports selected titles, overlap, coverage, timing, and reported usage without keys.
+An opt-in bounded evaluation uses low-effort or disabled-thinking settings where supported, local
+prompt concepts for slow planning models, per-request output ceilings and a private aggregate spending
+reservation before each call. The comparison accepts an optional native Claude Messages protocol with
+structured JSON output; its explicit four-field comparison config is separate from production Settings. Private diagnostic captures retain request timing, provider identity
+when reported, usage and raw responses outside Git; the ordinary production path retains no such content.
+Before full selections, it checks local assets and sends a bounded request to every configured model;
+any failed check stops the comparison before full generation begins. An optional per-model prompt-only
+JSON mode supports Chat Completions endpoints that reject the usual JSON-object response format.
+Its opt-in diagnostic pass allows fifteen minutes per model and stores private, credential-redacted
+request and response records outside the repository, without changing production deadlines.
 
-AI requires explicit API key, base URL, model and web-search settings, with no provider defaults or
-key fallbacks. Search uses Responses `web_search`, low search context, `max_tool_calls`, and disabled
-response storage. Search-disabled configurations use compatible Chat Completions. There is no
-provider-hostname detection or automatic paid retry. JSON mode is omitted for Responses search and
-custom temperature is omitted for both paths. Saving and playback never call the model.
+Production AI configuration lives in a versioned, atomically written, owner-only file under the
+persistent data directory. Settings keeps a separate key and preferences for OpenAI, Anthropic, xAI,
+OpenRouter, and one Custom endpoint; only one is active. The read API exposes the first five and
+last four characters of a saved key when at least five characters remain hidden; shorter keys use
+a fully masked placeholder. Disabling AI
+retains profiles, and forgetting a key requires confirmation before removing that secret. Provider
+checks and settings writes run in order so overlapping actions cannot restore a forgotten key.
+Known provider profiles resolve a current recommended model unless a saved override pins an explicit
+ID. Anthropic profiles use native Messages for recommended and overridden models. A bounded no-search
+connection check
+blocks confirmed authorization and request incompatibility while allowing temporary failures with a
+persistent unverified warning. New generations capture the active profile; running jobs retain theirs.
+Optional protocol selection supports native Claude Messages structured output, and optional
+prompt-only JSON mode supports Chat Completions endpoints without `response_format`.
+Hosted research uses OpenAI or xAI Responses `web_search`, OpenRouter Responses
+`openrouter:web_search`, or Anthropic Messages `web_search_20250305`. Each request asks the provider
+to limit calls, and response usage is counted against the shared generation budget. Responses search
+disables response storage; search-disabled Chat Completions and Anthropic Messages retain their
+existing adapters. OpenRouter requests prefer latency routing for both API formats, with the Qwen
+Venice exclusion retained. Custom endpoints use the search adapter for their selected API format. There is no
+automatic paid retry. JSON mode is omitted for Responses search and custom temperature is omitted for
+both paths. Saving a provider calls the model once for connection verification; saving Programs and
+playback never call the model.
 
 Selected-items programs retain chronological insertion batches separately from their effective order.
 They default to oldest-added first and may instead order by normalized title, exact release date with
@@ -869,8 +922,10 @@ channel priority by day, and falls back to normal selection rather than creating
 candidate conflicts. Already committed guide entries are never rewritten solely to remove a
 collision.
 
-The Programs catalog is searchable and filterable by content, sequence, similarity, or theme type. It sorts names
-alphabetically using media title normalization, ignoring punctuation and leading A, An, or The.
+The Programs catalog is searchable and filterable by content, sequence, similarity, or theme type.
+Content definitions distinguish AI selections from explicit items, groups, and library queries.
+The catalog sorts names alphabetically using media title normalization, ignoring punctuation and
+leading A, An, or The.
 Content rows expose
 a bounded, ordered carousel of indexed media previews, including unavailable matches; sequence rows
 show their authored child-program entries. Preview data is included in the scheduling status contract
@@ -1694,10 +1749,15 @@ Server logs are redacted, structured JSONL files beneath the persistent data dir
 Log and artwork megabyte settings are accepted only when they convert to finite, positive,
 safe-integer byte counts. Invalid and overflowing values use their documented defaults.
 
-The Logs view provides bounded search, cursor pagination, live refresh, one-line request entries, and
-structured details on demand. It pairs request-start and request-complete records to show method,
+The Logs view provides bounded search, cursor pagination, live refresh that retains loaded older
+pages, one-line request entries, and structured details on demand. Filter changes reset the list. It
+pairs request-start and request-complete records to show method,
 endpoint, source IP, status, and duration together. Routine polling of log-reading endpoints suppresses
-only automatic access records; failures and file downloads remain logged.
+only automatic access records; failures and file downloads remain logged. Successful readiness,
+playback-status, and AI-generation status polls omit routine access records. Failed polls retain their
+completion and error records. Starting and cancelling AI generations retain normal request logs.
+AI generation writes start, stage, and terminal entries with provider, timing, counts, usage, and safe
+failure categories. It never logs prompts, selected titles, provider text, or API keys.
 
 The server is assembled from domain-owned artwork, guide, media, operations, playback, repository,
 route, scanner, and scheduling modules. Persistence remains behind one repository facade, while the

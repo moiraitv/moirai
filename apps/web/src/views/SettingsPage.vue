@@ -2,7 +2,7 @@
 import { onBeforeRouteLeave } from 'vue-router';
 import { useDraftProtection } from '../draft-protection';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
-import { Copy, RefreshCw, Save } from '@lucide/vue';
+import { RefreshCw, Save } from '@lucide/vue';
 import type {
 	PlaybackEngineStatus,
 	PlaybackSettings,
@@ -16,6 +16,7 @@ import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
 import FallbackFillerEditor from '../components/FallbackFillerEditor.vue';
+import AiSettingsPanel from '../components/AiSettingsPanel.vue';
 import PageHeader from '../components/PageHeader.vue';
 import StatusPill from '../components/StatusPill.vue';
 import TransientToast from '../components/TransientToast.vue';
@@ -36,7 +37,6 @@ const settingsLoadError = ref('');
 const statusError = ref('');
 const statusLoading = ref(true);
 const saveErrors = reactive({ playback: '', 'viewing-preferences': '' });
-const clipboardError = ref('');
 const historyError = ref('');
 const capacityValidation = useFieldValidation(() => playbackSettingsSchema.safeParse(settings));
 const capacityAttributes = numericInputAttributes(playbackSettingsSchema.shape.maxActiveSessions.removeDefault());
@@ -58,6 +58,8 @@ const playbackSettingsValid = computed(() => playbackSettingsSchema.shape.maxAct
 const viewingPreferenceSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.viewingPreferencesEnabled !== savedSettings.value.viewingPreferencesEnabled);
 const fallbackDirty = computed(() => fallbackFile.value !== null || removeFallbackOnSave.value);
+const aiSettingsDirty = ref(false);
+const aiSettingsSaving = ref(false);
 const refreshingStatus = ref(false);
 let loadingSettings = false;
 let preferenceLoadSequence = 0;
@@ -281,19 +283,6 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 	}
 }
 
-/** Copy a client URL to the clipboard. */
-async function copyUrl(value: string, label: string): Promise<void> {
-	message.value = '';
-	clipboardError.value = '';
-	try {
-		await navigator.clipboard.writeText(value);
-		message.value = `${label} copied.`;
-	}
-	catch {
-		clipboardError.value = `Unable to copy ${label.toLowerCase()}.`;
-	}
-}
-
 const unsubscribe = liveEvents.subscribe((event) => {
 	if (event.type === 'system.ready' || event.type === 'playback.changed') {
 		void refreshStatus();
@@ -324,9 +313,10 @@ const unsavedSections = computed(() => [
 	playbackSettingsDirty.value ? 'playback capacity' : '',
 	viewingPreferenceSettingsDirty.value ? 'viewing preferences' : '',
 	fallbackDirty.value ? 'fallback filler' : '',
+	aiSettingsDirty.value ? 'AI provider' : '',
 ].filter(Boolean));
 useDraftProtection(() => unsavedSections.value.length > 0);
-onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && (!unsavedSections.value.length || await requestConfirmation({
+onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && !aiSettingsSaving.value && (!unsavedSections.value.length || await requestConfirmation({
 	key: 'discard-settings',
 	title: 'Discard Unsaved Changes?',
 	message: `Leave without saving changes to ${unsavedSections.value.join(', ')}?`,
@@ -339,9 +329,9 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 <template>
 	<section>
 		<PageHeader
-			eyebrow="Integrated playback"
+			eyebrow="Application settings"
 			title="Settings"
-			description="Moirai serves the channel playlist, guide, and live streams directly."
+			description="Configure playback, service options, and AI content selection."
 		>
 			<button class="button secondary" :disabled="refreshingStatus" @click="refreshStatus">
 				<RefreshCw :size="17" />Refresh Status
@@ -350,32 +340,10 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 		<div class="settings-layout async-state-surface">
 			<form class="panel form-grid" @submit.prevent="save('playback')">
 				<div class="span-2">
-					<p class="eyebrow">Client setup</p>
-					<h2>Playlist and guide</h2>
-					<p>Add these URLs to an IPTV client that can reach this Moirai server.</p>
+					<p class="eyebrow">Playback capacity</p>
+					<h2>Session count</h2>
+					<p>Set how many channel streams can play at once.</p>
 				</div>
-				<p v-if="clipboardError" class="notice error span-2" role="alert">{{ clipboardError }}</p>
-				<LoadingState v-if="statusLoading" class="span-2" label="Loading client URLs…" />
-				<template v-if="status">
-					<label class="span-2">
-						<span>Channel playlist</span>
-						<span class="input-with-action">
-							<input :value="status?.m3uUrl ?? ''" readonly />
-							<button type="button" class="icon-button" aria-label="Copy channel playlist URL" @click="copyUrl(status?.m3uUrl ?? '', 'Playlist URL')">
-								<Copy :size="17" />
-							</button>
-						</span>
-					</label>
-					<label class="span-2">
-						<span>XMLTV guide</span>
-						<span class="input-with-action">
-							<input :value="status?.epgUrl ?? ''" readonly />
-							<button type="button" class="icon-button" aria-label="Copy XMLTV guide URL" @click="copyUrl(status?.epgUrl ?? '', 'Guide URL')">
-								<Copy :size="17" />
-							</button>
-						</span>
-					</label>
-				</template>
 				<LoadingState v-if="initialLoading" class="span-2" label="Loading playback settings…" />
 				<div v-else-if="settingsLoadError" class="span-2"><p class="notice error" role="alert">{{ settingsLoadError }}</p><button type="button" class="button secondary" @click="loadSettings">Retry Settings</button></div>
 				<label v-if="savedSettings" class="span-2">
@@ -457,6 +425,7 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 				</div>
 				<p v-if="historyError" class="notice error" role="alert">{{ historyError }}</p>
 			</section>
+			<AiSettingsPanel @dirty="aiSettingsDirty = $event" @saving="aiSettingsSaving = $event" @saved="message = $event" />
 		</div>
 		<ViewingPreferenceScoresModal
 			v-if="scoresOpen"

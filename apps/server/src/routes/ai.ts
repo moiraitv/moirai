@@ -5,18 +5,23 @@ import { aiContentSelectionRequestSchema, aiContentSelectionResponseSchema, aiSt
 import type { AppConfig } from '../config.js';
 import type { Repository } from '../repository/index.js';
 import type { EmbeddingWakeStatus } from '../semantic/service.js';
-import { AiSelectionError, selectionFailure } from '../ai/errors.js';
+import { selectionFailure } from '../ai/errors.js';
 import { generateAiSelection } from '../ai/pipeline.js';
+import { AiRunLogger } from '../ai/run-logging.js';
+import { productionAiRequestOptions } from '../ai/provider.js';
+import type { AiSettingsService } from '../ai/settings.js';
 import { loadAiEmbeddings } from '../ai/embeddings.js';
 import { authenticatedSession } from '../auth/http.js';
 import { apiOperation, responseContent, multiContentResponse } from './contracts.js';
 
 import { workerRequestSignal } from './worker-response.js';
 import { registerAiGenerationRoutes } from './ai-generations.js';
+import { registerAiSettingsRoutes } from './ai-settings.js';
 
 /** Services required to expose AI content selection. */
 interface AiRouteDependencies {
 	config: AppConfig;
+	aiSettings?: AiSettingsService;
 	repository: Repository;
 	requestEmbeddingWork?: (includeMedia?: boolean, concepts?: string[]) => EmbeddingWakeStatus | void;
 }
@@ -24,18 +29,22 @@ interface AiRouteDependencies {
 /** Register AI availability and one-shot content selection. */
 export function registerAiRoutes(
 	app: FastifyInstance,
-	{ config, repository, requestEmbeddingWork }: AiRouteDependencies,
+	{ config, aiSettings, repository, requestEmbeddingWork }: AiRouteDependencies,
 ): void {
-	const jobs = registerAiGenerationRoutes(app, { config, repository, ...(requestEmbeddingWork ? { requestEmbeddingWork } : {}) });
+	const jobs = registerAiGenerationRoutes(app, { config, repository, ...(aiSettings ? { aiSettings } : {}),
+		...(requestEmbeddingWork ? { requestEmbeddingWork } : {}) });
+	if (aiSettings) {
+		registerAiSettingsRoutes(app, aiSettings);
+	}
 	app.get('/api/v1/ai', {
 		schema: apiOperation({
 			operationId: 'getAiStatus',
 			tags: ['AI'],
-			summary: 'Report whether an OpenAI-compatible content model is configured',
+			summary: 'Report whether AI content selection is enabled',
 			response: { 200: responseContent('AI availability', 'application/json', aiStatusSchema) },
 			errors: [401, 500],
 		}),
-	}, async () => ({ configured: config.ai !== null }));
+	}, async () => ({ configured: (aiSettings?.active() ?? config.ai) !== null }));
 
 	app.post('/api/v1/ai/content-selection', {
 		schema: apiOperation({
@@ -52,12 +61,14 @@ export function registerAiRoutes(
 			errors: [400, 401, 404, 422, 500, 503],
 		}),
 	}, async (request, reply) => {
-		if (!config.ai) {
+		const ai = aiSettings?.active() ?? config.ai;
+		if (!ai) {
 			throw Object.assign(new Error('An OpenAI-compatible API key is not configured.'), {
 				statusCode: 503,
 				expose: true,
 			});
 		}
+		const activeAi = ai;
 
 		const body = aiContentSelectionRequestSchema.parse(request.body);
 		const library = await repository.getLibrary(body.libraryId);
@@ -65,31 +76,40 @@ export function registerAiRoutes(
 			throw Object.assign(new Error('Library not found.'), { statusCode: 404, expose: true });
 		}
 
-		const ai = config.ai;
 		const libraryType = library.typeKey;
 		const signal = workerRequestSignal(reply);
 		const release = jobs.acquire(authenticatedSession(request).identity.id);
 		/** Validate the final selection before publishing it to either transport. */
 		async function generate(onProgress?: (status: AiProgress, details?: AiProgressDetails) => void) {
+			const runLog = new AiRunLogger(
+				request.log,
+				activeAi,
+				body.libraryId,
+				body.maxResults ?? null,
+			);
+			runLog.start();
 			try {
-				const result = await generateAiSelection(ai, body.prompt, libraryType, {
+				const result = await generateAiSelection(activeAi, body.prompt, libraryType, {
 					loadCatalog: () => repository.aiCatalog(body.libraryId),
 					loadVectors: (concepts, generationSignal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, generationSignal, requestEmbeddingWork),
-					onMetrics: metrics => {
-						if (metrics.searchBudgetOverrun) {
-							request.log.warn({ aiGeneration: metrics }, 'AI generation exceeded its requested search budget');
-						}
-						else {
-							request.log.info({ aiGeneration: metrics }, 'AI generation ended');
-						}
-					},
-				}, { ...(onProgress ? { onProgress } : {}), signal }, body.maxResults);
-				if (result.itemIds.length > config.maxExplicitMediaItems) {
-					throw new AiSelectionError(`The match list exceeds ${config.maxExplicitMediaItems} items. Narrow the prompt.`);
-				}
+					...(!activeAi.webSearch ? { fastLocalReview: true } : {}),
+					requestOptions: productionAiRequestOptions(activeAi),
+					onMetrics: metrics => runLog.setMetrics(metrics),
+				}, { onProgress: (status, details) => {
+					runLog.progress(status, details);
+					onProgress?.(status, details);
+				}, signal }, body.maxResults ?? Infinity);
+				result.itemIds = result.itemIds.slice(0, config.maxExplicitMediaItems);
+				runLog.complete(result);
 				return result;
 			}
 			catch (cause) {
+				if (signal.aborted) {
+					runLog.cancel();
+				}
+				else {
+					runLog.fail(cause);
+				}
 				throw selectionFailure(cause);
 			}
 			finally {

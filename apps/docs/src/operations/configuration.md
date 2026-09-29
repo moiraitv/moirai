@@ -45,10 +45,6 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_LOGTO_ENDPOINT` | Unset | Logto tenant origin; enables Logto only when all three Logto values are set |
 | `MOIRAI_LOGTO_APP_ID` | Unset | Traditional-web application ID issued by Logto |
 | `MOIRAI_LOGTO_APP_SECRET` | Unset | Traditional-web application secret; never returned or logged |
-| `MOIRAI_AI_API_KEY` | Unset | API key for AI content selection; required with the other three AI settings |
-| `MOIRAI_AI_BASE_URL` | Unset | Base URL of an OpenAI-compatible endpoint |
-| `MOIRAI_AI_MODEL` | Unset | Model name supported by the configured endpoint |
-| `MOIRAI_AI_WEB_SEARCH` | Unset | Opt into bounded web lookups through a compatible Responses API; accepts `true`, `false`, `1`, or `0` |
 | `MOIRAI_LOG_LEVEL` | `info` | Structured server log level |
 | `MOIRAI_LOG_DIR` | `<data>/logs` | Rotating structured server log directory |
 | `MOIRAI_GUIDE_DAYS` | `7` | Guide and XMLTV horizon in local calendar days, including today; accepts 1–14. One extra day is generated internally. |
@@ -104,17 +100,23 @@ One background worker prepares the library, releases the model after a minute wi
 
 ## AI content selection
 
-Set all four values (`MOIRAI_AI_API_KEY`, `MOIRAI_AI_BASE_URL`, `MOIRAI_AI_MODEL`, and `MOIRAI_AI_WEB_SEARCH`) to use your chosen OpenAI-compatible service for [AI content selections](/scheduling/programs). There are no AI configuration defaults or provider-specific key fallbacks. Leaving every AI setting unset disables AI; supplying an incomplete set prevents startup and names the missing settings. Keep the API key outside version control. Set `MOIRAI_AI_WEB_SEARCH=false` explicitly for Chat Completions without web search.
+AI content selection is provided as a means of initially generating content lists using just a general idea rather than making explicit choices. It's disabled by default because it needs a configured AI provider, API key, and established budget to use.
 
-Set `MOIRAI_AI_WEB_SEARCH=true` only when your endpoint and model support the Responses API, its built-in `web_search` tool with low search context and the `max_tool_calls` limit. Search requests ask for JSON in the prompt without enabling JSON mode; Moirai validates the complete selection locally before accepting it. This setting works by capability and does not select or detect a particular provider.
+In **Settings**, open **AI provider**, choose one of the common providers or Custom, enter the provider’s API key if applicable, and save. Moirai checks the connection once to verify functioning setting values.
 
-Moirai requests at most sixteen hosted tool calls for verification, including page opens. Discovery and initial review use no search. Sixteen is the requested budget, not a guaranteed spending cap: Moirai accepts up to two extra reported calls and logs a warning instead of discarding a valid result. An overrun beyond two calls, or beyond eighteen calls for the generation, stops generation. Generation targets three minutes, with up to two extra minutes to finish reviewing candidates and a hard stop at five minutes. Research is not started after three minutes, but an existing request may finish its research.
+Each provider keeps its own key and preferences. Switching providers changes new generations immediately; a generation already running keeps the settings it started with. Choose **Disable AI** to hide it from new Programs while retaining saved keys, or use **Forget key** to erase one provider’s key. Keys are stored in an owner-readable-only file under `MOIRAI_DATA_DIR` and are never shown again in Settings.
 
-Browser reloads do not cancel generation. The server retains completed results for one hour, holds at most 32 jobs, and permits two active jobs per administrator. Restarting the server clears these jobs. Providers may charge for searches; enforcement of the hosted call limit requires provider support.
+Moirai currently recommends `gpt-6-sol` for OpenAI, `claude-sonnet-5` for Anthropic, `grok-4.7` for xAI, and `deepseek/deepseek-v4-pro-0813` for OpenRouter, which will all change over time as new models are released. In **Advanced**, you can enter a custom model ID to use that instead.
 
-Moirai uses local matching and model-assisted discovery to shortlist up to 1,000 movie/other-media candidates or 1,500 episode candidates. Review sends compact identities and genres in batches for processing. Filesystem information is not sent.
+**Advanced** offers web research for OpenAI, Anthropic, xAI, OpenRouter, and Custom, off by default. Basic matching uses library details and the model’s existing knowledge while web research lets the model check promising titles when those details do not show whether they fit (e.g., whether an episode is set on Halloween). This often finds more good matches but can take longer and cost more. The selected model and account must support the search tool for that endpoint.
 
-The repository's `.env.example` contains commented blocks for xAI, OpenAI, and Anthropic. Uncomment one complete block and replace its API-key placeholder. Anthropic's OpenAI compatibility layer uses Chat Completions, ignores JSON-format enforcement, and does not provide the Responses search integration used here; keep web search disabled for that example.
+**Custom** accepts a model ID, endpoint URL, and mode and response settings; web research requires a compatible search tool in the chosen API format. A Custom key is optional for local servers.
+
+Non-search generation reviews up to 1,000 candidates in limited batches, validates provider references, and keeps usable reviewed matches even if final refinement fails. Different models can return anywhere from a few to many suitable titles. Generation can take up to five minutes but generally completes more quickly. Saved or cancelled generations may still incur provider charges.
+
+Browser reloads do not cancel generation. The server retains completed results for one hour, holds at most 32 jobs, and permits two active jobs. Restarting the server clears these jobs. In **Advanced**, set the web research time limit to 5, 7, 10, or 15 minutes for the selected provider; it defaults to 7 minutes. No new searches start after three minutes, but research already running may use the remaining time. Web research also has a limited call budget; provider billing and timing can vary.
+
+Prior to requesting any full model calls, Moirai uses local matching and model-assisted discovery to shortlist movie, other-media, or episode candidates. Filesystem information is never sent to the provider.
 
 ### Choose a model and manage costs
 
