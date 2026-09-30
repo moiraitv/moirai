@@ -32,7 +32,6 @@ import {
 	compatibleQuickLibraries,
 	quickScenarioPreset,
 	quickSelectionStrategy,
-	suggestedQuickTemplateName,
 	suggestedQuickChannelNumber,
 	type QuickChannelDraft,
 	type QuickProgrammingDraft,
@@ -111,10 +110,6 @@ const selectedLibraryScanning = computed(() => Boolean(
 		!selectedLibrary.value.lastScanCompletedAt
 		|| selectedLibrary.value.lastScanStartedAt > selectedLibrary.value.lastScanCompletedAt
 	),
-));
-const templateName = computed(() => suggestedQuickTemplateName(
-	channel.name,
-	schedulingStore.overview?.templates.map((template) => template.name) ?? [],
 ));
 const dirty = computed(() => configuredScenario.value !== null && result.value === null);
 const request = computed<QuickChannelSetupCreate | null>(() => {
@@ -447,7 +442,7 @@ useDraftProtection(() => modalOpen.value && dirty.value);
 								@next="stage = 3"
 							/>
 							<QuickChannelStep v-else-if="stage === 3" v-model="channel" v-model:logo="logo" @back="stage = 2" @next="stage = 4" />
-							<QuickReviewStep v-else-if="stage === 4 && request && selectedLibrary" :request="request" :library="selectedLibrary" :logo="logo" :busy="setupBusy" :error="setupError" :template-name="templateName" @back="stage = 3" @finish="finish" />
+							<QuickReviewStep v-else-if="stage === 4 && request && selectedLibrary" :request="request" :library="selectedLibrary" :logo="logo" :busy="setupBusy" :error="setupError" @back="stage = 3" @finish="finish" />
 							<section v-else-if="stage === 5 && result" class="quick-step quick-success" aria-labelledby="quick-success-title">
 								<div class="quick-success-hero">
 									<CheckCircle2 :size="48" />

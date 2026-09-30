@@ -8,7 +8,7 @@ import { similaritySeeds, similaritySeedItems } from '@server/db/semantic-schema
 import { Repository } from '@server/repository/index.js';
 import { TimelineMaterializer } from '@server/scheduling/timeline-materializer.js';
 
-it('clears only the selected channel history and retains its templates and regeneration seed across saves', async () => {
+it('clears only the selected channel history and retains its direct program and regeneration seed across saves', async () => {
 	const database = createDatabase(':memory:', path.resolve('drizzle'));
 	try {
 		const repository = new Repository(database.db);
@@ -49,12 +49,12 @@ it('clears only the selected channel history and retains its templates and regen
 		expect(await repository.getTimelineMaterialization(other)).toEqual(otherMaterialization);
 		expect(await repository.getSelectionState(other)).toEqual(otherState);
 		const reset = (await new Repository(database.db).getChannelSchedule(selected))!;
-		expect(reset).toMatchObject({ defaultTemplateId: original.defaultTemplateId, layers: original.layers, defaultFiller: original.defaultFiller });
+		expect(reset).toMatchObject({ defaultTemplateId: null, defaultProgramId: original.defaultProgramId,
+			layers: original.layers, defaultFiller: original.defaultFiller });
 		expect(reset.generationSeed).toBeTruthy();
 		expect(original.generationSeed).toBeUndefined();
 		const saved = await repository.setChannelSchedule(selected, { ...original, generationSeed: randomUUID() });
 		expect(saved?.generationSeed).toBe(reset.generationSeed);
-		await repository.setTemplateAssignments(original.defaultTemplateId, [selected]);
 		expect((await repository.getChannelSchedule(selected))?.generationSeed).toBe(reset.generationSeed);
 		expect((await repository.listChannelSchedules()).find(schedule => schedule.channelId === selected)?.generationSeed).toBe(reset.generationSeed);
 		expect(await repository.getProgram(resources[0]!.program.id)).toEqual(resources[0]!.program);

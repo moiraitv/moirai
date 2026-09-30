@@ -26,6 +26,7 @@ import type { SchedulingWorkerPool } from './worker-pool.js';
 import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
 import { mergeGuideOccurrences, recoverGuideOccurrences } from '../guide/occurrences.js';
 import { templatePlaybackInput } from './template-playback.js';
+import { directProgramTemplates, resolveProgramSchedule } from './direct-program-templates.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 import { currentTimestamp, yieldToEventLoop } from '../time.js';
 
@@ -112,18 +113,24 @@ function inputFingerprint(
 	catalog: SchedulingCatalog,
 ): string {
 	// Restrict templates and recursively referenced programs to this channel schedule.
+	const virtualTemplates = directProgramTemplates(schedule.channelId, schedule, programs);
 	const templateIds = new Set([
 		schedule.defaultTemplateId,
 		...schedule.layers.map((layer) => layer.templateId),
-	]);
-	const selectedTemplates = templates
+		...virtualTemplates.map((template) => template.id),
+	].filter((id): id is string => id !== null));
+	const selectedTemplates = [...templates, ...virtualTemplates]
 		.filter((template) => templateIds.has(template.id))
 		.sort((left, right) => left.id.localeCompare(right.id));
 	const selectedPrograms = referencedPrograms(
 		templateIds,
-		templates,
+		[...templates, ...virtualTemplates],
 		programs,
-		schedule.defaultFiller ? [schedule.defaultFiller.programId] : [],
+		[
+			...(schedule.defaultFiller ? [schedule.defaultFiller.programId] : []),
+			...(schedule.defaultProgramId ? [schedule.defaultProgramId] : []),
+			...schedule.layers.flatMap((layer) => layer.programId ? [layer.programId] : []),
+		],
 	).sort((left, right) => left.id.localeCompare(right.id));
 
 	// Collect only catalog scopes that can affect those programs.
@@ -283,18 +290,24 @@ function canRecoverEmptyTimeline(
 		return false;
 	}
 
+	const virtualTemplates = directProgramTemplates(schedule.channelId, schedule, programs);
 	const templateIds = new Set([
 		schedule.defaultTemplateId,
 		...schedule.layers.map((layer) => layer.templateId),
-	]);
+		...virtualTemplates.map((template) => template.id),
+	].filter((id): id is string => id !== null));
 	const authored = [
 		schedule,
-		...templates.filter((template) => templateIds.has(template.id)).map(templatePlaybackInput),
+		...[...templates, ...virtualTemplates].filter((template) => templateIds.has(template.id)).map(templatePlaybackInput),
 		...referencedPrograms(
 			templateIds,
-			templates,
+			[...templates, ...virtualTemplates],
 			programs,
-			schedule.defaultFiller ? [schedule.defaultFiller.programId] : [],
+			[
+				...(schedule.defaultFiller ? [schedule.defaultFiller.programId] : []),
+				...(schedule.defaultProgramId ? [schedule.defaultProgramId] : []),
+				...schedule.layers.flatMap((layer) => layer.programId ? [layer.programId] : []),
+			],
 		),
 	];
 	return authored.every((resource) => Date.parse(resource.updatedAt) <= Date.parse(current.committedAt));
@@ -576,7 +589,8 @@ export class TimelineMaterializer {
 		occupiedMedia: OccupiedMediaInterval[],
 	): Promise<(() => Promise<void>) | null> {
 		// Resolve the base template and desired rolling guide window.
-		const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
+		const resolved = resolveProgramSchedule(schedule.channelId, schedule, templates, programs);
+		const template = resolved.template;
 		if (!template) {
 			return null;
 		}
@@ -701,9 +715,9 @@ export class TimelineMaterializer {
 				timeZone: this.timeZone,
 				startDate: generationDate.toString(),
 				days,
-				schedule,
+				schedule: { ...schedule, ...resolved.schedule },
 				template,
-				templates,
+				templates: resolved.templates,
 				programs,
 				catalog,
 				state: initialState,
@@ -719,9 +733,9 @@ export class TimelineMaterializer {
 				timeZone: this.timeZone,
 				startDate: generationDate.toString(),
 				days,
-				schedule,
+				schedule: { ...schedule, ...resolved.schedule },
 				template,
-				templates,
+				templates: resolved.templates,
 				programs,
 				catalog,
 				state: initialState,
@@ -805,8 +819,8 @@ export class TimelineMaterializer {
 		const guideOccurrences = mergeGuideOccurrences(
 			current?.guideOccurrences?.length ? current.guideOccurrences
 				: current && current.inputFingerprint === currentFingerprint ? recoverGuideOccurrences(
-					schedule,
-					templates,
+					{ ...schedule, ...resolved.schedule },
+					resolved.templates,
 					existing,
 					localDate(current.windowStart, this.timeZone).toString(),
 					this.guideDays + MATERIALIZED_LOOKAHEAD_DAYS,

@@ -22,7 +22,7 @@ Open **Quick Setup** from navigation or the dashboard. Choose **Movie Channel**,
 
 The sample day uses the server timezone. It is illustrative: indexing and randomized selection can change the result. A preview error does not prevent an otherwise valid setup. A dynamic query can be saved while scanning is still underway, but playback needs usable indexed media.
 
-Quick Setup creates a linked ![](/icons/list-video.svg) Program, ![](/icons/calendar-range.svg) Template, ![](/icons/tv-minimal.svg) Channel, and ![](/icons/tv-minimal-play.svg) Channel Schedule together. A ![](/icons/library.svg) Library created earlier in the wizard remains and continues scanning if you cancel. If an optional logo upload fails, the channel is still created; retry the upload from the completion screen.
+Quick Setup creates a linked ![](/icons/list-video.svg) Program, ![](/icons/tv-minimal.svg) Channel, and ![](/icons/tv-minimal-play.svg) Channel Schedule together. The schedule assigns the Program directly for continuous daily playback, so there is no extra Template to maintain. A ![](/icons/library.svg) Library created earlier in the wizard remains and continues scanning if you cancel. If an optional logo upload fails, the channel is still created; retry the upload from the completion screen.
 
 ## Use the full editors
 
@@ -49,6 +49,8 @@ For finer control over individual resources or an existing setup, follow these s
    ![Channels page with New Channel and Moonrise Classics awaiting a schedule](/screenshots/channels.png)
 
 6. Open **Scheduling → Channel Schedules**, choose the channel, and assign the template as its base schedule. Review the preview and save it.
+
+If the channel only needs the one Program all day, skip creating a Template in step 4. In the channel schedule editor, choose **Program** beside the base picker and select the Program directly.
 
    ![Channel Schedule editor with a base Template and a preview warning about a playback gap](/screenshots/channel-schedules.png)
 

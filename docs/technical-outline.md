@@ -24,7 +24,7 @@ Video files + filenames + NFO and subtitle sidecars
         ↓
 Indexed catalog
         ↓
-Programs → templates → channel template stack
+Programs → optional templates → channel schedule layers
         ↓
 Committed configurable timeline (7 days by default)
         ↓
@@ -67,9 +67,9 @@ output of scheduling rules, not the editable schedule itself.
 | Boundary           | The relationship between adjacent slots that determines whether playback stops exactly, finishes the outgoing item, or favors the incoming slot. |
 | Drift              | The permitted difference between a nominal boundary and its duration-aware resolved time. It may be finite or unlimited where supported.         |
 | Filler             | Low-priority, interruptible content used for a remaining gap. It has separate selection state and never delays primary programming.              |
-| Channel schedule   | The ordered stack that assigns one base template and optional conditional template layers to a channel.                                          |
-| Base template      | The always-available lowest template in a channel schedule. It supplies programming when no higher layer applies.                                |
-| Conditional layer  | A higher-priority template assignment that applies only while its predicate matches.                                                             |
+| Channel schedule   | The ordered stack that assigns one base template or program and optional conditional layers to a channel.                                        |
+| Base assignment    | The always-available lowest source in a channel schedule. It supplies programming when no higher layer applies.                                  |
+| Conditional layer  | A higher-priority template or program assignment that applies only while its predicate matches.                                                  |
 | Predicate          | A nested set of date, month, weekday, annual-range, or time-range conditions controlling a conditional layer.                                    |
 | Nominal schedule   | The authored slot geometry before media durations and boundary policies are applied.                                                             |
 | Resolved schedule  | The duration-aware result after layer selection, content selection, boundary resolution, filler, and dead air are applied.                       |
@@ -577,11 +577,10 @@ The authored hierarchy is:
 
 ```text
 Channel
-  └─ ordered template stack
-       ├─ conditional template layers
-       └─ base template
-            └─ nominal slots
-                 └─ reusable programs
+  └─ ordered schedule layers
+       ├─ conditional templates or programs
+       └─ base template or program
+            └─ nominal slots when a template is selected
 ```
 
 The Programs management view virtualizes the loaded scheduling overview with TanStack Virtual.
@@ -980,12 +979,17 @@ unlimited drift. Added slots retain their source slot's settings and default new
 finish-left with unlimited drift. Geometry edits preserve explicit unlimited drift. Stored templates
 and omitted-field API parsing retain their existing behavior.
 
-A channel has an always-available base template. Conditional templates stack above it and can use
+A channel has an always-available base template or direct program. Conditional templates or programs stack above it and can use
 nested date, month, weekday, annual-range, and time-range predicates. A no-program slot is transparent:
 it falls through to the next lower layer. Its slot filler is therefore disabled.
-New schedule drafts suggest a base template by channel name: normalized exact matches precede full
-channel-name phrases, then relative edit distance; ties retain catalog order. The suggestion does
-not replace saved base templates or change how conditional layers are initialized.
+Direct program assignments resolve to stable, transient single-slot daily templates for preview,
+guide, and materialization. They use the standard new-template start and midnight boundary defaults
+without creating saved templates. Existing template assignments remain unchanged after upgrade.
+New schedule drafts suggest a base assignment by channel name: suitable templates take priority,
+then suitable direct programs. Each catalog ranks normalized exact matches, full channel-name
+phrases, and close spelling; ties retain catalog order. When neither catalog has a suitable name,
+the draft falls back to the closest template or, if none exists, the closest program. The suggestion
+does not replace saved assignments or change how conditional layers are initialized.
 
 Example:
 
@@ -1701,11 +1705,10 @@ and persists neither resources nor playback state. Samples remain illustrative w
 randomized playback can change output; preview errors do not block valid creation. Completion morphs
 the dialog surface to a compact content-sized layout without scaling text, with immediate sizing for
 reduced motion. Both logo preparation paths and server PNG normalization preserve alpha transparency.
-Final submission atomically creates a content program, a
-single-slot daily template with a persistent cursor and unlimited finish-left midnight boundary, a
-channel using the saved default encoding profile, and its base assignment. Program and generated
-template names keep the requested base when free and otherwise take the next unused numeric suffix,
-matching the case-insensitive uniqueness keys; a taken channel number still fails the transaction. A new library remains
+Final submission atomically creates a content program, a channel using the saved default encoding
+profile, and a direct base program assignment with a persistent cursor and unlimited finish-left
+midnight boundary. The program name keeps the requested base when free and otherwise takes the next
+unused numeric suffix, matching its case-insensitive uniqueness key; a taken channel number still fails the transaction. A new library remains
 independent of that transaction because scanning may already be active. Optional local artwork is
 fitted without cropping and uploaded afterward; a failed upload leaves the playable core setup
 intact and can be retried from the completion screen.

@@ -134,7 +134,7 @@ const roleLabel = computed(() => {
 						<div class="guide-preview-source">
 							<h3>Schedule source</h3>
 							<p><ListVideo :size="16" /><span>Program</span><strong>{{ detail.source.programName ?? 'None' }}</strong></p>
-							<p><Layers3 :size="16" /><span>Template</span><strong>{{ detail.source.templateName ?? 'Unavailable' }}</strong></p>
+							<p><Layers3 :size="16" /><span>{{ detail.source.templateName ? 'Template' : 'Schedule' }}</span><strong>{{ detail.source.templateName ?? 'No saved template' }}</strong></p>
 							<p><Folder :size="16" /><span>Library</span><strong>{{ detail.source.libraryName ?? 'None' }}</strong></p>
 						</div>
 						<RouterLink

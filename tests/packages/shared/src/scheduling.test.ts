@@ -30,6 +30,16 @@ function nestedPredicate(depth: number): SchedulePredicate {
 }
 
 describe('layered schedule contracts', () => {
+	it('requires one source for the base and each conditional layer', () => {
+		const layer = { id: uuid(4), predicate: { type: 'weekdays', values: [1], negated: false } };
+		expect(channelScheduleConfigSchema.safeParse({ defaultTemplateId: uuid(1), layers: [] }).success).toBe(true);
+		expect(channelScheduleConfigSchema.safeParse({ defaultProgramId: uuid(2), layers: [] }).success).toBe(true);
+		expect(channelScheduleConfigSchema.safeParse({ layers: [] }).success).toBe(false);
+		expect(channelScheduleConfigSchema.safeParse({ defaultTemplateId: uuid(1), defaultProgramId: uuid(2) }).success).toBe(false);
+		expect(channelScheduleConfigSchema.safeParse({ defaultProgramId: uuid(2), layers: [{ ...layer, programId: uuid(3) }] }).success).toBe(true);
+		expect(channelScheduleConfigSchema.safeParse({ defaultProgramId: uuid(2), layers: [{ ...layer, programId: uuid(3), templateId: uuid(1) }] }).success).toBe(false);
+	});
+
 	it('requires no-program slots to disable their unused filler configuration', () => {
 		const slot = {
 			id: uuid(1),

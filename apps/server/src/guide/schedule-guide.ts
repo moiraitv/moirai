@@ -9,6 +9,7 @@ import type { MaterializedSegmentRecord } from '../repository/contracts.js';
 import { generateTimeline } from '../scheduling/engine.js';
 import { timelineIssuesInRange } from '../scheduling/timeline-issues.js';
 import { schedulingRootProgramIds } from '../scheduling/catalog.js';
+import { resolveProgramSchedule } from '../scheduling/direct-program-templates.js';
 
 import { boundedProjectedWindow, GuideMaterializationLimitError } from './window.js';
 
@@ -151,11 +152,11 @@ export async function materializeScheduleGuide(
 		programs,
 		schedulingRootProgramIds(templates, schedules),
 	);
-	const templatesById = new Map(templates.map((template) => [template.id, template]));
 	let segmentCount = 0;
 	const channels: ScheduleGuide['channels'] = [];
 	for (const schedule of schedules) {
-		const template = templatesById.get(schedule.defaultTemplateId);
+		const resolved = resolveProgramSchedule(schedule.channelId, schedule, templates, programs);
+		const template = resolved.template;
 		if (!template) {
 			continue;
 		}
@@ -165,9 +166,9 @@ export async function materializeScheduleGuide(
 			timeZone,
 			startDate,
 			days,
-			schedule,
+			schedule: { ...schedule, ...resolved.schedule },
 			template,
-			templates,
+			templates: resolved.templates,
 			programs,
 			catalog,
 			state: statesByChannel.get(schedule.channelId) ?? [],
@@ -255,9 +256,12 @@ export async function readCommittedScheduleGuide(
 	// Resolve source labels and unnamed block titles in one lookup when needed.
 	const needsProgramNames = requestedRows.some(row => row.segment.role === 'primary' && row.segment.programId !== null) || templates.some((template) => template.slots.some((slot) =>
 		slot.programId && slot.guide?.mode === 'block' && !slot.guide.title.trim()));
-	const programNames = new Map(needsProgramNames
-		? (await repository.listPrograms()).map((program) => [program.id, program.name] as const)
-		: []);
+	const hasDirectAssignments = schedules.some((schedule) => schedule.defaultProgramId
+		|| schedule.layers?.some((layer) => layer.programId));
+	const hasGuideBlocks = templates.some((template) => template.slots.some((slot) => slot.guide?.mode === 'block'));
+	const programs = needsProgramNames || (hasDirectAssignments && hasGuideBlocks)
+		? await repository.listPrograms() : [];
+	const programNames = new Map(programs.map((program) => [program.id, program.name] as const));
 
 	const bounded = boundedGuideWindow(requestedStart, requestedEnd, timeZone, requestedRows);
 	const rangeEnd = bounded.endDate.toZonedDateTime(timeZone).toInstant().toString();
@@ -321,6 +325,9 @@ export async function readCommittedScheduleGuide(
 		template.slots.some((slot) => slot.guide?.mode === 'block'));
 	const channels: ScheduleGuide['channels'] = schedules.map((schedule) => {
 		const segments = byChannel.get(schedule.channelId) ?? [];
+		const resolved = projectBlocks && hasDirectAssignments
+			? resolveProgramSchedule(schedule.channelId, schedule, templates, programs)
+			: { schedule, templates };
 		const entries = projectBlocks
 			? projectGuideEntries(
 				schedule.channelId,
@@ -328,14 +335,14 @@ export async function readCommittedScheduleGuide(
 				materializationByChannel.get(schedule.channelId)?.guideOccurrences?.length
 					? materializationByChannel.get(schedule.channelId)!.guideOccurrences!
 					: materializationByChannel.get(schedule.channelId)?.pendingSince ? [] : recoverGuideOccurrences(
-						schedule,
-						templates,
+						{ ...schedule, ...resolved.schedule },
+						resolved.templates,
 						rows.filter((row) => row.segment.channelId === schedule.channelId),
 						startDate,
 						bounded.days,
 						timeZone,
 					),
-				templates,
+				resolved.templates,
 				rangeStart,
 				rangeEnd,
 				programNames,

@@ -4,6 +4,7 @@ import {
 	type SchedulePredicate,
 	type ScheduleSlot,
 	type ScheduleTemplate,
+	type SchedulingProgram,
 } from '@moirai/shared';
 import { countLabel } from './count-label';
 import { programColorStyle } from './program-colors';
@@ -27,14 +28,26 @@ const MONTH_NAMES = [
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 
 /** Return a template name while making stale references visible to the operator. */
-export function scheduleTemplateName(templates: ScheduleTemplate[], id: string): string {
+export function scheduleTemplateName(templates: ScheduleTemplate[], id: string | null): string {
 	return templates.find((template) => template.id === id)?.name ?? 'Missing template';
+}
+
+/** Name either an authored template or a directly assigned program. */
+export function scheduleAssignmentName(
+	templates: ScheduleTemplate[],
+	programs: SchedulingProgram[],
+	templateId: string | null,
+	programId: string | null | undefined,
+): string {
+	return programId
+		? programs.find((program) => program.id === programId)?.name ?? 'Missing program'
+		: scheduleTemplateName(templates, templateId);
 }
 
 /** Return the stable color of the first program used by a template. */
 export function templateRepresentativeStyle(
 	templates: ScheduleTemplate[],
-	id: string,
+	id: string | null,
 ): Record<string, string> {
 	const template = templates.find((candidate) => candidate.id === id);
 	const programId = template?.slots.find((slot) => slot.programId)?.programId ?? null;
@@ -229,16 +242,17 @@ function schedulePredicateClause(predicate: SchedulePredicate): string | null {
 	}
 }
 
-/** Summarize a channel's base and conditional templates without expanding a full predicate tree. */
+/** Summarize a channel's base and conditional assignments without expanding predicates. */
 export function channelScheduleSummary(
-	schedule: Pick<ChannelScheduleConfig, 'defaultTemplateId' | 'layers'> | null | undefined,
+	schedule: Pick<ChannelScheduleConfig, 'defaultTemplateId' | 'defaultProgramId' | 'layers'> | null | undefined,
 	templates: ScheduleTemplate[],
+	programs: SchedulingProgram[] = [],
 ): string {
 	if (!schedule) {
 		return 'No schedule configured';
 	}
 
-	const base = scheduleTemplateName(templates, schedule.defaultTemplateId);
+	const base = scheduleAssignmentName(templates, programs, schedule.defaultTemplateId, schedule.defaultProgramId);
 	if (schedule.layers.length === 0) {
 		return base;
 	}
@@ -246,14 +260,14 @@ export function channelScheduleSummary(
 	if (schedule.layers.length === 1) {
 		const layer = schedule.layers[0]!;
 		const clause = schedulePredicateClause(layer.predicate);
-		return `${base} with ${scheduleTemplateName(templates, layer.templateId)}${clause ? ` ${clause}` : ''}`;
+		return `${base} with ${scheduleAssignmentName(templates, programs, layer.templateId, layer.programId)}${clause ? ` ${clause}` : ''}`;
 	}
 
 	if (schedule.layers.length === 2) {
 		return `${base} with ${compactList(
-			schedule.layers.map((layer) => scheduleTemplateName(templates, layer.templateId)),
+			schedule.layers.map((layer) => scheduleAssignmentName(templates, programs, layer.templateId, layer.programId)),
 		)}`;
 	}
 
-	return `${base} with ${countLabel(schedule.layers.length, 'conditional template')}`;
+	return `${base} with ${countLabel(schedule.layers.length, 'conditional layer')}`;
 }

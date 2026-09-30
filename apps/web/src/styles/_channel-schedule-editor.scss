@@ -281,6 +281,14 @@
 	margin-top: 20px;
 }
 
+.schedule-layer-inspector > .template-panel-heading {
+	flex-wrap: wrap;
+}
+
+.schedule-layer-inspector > .template-panel-heading > .toolbar-button {
+	margin-left: auto;
+}
+
 .layer-template-picker {
 	min-width: min(330px, 100%);
 	display: grid;
@@ -291,10 +299,18 @@
 
 .layer-editor-title {
 	min-width: min(440px, 100%);
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: 8px;
+	align-items: end;
+}
+
+.layer-editor-title > .eyebrow {
+	grid-column: 1 / -1;
 }
 
 .layer-title-picker {
-	width: min(440px, 100%);
+	width: 100%;
 	margin-top: 7px;
 }
 
@@ -303,6 +319,18 @@
 	padding-left: 40px;
 	font-size: 1.08rem;
 	font-weight: 720;
+}
+
+.assignment-mode-toggle {
+	align-self: end;
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+}
+
+.assignment-mode-toggle:hover:not(:disabled) {
+	background: transparent;
 }
 
 .layer-template-select {
@@ -699,16 +727,17 @@
 	}
 
 	.schedule-channel-card {
-		padding: 18px;
+		padding: 14px;
 	}
 
 	.schedule-channel-card-main {
-		grid-template-columns: 68px minmax(0, 1fr);
+		grid-template-columns: 60px minmax(0, 1fr);
+		gap: 14px;
 	}
 
 	.schedule-channel-icon {
-		width: 68px;
-		height: 68px;
+		width: 60px;
+		height: 60px;
 	}
 
 	.schedule-channel-title {

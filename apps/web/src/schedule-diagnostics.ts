@@ -20,6 +20,8 @@ export interface DeadAirDiagnostic {
 	fillerOrigin: 'channel' | 'template' | 'slot' | null;
 	/** A programmed slot can opt out of every inherited filler source. */
 	slotFillerDisabled?: boolean;
+	/** Direct assignment owning this synthetic slot, when present. */
+	directProgramId?: string | null;
 }
 
 /** Summarize a duration without rounding a short gap down to zero. */
@@ -199,7 +201,12 @@ export function deadAirDiagnostics(
 
 	return preview.segments
 		.filter((segment) => segment.role === 'dead-air')
-		.map((segment) => deadAirDiagnostic(segment, preview.issues, templates, schedule));
+		.map((segment) => ({
+			...deadAirDiagnostic(segment, preview.issues, templates, schedule),
+			directProgramId: segment.scheduleLayerId
+				? schedule?.layers.find((layer) => layer.id === segment.scheduleLayerId)?.programId ?? null
+				: schedule?.defaultProgramId ?? null,
+		}));
 }
 
 /** Return total dead-air seconds across one preview. */

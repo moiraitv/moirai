@@ -267,6 +267,13 @@
       "when": 1789784000000,
       "tag": "0037_primary_genre",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1789784100000,
+      "tag": "0038_direct_schedule_programs",
+      "breakpoints": true
     }
   ]
 }

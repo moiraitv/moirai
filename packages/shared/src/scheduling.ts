@@ -885,7 +885,8 @@ export const boundedSchedulePredicateSchema = schedulePredicateSchema.superRefin
 /** Validate the channel schedule layer contract at runtime. */
 export const channelScheduleLayerSchema = z.object({
 	id: z.uuid(),
-	templateId: z.uuid(),
+	templateId: z.uuid().nullable().default(null),
+	programId: z.uuid().nullable().default(null),
 	predicate: boundedSchedulePredicateSchema,
 	entryBoundary: layerBoundarySchema.default({
 		policy: 'hard',
@@ -899,12 +900,15 @@ export const channelScheduleLayerSchema = z.object({
 		fallback: 'truncate-left',
 		earlyStartMaxDriftSeconds: 0,
 	}),
+}).refine((layer) => (layer.templateId === null) !== (layer.programId === null), {
+	message: 'Choose exactly one template or program for the layer',
 });
 /** Shared wire contract for channel schedule layer. */
 export interface ChannelScheduleLayer extends Omit<
 	z.infer<typeof channelScheduleLayerSchema>,
-	'entryBoundary' | 'exitBoundary'
+	'entryBoundary' | 'exitBoundary' | 'programId'
 > {
+	programId?: string | null;
 	entryBoundary: LayerBoundary;
 	exitBoundary: LayerBoundary;
 }
@@ -912,15 +916,19 @@ export interface ChannelScheduleLayer extends Omit<
 /** Validate the channel schedule config contract at runtime. */
 export const channelScheduleConfigSchema = z.object({
 	generationSeed: z.uuid().optional().describe('Server-managed randomness for unseeded programs; preserved on schedule saves.'),
-	defaultTemplateId: z.uuid(),
+	defaultTemplateId: z.uuid().nullable().default(null),
+	defaultProgramId: z.uuid().nullable().default(null),
 	layers: z.array(channelScheduleLayerSchema).max(MAX_CHANNEL_SCHEDULE_LAYERS).default([]),
 	defaultFiller: fillerConfigSchema.nullable().default(null),
+}).refine((schedule) => (schedule.defaultTemplateId === null) !== (schedule.defaultProgramId === null), {
+	message: 'Choose exactly one base template or program',
 });
 /** Shared wire contract for channel schedule config. */
 export interface ChannelScheduleConfig extends Omit<
 	z.infer<typeof channelScheduleConfigSchema>,
-	'layers'
+	'layers' | 'defaultProgramId'
 > {
+	defaultProgramId?: string | null;
 	layers: ChannelScheduleLayer[];
 }
 

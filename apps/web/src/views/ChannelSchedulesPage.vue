@@ -8,6 +8,7 @@ import { storeToRefs } from 'pinia';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import {
 	ArrowDown,
+	ArrowLeftRight,
 	ArrowUp,
 	CircleAlert,
 	CircleCheck,
@@ -31,7 +32,7 @@ import {
 	type TimelinePreview,
 } from '@moirai/shared';
 import { api } from '../api';
-import { suggestedChannelTemplateId } from '../channel-template-suggestion';
+import { suggestedChannelAssignment } from '../channel-template-suggestion';
 import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import { randomUuid } from '../random-uuid';
@@ -51,9 +52,9 @@ import TemplatesPage from './TemplatesPage.vue';
 import { schedulePreviewLegend, scheduleRulerMarks } from '../channel-schedule-preview';
 import {
 	schedulePredicateSummary,
-	scheduleTemplateName,
 	templateRepresentativeStyle as representativeStyle,
 	templateSlotStyle,
+	scheduleAssignmentName,
 } from '../channel-schedule-display';
 import { dateKey } from '../date-key';
 import { useUpcomingScheduleGuide } from '../upcoming-schedule-guide';
@@ -99,6 +100,7 @@ const applyingTimeline = ref(false);
 /** Editable layer plus UI-only expansion state for its predicate groups. */
 type BoundarySide = 'entryBoundary' | 'exitBoundary';
 const finiteBoundaryDrift = new Map<string, number>();
+const previousAssignments = new Map<string, { templateId: string | null; programId: string | null }>();
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewRevision = 0;
 let previewController: AbortController | undefined;
@@ -131,7 +133,13 @@ const scheduleNeedsSave = computed(() =>
 	Boolean(draft.value) && (!hasPersistedSchedule.value || isDirty.value));
 const scheduleFormValid = computed(() => channelScheduleConfigSchema.safeParse(draft.value).success);
 const previewLegend = computed(() =>
-	schedulePreviewLegend(preview.value, templates.value, draft.value?.defaultTemplateId ?? null));
+	schedulePreviewLegend(
+		preview.value,
+		templates.value,
+		draft.value?.defaultTemplateId ?? null,
+		programs.value,
+		draft.value,
+	));
 const previewDeadAir = computed(() => deadAirDiagnostics(preview.value, templates.value, draft.value));
 const previewDeadAirSeconds = computed(() => previewDeadAir.value.reduce(
 	(total, diagnostic) => total + diagnostic.durationSeconds,
@@ -141,14 +149,38 @@ const diagnosticBoundary = computed(() => typeof route.query.boundary === 'strin
 	? route.query.boundary
 	: null);
 
-/** Return the display name for template. */
-function templateName(id: string): string {
-	return scheduleTemplateName(templates.value, id);
+/** Name the selected template or program in a schedule layer. */
+function assignmentName(templateId: string | null, programId: string | null | undefined): string {
+	return scheduleAssignmentName(templates.value, programs.value, templateId, programId);
 }
 
-/** Return CSS presentation values for template representative. */
-function templateRepresentativeStyle(id: string): Record<string, string> {
-	return representativeStyle(templates.value, id);
+/** Give a direct program its own stable color. */
+function assignmentStyle(templateId: string | null, programId: string | null | undefined): Record<string, string> {
+	return programId ? programColorStyle(programId) : representativeStyle(templates.value, templateId);
+}
+
+/** Toggle a picker while retaining its prior selection for this unsaved draft. */
+function toggleAssignment(layer: ChannelScheduleLayer | null): void {
+	if (!draft.value) {
+		return;
+	}
+	const owner = layer?.id ?? 'base';
+	const current = layer
+		? { templateId: layer.templateId, programId: layer.programId ?? null }
+		: { templateId: draft.value.defaultTemplateId, programId: draft.value.defaultProgramId ?? null };
+	const old = previousAssignments.get(owner);
+	previousAssignments.set(owner, current);
+	const next = current.programId
+		? { templateId: old?.templateId ?? templates.value[0]?.id ?? null, programId: null }
+		: { templateId: null, programId: old?.programId ?? programs.value[0]?.id ?? null };
+	if (layer) {
+		layer.templateId = next.templateId;
+		layer.programId = next.programId;
+	}
+	else {
+		draft.value.defaultTemplateId = next.templateId;
+		draft.value.defaultProgramId = next.programId;
+	}
 }
 
 /** Restore the layered-scheduling explainer after dismissal. */
@@ -249,20 +281,23 @@ function predicateSummary(predicate: SchedulePredicate): string {
 	return schedulePredicateSummary(predicate);
 }
 
-/** Clone a saved schedule or suggest the closest template name for a new base-only draft. */
+/** Clone a saved schedule or suggest a matching template or program for a new base. */
 function loadDraft(): void {
 	finiteBoundaryDrift.clear();
+	previousAssignments.clear();
 	hasPersistedSchedule.value = false;
-	if (!editing.value || templates.value.length === 0) {
+	if (!editing.value || (templates.value.length === 0 && programs.value.length === 0)) {
 		draft.value = null;
 		return;
 	}
 
 	const existing = schedules.value.find((schedule) => schedule.channelId === channelId.value);
+	const suggestedBase = existing ? null : suggestedChannelAssignment(channel.value?.name ?? '', templates.value, programs.value);
 	hasPersistedSchedule.value = Boolean(existing);
 	draft.value = channelScheduleConfigSchema.parse(
 		existing ?? {
-			defaultTemplateId: suggestedChannelTemplateId(channel.value?.name ?? '', templates.value),
+			defaultTemplateId: suggestedBase?.templateId ?? null,
+			defaultProgramId: suggestedBase?.programId ?? null,
 			layers: [],
 			defaultFiller: null,
 		},
@@ -369,7 +404,7 @@ function toggleUnlimitedLayerDrift(side: BoundarySide, unlimited: boolean): void
 function addLayer(): void {
 	if (
 		!draft.value
-		|| templates.value.length === 0
+		|| (templates.value.length === 0 && programs.value.length === 0)
 		|| draft.value.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS
 	) {
 		return;
@@ -377,7 +412,8 @@ function addLayer(): void {
 
 	const layer: ChannelScheduleLayer = {
 		id: randomUuid(),
-		templateId: templates.value[0]!.id,
+		templateId: templates.value[0]?.id ?? null,
+		programId: templates.value.length ? null : programs.value[0]?.id ?? null,
 		predicate: {
 			type: 'all',
 			children: [{ type: 'weekdays', values: [1, 2, 3, 4, 5, 6, 7], negated: false }],
@@ -703,7 +739,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 		<PageHeader
 			eyebrow="Layered channel programming"
 			title="Channel Schedules"
-			description="Choose a channel to configure its base and conditional template stack."
+			description="Choose a channel to configure its base and conditional programming layers."
 		>
 		</PageHeader>
 		<LoadingState v-if="initialLoading" label="Loading channel schedules…" />
@@ -723,6 +759,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 					:channels="channels"
 					:schedules="schedules"
 					:templates="templates"
+					:programs="programs"
 					:guide="guide"
 					:summary-window="summaryWindow"
 					:summary-status="summaryStatus"
@@ -747,13 +784,13 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 					<ResourceEditorHeader close-label="Close channel schedule editor" :disabled="saving || deleting" @close="closeScheduleEditor">
 						<p class="eyebrow">Layered channel programming</p>
 						<div class="resource-editor-title-with-help"><h2>{{ channel?.name ?? 'Channel schedule' }}</h2><PageHelpButton label="Channel schedules" topic-id="scheduling.channel-schedules" /></div>
-						<p>Stack conditional templates above an always-available base template.</p>
+						<p>Stack conditional templates or programs above an always-available base.</p>
 					</ResourceEditorHeader>
 
-					<div v-if="templates.length === 0" class="empty-state scheduling-modal-empty">
-						<h3>Create a template first</h3>
-						<p>A channel schedule needs an always-available base template.</p>
-						<RouterLink class="button" to="/schedules/templates/new">New Template</RouterLink>
+					<div v-if="templates.length === 0 && programs.length === 0" class="empty-state scheduling-modal-empty">
+						<h3>Create a program or template first</h3>
+						<p>A channel schedule needs an always-available base template or program.</p>
+						<RouterLink class="button" to="/schedules/programs/new">New Program</RouterLink>
 					</div>
 
 					<template v-else-if="draft && channel">
@@ -799,9 +836,9 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 								<p v-if="error" class="notice error">{{ error }}</p>
 
 								<div class="schedule-editor-columns">
-									<section class="schedule-stack editor-surface" aria-label="Template priority stack">
+									<section class="schedule-stack editor-surface" aria-label="Schedule priority stack">
 										<div class="schedule-stack-heading">
-											<div><Layers3 :size="20" /><strong>Template stack</strong></div>
+											<div><Layers3 :size="20" /><strong>Schedule stack</strong></div>
 											<small>Highest priority</small>
 										</div>
 										<div class="schedule-layer-add-placeholder">
@@ -811,7 +848,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												:disabled="draft.layers.length >= MAX_CHANNEL_SCHEDULE_LAYERS"
 												@click="addLayer"
 											>
-												<Plus :size="17" />Add Conditional Template
+												<Plus :size="17" />Add Conditional {{ templates.length ? 'Template' : 'Program' }}
 											</button>
 										</div>
 										<article
@@ -840,10 +877,11 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												</button>
 											</div>
 											<div class="schedule-layer-copy">
-												<strong>{{ templateName(layer.templateId) }}</strong>
+												<strong>{{ assignmentName(layer.templateId, layer.programId) }}</strong>
 												<small>{{ predicateSummary(layer.predicate) }}</small>
 											</div>
 											<div class="schedule-layer-mini-track">
+												<span v-if="layer.programId" :data-program-id="layer.programId" :style="{ ...assignmentStyle(null, layer.programId), width: '100%' }"></span>
 												<span
 													v-for="slot in templates.find(
 														(template) => template.id === layer.templateId,
@@ -877,14 +915,15 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 											@click="selectedLayerId = null"
 										>
 											<div class="schedule-layer-copy">
-												<span class="eyebrow">Base template</span>
-												<strong>{{ templateName(draft.defaultTemplateId) }}</strong>
+												<span class="eyebrow">Base {{ draft.defaultProgramId ? 'program' : 'template' }}</span>
+												<strong>{{ assignmentName(draft.defaultTemplateId, draft.defaultProgramId) }}</strong>
 												<small>Fallback programming</small>
 											</div>
 											<div
 												class="schedule-layer-mini-track"
-												aria-label="Base template slot structure"
+												:aria-label="`Base ${draft.defaultProgramId ? 'program' : 'template'} slot structure`"
 											>
+												<span v-if="draft.defaultProgramId" :data-program-id="draft.defaultProgramId" :style="{ ...assignmentStyle(null, draft.defaultProgramId), width: '100%' }"></span>
 												<span
 													v-for="slot in templates.find(
 														(template) => template.id === draft?.defaultTemplateId,
@@ -907,12 +946,13 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 									<section v-if="selectedLayer" class="schedule-layer-inspector editor-surface">
 										<div class="template-panel-heading">
 											<div class="layer-editor-title">
-												<p class="eyebrow">Conditional layer</p>
+												<p class="eyebrow">Conditional {{ selectedLayer.programId ? 'program' : 'template' }}</p>
 												<label class="layer-template-picker layer-title-picker">
-													<span class="sr-only">Conditional layer template</span>
+													<span class="sr-only">Conditional layer {{ selectedLayer.programId ? 'program' : 'template' }}</span>
 													<span class="layer-template-select">
-														<i :data-program-id="templates.find((template) => template.id === selectedLayer?.templateId)?.slots.find((slot) => slot.programId)?.programId" :style="templateRepresentativeStyle(selectedLayer.templateId)"></i>
+														<i :data-program-id="selectedLayer.programId ?? templates.find((template) => template.id === selectedLayer?.templateId)?.slots.find((slot) => slot.programId)?.programId" :style="assignmentStyle(selectedLayer.templateId, selectedLayer.programId)"></i>
 														<select
+															v-if="!selectedLayer.programId"
 															v-model="selectedLayer.templateId"
 															aria-label="Conditional layer template"
 														>
@@ -924,16 +964,27 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 																{{ template.name }}
 															</option>
 														</select>
+														<select v-else v-model="selectedLayer.programId" aria-label="Conditional layer program">
+															<option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option>
+														</select>
 													</span>
 												</label>
+												<button
+													type="button" class="icon-button assignment-mode-toggle"
+													:disabled="selectedLayer.programId ? templates.length === 0 : programs.length === 0"
+													:aria-label="`Switch conditional layer to ${selectedLayer.programId ? 'template' : 'program'}`"
+													:title="`Switch conditional layer to ${selectedLayer.programId ? 'template' : 'program'}`"
+													@click="toggleAssignment(selectedLayer)">
+													<ArrowLeftRight :size="20" aria-hidden="true" />
+												</button>
 											</div>
 											<button
 												type="button"
 												class="toolbar-button"
-												:aria-label="`Edit ${templateName(selectedLayer.templateId)}`"
-												@click="editTemplate(selectedLayer.templateId)"
+												:aria-label="`Edit ${assignmentName(selectedLayer.templateId, selectedLayer.programId)}`"
+												@click="selectedLayer.programId ? quickEditingProgramId = selectedLayer.programId : editTemplate(selectedLayer.templateId!)"
 											>
-												<Pencil :size="16" />Edit Template
+												<Pencil :size="16" />Edit {{ selectedLayer.programId ? 'Program' : 'Template' }}
 											</button>
 										</div>
 										<h3>Show this layer when</h3>
@@ -1055,12 +1106,12 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 									<section v-else class="schedule-layer-inspector base-inspector editor-surface">
 										<div class="template-panel-heading">
 											<div class="layer-editor-title">
-												<p class="eyebrow">Base template</p>
+												<p class="eyebrow">Base {{ draft.defaultProgramId ? 'program' : 'template' }}</p>
 												<label class="layer-template-picker layer-title-picker">
-													<span class="sr-only">Base template</span>
+													<span class="sr-only">Base {{ draft.defaultProgramId ? 'program' : 'template' }}</span>
 													<span class="layer-template-select">
-														<i :data-program-id="templates.find((template) => template.id === draft?.defaultTemplateId)?.slots.find((slot) => slot.programId)?.programId" :style="templateRepresentativeStyle(draft.defaultTemplateId)"></i>
-														<select v-model="draft.defaultTemplateId" aria-label="Base template">
+														<i :data-program-id="draft.defaultProgramId ?? templates.find((template) => template.id === draft?.defaultTemplateId)?.slots.find((slot) => slot.programId)?.programId" :style="assignmentStyle(draft.defaultTemplateId, draft.defaultProgramId)"></i>
+														<select v-if="!draft.defaultProgramId" v-model="draft.defaultTemplateId" aria-label="Base template">
 															<option
 																v-for="template in templates"
 																:key="template.id"
@@ -1069,16 +1120,27 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 																{{ template.name }}
 															</option>
 														</select>
+														<select v-else v-model="draft.defaultProgramId" aria-label="Base program">
+															<option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option>
+														</select>
 													</span>
 												</label>
+												<button
+													type="button" class="icon-button assignment-mode-toggle"
+													:disabled="draft.defaultProgramId ? templates.length === 0 : programs.length === 0"
+													:aria-label="`Switch base to ${draft.defaultProgramId ? 'template' : 'program'}`"
+													:title="`Switch base to ${draft.defaultProgramId ? 'template' : 'program'}`"
+													@click="toggleAssignment(null)">
+													<ArrowLeftRight :size="20" aria-hidden="true" />
+												</button>
 											</div>
 											<button
 												type="button"
 												class="toolbar-button"
-												:aria-label="`Edit ${templateName(draft.defaultTemplateId)}`"
-												@click="editTemplate(draft.defaultTemplateId)"
+												:aria-label="`Edit ${assignmentName(draft.defaultTemplateId, draft.defaultProgramId)}`"
+												@click="draft.defaultProgramId ? quickEditingProgramId = draft.defaultProgramId : editTemplate(draft.defaultTemplateId!)"
 											>
-												<Pencil :size="16" />Edit Template
+												<Pencil :size="16" />Edit {{ draft.defaultProgramId ? 'Program' : 'Template' }}
 											</button>
 										</div>
 										<p class="base-inspector-description">
@@ -1087,8 +1149,9 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 										</p>
 										<div
 											class="base-inspector-track"
-											aria-label="Selected base template slot structure"
+											:aria-label="`Selected base ${draft.defaultProgramId ? 'program' : 'template'} slot structure`"
 										>
+											<span v-if="draft.defaultProgramId" :data-program-id="draft.defaultProgramId" :style="{ ...assignmentStyle(null, draft.defaultProgramId), width: '100%' }"></span>
 											<span
 												v-for="slot in templates.find(
 													(template) => template.id === draft?.defaultTemplateId,
@@ -1194,7 +1257,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												:data-program-id="programId"
 											></i>
 										</span>
-										<span> {{ entry.name }}<small v-if="entry.isBase"> (Base template)</small> </span>
+										<span> {{ entry.name }}<small v-if="entry.isBase"> (Base {{ draft.defaultProgramId ? 'program' : 'template' }})</small> </span>
 									</div>
 								</div>
 								<AnimatedDisclosure

@@ -1,4 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { channelCreateSchema } from '@moirai/shared';
@@ -148,6 +149,13 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 	await page.locator('#quick-setup-actions').getByRole('button', { name: 'Continue', exact: true }).click();
 	await page.getByRole('combobox', { name: /^Media choice/ }).selectOption('library-query');
 	await page.getByLabel('Program name').fill(`Quick Program ${runId}`);
+	const existingProgram = await page.request.post('/api/v1/programs', {
+		headers: { 'X-Moirai-CSRF': csrfToken },
+		data: { name: `Quick Program ${runId}`, config: {
+			type: 'content', source: { type: 'item', itemId: randomUUID() }, strategy: { type: 'sequential' },
+		} },
+	});
+	expect(existingProgram.ok()).toBe(true);
 	await page.locator('.quick-step-actions').getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByRole('heading', { name: 'Name and brand the channel' })).toBeVisible();
 	await page.getByLabel('Channel number').fill(`quick-${runId}`);
@@ -190,6 +198,12 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 	await expect(page.getByLabel('Library sample', { exact: true })).toContainText('26 indexed');
 	await expect(page.getByLabel('Programming sample', { exact: true })).toContainText('Quick Movie');
 	await expect(page.getByLabel('Sample resolved schedule', { exact: true })).toBeVisible();
+	const resolvedProgramName = `Quick Program ${runId} (2)`;
+	for (const heading of ['Programming', 'Daily schedule']) {
+		await expect(setupDialog.locator('.quick-review-row').filter({
+			has: page.getByRole('heading', { name: heading, exact: true }),
+		}).locator('.quick-review-content > strong')).toHaveText(resolvedProgramName);
+	}
 	const loadedHeights = await page.locator('.quick-review-row').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
 	expect(loadedHeights).toHaveLength(loadingHeights.length);
 	for (const [index, height] of loadedHeights.entries()) {
@@ -241,6 +255,7 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 		&& response.request().method() === 'POST');
 	await page.getByRole('button', { name: 'Create Channel' }).click();
 	const setup = await (await setupResponse).json();
+	expect(setup.program.name).toBe(resolvedProgramName);
 	expect((await logoUpload).status()).toBe(500);
 	await expect(page.getByRole('heading', { name: `quick-${runId} · Quick Channel ${runId}` }))
 		.toBeVisible({ timeout: 30_000 });

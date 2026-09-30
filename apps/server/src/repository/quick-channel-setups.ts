@@ -15,9 +15,6 @@ import {
 	libraries,
 	mediaGroups,
 	mediaItems,
-	scheduleBoundaries,
-	scheduleSlots,
-	scheduleTemplates,
 	schedulingPrograms,
 } from '../db/schema.js';
 import { SchedulingValidationError } from '../scheduling/validation.js';
@@ -57,23 +54,6 @@ function availableProgramName(
 	);
 }
 
-/** Find a readable unused template name while preserving the requested base when possible. */
-function availableTemplateName(
-	transaction: Pick<MoiraiDatabase, 'select'>,
-	channelName: string,
-): string {
-	return availableIdentityName(
-		(nameKey) => transaction.select({ id: scheduleTemplates.id })
-			.from(scheduleTemplates)
-			.where(eq(scheduleTemplates.nameKey, nameKey))
-			.get(),
-		(suffix) => {
-			const ending = suffix === 1 ? ' Daily' : ` Daily (${suffix})`;
-			return `${channelName.slice(0, 120 - ending.length).trimEnd()}${ending}`;
-		},
-	);
-}
-
 /** Own the atomic cross-domain persistence required by the Quick Setup workflow. */
 export class QuickChannelSetupRepository {
 	constructor(private readonly db: MoiraiDatabase) {}
@@ -84,7 +64,6 @@ export class QuickChannelSetupRepository {
 		let identity = 0;
 		const result = quickSetupResources(
 			{ ...input, programName: availableProgramName(this.db, input.programName) },
-			availableTemplateName(this.db, input.channel.name),
 			() => `00000000-0000-4000-8000-${String(++identity).padStart(12, '0')}`,
 		);
 		Object.assign(result.channel, applyDefaultEncodingProfile(this.db, channelCreateSchema.strip().parse(result.channel)));
@@ -149,7 +128,7 @@ export class QuickChannelSetupRepository {
 
 	}
 
-	/** Create a program, continuous daily template, channel, and base assignment together. */
+	/** Create a program, channel, and direct base assignment together. */
 	create(input: QuickChannelSetupCreate, maxExplicitMediaItems: number): QuickChannelSetupResult {
 		return this.db.transaction((transaction) => {
 			this.validateSource(input, maxExplicitMediaItems, transaction);
@@ -163,12 +142,9 @@ export class QuickChannelSetupRepository {
 			}
 
 			const programName = availableProgramName(transaction, input.programName);
-			const templateName = availableTemplateName(transaction, input.channel.name);
 			const { program, template, channel, schedule } = quickSetupResources(
 				{ ...input, programName },
-				templateName,
 			);
-			const templateId = template.id;
 			const channelId = channel.id;
 			const timestamp = program.createdAt;
 			const channelConfig = applyDefaultEncodingProfile(transaction, channelCreateSchema.strip().parse(channel));
@@ -177,25 +153,6 @@ export class QuickChannelSetupRepository {
 			transaction.insert(schedulingPrograms).values({
 				...program,
 				nameKey: canonicalIdentityKey(program.name),
-			}).run();
-			transaction.insert(scheduleTemplates).values({
-				id: template.id,
-				name: template.name,
-				nameKey: canonicalIdentityKey(template.name),
-				period: template.period,
-				defaultFiller: template.defaultFiller,
-				createdAt: timestamp,
-				updatedAt: timestamp,
-			}).run();
-			transaction.insert(scheduleSlots).values({
-				...template.slots[0]!,
-				templateId,
-				position: 0,
-			}).run();
-			transaction.insert(scheduleBoundaries).values({
-				...template.boundaries[0]!,
-				templateId,
-				position: 0,
 			}).run();
 			transaction.insert(channels).values({
 				id: channelId,
@@ -209,9 +166,11 @@ export class QuickChannelSetupRepository {
 			}).run();
 			transaction.insert(channelSchedules).values({
 				channelId,
-				defaultTemplateId: templateId,
+				defaultTemplateId: null,
+				defaultProgramId: program.id,
 				config: {
-					defaultTemplateId: templateId,
+					defaultTemplateId: null,
+					defaultProgramId: program.id,
 					layers: [],
 					defaultFiller: null,
 				},
@@ -219,7 +178,7 @@ export class QuickChannelSetupRepository {
 				updatedAt: timestamp,
 			}).run();
 
-			return { program, template, channel, schedule } as QuickChannelSetupResult;
+			return { program, template, channel, schedule };
 		});
 	}
 }

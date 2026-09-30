@@ -45,7 +45,8 @@ describe('quick channel setup repository', () => {
 		const subject = repository();
 		const request = await fixture(subject);
 		const preview = subject.previewQuickChannelSetup(request, 5_000);
-		expect(preview.template.slots[0]?.programId).toBe(preview.program.id);
+		expect(preview.template).toBeNull();
+		expect(preview.schedule.defaultProgramId).toBe(preview.program.id);
 		expect(await subject.listPrograms()).toEqual([]);
 		expect(await subject.listScheduleTemplates()).toEqual([]);
 		expect(await subject.listChannels()).toEqual([]);
@@ -53,13 +54,13 @@ describe('quick channel setup repository', () => {
 		expect(await subject.getSelectionState(preview.channel.id)).toEqual([]);
 		const created = subject.createQuickChannelSetup(request, 5_000);
 		expect(created.program.config).toEqual(preview.program.config);
-		expect(created.template.boundaries[0]).toMatchObject({ policy: 'finish-left', maxDriftSeconds: null });
+		expect(created.template).toBeNull();
 		expect(() => subject.previewQuickChannelSetup(request, 5_000)).not.toThrow();
 		expect(subject.previewQuickChannelSetup(request, 5_000).program.name).toBe(`${request.programName} (2)`);
 		expect(await subject.listPrograms()).toHaveLength(1);
 	});
 
-	it('creates a linked continuous program, template, channel, and schedule', async () => {
+	it('creates a linked program, channel, and direct schedule without a template', async () => {
 		const subject = repository();
 		const result = subject.createQuickChannelSetup(await fixture(subject), 5_000);
 
@@ -67,34 +68,24 @@ describe('quick channel setup repository', () => {
 			type: 'content',
 			strategy: { type: 'shuffle' },
 		});
-		expect(result.template.slots).toEqual([expect.objectContaining({
-			programId: result.program.id,
-			startSeconds: 0,
-			stateScope: 'persistent',
-			startEligibility: { type: 'allow-overrun' },
-		})]);
-		expect(result.template.boundaries).toEqual([expect.objectContaining({
-			leftSlotId: result.template.slots[0]!.id,
-			rightSlotId: result.template.slots[0]!.id,
-			policy: 'finish-left',
-			maxDriftSeconds: null,
-		})]);
+		expect(result.template).toBeNull();
 		expect(result.schedule).toMatchObject({
 			channelId: result.channel.id,
-			defaultTemplateId: result.template.id,
+			defaultTemplateId: null,
+			defaultProgramId: result.program.id,
 			layers: [],
 		});
 		expect(await subject.listPrograms()).toHaveLength(1);
-		expect(await subject.listScheduleTemplates()).toHaveLength(1);
+		expect(await subject.listScheduleTemplates()).toHaveLength(0);
 		expect(await subject.listChannels()).toHaveLength(1);
 		expect(await subject.listChannelSchedules()).toHaveLength(1);
 	});
 
-	it('suffixes generated program and template names and leaves no partial bundle on conflict', async () => {
+	it('suffixes generated program names and leaves no partial bundle on conflict', async () => {
 		const subject = repository();
 		subject.createQuickChannelSetup(await fixture(subject, '1'), 5_000);
 		const second = subject.createQuickChannelSetup(await fixture(subject, '2'), 5_000);
-		expect(second.template.name).toBe('Movie Channel Daily (2)');
+		expect(second.template).toBeNull();
 
 		const renamed = await fixture(subject, '3');
 		renamed.programName = second.program.name;
@@ -108,7 +99,7 @@ describe('quick channel setup repository', () => {
 			'That channel number is already in use',
 		);
 		expect(await subject.listPrograms()).toHaveLength(3);
-		expect(await subject.listScheduleTemplates()).toHaveLength(3);
+		expect(await subject.listScheduleTemplates()).toHaveLength(0);
 		expect(await subject.listChannels()).toHaveLength(3);
 		expect(await subject.listChannelSchedules()).toHaveLength(3);
 	});

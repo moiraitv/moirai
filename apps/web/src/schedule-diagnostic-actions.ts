@@ -29,6 +29,9 @@ export function deadAirAction(diagnostic: DeadAirDiagnostic): DeadAirAction {
 	if (diagnostic.fillerOrigin === 'channel' || (category === 'unfilled' && !diagnostic.slotFillerDisabled)) {
 		return { type: 'channel-filler', label: 'Review channel filler' };
 	}
+	if (diagnostic.directProgramId) {
+		return { type: 'program', programId: diagnostic.directProgramId, label: 'Edit program' };
+	}
 	return {
 		type: 'template',
 		templateId: segment.templateId,

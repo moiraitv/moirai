@@ -86,7 +86,7 @@ export function resolveScheduleDay(
 	> => {
 		const instant = instantFor(selectionDate, startSeconds, input.timeZone);
 		for (const [layerIndex, layer] of input.schedule.layers.entries()) {
-			const template = templateMap.get(layer.templateId);
+			const template = layer.templateId ? templateMap.get(layer.templateId) : undefined;
 			if (!template || !schedulePredicateMatches(layer.predicate, instant, input.timeZone)) {
 				continue;
 			}
@@ -176,4 +176,3 @@ function boundaryFor(template: ScheduleTemplate, slot: ScheduleSlot): ScheduleBo
 
 	return boundary;
 }
-

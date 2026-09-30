@@ -1,7 +1,7 @@
 ---
 id: scheduling.channel-schedules
 title: Channel schedules
-description: Assign a base template and conditional layers to a channel.
+description: Assign templates or programs as a channel's base and conditional layers.
 contextual: true
 ---
 
@@ -11,7 +11,7 @@ contextual: true
 >
 > ## ![](/icons/introduction-layers.svg) What is a channel schedule?
 >
-> A channel schedule layers reusable templates into one resolved lineup. Start with an always-available base, then add conditional programming for specific days, dates, seasons, or hours.
+> A channel schedule layers templates or programs into one resolved lineup. Start with an always-available base, then add conditional programming for specific days, dates, seasons, or hours.
 >
 > ### Channel schedules help you
 >
@@ -36,13 +36,15 @@ contextual: true
 
 
 
-A ![](/icons/tv-minimal-play.svg) Channel Schedule chooses which ![](/icons/calendar-range.svg) Templates apply to one ![](/icons/tv-minimal.svg) Channel. Start with a base ![](/icons/calendar-range.svg) Template, then add conditional layers when particular dates or times need different programming.
+A ![](/icons/tv-minimal-play.svg) Channel Schedule chooses which ![](/icons/calendar-range.svg) Templates or ![](/icons/list-video.svg) Programs apply to one ![](/icons/tv-minimal.svg) Channel. Start with a base, then add conditional layers when particular dates or times need different programming. Choose a Program directly when one Program should run continuously, without maintaining a separate Template.
 
-## Choose the base Template
+## Choose the base Template or Program
 
-Open the ![](/icons/tv-minimal.svg) Channel's schedule editor, select the base at the bottom of the **Template stack**, and choose its **Base template**. This supplies normal programming wherever no higher-priority layer provides content.
+Open the ![](/icons/tv-minimal.svg) Channel's schedule editor, select the base at the bottom of the **Schedule stack**, and choose its **Base template** or **Base program**. This supplies normal programming wherever no higher-priority layer provides content.
 
-When you add the first template, Moirai preselects the closest template name to the channel name. It prefers an exact name, then a template containing the full channel name, then the closest spelling. You can choose another template before saving. Existing schedules keep their saved base template.
+For a new schedule, Moirai first looks for a Template whose name matches the Channel exactly, contains its full name, or has close spelling. If none fits, it looks for a Program in the same order and assigns that Program directly. If neither has a close match, it preselects a Template, or a Program when no Templates exist. You can change the selection before saving. Existing schedules keep their saved base assignment.
+
+To choose a Program manually, select the base and use the switch icon beside the picker. Select **Base program**. Moirai schedules it as a single full-day slot using the usual new-template start and boundary behavior. No Template is saved. Use the same icon to return to Template selection.
 
 ![Channel Schedule editor with a base Template and a resolved preview](/screenshots/channel-schedules.png)
 
@@ -55,6 +57,8 @@ A conditional ![](/icons/calendar-range.svg) Template is a reusable day structur
 3. Select the **Conditional layer template** in the right-hand panel.
 4. Set **Show this layer when** to the dates and times that should activate it. A newly added layer initially matches every weekday, so narrow this rule before saving if it is meant to be an exception.
 5. Configure the layer's entry and exit boundaries, then preview matching and nonmatching dates.
+
+For a conditional layer that needs just one Program, use the switch icon beside the layer picker and select **Conditional layer program**. Its condition and entry and exit boundaries work the same way as for a Template. **Edit Program** changes the reusable Program wherever it is used. Removing the layer removes only this assignment.
 
 ![Conditional Template selected above the base with weekend and evening conditions](/screenshots/channel-schedule-conditional.png)
 

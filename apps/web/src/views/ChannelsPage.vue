@@ -208,6 +208,7 @@ function scheduleSummary(channelId: string): string {
 	return channelScheduleSummary(
 		scheduleByChannel.value.get(channelId),
 		scheduling.overview?.templates ?? [],
+		scheduling.overview?.programs ?? [],
 	);
 }
 

@@ -10,23 +10,26 @@ import {
 	Search,
 	TvMinimal,
 } from '@lucide/vue';
-import type { Channel, ChannelSchedule, ScheduleGuide, ScheduleTemplate } from '@moirai/shared';
+import type { Channel, ChannelSchedule, ScheduleGuide, ScheduleTemplate, SchedulingProgram } from '@moirai/shared';
 import { channelLogoUrl } from '../../channel-logo';
+import { channelGuideRows } from '../../channel-groups';
 import { countLabel } from '../../count-label';
 import ResourceEmptyState from '../ResourceEmptyState.vue';
 import {
 	schedulePredicateSummary,
-	scheduleTemplateName,
+	scheduleAssignmentName,
 	templateRepresentativeStyle,
 } from '../../channel-schedule-display';
 import { upcomingScheduleSummary, type ScheduleSummaryWindow } from '../../channel-schedule-preview';
 import type { UpcomingGuideStatus } from '../../upcoming-schedule-guide';
 import { schedulingDurationLabel } from '../../schedule-diagnostics';
+import { programColorStyle } from '../../program-colors';
 
 const props = defineProps<{
 	channels: Channel[];
 	schedules: ChannelSchedule[];
 	templates: ScheduleTemplate[];
+	programs: SchedulingProgram[];
 	guide: ScheduleGuide | null;
 	summaryWindow: ScheduleSummaryWindow;
 	summaryStatus: UpcomingGuideStatus;
@@ -53,6 +56,7 @@ const filteredChannels = computed(() => {
 		[entry.number, entry.name, entry.group ?? ''].some((value) =>
 			value.toLocaleLowerCase().includes(search)));
 });
+const channelRows = computed(() => channelGuideRows(filteredChannels.value));
 
 /** Return the saved schedule associated with a channel. */
 function channelSchedule(id: string): ChannelSchedule | undefined {
@@ -107,7 +111,7 @@ function channelHasDeadAir(id: string): boolean {
 	return (upcomingSummaries.value.get(id)?.gapCount ?? 0) > 0;
 }
 
-/** Summarize a channel's base and conditional template configuration. */
+/** Summarize a channel's base and conditional schedule assignments. */
 function scheduleStatus(id: string): string {
 	const schedule = channelSchedule(id);
 	if (!schedule) {
@@ -115,12 +119,27 @@ function scheduleStatus(id: string): string {
 	}
 
 	const layerCount = schedule.layers.length;
-	return `${scheduleTemplateName(props.templates, schedule.defaultTemplateId)} base${
-		layerCount ? ` · ${countLabel(layerCount, 'conditional template')}` : ''
+	return `${scheduleAssignmentName(
+		props.templates,
+		props.programs,
+		schedule.defaultTemplateId,
+		schedule.defaultProgramId,
+	)} base${
+		layerCount ? ` · ${countLabel(layerCount, 'conditional layer')}` : ''
 	}`;
 }
 
-/** Report the total number of configured template layers. */
+/** Color a saved template or direct program assignment. */
+function assignmentStyle(templateId: string | null, programId: string | null | undefined): Record<string, string> {
+	return programId ? programColorStyle(programId) : templateRepresentativeStyle(props.templates, templateId);
+}
+
+/** Label a saved template or direct program assignment. */
+function assignmentName(templateId: string | null, programId: string | null | undefined): string {
+	return scheduleAssignmentName(props.templates, props.programs, templateId, programId);
+}
+
+/** Report the total number of configured schedule layers. */
 function stackSummary(id: string): string {
 	const schedule = channelSchedule(id);
 	if (!schedule) {
@@ -128,7 +147,7 @@ function stackSummary(id: string): string {
 	}
 
 	const count = schedule.layers.length + 1;
-	return `${count} template${count === 1 ? '' : 's'}`;
+	return `${count} layer${count === 1 ? '' : 's'}`;
 }
 
 /** Merge channel-list controls into route state so browser navigation restores them. */
@@ -169,93 +188,98 @@ onMounted(() => {
 		</div>
 
 		<div class="schedule-channel-list">
-			<article
-				v-for="entry in filteredChannels"
-				:key="entry.id"
-				class="schedule-channel-card"
-				:class="{ 'has-dead-air': channelHasDeadAir(entry.id) }"
-			>
-				<div class="schedule-channel-card-main">
-					<span class="schedule-channel-icon">
-						<img
-							v-if="displayedChannelLogo(entry)"
-							:src="displayedChannelLogo(entry) ?? undefined"
-							alt=""
-							loading="lazy"
-							decoding="async"
-							@error="markChannelLogoFailed(entry.id)"
-						/>
-						<TvMinimal v-else :size="32" />
-					</span>
-					<div class="schedule-channel-identity">
-						<div class="schedule-channel-title">
-							<span>{{ entry.number }}</span><span aria-hidden="true">·</span
-							><strong>{{ entry.name }}</strong>
+			<template v-for="row in channelRows" :key="row.key">
+				<h3 v-if="row.type === 'family'" class="schedule-channel-family">{{ row.label }}</h3>
+				<article
+					v-else
+					class="schedule-channel-card"
+					:class="{ 'has-dead-air': channelHasDeadAir(row.channel.id) }"
+				>
+					<div class="schedule-channel-card-main">
+						<span class="schedule-channel-icon">
+							<img
+								v-if="displayedChannelLogo(row.channel)"
+								:src="displayedChannelLogo(row.channel) ?? undefined"
+								alt=""
+								loading="lazy"
+								decoding="async"
+								@error="markChannelLogoFailed(row.channel.id)"
+							/>
+							<TvMinimal v-else :size="32" />
+						</span>
+						<div class="schedule-channel-identity">
+							<div class="schedule-channel-title">
+								<span>{{ row.channel.number }}</span><span aria-hidden="true">·</span
+								><strong>{{ row.channel.name }}</strong>
+							</div>
+							<p>
+								<span class="channel-ready-pill">Ready</span>
+								<span aria-hidden="true">·</span>
+								{{ scheduleStatus(row.channel.id) }}
+							</p>
 						</div>
-						<p>
-							<span class="channel-ready-pill">Ready</span>
-							<span aria-hidden="true">·</span>
-							{{ scheduleStatus(entry.id) }}
-						</p>
+						<div class="schedule-channel-metric">
+							<Layers3 :size="23" />
+							<span><strong>Schedule stack</strong><small>{{ stackSummary(row.channel.id) }}</small></span>
+						</div>
+						<div class="schedule-channel-metric next-day" :class="{ warning: channelHasDeadAir(row.channel.id) }">
+							<CircleAlert v-if="channelHasDeadAir(row.channel.id)" :size="23" />
+							<CalendarClock v-else :size="23" />
+							<span><strong>Next 24h</strong><small>{{ nextDaySummary(row.channel.id) }}</small></span>
+						</div>
 					</div>
-					<div class="schedule-channel-metric">
-						<Layers3 :size="23" />
-						<span><strong>Template stack</strong><small>{{ stackSummary(entry.id) }}</small></span>
-					</div>
-					<div class="schedule-channel-metric next-day" :class="{ warning: channelHasDeadAir(entry.id) }">
-						<CircleAlert v-if="channelHasDeadAir(entry.id)" :size="23" />
-						<CalendarClock v-else :size="23" />
-						<span><strong>Next 24h</strong><small>{{ nextDaySummary(entry.id) }}</small></span>
-					</div>
-				</div>
 
-				<div v-if="!channelSchedule(entry.id)" class="schedule-channel-empty-stack">
-					<CirclePlus :size="31" />
-					<div>
-						<strong>Add the first template</strong>
-						<small>Start by adding a base template for this channel.</small>
-					</div>
-					<RouterLink
-						class="button"
-						:to="templates.length ? `/schedules/channels/${entry.id}` : '/schedules/templates/new'"
-					>
-						{{ templates.length ? 'Add Template' : 'Create Template' }}
-					</RouterLink>
-				</div>
-				<div v-else class="schedule-channel-configured-stack">
-					<div class="schedule-channel-stack-summary">
-						<div
-							v-for="layer in channelSchedule(entry.id)!.layers.slice(0, 3)"
-							:key="layer.id"
-							class="schedule-channel-stack-row"
+					<div v-if="!channelSchedule(row.channel.id)" class="schedule-channel-empty-stack">
+						<CirclePlus :size="31" />
+						<div>
+							<strong>Add the first program or template</strong>
+							<small>Start by adding a base program or template for this channel.</small>
+						</div>
+						<RouterLink
+							class="button"
+							:to="templates.length || programs.length ? `/schedules/channels/${row.channel.id}` : '/schedules/programs/new'"
 						>
-							<i :style="templateRepresentativeStyle(templates, layer.templateId)"></i>
-							<span>
-								<small>Conditional</small>
-								<strong>{{ scheduleTemplateName(templates, layer.templateId) }}</strong>
-								<em>{{ schedulePredicateSummary(layer.predicate) }}</em>
-							</span>
-						</div>
-						<div v-if="channelSchedule(entry.id)!.layers.length > 3" class="schedule-channel-stack-more">
-							+{{ channelSchedule(entry.id)!.layers.length - 3 }} more conditional
-							{{ channelSchedule(entry.id)!.layers.length - 3 === 1 ? 'template' : 'templates' }}
-						</div>
-						<div class="schedule-channel-stack-row base">
-							<i
-								:style="templateRepresentativeStyle(templates, channelSchedule(entry.id)!.defaultTemplateId)"
-							></i>
-							<span>
-								<small>Base</small>
-								<strong>{{ scheduleTemplateName(templates, channelSchedule(entry.id)!.defaultTemplateId) }}</strong>
-								<em>Used when no conditional layer supplies programming</em>
-							</span>
-						</div>
+							{{ templates.length ? 'Add Template' : programs.length ? 'Add Program' : 'Create Program' }}
+						</RouterLink>
 					</div>
-					<RouterLink class="button secondary" :to="`/schedules/channels/${entry.id}`">
-						<Pencil :size="16" />Edit Schedule
-					</RouterLink>
-				</div>
-			</article>
+					<div v-else class="schedule-channel-configured-stack">
+						<div class="schedule-channel-stack-summary">
+							<div
+								v-for="layer in channelSchedule(row.channel.id)!.layers.slice(0, 3)"
+								:key="layer.id"
+								class="schedule-channel-stack-row"
+							>
+								<i :style="assignmentStyle(layer.templateId, layer.programId)"></i>
+								<span>
+									<small>Conditional</small>
+									<strong>{{ assignmentName(layer.templateId, layer.programId) }}</strong>
+									<em>{{ schedulePredicateSummary(layer.predicate) }}</em>
+								</span>
+							</div>
+							<div v-if="channelSchedule(row.channel.id)!.layers.length > 3" class="schedule-channel-stack-more">
+								+{{ channelSchedule(row.channel.id)!.layers.length - 3 }} more conditional
+								{{ channelSchedule(row.channel.id)!.layers.length - 3 === 1 ? 'template' : 'templates' }}
+							</div>
+							<div
+								class="schedule-channel-stack-row base"
+								:class="{ 'base-only': channelSchedule(row.channel.id)!.layers.length === 0 }"
+							>
+								<i
+									:style="assignmentStyle(channelSchedule(row.channel.id)!.defaultTemplateId, channelSchedule(row.channel.id)!.defaultProgramId)"
+								></i>
+								<span>
+									<small>Base</small>
+									<strong>{{ assignmentName(channelSchedule(row.channel.id)!.defaultTemplateId, channelSchedule(row.channel.id)!.defaultProgramId) }}</strong>
+									<em v-if="channelSchedule(row.channel.id)!.layers.length > 0">Used when no conditional layer supplies programming</em>
+								</span>
+							</div>
+						</div>
+						<RouterLink class="button secondary" :to="`/schedules/channels/${row.channel.id}`">
+							<Pencil :size="16" />Edit Schedule
+						</RouterLink>
+					</div>
+				</article>
+			</template>
 
 			<ResourceEmptyState
 				v-if="channels.length === 0"

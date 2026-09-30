@@ -117,6 +117,19 @@ describe('readCommittedScheduleGuide', () => {
 		expect(result.catalog.media).toEqual([]);
 	});
 
+	it('reads complete dead-air output for a direct program without loading unused projection resources', async () => {
+		const channel = { ...schedule(), defaultTemplateId: null, defaultProgramId: randomUUID() };
+		const gap = segment(channel.channelId);
+		const repository = repositoryFixture([channel], [gap], [{
+			channelId: channel.channelId, health: 'ready', committedAt: RANGE_START,
+		}]);
+
+		const result = await readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1);
+
+		expect(result.guide.channels[0]?.preview.segments).toEqual([gap]);
+		expect(repository.listPrograms).not.toHaveBeenCalled();
+	});
+
 	it('overlays committed snapshots when XMLTV asks for catalog media', async () => {
 		const channel = schedule();
 		const item = { ...segment(channel.channelId), role: 'primary' as const, mediaItemId: randomUUID() };
@@ -275,7 +288,7 @@ describe('readCommittedScheduleGuide', () => {
 				guide: { mode: 'block', title: '' },
 			}], boundaries: [{ id: randomUUID(), leftSlotId: item.slotId, rightSlotId: item.slotId,
 				targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard' }] }),
-			id: configured.defaultTemplateId, createdAt: RANGE_START, updatedAt: RANGE_START,
+			id: configured.defaultTemplateId!, createdAt: RANGE_START, updatedAt: RANGE_START,
 		};
 		vi.mocked(repository.listScheduleTemplates).mockResolvedValue([template]);
 		vi.mocked(repository.listPrograms).mockResolvedValue([{ id: programId, name: 'Music Videos' }] as Awaited<ReturnType<Repository['listPrograms']>>);

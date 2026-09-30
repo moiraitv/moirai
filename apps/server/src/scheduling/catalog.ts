@@ -46,6 +46,14 @@ export function schedulingRootProgramIds(
 		}
 	}
 	for (const schedule of schedules ?? []) {
+		if (schedule.defaultProgramId) {
+			ids.add(schedule.defaultProgramId);
+		}
+		for (const layer of schedule.layers) {
+			if (layer.programId) {
+				ids.add(layer.programId);
+			}
+		}
 		if (schedule.defaultFiller) {
 			ids.add(schedule.defaultFiller.programId);
 		}

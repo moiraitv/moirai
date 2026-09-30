@@ -194,7 +194,7 @@ test('remembers program media browsing and contains selection drawers', async ({
 	}
 });
 
-test('keeps template and channel schedule editors contained on short viewports', async ({ page }) => {
+test('keeps template and channel schedule editors contained on short and portrait viewports', async ({ page }) => {
 	const headers = await authenticatedHeaders(page);
 	const id = randomUUID();
 	const templateId = await createTemplate(page, headers, id);
@@ -212,6 +212,23 @@ test('keeps template and channel schedule editors contained on short viewports',
 		await content.evaluate((element) => element.scrollTop = element.scrollHeight);
 		expect(await content.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 		await contained(page, page.locator('.resource-editor-action-bar'));
+	}
+
+	await page.setViewportSize({ width: 1024, height: 1366 });
+	await page.goto(`/schedules/channels/${channel.id}`);
+	const inspector = page.locator('.schedule-layer-inspector');
+	for (const layer of ['base', 'conditional']) {
+		if (layer === 'conditional') {
+			await page.getByRole('button', { name: 'Add conditional template' }).click();
+		}
+
+		await expect.poll(async () => {
+			const inspectorBox = await inspector.boundingBox();
+			const editBox = await inspector.locator('.template-panel-heading > .toolbar-button').boundingBox();
+			return inspectorBox !== null && editBox !== null
+				&& editBox.x >= inspectorBox.x
+				&& editBox.x + editBox.width <= inspectorBox.x + inspectorBox.width;
+		}).toBe(true);
 	}
 });
 

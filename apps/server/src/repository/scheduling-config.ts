@@ -492,7 +492,11 @@ export class SchedulingConfigurationRepository {
 		const referencedByChannel = schedules.some(
 			(schedule) => schedule.config.defaultFiller?.programId === id,
 		);
-		if (referencedBySequence || slotReference || referencedAsFiller || referencedByChannel) {
+		const referencedByDirectSchedule = schedules.some((schedule) => schedule.defaultProgramId === id);
+		const referencedByDirectLayer = (await this.db.select({ programId: channelScheduleLayers.programId })
+			.from(channelScheduleLayers).where(eq(channelScheduleLayers.programId, id)).limit(1)).length > 0;
+		if (referencedBySequence || slotReference || referencedAsFiller || referencedByChannel
+			|| referencedByDirectSchedule || referencedByDirectLayer) {
 			throw new SchedulingValidationError('The program is still referenced by a schedule');
 		}
 
@@ -741,9 +745,11 @@ export class SchedulingConfigurationRepository {
 				...channelScheduleConfigSchema.parse({
 					...row.config,
 					defaultTemplateId: row.defaultTemplateId,
+					defaultProgramId: row.defaultProgramId,
 					layers: layers.map((layer) => ({
 						id: layer.id,
 						templateId: layer.templateId,
+						programId: layer.programId,
 						predicate: layer.predicate,
 						entryBoundary: layer.entryBoundary,
 						exitBoundary: layer.exitBoundary,
@@ -775,9 +781,11 @@ export class SchedulingConfigurationRepository {
 			...channelScheduleConfigSchema.parse({
 				...row.config,
 				defaultTemplateId: row.defaultTemplateId,
+				defaultProgramId: row.defaultProgramId,
 				layers: (layersByChannel.get(row.channelId) ?? []).map((layer) => ({
 					id: layer.id,
 					templateId: layer.templateId,
+					programId: layer.programId,
 					predicate: layer.predicate,
 					entryBoundary: layer.entryBoundary,
 					exitBoundary: layer.exitBoundary,
@@ -789,7 +797,7 @@ export class SchedulingConfigurationRepository {
 		}));
 	}
 
-	/** Persist a channel's base and conditional template stack. */
+	/** Persist a channel's base and conditional template or program assignments. */
 	async setChannelSchedule(
 		channelId: string,
 		config: ChannelScheduleConfig,
@@ -802,6 +810,8 @@ export class SchedulingConfigurationRepository {
 			return null;
 		}
 
+		// Normalize omitted legacy IDs to null before replacing an existing assignment.
+		config = channelScheduleConfigSchema.parse(config);
 		const [templateRows, programRows] = await Promise.all([
 			this.db.select({ id: scheduleTemplates.id }).from(scheduleTemplates),
 			this.db.select({ id: schedulingPrograms.id }).from(schedulingPrograms),
@@ -820,13 +830,15 @@ export class SchedulingConfigurationRepository {
 				.values({
 					channelId,
 					defaultTemplateId: config.defaultTemplateId,
+					defaultProgramId: config.defaultProgramId,
 					config,
 					createdAt: current?.createdAt ?? timestamp,
 					updatedAt: timestamp,
 				})
 				.onConflictDoUpdate({
 					target: channelSchedules.channelId,
-					set: { defaultTemplateId: config.defaultTemplateId, config, updatedAt: timestamp },
+					set: { defaultTemplateId: config.defaultTemplateId,
+						defaultProgramId: config.defaultProgramId, config, updatedAt: timestamp },
 				})
 				.run();
 			tx.delete(channelScheduleLayers).where(eq(channelScheduleLayers.channelId, channelId)).run();
@@ -904,7 +916,7 @@ export class SchedulingConfigurationRepository {
 		});
 	}
 
-	/** Delete a channel's template stack, timeline, cursors, and semantic decisions atomically. */
+	/** Delete a channel's schedule stack, timeline, cursors, and semantic decisions atomically. */
 	async deleteChannelSchedule(channelId: string): Promise<boolean> {
 		return this.db.transaction((tx) => {
 			tx.delete(materializedTimelineSegments)
@@ -963,6 +975,7 @@ export class SchedulingConfigurationRepository {
 				const config: ChannelScheduleConfig = {
 					generationSeed: current?.generationSeed,
 					defaultTemplateId: templateId,
+					defaultProgramId: null,
 					layers: current?.layers ?? [],
 					defaultFiller: current?.defaultFiller ?? null,
 				};
@@ -970,13 +983,14 @@ export class SchedulingConfigurationRepository {
 					.values({
 						channelId,
 						defaultTemplateId: templateId,
+						defaultProgramId: null,
 						config,
 						createdAt: current?.createdAt ?? timestamp,
 						updatedAt: timestamp,
 					})
 					.onConflictDoUpdate({
 						target: channelSchedules.channelId,
-						set: { defaultTemplateId: templateId, config, updatedAt: timestamp },
+						set: { defaultTemplateId: templateId, defaultProgramId: null, config, updatedAt: timestamp },
 					})
 					.run();
 			}

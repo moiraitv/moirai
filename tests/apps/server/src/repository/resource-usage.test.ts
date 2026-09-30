@@ -42,6 +42,19 @@ it('groups every program reference role without expanding indirect channels and 
 	expect(resourceUsage(db, 'program', randomUUID(), 1, 50)).toBeNull();
 });
 
+it('shows direct base and conditional program assignments as channel usages', () => {
+	const { db, insert } = fixture();
+	const program = randomUUID(), channel = randomUUID();
+	insert('scheduling_programs', { id: program, name: 'Direct', config: { type: 'content' } });
+	insert('channels', { id: channel, number: '2', name: 'Direct channel', config: {} });
+	insert('channel_schedules', { channel_id: channel, default_program_id: program,
+		config: { defaultTemplateId: null, defaultProgramId: program, layers: [] } });
+	insert('channel_schedule_layers', { id: randomUUID(), channel_id: channel, position: 0,
+		program_id: program, predicate: {}, entry_boundary: {}, exit_boundary: {} });
+	expect(resourceUsage(db, 'program', program, 1, 50)).toMatchObject({ total: 1,
+		items: [{ id: channel, roles: ['Base program', 'Conditional program'], referenceCount: 2 }] });
+});
+
 it('paginates owners deterministically and includes both template assignment roles', () => {
 	const { db, insert } = fixture();
 	const template = randomUUID();

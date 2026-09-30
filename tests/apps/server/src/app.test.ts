@@ -1800,15 +1800,12 @@ describe('API', () => {
 					},
 				},
 			},
-			template: {
-				name: 'Quick Movies Daily',
-				boundaries: [{ policy: 'finish-left', maxDriftSeconds: null }],
-			},
+			template: null,
 			channel: { number: '71', name: 'Quick Movies' },
-			schedule: { layers: [], defaultFiller: null },
+			schedule: { layers: [], defaultFiller: null, defaultTemplateId: null },
 		});
 		expect(created.json().schedule.channelId).toBe(created.json().channel.id);
-		expect(created.json().schedule.defaultTemplateId).toBe(created.json().template.id);
+		expect(created.json().schedule.defaultProgramId).toBe(created.json().program.id);
 	});
 
 	it('paginates Quick Setup query matches in stable program order', async () => {

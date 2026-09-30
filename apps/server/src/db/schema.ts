@@ -486,15 +486,16 @@ export const scheduleBoundaries = sqliteTable(
 /**
  * Schema for `channelSchedules`.
  *
- * Stores each channel's base template and channel-level scheduling configuration.
+ * Stores each channel's base template or program and channel-level scheduling configuration.
  */
 export const channelSchedules = sqliteTable('channel_schedules', {
 	channelId: text('channel_id')
 		.primaryKey()
 		.references(() => channels.id, { onDelete: 'cascade' }),
 	defaultTemplateId: text('default_template_id')
-		.notNull()
 		.references(() => scheduleTemplates.id, { onDelete: 'restrict' }),
+	defaultProgramId: text('default_program_id')
+		.references(() => schedulingPrograms.id, { onDelete: 'restrict' }),
 	config: text('config', { mode: 'json' }).$type<ChannelScheduleConfig>().notNull(),
 	...timestamps,
 });
@@ -502,7 +503,7 @@ export const channelSchedules = sqliteTable('channel_schedules', {
 /**
  * Schema for `channelScheduleLayers`.
  *
- * These are the optional layers above a channel's base schedule template that may apply depending
+ * These are optional template or program layers above a channel's base assignment that may apply depending
  * on how the predicate matches (e.g., always show during the 5:00-7:00 pm hours).
  */
 export const channelScheduleLayers = sqliteTable(
@@ -514,8 +515,9 @@ export const channelScheduleLayers = sqliteTable(
 			.references(() => channelSchedules.channelId, { onDelete: 'cascade' }),
 		position: integer('position').notNull(),
 		templateId: text('template_id')
-			.notNull()
 			.references(() => scheduleTemplates.id, { onDelete: 'restrict' }),
+		programId: text('program_id')
+			.references(() => schedulingPrograms.id, { onDelete: 'restrict' }),
 		predicate: text('predicate', { mode: 'json' })
 			.$type<ChannelScheduleLayer['predicate']>()
 			.notNull(),

@@ -5,6 +5,8 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
+import { Repository } from '@server/repository/index.js';
+import { materializeScheduleGuide } from '@server/guide/schedule-guide.js';
 
 interface MigrationJournalEntry {
 	idx: number;
@@ -22,6 +24,7 @@ interface MigrationJournal {
 
 type SqliteDatabase = InstanceType<typeof Database>;
 type DatabaseStep = (sqlite: SqliteDatabase) => void;
+type VerifyStep = (sqlite: SqliteDatabase, database: ReturnType<typeof createDatabase>) => void | Promise<void>;
 
 const migrationsDir = path.resolve('drizzle');
 
@@ -63,7 +66,7 @@ function migrationMarkers(sqlite: SqliteDatabase): number[] {
 async function upgradeFrom(
 	priorTag: string,
 	seed: DatabaseStep,
-	verify: DatabaseStep,
+	verify: VerifyStep,
 	worker = false,
 ): Promise<void> {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'moirai-migration-'));
@@ -89,7 +92,7 @@ async function upgradeFrom(
 		expect(migrationMarkers(currentDatabase.sqlite)).toEqual(
 			journal.entries.map((entry) => entry.when),
 		);
-		verify(currentDatabase.sqlite);
+		await verify(currentDatabase.sqlite, currentDatabase);
 	}
 	finally {
 		priorDatabase?.close();
@@ -135,6 +138,60 @@ function insertScheduleFoundation(sqlite: SqliteDatabase): void {
 }
 
 describe('database compatibility migrations', () => {
+	it('keeps existing template assignments when adding direct program columns', async () => {
+		const channelId = '00000000-0000-4000-8000-000000000001';
+		const baseId = '00000000-0000-4000-8000-000000000002';
+		const specialId = '00000000-0000-4000-8000-000000000003';
+		const layerId = '00000000-0000-4000-8000-000000000004';
+		await upgradeFrom('0037_primary_genre', (sqlite) => {
+			insertChannel(sqlite, channelId);
+			sqlite.prepare('INSERT INTO schedule_templates (id, name) VALUES (?, ?), (?, ?)')
+				.run(baseId, 'Base', specialId, 'Special');
+			for (const [index, templateId] of [baseId, specialId].entries()) {
+				const slotId = `00000000-0000-4000-8000-00000000000${index + 5}`;
+				const boundaryId = `00000000-0000-4000-8000-00000000000${index + 7}`;
+				sqlite.prepare(`INSERT INTO schedule_slots
+					(id, template_id, position, start_seconds, state_scope, start_eligibility, filler)
+					VALUES (?, ?, 0, 0, 'persistent', '{"type":"allow-overrun"}', '{"mode":"disabled"}')`)
+					.run(slotId, templateId);
+				sqlite.prepare(`INSERT INTO schedule_boundaries
+					(id, template_id, position, left_slot_id, right_slot_id, target_seconds, policy, fallback)
+					VALUES (?, ?, 0, ?, ?, 86400, 'hard', 'truncate-left')`)
+					.run(boundaryId, templateId, slotId, slotId);
+			}
+			sqlite.prepare(`INSERT INTO channel_schedules (channel_id, default_template_id, config)
+				VALUES (?, ?, ?)`)
+				.run(channelId, baseId, JSON.stringify({ defaultTemplateId: baseId, layers: [], defaultFiller: null }));
+			sqlite.prepare(`INSERT INTO channel_schedule_layers
+				(id, channel_id, position, template_id, predicate, entry_boundary, exit_boundary)
+				VALUES (?, ?, 0, ?, ?, ?, ?)`)
+				.run(
+					layerId,
+					channelId,
+					specialId,
+					JSON.stringify({ type: 'time-range', startSeconds: 3600, endSeconds: 7200, negated: false }),
+					JSON.stringify({ policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left', earlyStartMaxDriftSeconds: 0 }),
+					JSON.stringify({ policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left', earlyStartMaxDriftSeconds: 0 }),
+				);
+		}, async (sqlite, database) => {
+			expect(sqlite.prepare('SELECT default_template_id AS templateId, default_program_id AS programId FROM channel_schedules').get())
+				.toEqual({ templateId: baseId, programId: null });
+			expect(sqlite.prepare('SELECT template_id AS templateId, program_id AS programId FROM channel_schedule_layers').get())
+				.toEqual({ templateId: specialId, programId: null });
+			expect(sqlite.pragma('foreign_key_check')).toEqual([]);
+			const repository = new Repository(database.db);
+			expect(await repository.getChannelSchedule(channelId)).toMatchObject({
+				defaultTemplateId: baseId, defaultProgramId: null,
+				layers: [{ id: layerId, templateId: specialId, programId: null }],
+			});
+			const materialized = await materializeScheduleGuide(repository, 'UTC', '2026-09-19', 1);
+			expect(materialized.guide.channels).toHaveLength(1);
+			expect(materialized.guide.channels[0]?.preview.segments.length).toBeGreaterThan(0);
+			expect(materialized.guide.channels[0]?.preview.segments.some((segment) => segment.templateId === baseId))
+				.toBe(true);
+		});
+	});
+
 	it('upgrades each recent migration boundary through the production installer', async () => {
 		const boundaries = [
 			['0010_no_program_filler', '0011_media_probe'],

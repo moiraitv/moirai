@@ -20,6 +20,14 @@ export function countProgramUsages(overview: SchedulingOverview | null): Map<str
 		}
 	}
 	for (const schedule of overview?.channelSchedules ?? []) {
+		if (schedule.defaultProgramId) {
+			countUse(schedule.defaultProgramId);
+		}
+		for (const layer of schedule.layers) {
+			if (layer.programId) {
+				countUse(layer.programId);
+			}
+		}
 		if (schedule.defaultFiller) {
 			countUse(schedule.defaultFiller.programId);
 		}

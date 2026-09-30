@@ -21,7 +21,6 @@ const props = defineProps<{
 	logo: PreparedChannelLogo | null;
 	busy: boolean;
 	error: string;
-	templateName: string;
 }>();
 const emit = defineEmits<{ back: []; finish: [] }>();
 const preview = ref<QuickChannelSetupPreviewResult | null>(null);
@@ -82,7 +81,7 @@ onBeforeUnmount(() => {
 			</article>
 			<article class="panel quick-review-row">
 				<h3>Programming</h3><div class="quick-review-content">
-					<strong>{{ request.programName }}</strong>
+					<strong>{{ preview?.templateName ?? request.programName }}</strong>
 					<small>{{ request.source.type === 'library-query' ? 'Library query' : request.source.type === 'collection' ? 'Specific items' : 'Shows or seasons' }} · {{ request.strategy.type }}</small>
 					<small>{{ quickSourceSummary(request.source) }}</small>
 					<QuickQueryPreview
@@ -100,7 +99,7 @@ onBeforeUnmount(() => {
 			</article>
 			<article class="panel quick-review-row">
 				<h3>Daily schedule</h3><div class="quick-review-content">
-					<strong>{{ preview?.templateName ?? templateName }}</strong><small>Continuous all day · media may finish across midnight</small>
+					<strong>{{ preview?.templateName ?? request.programName }}</strong><small>Continuous all day · media may finish across midnight</small>
 				</div>
 				<div class="quick-review-schedule-slot">
 					<QuickScheduleSample v-if="preview" :preview="preview.schedule" />

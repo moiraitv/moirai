@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
-	DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR, DEFAULT_TEMPLATE_START_ELIGIBILITY,
-	SECONDS_PER_SCHEDULING_DAY, channelCreateSchema,
+	channelCreateSchema,
 	type Channel, type ChannelSchedule, type ProgramConfig, type QuickChannelSetupCreate,
-	type ScheduleTemplate, type SchedulingProgram,
+	type SchedulingProgram,
 } from '@moirai/shared';
 import type { QuickChannelSetupResult } from '@moirai/shared/api-contracts';
 import { currentTimestamp } from '../time.js';
@@ -27,14 +26,10 @@ export function libraryTypeMediaKind(typeKey: string): string {
 /** Construct identical continuous scheduling resources for persistence or a read-only sample. */
 export function quickSetupResources(
 	input: QuickChannelSetupCreate,
-	templateName: string,
 	createId: () => string = randomUUID,
 ): QuickChannelSetupResult {
 	const timestamp = currentTimestamp();
 	const programId = createId();
-	const templateId = createId();
-	const slotId = createId();
-	const boundaryId = createId();
 	const channelId = createId();
 	const expectedKind = libraryTypeMediaKind(input.scenario);
 	const source = input.source.type === 'library-query'
@@ -65,29 +60,6 @@ export function quickSetupResources(
 		createdAt: timestamp,
 		updatedAt: timestamp,
 	};
-	const template: ScheduleTemplate = {
-		id: templateId!,
-		name: templateName,
-		period: 'day',
-		defaultFiller: null,
-		slots: [{
-			id: slotId!,
-			startSeconds: 0,
-			programId: programId!,
-			stateScope: 'persistent',
-			startEligibility: { ...DEFAULT_TEMPLATE_START_ELIGIBILITY },
-			filler: { mode: 'inherit' },
-		}],
-		boundaries: [{
-			id: boundaryId!,
-			leftSlotId: slotId!,
-			rightSlotId: slotId!,
-			targetSeconds: SECONDS_PER_SCHEDULING_DAY,
-			...DEFAULT_TEMPLATE_BOUNDARY_BEHAVIOR,
-		}],
-		createdAt: timestamp,
-		updatedAt: timestamp,
-	};
 	const channelConfig = channelCreateSchema.parse(input.channel);
 	const channel: Channel = {
 		...channelConfig,
@@ -97,12 +69,13 @@ export function quickSetupResources(
 	};
 	const schedule: ChannelSchedule = {
 		channelId: channelId!,
-		defaultTemplateId: templateId!,
+		defaultTemplateId: null,
+		defaultProgramId: programId!,
 		layers: [],
 		defaultFiller: null,
 		createdAt: timestamp,
 		updatedAt: timestamp,
 	};
 
-	return { program, template, channel, schedule } as QuickChannelSetupResult;
+	return { program, template: null, channel, schedule } as QuickChannelSetupResult;
 }

@@ -342,7 +342,7 @@ export const scheduleTemplateSchema = scheduleTemplateCreateSchema.extend({
 });
 
 /** Layered schedule configuration assigned to one channel. */
-export const channelScheduleSchema = channelScheduleConfigSchema.extend({
+export const channelScheduleSchema = channelScheduleConfigSchema.safeExtend({
 	channelId: idSchema,
 	createdAt: isoDateSchema,
 	updatedAt: isoDateSchema,
@@ -351,7 +351,7 @@ export const channelScheduleSchema = channelScheduleConfigSchema.extend({
 /** Complete resource bundle returned by atomic quick channel creation. */
 export const quickChannelSetupResultSchema = z.object({
 	program: schedulingProgramSchema,
-	template: scheduleTemplateSchema,
+	template: scheduleTemplateSchema.nullable(),
 	channel: channelSchema,
 	schedule: channelScheduleSchema,
 });

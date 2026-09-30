@@ -9,6 +9,7 @@ import { schedulingOverviewSchema, quickChannelQueryPreviewResultSchema, timelin
 import type { Repository } from '../repository/index.js';
 import { currentTimestamp } from '../time.js';
 import { schedulingRootProgramIds } from './catalog.js';
+import { resolveProgramSchedule } from './direct-program-templates.js';
 import { schedulingProgramStatuses, schedulingContentMatches } from './status.js';
 import { compareLibraryQueryMedia } from './content-query.js';
 import { libraryTypeMediaKind } from './quick-setup-resources.js';
@@ -186,7 +187,8 @@ async function persisted(repository: Repository, request: Extract<SchedulingRead
 		programs,
 		schedulingRootProgramIds(templates, [schedule]),
 	);
-	const template = templates.find((candidate) => candidate.id === schedule.defaultTemplateId);
+	const resolved = resolveProgramSchedule(id, schedule, templates, programs);
+	const template = resolved.template;
 	if (!template) {
 		throw app.httpErrors.notFound('Schedule template not found');
 	}
@@ -197,14 +199,14 @@ async function persisted(repository: Repository, request: Extract<SchedulingRead
 		timeZone: request.timeZone,
 		startDate: query.startDate ?? Temporal.Now.plainDateISO(request.timeZone).toString(),
 		days: query.days,
-		schedule,
+		schedule: { ...schedule, ...resolved.schedule },
 		template,
-		templates,
+		templates: resolved.templates,
 		programs,
 		catalog,
 		state,
 	}));
-	return guideTimelinePreview(generated, templates, programs);
+	return guideTimelinePreview(generated, resolved.templates, programs);
 }
 
 /** Apply the authored template to the same schedule context used by the editor. */
@@ -240,6 +242,7 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 			: {
 				channelId,
 				defaultTemplateId: input.template.id,
+				defaultProgramId: null,
 				layers: [],
 				defaultFiller: currentSchedule?.defaultFiller ?? null,
 				createdAt: currentSchedule?.createdAt ?? timestamp,
@@ -251,9 +254,8 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 				? { ...draftTemplate, createdAt: template.createdAt }
 				: template)
 		: [...templates, draftTemplate];
-	const baseTemplate = previewTemplates.find(
-		(template) => template.id === previewSchedule.defaultTemplateId,
-	);
+	const resolved = resolveProgramSchedule(channelId, previewSchedule, previewTemplates, programs);
+	const baseTemplate = resolved.template;
 	if (!baseTemplate) {
 		throw app.httpErrors.notFound('Base schedule template not found');
 	}
@@ -268,12 +270,12 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 		timeZone: request.timeZone,
 		startDate: input.startDate ?? Temporal.Now.plainDateISO(request.timeZone).toString(),
 		days: input.days,
-		schedule: previewSchedule,
+		schedule: { ...previewSchedule, ...resolved.schedule },
 		template: baseTemplate,
-		templates: previewTemplates,
+		templates: resolved.templates,
 		programs,
 		catalog,
 		state,
 	}));
-	return guideTimelinePreview(generated, previewTemplates, programs);
+	return guideTimelinePreview(generated, resolved.templates, programs);
 }

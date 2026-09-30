@@ -76,10 +76,6 @@ export function registerQuickChannelSetupRoutes(
 		});
 		events.publish({
 			type: 'scheduling.changed',
-			data: { entity: 'template', change: 'created', id: result.template.id },
-		});
-		events.publish({
-			type: 'scheduling.changed',
 			data: { entity: 'assignment', change: 'updated', id: result.channel.id },
 		});
 		events.publish({

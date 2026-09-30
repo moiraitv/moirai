@@ -10,6 +10,7 @@ import type { MoiraiDatabase } from '../db/index.js';
 import { currentTimestamp } from '../time.js';
 import { guideTimelinePreview } from '../guide/preview.js';
 import { schedulingRootProgramIds } from './catalog.js';
+import { resolveProgramSchedule } from './direct-program-templates.js';
 import { generateTimelineDetailed, type GenerateTimelineInput } from './engine.js';
 import { libraryTypeMediaKind } from './quick-setup-resources.js';
 import { schedulingProgramStatuses } from './status.js';
@@ -113,25 +114,31 @@ export class PreviewExecutor {
 			this.scheduling.listPrograms(),
 			this.scheduling.getSelectionState(input.channelId),
 		]);
-		const template = templates.find((candidate) => candidate.id === input.schedule.defaultTemplateId);
+		const resolved = resolveProgramSchedule(input.channelId, input.schedule, templates, programs);
+		const template = resolved.template;
 		if (!template) {
 			throw Object.assign(new Error('Base schedule template not found'), { statusCode: 404, expose: true });
 		}
 
 		const timestamp = currentTimestamp();
-		const schedule = { ...input.schedule, channelId: input.channelId, createdAt: timestamp, updatedAt: timestamp };
-		const catalog = await this.scheduling.getSchedulingCatalog(programs, schedulingRootProgramIds(templates, [schedule]));
+		const schedule = { ...resolved.schedule, channelId: input.channelId, createdAt: timestamp, updatedAt: timestamp };
+		const catalog = await this.scheduling.getSchedulingCatalog(
+			programs,
+			schedulingRootProgramIds(templates, [{ ...schedule, ...input.schedule }]),
+		);
 		return {
 			input: { channelId: input.channelId, timeZone, startDate: input.startDate, days: input.days,
-				schedule, template, templates, programs, catalog, state },
-			project: (generated) => guideTimelinePreview(generated, templates, programs),
+				schedule, template, templates: resolved.templates, programs, catalog, state },
+			project: (generated) => guideTimelinePreview(generated, resolved.templates, programs),
 		};
 	}
 
 	/** Prepare illustrative resources and one shared library catalog without saving a draft. */
 	private async quickSetup(request: Extract<PreviewRequest, { kind: 'quick' }>): Promise<PreparedPreview> {
 		const { input, timeZone, startDate, maxExplicitMediaItems } = request;
-		const { program, template, schedule, channel } = this.quick.preview(input, maxExplicitMediaItems);
+		const { program, schedule, channel } = this.quick.preview(input, maxExplicitMediaItems);
+		const resolved = resolveProgramSchedule(channel.id, schedule, [], [program]);
+		const template = resolved.template!;
 		const libraryProgram: SchedulingProgram = {
 			...program,
 			id: '00000000-0000-4000-8000-000000000006',
@@ -144,13 +151,14 @@ export class PreviewExecutor {
 		const catalog = await this.scheduling.getSchedulingCatalog([program, libraryProgram]);
 		return {
 			input: { channelId: channel.id, timeZone, startDate, days: 1,
-				schedule, template, templates: [template], programs: [program], catalog, state: [] },
+				schedule: { ...schedule, ...resolved.schedule }, template,
+				templates: resolved.templates, programs: [program], catalog, state: [] },
 			project: (generated) => {
 				const [library, programming] = schedulingProgramStatuses([libraryProgram, program], catalog);
 				return quickChannelSetupPreviewResultSchema.parse({
 					library: { items: library!.previewItems, indexedItemCount: library!.indexedItemCount },
 					programming: { items: programming!.previewItems, indexedItemCount: programming!.indexedItemCount },
-					templateName: template.name,
+					templateName: program.name,
 					schedule: { ...generated, issues: generated.issues.map(publicTimelineIssue) },
 				});
 			},

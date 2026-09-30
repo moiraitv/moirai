@@ -12,7 +12,6 @@
 	gap: 24px;
 }
 
-
 .channel-schedules-page > .page-header .lede {
 	max-width: 720px;
 	font-size: 1rem;
@@ -169,11 +168,31 @@
 
 .schedule-channel-list {
 	display: grid;
-	gap: 16px;
+	gap: 12px;
+}
+
+.schedule-channel-family {
+	min-height: 34px;
+	margin: 14px 0 0;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	color: var(--accent);
+	font-size: 0.68rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.schedule-channel-family::after {
+	flex: 1;
+	height: 1px;
+	background: var(--line-bright);
+	content: '';
 }
 
 .schedule-channel-card {
-	padding: 25px 27px 22px;
+	padding: 18px 20px 16px;
 	overflow: hidden;
 	border: 1px solid var(--line-bright);
 	border-radius: 13px;
@@ -189,14 +208,14 @@
 
 .schedule-channel-card-main {
 	display: grid;
-	grid-template-columns: 112px minmax(250px, 1.5fr) minmax(155px, 0.62fr) minmax(170px, 0.72fr);
+	grid-template-columns: 88px minmax(250px, 1.5fr) minmax(155px, 0.62fr) minmax(170px, 0.72fr);
 	align-items: center;
-	gap: 28px;
+	gap: 18px;
 }
 
 .schedule-channel-icon {
-	width: 112px;
-	height: 112px;
+	width: 88px;
+	height: 88px;
 	display: grid;
 	place-items: center;
 	border-radius: 18px;
@@ -223,7 +242,7 @@
 	overflow: hidden;
 	color: var(--text);
 	text-overflow: ellipsis;
-	font-size: clamp(1.15rem, 2vw, 1.55rem);
+	font-size: clamp(1.15rem, 2vw, 1.25rem);
 	font-weight: 760;
 	white-space: nowrap;
 }
@@ -234,7 +253,7 @@
 }
 
 .schedule-channel-identity p {
-	margin: 11px 0 0;
+	margin: 6px 0 0;
 	display: flex;
 	align-items: center;
 	gap: 9px;
@@ -243,19 +262,19 @@
 }
 
 .channel-ready-pill {
-	padding: 4px 8px;
+	padding: 3px 7px;
 	border-radius: 7px;
 	color: #9df0ce;
 	background: rgba(19, 105, 74, 0.55);
 }
 
 .schedule-channel-metric {
-	min-height: 67px;
-	padding-left: 24px;
+	min-height: 52px;
+	padding-left: 16px;
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr);
 	align-items: center;
-	gap: 15px;
+	gap: 10px;
 	border-left: 1px solid var(--line);
 }
 
@@ -281,7 +300,12 @@
 	font-size: 0.82rem;
 }
 
-.schedule-channel-metric small,
+.schedule-channel-metric small {
+	margin-top: 3px;
+	color: var(--muted);
+	font-size: 0.78rem;
+}
+
 .schedule-layer-copy small {
 	margin-top: 5px;
 	color: var(--muted);
@@ -290,12 +314,12 @@
 
 .schedule-channel-empty-stack,
 .schedule-channel-configured-stack {
-	min-height: 88px;
-	margin: 18px 0 0 140px;
-	padding: 18px 22px;
+	min-height: 68px;
+	margin: 12px 0 0 106px;
+	padding: 12px 16px;
 	display: flex;
 	align-items: center;
-	gap: 18px;
+	gap: 12px;
 	border: 1px dashed rgba(22, 191, 151, 0.5);
 	border-radius: 10px;
 	background: rgba(6, 23, 31, 0.5);
@@ -335,7 +359,7 @@
 }
 
 .schedule-channel-configured-stack {
-	min-height: 70px;
+	min-height: 58px;
 	align-items: stretch;
 	border-style: solid;
 	border-color: rgba(45, 99, 111, 0.55);
@@ -345,7 +369,7 @@
 	flex: 1;
 	min-width: 0;
 	display: grid;
-	gap: 8px;
+	gap: 6px;
 }
 
 .schedule-channel-stack-row {
@@ -353,12 +377,12 @@
 	display: grid;
 	grid-template-columns: 8px minmax(0, 1fr);
 	align-items: stretch;
-	gap: 11px;
+	gap: 8px;
 }
 
 .schedule-channel-stack-row > i {
 	width: 8px;
-	min-height: 48px;
+	min-height: 38px;
 	border-radius: 8px;
 	background: var(--program-color, var(--accent));
 }
@@ -366,9 +390,9 @@
 .schedule-channel-stack-row > span {
 	min-width: 0;
 	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
-	align-items: baseline;
-	column-gap: 10px;
+	grid-template-columns: minmax(0, 1fr);
+	align-content: center;
+	row-gap: 2px;
 }
 
 .schedule-channel-stack-row small {
@@ -386,8 +410,6 @@
 }
 
 .schedule-channel-stack-row em {
-	grid-column: 1 / -1;
-	margin-top: 3px;
 	overflow: hidden;
 	color: var(--muted);
 	font-size: 0.7rem;
@@ -397,8 +419,17 @@
 }
 
 .schedule-channel-stack-row.base {
-	padding-top: 8px;
+	padding-top: 6px;
 	border-top: 1px solid var(--line);
+}
+
+.schedule-channel-stack-row.base-only {
+	padding-top: 0;
+	border-top: 0;
+}
+
+.schedule-channel-stack-row.base-only > i {
+	min-height: 28px;
 }
 
 .schedule-channel-stack-more {
@@ -497,16 +528,16 @@
 	}
 
 	.schedule-channel-card-main {
-		grid-template-columns: 92px minmax(0, 1fr);
+		grid-template-columns: 76px minmax(0, 1fr);
 	}
 
 	.schedule-channel-icon {
-		width: 92px;
-		height: 92px;
+		width: 76px;
+		height: 76px;
 	}
 
 	.schedule-channel-metric {
-		padding: 13px 0 0;
+		padding: 9px 0 0;
 		border-top: 1px solid var(--line);
 		border-left: 0;
 	}
@@ -521,6 +552,6 @@
 
 	.schedule-channel-empty-stack,
 	.schedule-channel-configured-stack {
-		margin-left: 110px;
+		margin-left: 94px;
 	}
 }

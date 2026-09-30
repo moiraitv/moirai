@@ -14,11 +14,15 @@ import { timelinePreviewSchema, quickChannelSetupPreviewResultSchema } from '@mo
 import { createDatabase } from '@server/db/index.js';
 import { openReadOnlyDatabase } from '@server/db/read-only.js';
 import { guideTimelinePreview } from '@server/guide/preview.js';
+import { materializeScheduleGuide } from '@server/guide/schedule-guide.js';
 import { Repository } from '@server/repository/index.js';
 import { SchedulingRepository } from '@server/repository/scheduling.js';
 import { schedulingRootProgramIds } from '@server/scheduling/catalog.js';
+import { resolveProgramSchedule } from '@server/scheduling/direct-program-templates.js';
 import { generateTimelineDetailed } from '@server/scheduling/engine.js';
 import { PreviewExecutor, type PreviewRequest } from '@server/scheduling/preview.js';
+import { schedulingRead } from '@server/scheduling/read-jobs.js';
+import { TimelineMaterializer } from '@server/scheduling/timeline-materializer.js';
 import { schedulingProgramStatuses } from '@server/scheduling/status.js';
 import { SchedulingQueueFullError, SchedulingWorkerPool } from '@server/scheduling/worker-pool.js';
 import { publicError } from '@server/routes/public-errors.js';
@@ -73,7 +77,7 @@ it('matches independent generation for semantic programs, conditional layers, an
 	const request = await channel(f, f.program.id);
 	const layer = await template(f, f.source.id, 'Override');
 	request.input.schedule.layers.push({
-		id: randomUUID(), templateId: layer.id,
+		id: randomUUID(), templateId: layer.id, programId: null,
 		predicate: { type: 'time-range', startSeconds: 3600, endSeconds: 7200, negated: false },
 		entryBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left', earlyStartMaxDriftSeconds: 0 },
 		exitBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left', earlyStartMaxDriftSeconds: 0 },
@@ -95,19 +99,120 @@ it('matches independent generation for semantic programs, conditional layers, an
 	expect(f.database.sqlite.serialize()).toEqual(before);
 }, 20_000);
 
+it('saves and previews direct programs in base and conditional layers without creating templates', async () => {
+	const f = await setup();
+	const special = await f.repository.createProgram({ name: 'Special', config: {
+		type: 'content', source: { type: 'item', itemId: f.ids[1]! }, strategy: { type: 'sequential' },
+	} });
+	const layerId = randomUUID();
+	const schedule = channelScheduleDraftPreviewSchema.parse({ channelId: f.channel.id,
+		startDate: '2026-09-19', days: 1, schedule: {
+			defaultProgramId: f.source.id,
+			layers: [{ id: layerId, programId: special.id,
+				predicate: { type: 'time-range', startSeconds: 3600, endSeconds: 7200, negated: false } }],
+		} }).schedule;
+	await f.repository.setChannelSchedule(f.channel.id, schedule);
+	const saved = (await f.repository.getChannelSchedule(f.channel.id))!;
+	const before = await f.repository.listScheduleTemplates();
+	const preview = await f.workers.preview({ kind: 'channel', timeZone: 'UTC', input: {
+		channelId: f.channel.id, startDate: '2026-09-19', days: 1, schedule,
+	} });
+	const guide = await materializeScheduleGuide(f.repository, 'UTC', '2026-09-19', 1);
+	const persisted = await schedulingRead(f.repository, { kind: 'persisted', id: f.channel.id,
+		input: { startDate: '2026-09-19', days: 1 }, timeZone: 'UTC' });
+	const again = await f.workers.preview({ kind: 'channel', timeZone: 'UTC', input: {
+		channelId: f.channel.id, startDate: '2026-09-19', days: 1,
+		schedule: channelScheduleDraftPreviewSchema.parse({
+			channelId: f.channel.id, startDate: '2026-09-19', days: 1, schedule: saved,
+		}).schedule,
+	} });
+	expect(saved).toMatchObject({ defaultTemplateId: null, defaultProgramId: f.source.id,
+		layers: [{ templateId: null, programId: special.id }] });
+	const virtual = resolveProgramSchedule(f.channel.id, saved, [], [f.source, special]);
+	expect(virtual.template?.slots[0]?.programId).toBe(f.source.id);
+	expect(virtual.templates.map((template) => template.slots[0]?.programId)).toEqual([f.source.id, special.id]);
+	expect(preview.segments.some((segment) => segment.scheduleLayerId === layerId)).toBe(true);
+	expect(preview.segments.some((segment) => segment.scheduleLayerId === null)).toBe(true);
+	expect(new Set(preview.segments.map((segment) => segment.templateId)).size).toBe(2);
+	expect(again.segments.map((segment) => segment.templateId)).toEqual(preview.segments.map((segment) => segment.templateId));
+	expect(again.proposedState.map((state) => state.consumerKey)).toEqual(
+		preview.proposedState.map((state) => state.consumerKey),
+	);
+	expect(guide.guide.channels[0]?.preview.segments).toEqual(preview.segments);
+	expect(JSON.parse(persisted.body).segments).toEqual(preview.segments);
+	expect(await f.repository.listScheduleTemplates()).toEqual(before);
+	await expect(f.repository.deleteProgram(special.id)).rejects.toThrow('still referenced');
+	await expect(f.repository.setChannelSchedule(f.channel.id, {
+		defaultTemplateId: null, defaultProgramId: randomUUID(), layers: [], defaultFiller: null,
+	})).rejects.toThrow('does not exist');
+}, 20_000);
+
+it('rejects a draft with a missing base program even when a conditional program exists', async () => {
+	const f = await setup();
+	const layerId = randomUUID();
+	const schedule = channelScheduleDraftPreviewSchema.parse({
+		channelId: f.channel.id, startDate: '2026-09-19', days: 1,
+		schedule: { defaultProgramId: randomUUID(), layers: [{ id: layerId, programId: f.source.id,
+			predicate: { type: 'weekdays', values: [6], negated: false } }] },
+	}).schedule;
+	expect(() => resolveProgramSchedule(f.channel.id, schedule, [], [f.source]))
+		.toThrow('Direct schedule program');
+	await expect(f.workers.preview({ kind: 'channel', timeZone: 'UTC', input: {
+		channelId: f.channel.id, startDate: '2026-09-19', days: 1, schedule,
+	} })).rejects.toThrow('Direct schedule program');
+}, 20_000);
+
+it('rejects a draft with a missing conditional program rather than previewing the base', async () => {
+	const f = await setup();
+	const schedule = channelScheduleDraftPreviewSchema.parse({
+		channelId: f.channel.id, startDate: '2026-09-19', days: 1,
+		schedule: { defaultProgramId: f.source.id, layers: [{ id: randomUUID(), programId: randomUUID(),
+			predicate: { type: 'weekdays', values: [6], negated: false } }] },
+	}).schedule;
+	await expect(f.workers.preview({ kind: 'channel', timeZone: 'UTC', input: {
+		channelId: f.channel.id, startDate: '2026-09-19', days: 1, schedule,
+	} })).rejects.toThrow('Direct schedule program');
+}, 20_000);
+
+it('replaces a direct base with a legacy template-only repository assignment', async () => {
+	const f = await setup();
+	const base = await template(f, f.source.id);
+	await f.repository.setChannelSchedule(f.channel.id, {
+		defaultTemplateId: null, defaultProgramId: f.source.id, layers: [], defaultFiller: null,
+	});
+	const saved = await f.repository.setChannelSchedule(f.channel.id, {
+		defaultTemplateId: base.id, layers: [], defaultFiller: null,
+	});
+	expect(saved).toMatchObject({ defaultTemplateId: base.id, defaultProgramId: null });
+}, 20_000);
+
+it('materializes a channel whose only scheduling source is a direct program', async () => {
+	const f = await setup();
+	await f.repository.setChannelSchedule(f.channel.id, {
+		defaultTemplateId: null, defaultProgramId: f.source.id, layers: [], defaultFiller: null,
+	});
+	await new TimelineMaterializer(f.repository, { publish: () => {} }, 'UTC', undefined, undefined, 1).runNow();
+	const status = await f.repository.getTimelineMaterialization(f.channel.id);
+	expect(status?.health).toBe('ready');
+	expect((await f.repository.listScheduleTemplates()).length).toBe(0);
+}, 20_000);
+
 it('matches the previous Quick Setup calculation and refreshes cached media after invalidation', async () => {
 	const f = await setup();
 	const request = quick(f);
-	const { program, template: base, schedule, channel: draft } = f.repository.previewQuickChannelSetup(request.input, request.maxExplicitMediaItems);
+	const { program, schedule, channel: draft } = f.repository.previewQuickChannelSetup(request.input, request.maxExplicitMediaItems);
+	const resolved = resolveProgramSchedule(draft.id, schedule, [], [program]);
+	const base = resolved.template!;
 	const libraryProgram = { ...program, id: '00000000-0000-4000-8000-000000000006' };
 	const catalog = await f.repository.getSchedulingCatalog([program, libraryProgram]);
 	const [library, programming] = schedulingProgramStatuses([libraryProgram, program], catalog);
 	const generated = generateTimelineDetailed({ channelId: draft.id, timeZone: request.timeZone, startDate: request.startDate,
-		days: 1, schedule, template: base, templates: [base], programs: [program], catalog, state: [] });
+		days: 1, schedule: { ...schedule, ...resolved.schedule }, template: base,
+		templates: resolved.templates, programs: [program], catalog, state: [] });
 	const expected = quickChannelSetupPreviewResultSchema.parse({
 		library: { items: library!.previewItems, indexedItemCount: library!.indexedItemCount },
 		programming: { items: programming!.previewItems, indexedItemCount: programming!.indexedItemCount },
-		templateName: base.name, schedule: generated,
+		templateName: program.name, schedule: generated,
 	});
 	const before = f.database.sqlite.serialize();
 	expect(await f.workers.preview(request)).toEqual(expected);
@@ -178,9 +283,11 @@ it('keeps background catalogs isolated and shares capacity across both job kinds
 	const f = await setup();
 	const request = quick(f);
 	const resources = f.repository.previewQuickChannelSetup(request.input, request.maxExplicitMediaItems);
+	const resolved = resolveProgramSchedule(resources.channel.id, resources.schedule, [], [resources.program]);
 	const catalog = await f.repository.getSchedulingCatalog([resources.program]);
 	const input = { channelId: resources.channel.id, timeZone: request.timeZone, startDate: request.startDate,
-		days: 1, schedule: resources.schedule, template: resources.template, templates: [resources.template],
+		days: 1, schedule: { ...resources.schedule, ...resolved.schedule }, template: resolved.template!,
+		templates: resolved.templates,
 		programs: [resources.program], state: [], catalog: { ...catalog, cacheKey: 'background-test',
 			media: catalog.media.map((item) => ({ ...item, title: 'Background snapshot' })) } };
 	const workers = new SchedulingWorkerPool(1, 1, { db: f.database.db, repository: f.repository });

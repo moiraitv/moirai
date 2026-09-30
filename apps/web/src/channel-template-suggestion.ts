@@ -1,4 +1,16 @@
-import { catalogSortTitle, type ScheduleTemplate } from '@moirai/shared';
+import { catalogSortTitle, type ScheduleTemplate, type SchedulingProgram } from '@moirai/shared';
+
+/** Maximum relative edit distance considered a close spelling match. */
+const CLOSE_NAME_DISTANCE = 0.2;
+
+/** Named resource eligible for a channel-name suggestion. */
+type NamedResource = Pick<ScheduleTemplate | SchedulingProgram, 'id' | 'name'>;
+
+/** Best name match and whether it is strong enough to preselect over another resource type. */
+interface NameSuggestion {
+	id: string;
+	suitable: boolean;
+}
 
 /** Compare names without leading articles, punctuation, accents, or letter case. */
 function normalizedName(value: string): string {
@@ -24,22 +36,26 @@ function nameDistance(left: string, right: string): number {
 	return row[right.length]!;
 }
 
-/** Prefer exact names, then a full channel-name phrase, then relative spelling similarity; keep ties stable. */
-export function suggestedChannelTemplateId(
+/** Rank exact names, full phrases, then spelling similarity while keeping catalog ties stable. */
+function bestNameSuggestion(
 	channelName: string,
-	templates: readonly Pick<ScheduleTemplate, 'id' | 'name'>[],
-): string | undefined {
+	resources: readonly NamedResource[],
+): NameSuggestion | undefined {
 	const channel = normalizedName(channelName);
-	let selected = templates[0]?.id;
+	let selected = resources[0]?.id;
+	if (!selected) {
+		return undefined;
+	}
 	if (!channel) {
-		return selected;
+		return { id: selected, suitable: false };
 	}
 
 	let bestScore = Infinity;
-	for (const template of templates) {
-		const name = normalizedName(template.name);
+	let suitable = false;
+	for (const resource of resources) {
+		const name = normalizedName(resource.name);
 		if (name === channel) {
-			return template.id;
+			return { id: resource.id, suitable: true };
 		}
 
 		const containsChannel = ` ${name} `.includes(` ${channel} `);
@@ -47,8 +63,31 @@ export function suggestedChannelTemplateId(
 		const score = (containsChannel ? 0 : 1) + distance;
 		if (score < bestScore) {
 			bestScore = score;
-			selected = template.id;
+			selected = resource.id;
+			suitable = containsChannel || distance <= CLOSE_NAME_DISTANCE;
 		}
 	}
-	return selected;
+	return { id: selected, suitable };
+}
+
+/** Suggest the closest saved template, including a fallback when all names are unrelated. */
+export function suggestedChannelTemplateId(
+	channelName: string,
+	templates: readonly Pick<ScheduleTemplate, 'id' | 'name'>[],
+): string | undefined {
+	return bestNameSuggestion(channelName, templates)?.id;
+}
+
+/** Prefer a suitable template, then a suitable program, before falling back to a catalog choice. */
+export function suggestedChannelAssignment(
+	channelName: string,
+	templates: readonly Pick<ScheduleTemplate, 'id' | 'name'>[],
+	programs: readonly Pick<SchedulingProgram, 'id' | 'name'>[],
+): { templateId: string | null; programId: string | null } {
+	const template = bestNameSuggestion(channelName, templates);
+	const program = bestNameSuggestion(channelName, programs);
+	if (template?.suitable || (template && !program?.suitable)) {
+		return { templateId: template.id, programId: null };
+	}
+	return { templateId: null, programId: program?.id ?? null };
 }

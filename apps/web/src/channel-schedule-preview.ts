@@ -1,5 +1,5 @@
 import { Temporal } from '@js-temporal/polyfill';
-import { SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide, type ScheduleTemplate, type TimelinePreview } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type ChannelScheduleConfig, type ScheduleGuide, type ScheduleTemplate, type SchedulingProgram, type TimelinePreview } from '@moirai/shared';
 
 /** Exact rolling interval and the smallest local-date guide request that covers it. */
 export interface ScheduleSummaryWindow {
@@ -115,6 +115,8 @@ export function schedulePreviewLegend(
 	preview: TimelinePreview | null,
 	templates: ScheduleTemplate[],
 	baseTemplateId: string | null,
+	programs: SchedulingProgram[] = [],
+	schedule: ChannelScheduleConfig | null = null,
 ): SchedulePreviewLegendEntry[] {
 	if (!preview) {
 		return [];
@@ -123,15 +125,22 @@ export function schedulePreviewLegend(
 	const names = new Map(templates.map((template) => [template.id, template.name]));
 	const entries = new Map<string, SchedulePreviewLegendEntry>();
 	for (const segment of preview.segments) {
+		const directProgramId = segment.scheduleLayerId
+			? schedule?.layers.find((layer) => layer.id === segment.scheduleLayerId)?.programId
+			: schedule?.defaultProgramId;
 		const existing = entries.get(segment.templateId);
 		const entry = existing ?? {
 			templateId: segment.templateId,
-			name: names.get(segment.templateId) ?? 'Missing template',
+			name: names.get(segment.templateId)
+				?? programs.find((program) => program.id === directProgramId)?.name
+				?? programs.find((program) => program.id === segment.programId)?.name
+				?? 'Missing template',
 			programIds: [],
 			isBase: segment.templateId === baseTemplateId || segment.scheduleLayerId === null,
 		};
-		if (segment.programId && !entry.programIds.includes(segment.programId)) {
-			entry.programIds.push(segment.programId);
+		const colorProgramId = directProgramId ?? segment.programId;
+		if (colorProgramId && !entry.programIds.includes(colorProgramId)) {
+			entry.programIds.push(colorProgramId);
 		}
 		entry.isBase ||= segment.templateId === baseTemplateId || segment.scheduleLayerId === null;
 		entries.set(segment.templateId, entry);

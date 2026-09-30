@@ -28,7 +28,13 @@ function references(kind: Exclude<ResourceUsageKind, 'media'>, id: string): SQL 
 			WHERE json_extract(default_filler, '$.programId') = ${id}
 			UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Schedule filler'
 			FROM channel_schedules s JOIN channels c ON c.id = s.channel_id
-			WHERE json_extract(s.config, '$.defaultFiller.programId') = ${id}`;
+			WHERE json_extract(s.config, '$.defaultFiller.programId') = ${id}
+			UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Base program'
+			FROM channel_schedules s JOIN channels c ON c.id = s.channel_id
+			WHERE s.default_program_id = ${id}
+			UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Conditional program'
+			FROM channel_schedule_layers l JOIN channels c ON c.id = l.channel_id
+			WHERE l.program_id = ${id}`;
 	}
 	if (kind === 'template') {
 		return sql`

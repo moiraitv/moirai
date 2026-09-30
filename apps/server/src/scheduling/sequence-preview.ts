@@ -47,7 +47,8 @@ export async function prepareSequencePreview(
 	return {
 		channelId: root.id, timeZone,
 		startDate: input.startDate ?? Temporal.Now.plainDateISO(timeZone).toString(), days: 1,
-		schedule: { channelId: root.id, defaultTemplateId: root.id, layers: [], defaultFiller: null,
+		schedule: { channelId: root.id, defaultTemplateId: root.id, defaultProgramId: null,
+			layers: [], defaultFiller: null,
 			createdAt: timestamp, updatedAt: timestamp },
 		template, templates: [template], programs, catalog, state: [],
 	};

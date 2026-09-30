@@ -143,8 +143,14 @@ export function validateChannelSchedule(
 	templateIds: Set<string>,
 	programIds: Set<string>,
 ): void {
-	if (!templateIds.has(config.defaultTemplateId)) {
+	if (Boolean(config.defaultTemplateId) === Boolean(config.defaultProgramId)) {
+		throw new SchedulingValidationError('Choose exactly one base template or program');
+	}
+	if (config.defaultTemplateId && !templateIds.has(config.defaultTemplateId)) {
 		throw new SchedulingValidationError('The default schedule template does not exist');
+	}
+	if (config.defaultProgramId && !programIds.has(config.defaultProgramId)) {
+		throw new SchedulingValidationError('The default schedule program does not exist');
 	}
 
 	const layerIds = new Set<string>();
@@ -154,10 +160,16 @@ export function validateChannelSchedule(
 		}
 
 		layerIds.add(layer.id);
-		if (!templateIds.has(layer.templateId)) {
+		if (Boolean(layer.templateId) === Boolean(layer.programId)) {
+			throw new SchedulingValidationError('Choose exactly one template or program for each layer');
+		}
+		if (layer.templateId && !templateIds.has(layer.templateId)) {
 			throw new SchedulingValidationError(
 				`Schedule layer template ${layer.templateId} does not exist`,
 			);
+		}
+		if (layer.programId && !programIds.has(layer.programId)) {
+			throw new SchedulingValidationError(`Schedule layer program ${layer.programId} does not exist`);
 		}
 	}
 	assertFillerProgram(config.defaultFiller, programIds);
