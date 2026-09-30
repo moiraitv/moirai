@@ -38,7 +38,7 @@
     "docs:user:review:list": "tsx scripts/user-docs.ts list",
     "docs:user:review:migrate": "tsx scripts/user-docs.ts migrate",
     "docs:user:review:approve": "tsx scripts/user-docs.ts approve",
-    "docs:user:review:check": "tsx scripts/user-docs.ts review-check",
+    "docs:user:review:check": "node --import tsx scripts/user-docs.ts review-check",
     "docs:user:screenshots:update": "playwright test --config playwright.docs.config.ts --grep @docs-screenshot && tsx tests/e2e/documentation/publish.ts",
     "ai:compare": "node --env-file-if-exists=.env --import tsx scripts/compare-ai-models.ts",
     "ai:compare:html": "node --env-file-if-exists=.env --import tsx scripts/ai-production-comparison.ts",

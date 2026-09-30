@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx ../../scripts/user-docs.ts manifest && vitepress dev",
-		"build": "tsx ../../scripts/user-docs.ts manifest && vitepress build && tsx ../../scripts/user-docs.ts bundle",
-    "typecheck": "tsx ../../scripts/user-docs.ts manifest && vue-tsc --noEmit"
+    "dev": "node --import tsx ../../scripts/user-docs.ts manifest && vitepress dev",
+		"build": "node --import tsx ../../scripts/user-docs.ts manifest && vitepress build && node --import tsx ../../scripts/user-docs.ts bundle",
+    "typecheck": "node --import tsx ../../scripts/user-docs.ts manifest && vue-tsc --noEmit"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
