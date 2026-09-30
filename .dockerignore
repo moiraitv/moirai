@@ -7,4 +7,5 @@ test-results
 playwright-report
 .env
 .DS_Store
+assets-src
 vendor/ersatztv-next

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - 2026-09-30
+
+### New
+
+- **AI** content selections can generate a saved list of media for a Content Program from a description. Review and exclude results before saving, then use the selection with the existing playback orders.
+- **AI provider** settings support OpenAI, Anthropic, xAI, OpenRouter, and custom endpoints. Configure a provider in Settings, test the connection, choose a model, and optionally enable compatible web research.
+- Channel schedules can assign a Program directly as their base, without creating a one-slot Template. New schedules suggest a closely named Template or Program when one is available; existing assignments stay in place.
+
+### Improvements
+
+- Silenced many of the background request log messages to reduce the signal-to-noise ratio.
+
 ## 0.4.1 - 2026-09-26
 
 ### Improvements

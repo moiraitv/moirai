@@ -1,8 +1,12 @@
 FROM node:24-bookworm-slim AS dependencies
 ENV npm_config_nodedir=/usr/local
 WORKDIR /app
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y python3 make g++ \
+RUN apt-get update || { \
+        echo >&2 'APT update failed. If repository signatures are invalid, check Docker disk space with "docker system df" on the host.'; \
+        df -h / >&2; \
+        exit 1; \
+    }; \
+    apt-get install --no-install-recommends -y python3 make g++ git \
     && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/package.json
@@ -13,9 +17,6 @@ COPY packages/ersatztv-contract/package.json packages/ersatztv-contract/package.
 RUN npm ci
 
 FROM dependencies AS build
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y git \
-    && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN npm run build:production
 
