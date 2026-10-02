@@ -1,3 +1,6 @@
+import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
+import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
+import type { CatalogReadRequest } from '../repository/catalog-read.js';
 import { createReadStream } from 'node:fs';
 import type { FastifyInstance, RouteHandlerMethod } from 'fastify';
 import { z } from 'zod';
@@ -128,13 +131,29 @@ const artworkQuerySchema = z.object({
 interface CatalogRouteDependencies {
 	repository: Repository;
 	artworkCache: ArtworkCache;
+	schedulingWorkers?: SchedulingWorkerPool;
 }
 
 /** Register catalog browsing, media preview, and proxied artwork endpoints. */
 export function registerCatalogRoutes(
 	app: FastifyInstance,
-	{ repository, artworkCache }: CatalogRouteDependencies,
+	{ repository, artworkCache, schedulingWorkers }: CatalogRouteDependencies,
 ): void {
+	/** Preserve local route fixtures while production reads return worker-validated bytes. */
+	const readCatalog = async (request: CatalogReadRequest, reply: import('fastify').FastifyReply): Promise<unknown> => {
+		if (schedulingWorkers?.databaseBacked) {
+			const result = await schedulingWorkers.read(request, workerRequestSignal(reply));
+			return sendWorkerJson(reply, result.body);
+		}
+		if (request.operation === 'browse') {
+			return repository.browseMedia(...request.args);
+		}
+		if (request.operation === 'genres') {
+			return repository.listMediaGenres(...request.args);
+		}
+		return repository.browseMediaSourceOptions(...request.args);
+	};
+
 	// Paginated library browsing and filter facets.
 	app.get('/api/v1/libraries/:id/media', {
 		schema: apiOperation({
@@ -146,10 +165,10 @@ export function registerCatalogRoutes(
 			response: { 200: responseContent('Paginated catalog entries', 'application/json', mediaBrowseResultSchema) },
 			errors: [400, 404, 500, 503],
 		}),
-	}, async (request) => {
+	}, async (request, reply) => {
 		const id = parseId(request);
 		const query = mediaBrowseQuerySchema.parse(request.query);
-		return repository.browseMedia(id, {
+		return readCatalog({ kind: 'catalog', operation: 'browse', args: [id, {
 			...query,
 			parentId: query.parentId ?? null,
 			releaseYearFrom: query.releaseYearFrom ?? null,
@@ -160,7 +179,7 @@ export function registerCatalogRoutes(
 			minimumUserRating: query.minimumUserRating ?? null,
 			addedFrom: query.addedFrom ?? null,
 			addedBefore: query.addedBefore ?? null,
-		});
+		}] }, reply);
 	});
 	app.get('/api/v1/libraries/:id/media-genres', {
 		schema: apiOperation({
@@ -172,14 +191,14 @@ export function registerCatalogRoutes(
 			response: { 200: responseContent('Normalized genre facets', 'application/json', z.array(mediaGenreFacetSchema)) },
 			errors: [400, 404, 500, 503],
 		}),
-	}, async (request) => {
+	}, async (request, reply) => {
 		const query = mediaGenreFacetQuerySchema.parse(request.query);
-		return repository.listMediaGenres(
+		return readCatalog({ kind: 'catalog', operation: 'genres', args: [
 			parseId(request),
 			query.genreMatch === 'all'
 				? { genres: query.genres, primaryGenres: query.primaryGenres, excludedGenres: query.excludedGenres }
 				: null,
-		);
+		] }, reply);
 	});
 	// Bounded source-picker searches for program editing.
 	app.get('/api/v1/libraries/:id/media-source-options', {
@@ -192,12 +211,12 @@ export function registerCatalogRoutes(
 			response: { 200: responseContent('Bounded source-picker results', 'application/json', mediaSourcePickerResultSchema) },
 			errors: [400, 404, 500, 503],
 		}),
-	}, async (request) => {
+	}, async (request, reply) => {
 		const query = mediaSourceOptionsQuerySchema.parse(request.query);
-		return repository.browseMediaSourceOptions(parseId(request), {
+		return readCatalog({ kind: 'catalog', operation: 'sources', args: [parseId(request), {
 			...query,
 			parentId: query.parentId ?? null,
-		});
+		}] }, reply);
 	});
 	// Resolve explicitly selected item and group summaries in stable request order.
 	app.post('/api/v1/libraries/:id/media-selection', {

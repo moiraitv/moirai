@@ -177,7 +177,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		return promise;
 	}
 
-	/** Refresh the guide, advancing expired start dates and navigation history to today. */
+	/** Accept guide snapshots independently of status reads and advance expired navigation dates. */
 	async function performGuideLoad(
 		startDate: string,
 		days = 7,
@@ -216,10 +216,11 @@ export const useChannelsStore = defineStore('channels', () => {
 					materializationsLoaded.value = true;
 				}
 			});
-			// Observe failures immediately while the guide and status reads run together.
+			// Observe status failures now, but accept each guide before awaiting them. The worker
+			// has already replaced its snapshot when the guide read completes.
 			void statuses.catch(() => undefined);
 			if (days > 1 && (guideWeekStart.value !== startDate || guideDays.value < 1)) {
-				const [first] = await Promise.all([api.scheduleGuide(startDate, 1), statuses]);
+				const first = await api.scheduleGuide(startDate, 1);
 				if (sequence !== guideSequence) {
 					return;
 				}
@@ -234,7 +235,7 @@ export const useChannelsStore = defineStore('channels', () => {
 				error.value = '';
 			}
 
-			const [result] = await Promise.all([api.scheduleGuide(startDate, days), statuses]);
+			const result = await api.scheduleGuide(startDate, days);
 			if (sequence !== guideSequence) {
 				return;
 			}
@@ -245,6 +246,7 @@ export const useChannelsStore = defineStore('channels', () => {
 			guideDays.value = days;
 			guidePendingWindowDays.value = null;
 			guideLoaded.value = true;
+			guideLoading.value = false;
 			if (navigation === 'forward' && previousStart >= today && previousStart !== startDate) {
 				if (guideStartHistory.value.at(-1) !== previousStart) {
 					guideStartHistory.value.push(previousStart);
@@ -256,7 +258,11 @@ export const useChannelsStore = defineStore('channels', () => {
 			) {
 				guideStartHistory.value.pop();
 			}
-			error.value = '';
+
+			await statuses;
+			if (sequence === guideSequence) {
+				error.value = '';
+			}
 		}
 		catch (cause) {
 			if (sequence !== guideSequence) {

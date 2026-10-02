@@ -17,14 +17,14 @@ export async function loadAiEmbeddings(
 	signal.throwIfAborted();
 	const vectors = repository.retrievalVectors(libraryId);
 	const deadline = Date.now() + AI_QUERY_EMBEDDING_WAIT_MS;
-	let preferences = repository.preferences.catalog(concepts, Boolean(requestWork));
+	let preferences = await repository.preferences.catalog(concepts, Boolean(requestWork));
 	let issue: AiRetrievalVectors['issue'];
 	if (requestWork && Object.values(preferences).some(item => item.status === 'pending')) {
 		const wake = requestWork(false, concepts);
 		issue = wake === 'paused' ? 'service-paused' : wake === 'stopped' ? 'service-stopped' : undefined;
 		while (!issue && Date.now() < deadline && Object.values(preferences).some(item => item.status === 'pending' && !item.error)) {
 			await delay(Math.min(500, Math.max(1, deadline - Date.now())), undefined, { signal });
-			preferences = repository.preferences.catalog(concepts, false);
+			preferences = await repository.preferences.catalog(concepts, false);
 		}
 	}
 	const queries = concepts.flatMap(concept => preferences[concept]?.vector ? [preferences[concept]!.vector!] : []);

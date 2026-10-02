@@ -108,10 +108,29 @@ export async function prepareMediaStreams(repository: Repository, channel: Chann
 	}
 	try {
 		const metadata = await repository.audioMetadata(selected.map(({ segment }) => segment.mediaItemId!));
+		const videoByPath = new Map<string, number | null>();
+		const audioByPath = new Map<string, number | null>();
 		for (const { segment, preference } of selected) {
 			const paths = segment.playbackParts?.length ? segment.playbackParts.map((part) => part.playbackPath) : [segment.playbackPath];
-			result.audio.set(segment.id, paths.map((file) => file ? selectAudio(metadata.get(file), preference) : null));
-			result.video.set(segment.id, paths.map(file => file ? selectVideo(metadata.get(file)) : null));
+			result.audio.set(segment.id, paths.map(file => {
+				if (!file) {
+					return null;
+				}
+				const key = JSON.stringify([file, preference.language ?? null, preference.title ?? null]);
+				if (!audioByPath.has(key)) {
+					audioByPath.set(key, selectAudio(metadata.get(file), preference));
+				}
+				return audioByPath.get(key)!;
+			}));
+			result.video.set(segment.id, paths.map(file => {
+				if (!file) {
+					return null;
+				}
+				if (!videoByPath.has(file)) {
+					videoByPath.set(file, selectVideo(metadata.get(file)));
+				}
+				return videoByPath.get(file)!;
+			}));
 		}
 	}
 	catch {

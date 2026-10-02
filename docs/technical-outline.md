@@ -26,7 +26,7 @@ Indexed catalog
         ↓
 Programs → optional templates → channel schedule layers
         ↓
-Committed configurable timeline (7 days by default)
+Committed configurable timeline (3 days by default)
         ↓
 Daily ErsatzTV playout files
         ↓
@@ -1039,8 +1039,13 @@ boundary failures.
 
 ### Materialization and determinism
 
+Each generation indexes other-channel occupancy by media item once, avoiding full schedule scans
+for each candidate. Ordered selection stops when its winner is known; longest-fit selection uses one
+stable pass. Speculative branches share untouched cursor records and clone records before mutation.
+State deltas skip identical records, and Program cursor fingerprints are cached within each generation.
+
 Saved channel schedules become durable rolling timelines in SQLite. The advertised XMLTV and playout
-window uses `MOIRAI_GUIDE_DAYS` (1–14 local days, default 7), validated at startup and
+window uses `MOIRAI_GUIDE_DAYS` (1–14 local days, default 3), validated at startup and
 reported in server capabilities. Guide reads, XMLTV, playout, and local or worker materialization
 share this horizon. The stored window keeps one extra local day so that window still covers the
 advertised horizon after local midnight, before the next materialization pass replenishes the
@@ -1157,22 +1162,59 @@ persisted-channel previews also run as compact read jobs. Committed guide projec
 previews, and XMLTV rendering stay in workers; large guide and overview responses are validated and
 serialized there before HTTP delivery. Authentication and input validation remain in routes. Missing
 committed coverage still requests authoritative materialization before retrying the read. Draft
-semantic preparation is queued by the owning service, never by a read-only worker.
+semantic preparation is queued by the owning service, never by a read-only worker. Paginated catalog
+browsing, genre facets, and source searches use the same read workers and existing bounded queries.
 
 Background materialization prepares catalogs, fingerprints, selection state, and commit payloads in a
-worker. The main process acknowledges ordered pending/failed/commit writes through the existing
-repository transactions and revision checks. The shared pool retains its total queue limit, reserves
+worker. Bulk checkpoints skip future application boundaries before catalog and occupancy work unless
+failed-channel or empty-timeline recovery is eligible. Unchanged, covered channels do not reconstruct
+selection state. A pass-local canonical serialization context preserves fingerprint bytes while
+sharing immutable media, hierarchy, Program, and semantic inputs across channels. The main process
+awaits pending/failed/commit acknowledgements from the dedicated database writer, preserving existing
+repository transactions and revision checks. The shared pool retains its ordinary admission limit, reserves
 one worker from background work when multiple workers are enabled, and admits background work after
-at most three queued interactive dispatches with one worker. Identical reads and previews share a job;
+at most three queued interactive dispatches with one worker when no playback jobs are waiting.
+Live tune preparation and document jobs take priority over periodic playout, guide, preview, and
+materialization work and may use the worker reserved from background work. Periodic playout shares
+the background worker allowance. A tune promotes already queued preparation for its channel and
+shares that pass without requiring another pass solely for the tune. Ordinary admission retains its
+configured limit; live jobs can use up to one additional admission per configured worker (at least
+one), keeping total accepted work bounded. Running jobs finish without preemption.
+Identical reads and previews share a job;
 disconnected consumers release queued work only when no other consumer needs it. Running authoritative
 work is not cancelled by an HTTP disconnect.
 
 Private playout reads and daily ErsatzTV document generation also use the pool, including fallback-only
-output for unassigned channels. Subtitle/audio asset preparation, configuration reconciliation, and
-atomic file publication remain with the owning playout service. Generation receives the bounded guide
-and prepared selections, without transferring a catalog. Daily fallback clipping rejects out-of-range
+output for unassigned channels. Stream metadata reads and audio/video selection run in the read worker,
+memoizing physical paths and effective audio preferences within one preparation. The worker retains
+the full committed guide and returns only subtitle/credit spans and inherited preferences needed by
+the owning asset service. Document generation reuses that snapshot or reloads against the
+authoritative read revision. Publication checks a separate revision for the tuned channel and shared
+playback inputs: other channels' timeline changes, scan progress, and embedding progress do not restart
+live preparation. Changes to the channel, shared media facts, or Program/credit preferences retain
+the preparation retry. Subtitle asset preparation, configuration reconciliation, and atomic file publication
+remain with the owning playout service. Daily fallback clipping rejects out-of-range
 items before constructing Temporal objects, preserving loop phase and exact output. Playout jobs share
-the background capacity reservation, queue limit, and shutdown lifecycle.
+the queue limit and shutdown lifecycle, with priority over other queued work.
+
+After startup migrations, one dedicated worker owns runtime mutations for file-backed databases.
+The main SQLite connection rejects writes with `query_only`, and computational workers open read-only
+connections. Typed, allowlisted commands retain complete scan, timeline, resource, authentication,
+and semantic transactions. The FIFO admits one active command and at most 32 waiting commands;
+background producers wait for capacity and excess interactive mutations return `503` with
+`Retry-After`. Callers await commits before events or read-cache invalidation. Shutdown drains accepted
+commands; unexpected worker failure rejects pending work without replaying uncertain commits and
+makes database readiness fail. In-memory test databases retain local writes because their contents
+cannot be shared across connections. Disabling scheduling workers does not disable the write owner.
+
+The browser guide worker fetches, parses, and indexes one active authenticated snapshot. The UI holds
+compact channel summaries and requests only viewport listings or inspected block segments, retaining
+DOM layout and accessible interaction on the main thread. Rolling schedule counts and dead-air totals
+are calculated against retained segment indexes in the worker; catalog summaries distinguish pending
+and failed queries from loaded empty results. Successful guide responses are accepted before waiting
+for materialization status, so a status failure reports an error without invalidating the displayed
+guide's listings, previews, or summaries. Superseded responses are discarded; session
+clearing releases the snapshot.
 
 Channel persistence invalidates read caches immediately and defers coalesced change notifications and
 playout follow-up beyond its response path. Unassigned channels do not request timeline generation.
@@ -1185,8 +1227,8 @@ notifications recover authoritative state.
 Responsiveness diagnostics use fixed operation labels without request contents. Debug timings cover
 HTTP operations, worker queue/execution, guide reads/computation/serialization, timeline writes, scan
 reconciliation, and maintenance. Event-loop delays of at least 250 ms produce a warning at most once
-per 30 seconds. SQLite writers remain on their owning thread; these measurements expose remaining
-writer stalls without changing the container's three-second health-check timeout.
+per 30 seconds. Database timings distinguish accepted queue wait, transport, and transaction work,
+without changing the container's three-second health-check timeout.
 
 Catalog loading follows program references. It reads whole libraries only for library-query sources,
 coalesces identical revision reads, builds reusable indexes, and retains at most 32 cached scopes.

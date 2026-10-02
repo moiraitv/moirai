@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { TvMinimal } from '@lucide/vue';
 import type { Channel, GuideEntry, GuideSegmentDetail, ScheduleGuide, TimelineSegment } from '@moirai/shared';
 import { api } from '../api';
+import { isWorkerGuide, queryWorkerGuide } from '../guide-worker';
 import { guideIntervalIndex } from '../guide-index';
 import { useGuideRows } from '../composables/useGuideRows';
 import { channelLogoUrl } from '../channel-logo';
@@ -82,7 +83,9 @@ const blockPopover = ref<InstanceType<typeof GuideBlockPopover>>();
 const itemPreview = ref<InstanceType<typeof GuideItemPreview>>();
 const programNames = computed(() => Object.assign({}, ...(props.guide?.channels.map(channel => channel.preview.programNames ?? {}) ?? [])) as Record<string, string>);
 const activeChannelId = ref<string | null>(null);
-const activeSegments = computed(() => props.guide?.channels.find(channel => channel.channelId === activeChannelId.value)?.preview.segments ?? []);
+const inspectedSegments = shallowRef<TimelineSegment[]>([]);
+const activeSegments = computed(() => isWorkerGuide(props.guide) ? inspectedSegments.value
+	: props.guide?.channels.find(channel => channel.channelId === activeChannelId.value)?.preview.segments ?? []);
 const displayedByChannel = computed(() => new Map((props.guide?.channels ?? []).map((channel) =>
 	[channel.channelId, channel.entries ?? channel.preview.segments])));
 /** Extra hours rendered beyond the scrolled viewport so scrolling does not flash empty track. */
@@ -124,8 +127,19 @@ const guideByChannel = computed(
 
 const guideRows = computed(() => channelGuideRows(props.channels));
 const { body: rowsBody, visibleRows, height: rowsHeight, measureRow, retainFocus, releaseFocus, navigateRows, measureOffset } = useGuideRows(guideRows, viewportReady);
+const viewportError = ref('');
+const workerVisible = shallowRef(new Map<string, Array<TimelineSegment | GuideEntry>>());
+let viewportQuery = 0;
+
+/** Distinguish the first viewport request from an already loaded empty collection. */
+function workerListingsPending(channelId: string): boolean {
+	return isWorkerGuide(props.guide) && !workerVisible.value.has(channelId);
+}
 const visibleByChannel = computed(() => {
 	const result = new Map<string, Array<TimelineSegment | GuideEntry>>();
+	if (isWorkerGuide(props.guide)) {
+		return workerVisible.value;
+	}
 	if (!viewportReady.value || !daysGeometry.value.length) {
 		return result;
 	}
@@ -150,6 +164,37 @@ const visibleByChannel = computed(() => {
 	}
 	return result;
 });
+watch([() => props.guide, visibleRows, viewportReady, viewportStart, viewportEnd, hourWidth, daysGeometry], async () => {
+	const request = ++viewportQuery;
+	const guide = props.guide;
+	if (!guide || !isWorkerGuide(guide) || !viewportReady.value || !daysGeometry.value.length) {
+		workerVisible.value = new Map();
+		viewportError.value = '';
+		return;
+	}
+	const origin = daysGeometry.value[0]!.startMilliseconds;
+	const scale = 3_600_000 / hourWidth.value;
+	try {
+		const result = await queryWorkerGuide(guide, {
+			channelIds: visibleRows.value.flatMap(({ row }) => row.type === 'channel' ? [row.channel.id] : []),
+			start: origin + viewportStart.value * scale, finish: origin + viewportEnd.value * scale, minimumDuration: 3 * scale,
+		});
+		if (request === viewportQuery) {
+			const pinned = pinnedProgramme.value;
+			if (pinned && result.has(pinned.channelId) && !result.get(pinned.channelId)!.some(value => value.id === pinned.id)) {
+				result.get(pinned.channelId)!.push(pinned);
+			}
+			workerVisible.value = result;
+			viewportError.value = '';
+		}
+	}
+	catch (error) {
+		if (request === viewportQuery && !(error instanceof DOMException && error.name === 'AbortError')) {
+			viewportError.value = errorMessage(error);
+		}
+	}
+}, { immediate: true });
+
 let viewportFrame = 0;
 let viewportObserver: ResizeObserver | null = null;
 
@@ -315,7 +360,8 @@ function inspectChannel(event: MouseEvent): void {
 }
 
 /** Open grouped listings without sending their presentation IDs to the media endpoint. */
-function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): void {
+async function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = false): Promise<void> {
+	const eventTarget = event.currentTarget;
 	if (props.inspectListings) {
 		if (event.type === 'click' && event.currentTarget instanceof HTMLElement) {
 			pinnedProgramme.value = entry;
@@ -327,11 +373,28 @@ function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = fa
 
 	pinnedProgramme.value = entry;
 	activeChannelId.value = entry.channelId;
+	if (props.guide && isWorkerGuide(props.guide)) {
+		const guide = props.guide;
+		try {
+			const result = await queryWorkerGuide(guide, { channelIds: [entry.channelId], start: Date.parse(entry.start),
+				finish: Date.parse(entry.finish), minimumDuration: 0, segmentsOnly: true });
+			if (pinnedProgramme.value !== entry || props.guide !== guide) {
+				return;
+			}
+			inspectedSegments.value = (result.get(entry.channelId) ?? []) as TimelineSegment[];
+		}
+		catch (error) {
+			if (!(error instanceof DOMException && error.name === 'AbortError')) {
+				selectedError.value = errorMessage(error);
+			}
+			return;
+		}
+	}
 	if ('kind' in entry && entry.kind === 'block') {
 		itemPreview.value?.close();
 		void blockPopover.value?.show(
 			entry,
-			event.currentTarget as HTMLElement,
+			eventTarget as HTMLElement,
 			focus,
 			event instanceof MouseEvent && (event.type.startsWith('pointer') || event.detail > 0) ? event.clientX : undefined,
 		);
@@ -347,7 +410,7 @@ function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focus = fa
 			}
 		}
 		else if (segment) {
-			void itemPreview.value?.show(segment, event);
+			void itemPreview.value?.show(segment, event, eventTarget instanceof HTMLElement ? eventTarget : undefined);
 		}
 	}
 }
@@ -470,6 +533,7 @@ onMounted(() => {
 	}
 });
 onBeforeUnmount(() => {
+	viewportQuery++;
 	closeSegment();
 	guideScroll.value?.removeEventListener('scroll', scheduleViewportRead);
 	viewportObserver?.disconnect();
@@ -561,7 +625,7 @@ onBeforeUnmount(() => {
 											{{ channel.audio.format?.toUpperCase() }}
 										</p>
 										<slot name="detail" :channel="channel" :preview="guideByChannel.get(channel.id)"></slot>
-										<div v-if="guideByChannel.has(channel.id) && rowStates[channel.id]?.state === 'failed'" class="guide-channel-failure">
+										<div v-if="guideByChannel.has(channel.id) && (rowStates[channel.id]?.state === 'failed' || (viewportError && workerVisible.has(channel.id)))" class="guide-channel-failure">
 											<span role="alert">Guide could not be updated.</span>
 											<button type="button" class="button secondary" @click="emit('retry')">Retry</button>
 										</div>
@@ -641,17 +705,17 @@ onBeforeUnmount(() => {
 										</component>
 									</component>
 									<div
-										v-if="!guideByChannel.get(channel.id)"
+										v-if="!guideByChannel.get(channel.id) || workerListingsPending(channel.id)"
 										class="guide-empty-day"
 										:style="{ left: '8px', width: `${timelineWidth - 16}px` }"
 									>
 										<div class="guide-empty-status">
-											<span :role="rowStates[channel.id]?.state === 'failed' ? 'alert' : 'status'">
-												{{ rowStates[channel.id]?.state === 'failed' ? 'Guide could not be loaded.'
+											<span :role="rowStates[channel.id]?.state === 'failed' || viewportError ? 'alert' : 'status'">
+												{{ rowStates[channel.id]?.state === 'failed' || viewportError ? 'Guide could not be loaded.'
 													: rowStates[channel.id]?.state === 'preparing' ? 'Preparing guide…'
-														: rowStates[channel.id]?.state === 'loading' || (!rowStates[channel.id] && refreshing) ? 'Loading guide…' : emptyMessage }}
+														: workerListingsPending(channel.id) || rowStates[channel.id]?.state === 'loading' || (!rowStates[channel.id] && refreshing) ? 'Loading guide…' : emptyMessage }}
 											</span>
-											<button v-if="rowStates[channel.id]?.state === 'failed'" type="button" class="button secondary" @click="emit('retry')">Retry</button>
+											<button v-if="rowStates[channel.id]?.state === 'failed' || viewportError" type="button" class="button secondary" @click="emit('retry')">Retry</button>
 										</div>
 									</div>
 									<span

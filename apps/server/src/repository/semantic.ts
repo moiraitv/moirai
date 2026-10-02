@@ -201,6 +201,11 @@ export class SemanticRepository {
 		return vectors;
 	}
 
+	/** Count queued persisted inferences without loading metadata or decoding cached vectors. */
+	pendingCount(): number {
+		return (this.db.$client.prepare("SELECT count(*) AS total FROM media_embeddings WHERE status='pending'").get() as { total: number }).total;
+	}
+
 	/** Attach current vectors only; a stale cached vector must never enter a new recommendation. */
 	catalog(scope?: { libraryIds: string[]; programIds: string[] }): SemanticCatalog {
 		const inputs = new Map(this.inputs(undefined, scope?.libraryIds).map((input) => [input.id, input]));

@@ -22,6 +22,7 @@ import type { BoundaryRejection, TimelineContinuation } from './continuation.js'
 import {
 	addIssue,
 	changedStateRecords,
+	indexOccupiedMedia,
 	selectProgram,
 	type SelectionResult,
 	type SelectionContext,
@@ -211,6 +212,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 	const issueKeys = new Set<string>();
 	const issueIndex = new Map<string, RecordedTimelineIssue>();
 	const candidateCache: SelectionContext['candidateCache'] = new Map();
+	const stateFingerprints: NonNullable<SelectionContext['stateFingerprints']> = new Map();
+	const occupiedMediaIndex = indexOccupiedMedia(input.occupiedMedia ?? []);
 	const blockedPrograms = new Set<string>();
 	const segments: TimelineSegment[] = [];
 	const guideOccurrences: GuideOccurrence[] = [];
@@ -292,6 +295,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			}
 			const context: SelectionContext = {
 				programs,
+				stateFingerprints,
 				catalog: input.catalog,
 				candidateCache,
 				blockedPrograms,
@@ -307,6 +311,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				viewingPreferences: input.viewingPreferences ?? { itemScores: {}, showScores: {} },
 				selectionStart: cursor.toString(),
 				occupiedMedia: input.occupiedMedia ?? [],
+				occupiedMediaIndex,
 			};
 			let primaryCount = resume?.hadPrimary ? 1 : 0;
 			let boundaryRejection: BoundaryRejection | null = resume?.boundaryRejection ?? null;

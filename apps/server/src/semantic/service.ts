@@ -105,12 +105,12 @@ export class EmbeddingService {
 			return;
 		}
 		this.retryDelay = 60_000;
-		this.active = this.run().catch(() => {
+		this.active = this.run().catch(async () => {
 			this.dirty = true;
 			this.priorityTexts.clear();
 			if (!this.closed && !this.paused) {
-				this.repository.preparationError('model-unavailable');
-				this.events.publish({ type: 'embeddings.changed', data: { pending: this.repository.catalog().pendingItemIds.length, failed: 0, status: 'idle' } });
+				await this.repository.preparationError('model-unavailable');
+				this.events.publish({ type: 'embeddings.changed', data: { pending: this.repository.pendingCount(), failed: 0, status: 'idle' } });
 			}
 		}).finally(() => {
 			this.active = null;
@@ -124,10 +124,10 @@ export class EmbeddingService {
 			return;
 		}
 		if (this.dirty) {
-			this.repository.preferences.reconcile();
+			await this.repository.preferences.reconcile();
 		}
 		const preferences = this.repository.preferences.pending([...this.priorityTexts]);
-		const pending = this.dirty ? this.repository.reconcile() : [];
+		const pending = this.dirty ? await this.repository.reconcile() : [];
 		if (pending.length === 0 && preferences.length === 0) {
 			this.dirty = false;
 			this.priorityTexts.clear();
@@ -135,11 +135,11 @@ export class EmbeddingService {
 		}
 		if (!existsSync(path.join(this.modelPath, 'onnx/model.onnx'))) {
 			this.priorityTexts.clear();
-			this.repository.preparationError('model-missing');
+			await this.repository.preparationError('model-missing');
 			this.events.publish({ type: 'embeddings.changed', data: { pending: pending.length + preferences.length, failed: 0, status: 'model-missing' } });
 			return;
 		}
-		this.repository.preparationError(null);
+		await this.repository.preparationError(null);
 		this.dirty = false;
 		await this.preparePreferences(preferences, pending.length);
 
@@ -158,7 +158,7 @@ export class EmbeddingService {
 			}
 			results.push({ input, vector });
 			if (results.length >= MEDIA_EMBEDDING_BATCH_SIZE || index === pending.length - 1) {
-				this.repository.storeBatch(results.splice(0));
+				await this.repository.storeBatch(results.splice(0));
 				this.events.publish({ type: 'embeddings.changed', data: {
 					pending: pending.length - index - 1, failed, status: index === pending.length - 1 ? 'idle' : 'working',
 				} });
@@ -174,7 +174,7 @@ export class EmbeddingService {
 			if (this.closed || this.paused) {
 				return;
 			}
-			this.repository.preferences.store(preference.hash, await this.infer(preference.text));
+			await this.repository.preferences.store(preference.hash, await this.infer(preference.text));
 			this.priorityTexts.delete(preference.text);
 			await new Promise((resolve) => setTimeout(resolve, 25));
 		}

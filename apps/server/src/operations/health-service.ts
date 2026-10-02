@@ -1,3 +1,4 @@
+import type { DatabaseWriter } from '../repository/writer.js';
 import type { MaintenanceService } from './maintenance.js';
 import type { PlaybackEngine } from '../playback/playback-engine.js';
 import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
@@ -46,6 +47,7 @@ export class HealthService {
 		private readonly playoutSync: PlayoutSynchronizer,
 		private readonly mediaProbe?: MediaProbe,
 		private readonly resourcePressure?: ResourcePressureCoordinator,
+		private readonly databaseWriter?: DatabaseWriter,
 	) {}
 
 	/** Evaluate SQLite, the playback engine, and background service warnings. */
@@ -55,6 +57,7 @@ export class HealthService {
 		let databaseReady = true;
 		try {
 			this.repository.checkDatabase();
+			this.databaseWriter?.checkReady();
 			checks.push({ name: 'database', status: 'ready', essential: true });
 		}
 		catch {
@@ -63,7 +66,7 @@ export class HealthService {
 				name: 'database',
 				status: 'degraded',
 				essential: true,
-				detail: 'SQLite is unavailable',
+				detail: 'Database access is unavailable',
 			});
 		}
 

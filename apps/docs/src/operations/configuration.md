@@ -47,7 +47,7 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_LOGTO_APP_SECRET` | Unset | Traditional-web application secret; never returned or logged |
 | `MOIRAI_LOG_LEVEL` | `info` | Structured server log level |
 | `MOIRAI_LOG_DIR` | `<data>/logs` | Rotating structured server log directory |
-| `MOIRAI_GUIDE_DAYS` | `7` | Guide and XMLTV horizon in local calendar days, including today; accepts 1–14. One extra day is generated internally. |
+| `MOIRAI_GUIDE_DAYS` | `3` | Guide and XMLTV horizon in local calendar days, including today; accepts 1–14. One extra day is generated internally. |
 | `MOIRAI_LOG_RETENTION_DAYS` | `14` | Maximum age of retained JSONL logs |
 | `MOIRAI_LOG_MAX_MB` | `200` | Maximum total retained log size |
 | `MOIRAI_LOG_FILE_MAX_MB` | `10` | Rotation size for an individual log file |
@@ -59,8 +59,8 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_FFPROBE_PATH` | `ffprobe` | ffprobe executable used for technical media inspection |
 | `MOIRAI_MEDIA_PROBE_CONCURRENCY` | `2` | Maximum concurrent media probe processes |
 | `MOIRAI_MEDIA_PROBE_TIMEOUT_MS` | `15000` | Deadline for inspecting one media file |
-| `MOIRAI_SCHEDULING_WORKERS` | `2` | Timeline worker threads; `0` uses the main thread |
-| `MOIRAI_SCHEDULING_WORKER_QUEUE` | `32` | Maximum queued/in-flight timeline jobs |
+| `MOIRAI_SCHEDULING_WORKERS` | `2` | Schedule and catalog workers; `0` runs this work on the main thread |
+| `MOIRAI_SCHEDULING_WORKER_QUEUE` | `32` | Ordinary queued/in-flight jobs; live tunes have additional reserved capacity described below |
 | `MOIRAI_MAX_EXPLICIT_MEDIA_ITEMS` | `5000` | Maximum items in one selected-items program; accepts `1`–`25000` |
 | `MOIRAI_SCAN_CANCEL_GRACE_MS` | `5000` | Wait limit for cancelled native filesystem work |
 | `MOIRAI_SHUTDOWN_DEADLINE_MS` | `10000` | Production graceful-shutdown deadline |

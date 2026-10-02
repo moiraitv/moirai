@@ -7,9 +7,10 @@ import { saveProfile } from './profile-output';
 test.use({ trace: 'off' });
 
 test('profiles synthetic guide navigation and retained browser resources', async ({ page }, testInfo) => {
+	const guideDays = Number(process.env.GUIDE_DAYS ?? 7);
 	const channelCount = Number(process.env.GUIDE_CHANNELS ?? 20);
-	const segmentsPerDay = process.env.GUIDE_NEAR_LIMIT ? Math.floor(MAX_GUIDE_TIMELINE_SEGMENTS / channelCount / 7) : Number(process.env.GUIDE_SEGMENTS_PER_DAY ?? 48);
-	await installGuideFixture(page, channelCount, segmentsPerDay);
+	const segmentsPerDay = process.env.GUIDE_NEAR_LIMIT ? Math.floor(MAX_GUIDE_TIMELINE_SEGMENTS / channelCount / guideDays) : Number(process.env.GUIDE_SEGMENTS_PER_DAY ?? 48);
+	await installGuideFixture(page, channelCount, segmentsPerDay, false, false, guideDays);
 	const errors: string[] = [];
 	page.on('pageerror', error => errors.push(error.message));
 	const session = await page.context().newCDPSession(page);
@@ -24,7 +25,7 @@ test('profiles synthetic guide navigation and retained browser resources', async
 	const samples: unknown[] = [];
 	const retained: unknown[] = [];
 	const coldStart = performance.now();
-	const initialWeek = page.waitForResponse(response => response.url().includes('/schedule-guide?') && new URL(response.url()).searchParams.get('days') === '7');
+	const initialWeek = page.waitForResponse(response => response.url().includes('/schedule-guide?') && new URL(response.url()).searchParams.get('days') === String(guideDays));
 	await page.goto('/guide');
 	await expect(page.locator('.guide-programme').first()).toBeVisible();
 	const coldPaint = performance.now() - coldStart;
@@ -33,7 +34,7 @@ test('profiles synthetic guide navigation and retained browser resources', async
 	for (const path of ['/channels', '/guide', '/channels', '/guide', '/channels', '/guide']) {
 		const before = await session.send('Performance.getMetrics');
 		const start = performance.now();
-		const refreshed = page.waitForResponse(response => response.url().includes('/schedule-guide?') && new URL(response.url()).searchParams.get('days') === '7');
+		const refreshed = page.waitForResponse(response => response.url().includes('/schedule-guide?') && new URL(response.url()).searchParams.get('days') === String(guideDays));
 		await page.locator(`.primary-nav a[href="${path}"]`).click();
 		await expect(page).toHaveURL(new RegExp(`${path}$`));
 		await expect(page.locator('.guide-programme').first()).toBeAttached();

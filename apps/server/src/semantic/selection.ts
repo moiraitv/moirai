@@ -1,3 +1,4 @@
+import { selectOrderedCandidate } from '../scheduling/candidate-selection.js';
 import { semanticSource } from './source.js';
 import { passesSemanticExclusions, preferenceIssue } from './refinement.js';
 import type { SchedulableMedia, SchedulingCatalog, SelectionStateRecord, SimilaritySeed } from '@moirai/shared';
@@ -103,17 +104,9 @@ export function chooseSimilarity(
 	if (playable.length < remaining.length) {
 		report('Some remaining items in the current set are unavailable. The set will wait for them.', playable.length === 0);
 	}
-	const start = Date.parse(context.selectionStart);
-	const collisionFree = playable.filter(({ media }) => !context.occupiedMedia.some((occupied) =>
-		occupied.mediaItemId === media.id && start < Date.parse(occupied.finish)
-		&& start + media.durationSeconds! * 1_000 > Date.parse(occupied.start)));
-	const candidates = collisionFree.length ? collisionFree : playable;
-	// Primary slots retain order; best-fit filler prefers the longest eligible remaining item.
-	const selected = fitSeconds === null ? candidates[0]
-		: fitMode === 'first-fit-arbitrary'
-			? candidates[0] && candidates[0].media.durationSeconds! <= fitSeconds ? candidates[0] : undefined
-			: candidates.filter(({ media }) => media.durationSeconds! <= fitSeconds)
-				.sort((left, right) => right.media.durationSeconds! - left.media.durationSeconds!)[0];
+	// Preserve seed order for primary starts; filler chooses the longest expanded duration that fits.
+	const media = selectOrderedCandidate(playable.map(entry => entry.media), context, fitSeconds, fitMode, true);
+	const selected = media ? playable.find(entry => entry.media === media) : undefined;
 	if (!selected) {
 		if (playable.length && fitSeconds !== null) {
 			context.fitRejectionCount += 1;

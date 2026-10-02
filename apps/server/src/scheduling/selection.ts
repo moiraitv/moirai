@@ -1,3 +1,4 @@
+import { selectOrderedCandidate } from './candidate-selection.js';
 import { selectSequence } from './sequence-selection.js';
 import { chooseSimilarity } from '../semantic/selection.js';
 import { createHash } from 'node:crypto';
@@ -37,6 +38,8 @@ export type SelectionFitMode = 'best-fit' | 'first-fit-arbitrary';
 
 /** Immutable catalog indexes and mutable proposed state used during selection. */
 export interface SelectionContext {
+	/** Configuration fingerprints shared by all branches in this generation. */
+	stateFingerprints?: Map<SchedulingProgram, { fingerprint: string; compatible: string | null }>;
 	programs: Map<string, SchedulingProgram>;
 	catalog: SchedulingCatalog;
 	candidateCache: Map<
@@ -63,22 +66,42 @@ export interface SelectionContext {
 	viewingPreferences: ViewingPreferenceScores;
 	selectionStart: string;
 	occupiedMedia: Array<{ mediaItemId: string; start: string; finish: string }>;
+	/** Shared per-generation lookup, including speculative filler selection contexts. */
+	occupiedMediaIndex?: ReadonlyMap<string, Array<{ start: number; finish: number }>>;
 }
 
-/** Remove avoidable exact-item overlaps with other channels at the proposed start instant. */
-function collisionFreeCandidates(
-	candidates: SchedulableMedia[],
-	context: SelectionContext,
-): SchedulableMedia[] {
-	const startMs = Date.parse(context.selectionStart);
-	const available = candidates.filter((candidate) => {
-		const finishMs = startMs + candidate.durationSeconds! * 1_000;
-		return !context.occupiedMedia.some((occupied) =>
-			occupied.mediaItemId === candidate.id
-			&& startMs < Date.parse(occupied.finish)
-			&& finishMs > Date.parse(occupied.start));
-	});
-	return available.length > 0 ? available : candidates;
+/** Index other-channel occupancy once so candidate checks visit only the same media item. */
+export function indexOccupiedMedia(occupiedMedia: SelectionContext['occupiedMedia']): NonNullable<SelectionContext['occupiedMediaIndex']> {
+	const index = new Map<string, Array<{ start: number; finish: number }>>();
+	for (const occupied of occupiedMedia) {
+		const mediaItemId = occupied.mediaItemId;
+		const intervals = index.get(mediaItemId) ?? [];
+		intervals.push({ start: Date.parse(occupied.start), finish: Date.parse(occupied.finish) });
+		index.set(mediaItemId, intervals);
+	}
+	return index;
+}
+
+/** Read the playable candidate duration for fitting and collision checks. */
+export function selectionDuration(media: SchedulableMedia): number {
+	return media.durationSeconds!;
+}
+
+/** Check duration only when the same item's occupied interval has not ended. */
+export function hasSelectionCollision(media: SchedulableMedia, context: SelectionContext): boolean {
+	if (context.occupiedMediaIndex) {
+		const intervals = context.occupiedMediaIndex.get(media.id);
+		if (!intervals?.length) {
+			return false;
+		}
+		const start = Date.parse(context.selectionStart);
+		return intervals.some(occupied =>
+			start < occupied.finish && start + selectionDuration(media) * 1_000 > occupied.start);
+	}
+	const start = Date.parse(context.selectionStart);
+	return context.occupiedMedia.some(occupied => occupied.mediaItemId === media.id
+		&& start < Date.parse(occupied.finish)
+		&& start + selectionDuration(media) * 1_000 > Date.parse(occupied.start));
 }
 
 /** Return the show ancestor that shares preference across episodes. */
@@ -154,7 +177,7 @@ export function changedStateRecords(
 	const changed: SelectionStateRecord[] = [];
 	for (const [key, record] of after) {
 		const prior = before.get(key);
-		if (!prior || stableJson(prior) !== stableJson(record)) {
+		if (prior !== record && (!prior || stableJson(prior) !== stableJson(record))) {
 			changed.push(structuredClone(record));
 		}
 	}
@@ -464,26 +487,27 @@ function candidatesFor(
 	return playable;
 }
 
-/** Return current state, migrate a compatible fingerprint, or initialize a new cursor state. */
+/** Own a cursor record before mutation, preserving compatible legacy progress or initializing it. */
 function stateFor(
 	state: Map<string, SelectionStateRecord>,
 	consumerKey: string,
-	config: unknown,
+	configFingerprint: string,
 	initial: SelectionStateValue,
 	now: string,
-	compatibleConfig: unknown | null = null,
+	compatibleFingerprint: string | null = null,
 ): SelectionStateRecord {
-	const configFingerprint = stableJsonFingerprint(config);
 	const existing = state.get(consumerKey);
 	if (existing?.value.type === initial.type) {
 		if (existing.configFingerprint === configFingerprint) {
-			return existing;
+			const owned = { ...existing, value: structuredClone(existing.value) };
+			state.set(consumerKey, owned);
+			return owned;
 		}
 		if (
-			compatibleConfig !== null
-			&& existing.configFingerprint === stableJsonFingerprint(compatibleConfig)
+			compatibleFingerprint !== null
+			&& existing.configFingerprint === compatibleFingerprint
 		) {
-			const migrated = { ...existing, configFingerprint, updatedAt: now };
+			const migrated = { ...existing, value: structuredClone(existing.value), configFingerprint, updatedAt: now };
 			state.set(consumerKey, migrated);
 			return migrated;
 		}
@@ -569,6 +593,23 @@ function selectionStateConfig(input: ProgramConfig): unknown {
 	};
 }
 
+/** Compute canonical and legacy cursor fingerprints once for each immutable generation Program. */
+function stateFingerprints(program: SchedulingProgram, context: SelectionContext): { fingerprint: string; compatible: string | null } {
+	const cache = context.stateFingerprints ??= new Map();
+	const cached = cache.get(program);
+	if (cached) {
+		return cached;
+	}
+
+	const config = program.config;
+	const compatible = config.type === 'sequence' ? normalizeSequenceOrdering(config)
+		: config.type === 'content' && config.source.type === 'library-query' ? config : legacySetSelectionStateConfig(config);
+	const fingerprints = { fingerprint: stableJsonFingerprint(selectionStateConfig(config)),
+		compatible: compatible === null ? null : stableJsonFingerprint(compatible) };
+	cache.set(program, fingerprints);
+	return fingerprints;
+}
+
 /** Select one item from a source while applying ordering and fit rules. */
 function chooseContent(
 	program: SchedulingProgram,
@@ -596,10 +637,7 @@ function chooseContent(
 	}
 
 	const strategy = program.config.strategy;
-	const stateConfig = selectionStateConfig(program.config);
-	const legacyStateConfig = program.config.source.type === 'library-query'
-		? program.config
-		: legacySetSelectionStateConfig(program.config);
+	const { fingerprint: stateConfig, compatible: legacyStateConfig } = stateFingerprints(program, context);
 
 	// Advance a stable cursor through the source's natural media order.
 	if (strategy.type === 'sequential') {
@@ -620,21 +658,7 @@ function chooseContent(
 		const ordered = candidates.map(
 			(_, offset) => candidates[(start + offset) % candidates.length]!,
 		);
-		const selectable = collisionFreeCandidates(ordered, context);
-		const fitting
-			= fitSeconds === null
-				? selectable[0]!
-				: fitMode === 'first-fit-arbitrary'
-					? selectable[0]!.durationSeconds! <= fitSeconds
-						? selectable[0]!
-						: null
-					: (selectable
-						.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
-						.sort(
-							(a, b) =>
-								b.durationSeconds! - a.durationSeconds!
-								|| selectable.indexOf(a) - selectable.indexOf(b),
-						)[0] ?? null);
+		const fitting = selectOrderedCandidate(ordered, context, fitSeconds, fitMode, true);
 		if (!fitting) {
 			return null;
 		}
@@ -686,19 +710,7 @@ function chooseContent(
 		const ordered = value.remainingItemIds
 			.map((id) => candidates.find((candidate) => candidate.id === id))
 			.filter((candidate): candidate is SchedulableMedia => Boolean(candidate));
-		const selectable = collisionFreeCandidates(ordered, context);
-		const selected
-			= fitSeconds === null
-				? selectable[0]!
-				: fitMode === 'first-fit-arbitrary'
-					? (selectable.find((candidate) => candidate.durationSeconds! <= fitSeconds) ?? null)
-					: (selectable
-						.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
-						.sort(
-							(a, b) =>
-								b.durationSeconds! - a.durationSeconds!
-								|| selectable.indexOf(a) - selectable.indexOf(b),
-						)[0] ?? null);
+		const selected = selectOrderedCandidate(ordered, context, fitSeconds, fitMode);
 		if (!selected) {
 			return null;
 		}
@@ -720,25 +732,8 @@ function chooseContent(
 			legacyStateConfig,
 		);
 		const value = record.value as Extract<SelectionStateValue, { type: 'weighted-random' }>;
-		let ordered = collisionFreeCandidates(
-			weightedOrder(candidates, strategy.seed, consumerKey, value.counter, context),
-			context,
-		);
-		const alternative = ordered.some((candidate) =>
-			candidate.id !== value.lastItemId
-			&& (fitSeconds === null || candidate.durationSeconds! <= fitSeconds));
-		if (alternative && value.lastItemId) {
-			ordered = ordered.filter((candidate) => candidate.id !== value.lastItemId);
-		}
-		const selected = fitSeconds === null
-			? ordered[0]!
-			: fitMode === 'first-fit-arbitrary'
-				? (ordered.find((candidate) => candidate.durationSeconds! <= fitSeconds) ?? null)
-				: (ordered
-					.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
-					.sort((a, b) =>
-						b.durationSeconds! - a.durationSeconds! || ordered.indexOf(a) - ordered.indexOf(b))[0]
-						?? null);
+		const ordered = weightedOrder(candidates, strategy.seed, consumerKey, value.counter, context);
+		const selected = selectOrderedCandidate(ordered, context, fitSeconds, fitMode, false, value.lastItemId);
 		if (!selected) {
 			return null;
 		}
@@ -759,25 +754,10 @@ function chooseContent(
 		legacyStateConfig,
 	);
 	const value = record.value as Extract<SelectionStateValue, { type: 'random' }>;
-	const ordered = collisionFreeCandidates(
-		[...candidates].sort(
-			(a, b) =>
-				deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${a.id}`)
-				- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${b.id}`),
-		),
-		context,
-	);
-	const selected
-		= fitSeconds === null
-			? ordered[0]!
-			: fitMode === 'first-fit-arbitrary'
-				? (ordered.find((candidate) => candidate.durationSeconds! <= fitSeconds) ?? null)
-				: (ordered
-					.filter((candidate) => candidate.durationSeconds! <= fitSeconds)
-					.sort(
-						(a, b) =>
-							b.durationSeconds! - a.durationSeconds! || ordered.indexOf(a) - ordered.indexOf(b),
-					)[0] ?? null);
+	const ordered = [...candidates].sort((a, b) =>
+		deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${a.id}`)
+		- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${b.id}`));
+	const selected = selectOrderedCandidate(ordered, context, fitSeconds, fitMode);
 	if (!selected) {
 		return null;
 	}
@@ -788,7 +768,10 @@ function chooseContent(
 	return selected;
 }
 
-/** Select the next playable item from a program, including composite sequences. */
+/**
+ * Propose the next playable item without mutating source cursors. Branches share untouched records;
+ * each content or sequence cursor is cloned before mutation, including nested sequence decisions.
+ */
 export function selectProgram(
 	programId: string,
 	consumerKey: string,
@@ -820,7 +803,7 @@ export function selectProgram(
 		return null;
 	}
 
-	const state = cloneState(sourceState);
+	const state = new Map(sourceState);
 
 	// Delegate leaf content programs to the configured selection strategy.
 	if (program.config.type === 'content') {
@@ -837,13 +820,14 @@ export function selectProgram(
 		return media ? { media, state, programAncestry: [...ancestry, programId] } : null;
 	}
 
+	const fingerprints = stateFingerprints(program, context);
 	const record = stateFor(
 		state,
 		consumerKey,
-		selectionStateConfig(program.config),
+		fingerprints.fingerprint,
 		{ type: 'sequence', entryIndex: 0, selectedInEntry: 0, completed: false },
 		context.now,
-		normalizeSequenceOrdering(program.config),
+		fingerprints.compatible,
 	);
 	return selectSequence(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectProgram);
 }

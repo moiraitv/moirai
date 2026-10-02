@@ -21,7 +21,7 @@ export function registerSilentEndingRoutes(app: FastifyInstance, repository: Rep
 		if (!await repository.getLibrary(id)) {
 			throw app.httpErrors.notFound('Library not found');
 		}
-		if (!repository.setMediaIssueIgnored(id, input.path, input.code, input.fingerprint, input.ignored)) {
+		if (!(await repository.setMediaIssueIgnored(id, input.path, input.code, input.fingerprint, input.ignored))) {
 			throw app.httpErrors.conflict('The finding changed, a scan is running, or the source requires approval. Refresh and try again.');
 		}
 		events.publish({ type: 'library.changed', data: { libraryId: id, change: 'updated', affectsProgramming: false } });
@@ -41,7 +41,7 @@ export function registerSilentEndingRoutes(app: FastifyInstance, repository: Rep
 		if (!await repository.getLibrary(id)) {
 			throw app.httpErrors.notFound('Library not found');
 		}
-		if (!repository.setSilentEndingAcceptance(id, input.path, input.fingerprint, input.accepted)) {
+		if (!(await repository.setSilentEndingAcceptance(id, input.path, input.fingerprint, input.accepted))) {
 			throw app.httpErrors.conflict('The finding changed or a scan is running. Refresh after scanning and try again.');
 		}
 		events.publish({ type: 'library.changed', data: { libraryId: id, change: 'updated', affectsProgramming: false } });

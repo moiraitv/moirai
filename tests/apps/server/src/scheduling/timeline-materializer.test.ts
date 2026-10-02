@@ -1063,3 +1063,35 @@ it('uses a custom horizon plus one day and preserves commits when the horizon sh
 	await new TimelineMaterializer(test.repository, test.events, 'UTC', undefined, undefined, 1).runNow();
 	expect(test.materialization()?.windowEnd).toBe('2026-08-30T00:00:00Z');
 });
+
+it('skips deferred channels before catalog, occupancy, and state-bearing segment reads', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	const record = test.materialization()!;
+	test.repository.listMaterializationCheckpoints = vi.fn(async () => [{ ...record, health: 'pending' as const, pendingSince: '2026-08-22T12:00:00Z', applyAfter: '2026-08-23T00:00:00Z' }]);
+	vi.clearAllMocks();
+	await materializer.runNow(true);
+	expect(test.repository.listMaterializationCheckpoints).toHaveBeenCalledTimes(1);
+	expect(test.repository.getSchedulingCatalog).not.toHaveBeenCalled();
+	expect(test.repository.listOccupiedMediaIntervals).not.toHaveBeenCalled();
+	expect(test.repository.listMaterializedTimelineSegments).not.toHaveBeenCalled();
+	expect(test.repository.getSelectionState).not.toHaveBeenCalled();
+});
+
+it('does not reconstruct state-bearing spans for unchanged channels with complete coverage', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	test.repository.listMaterializationCheckpoints = vi.fn(async () => [test.materialization()!]);
+	vi.clearAllMocks();
+	await materializer.runNow(true);
+	expect(test.repository.getTimelineMaterialization).not.toHaveBeenCalled();
+	expect(test.repository.listMaterializedTimelineSegments).not.toHaveBeenCalled();
+	expect(test.repository.getSelectionState).not.toHaveBeenCalled();
+	expect(test.repository.commitMaterializedTimeline).not.toHaveBeenCalled();
+});

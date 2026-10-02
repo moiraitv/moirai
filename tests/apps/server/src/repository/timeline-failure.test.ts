@@ -21,9 +21,12 @@ describe('timeline failure persistence', () => {
 			number: '40.1',
 			name: 'Test channel',
 		}));
+		const library = await repository.createLibrary({ name: 'Movies', typeKey: 'movies', sourceType: 'on-disk', sourceConfig: { scanRoot: '/media', playbackRoot: null }, enabled: true, watcherEnabled: false, scanIntervalMinutes: 15 });
+		const program = await repository.createProgram({ name: 'Movies', config: { type: 'content', source: { type: 'library-query', libraryId: library.id, kinds: ['movie'], genres: [] }, strategy: { type: 'sequential' } } });
+		await repository.setChannelSchedule(channel.id, { defaultTemplateId: null, defaultProgramId: program.id, layers: [], defaultFiller: null });
 		const failedAt = '2026-08-24T12:00:00Z';
 
-		repository.markTimelineFailed(channel.id, 'Media duration is unavailable', failedAt);
+		await repository.markTimelineFailed(channel.id, 'Media duration is unavailable', failedAt);
 
 		expect(await repository.listTimelineMaterializationStatuses()).toEqual([
 			expect.objectContaining({
@@ -50,7 +53,7 @@ describe('timeline failure persistence', () => {
 			issues: [],
 			committedAt: '2026-08-24T12:01:00Z',
 		};
-		repository.commitMaterializedTimeline(commit);
+		await repository.commitMaterializedTimeline(commit);
 
 		expect(await repository.getTimelineMaterialization(channel.id)).toMatchObject({
 			health: 'ready',

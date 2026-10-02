@@ -7,8 +7,8 @@ const active = shallowRef<{ segmentId: string; item: MediaCardPreviewSource; anc
 const preview = shallowRef<InstanceType<typeof MediaCardPreview>>();
 
 /** Reuse the media-card preview for a single guide item without wrapping every timeline entry. */
-async function show(segment: TimelineSegment, event: Event): Promise<void> {
-	if (!segment.mediaItemId || !(event.currentTarget instanceof HTMLElement)) {
+async function show(segment: TimelineSegment, event: Event, anchor: EventTarget | null = event.currentTarget): Promise<void> {
+	if (!segment.mediaItemId || !(anchor instanceof HTMLElement)) {
 		close();
 		return;
 	}
@@ -16,7 +16,7 @@ async function show(segment: TimelineSegment, event: Event): Promise<void> {
 	const target = {
 		segmentId: segment.id,
 		item: { id: segment.mediaItemId, title: segment.title, artworkUrl: null, year: null },
-		anchor: event.currentTarget,
+		anchor,
 	};
 	active.value = target;
 	await nextTick();

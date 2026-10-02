@@ -16,12 +16,14 @@ import {
 	MAX_MEDIA_GENRE_RULES,
 	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	SECONDS_PER_SCHEDULING_DAY,
+	XMLTV_EPG_DAYS,
 	type LiveEvent,
 } from '@moirai/shared';
 import { buildApp } from '@server/app.js';
 import { hashToken } from '@server/auth/crypto.js';
 import { AuthenticationRequestError, OIDC_SESSION_TTL_MS } from '@server/auth/service.js';
 import { loadConfig } from '@server/config.js';
+import { openWriteDatabase } from '@server/db/write-connection.js';
 import { createDatabase } from '@server/db/index.js';
 import { authenticationSessions, mediaItems } from '@server/db/schema.js';
 import { Repository } from '@server/repository/index.js';
@@ -100,6 +102,7 @@ async function fixture(options: {
 	serveWeb?: boolean;
 	sessionAgeMs?: number;
 	trustedProxies?: string[];
+	guideDays?: number;
 } = {}) {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-api-'));
 	const webDistDir = path.join(root, 'web');
@@ -115,6 +118,7 @@ async function fixture(options: {
 		databasePath: path.join(root, 'test.sqlite'),
 		migrationsDir: path.resolve('drizzle'),
 		logLevel: 'silent',
+		guideDays: options.guideDays ?? XMLTV_EPG_DAYS,
 		publicUrl: 'https://moirai.example.test',
 		...(options.managementUrl ? { managementUrl: options.managementUrl } : {}),
 		...(options.host ? { host: options.host } : {}),
@@ -152,6 +156,7 @@ async function fixture(options: {
 		});
 	}
 	const built = await buildApp(config, database.db);
+	const fixtureDatabase = openWriteDatabase(config.databasePath);
 	const app = options.authenticated === false ? built.app : new Proxy(built.app, {
 		get(target, property) {
 			if (property === 'inject') {
@@ -180,10 +185,11 @@ async function fixture(options: {
 	cleanups.push(async () => {
 		await built.services.scanner.close();
 		await built.app.close();
+		fixtureDatabase.close();
 		database.close();
 		await rm(root, { recursive: true, force: true });
 	});
-	return { ...built, app, rawApp: built.app, database, root, sessionToken };
+	return { ...built, app, rawApp: built.app, database: fixtureDatabase, root, sessionToken, guideDays: config.guideDays };
 }
 afterEach(async () => {
 	vi.useRealTimers();
@@ -792,6 +798,7 @@ describe('API', () => {
 	it('passes deduplicated Match all selections to contextual genre facets', async () => {
 		const { app, services } = await fixture();
 		const libraryId = randomUUID();
+		vi.spyOn(services.schedulingWorkers, 'databaseBacked', 'get').mockReturnValue(false);
 		const listMediaGenres = vi.spyOn(services.repository, 'listMediaGenres').mockResolvedValue([
 			{ key: 'drama', name: 'Drama', count: 4, primaryCount: 2, excludeCount: 7 },
 		]);
@@ -1595,8 +1602,8 @@ describe('API', () => {
 		}
 	});
 
-	it('serves live and ready probes during a large-catalog preview over HTTP', async () => {
-		const { app, services, database, root, sessionToken } = await fixture();
+	it.each([XMLTV_EPG_DAYS, 7])('serves live and ready probes during a large-catalog preview over HTTP (%i days)', async (configuredDays) => {
+		const { app, services, database, root, sessionToken, guideDays } = await fixture({ guideDays: configuredDays });
 		const mediaRoot = path.join(root, 'large-preview');
 		await mkdir(mediaRoot);
 		await writeFile(path.join(mediaRoot, 'Seed.mp4'), 'video');
@@ -1688,7 +1695,7 @@ describe('API', () => {
 			services.timelineMaterializer.runNow(true),
 			request('plainCreate', '/api/v1/channels', { method: 'POST', body: JSON.stringify({ number: '97', name: 'Unscheduled during load' }) }),
 			request('overview', '/api/v1/scheduling/overview'),
-			request('guide', '/api/v1/schedule-guide?days=7'),
+			request('guide', `/api/v1/schedule-guide?days=${guideDays}`),
 			request('xmltv', '/epg.xml'),
 			request('persistedPreview', `/api/v1/channels/${resources.channel.id}/timeline-preview?days=1`),
 			request('save', `/api/v1/channels/${resources.channel.id}`, { method: 'PATCH', body: JSON.stringify({ name: 'Saved during load' }) }),
@@ -1703,7 +1710,7 @@ describe('API', () => {
 		expect(latencies.at(-1)).toBeLessThan(3_000);
 		delays.disable();
 		await mkdir('test-results', { recursive: true });
-		await writeFile('test-results/channel-responsiveness.json', JSON.stringify({ itemCount, durations, eventLoop: { max: delays.max / 1e6, p95: delays.percentile(95) / 1e6 },
+		await writeFile(`test-results/channel-responsiveness-${guideDays}.json`, JSON.stringify({ itemCount, durations, eventLoop: { max: delays.max / 1e6, p95: delays.percentile(95) / 1e6 },
 			probes: latencies.length, p50: latencies[Math.floor(latencies.length * 0.5)],
 			p95: latencies[Math.floor(latencies.length * 0.95)], max: latencies.at(-1) }, null, 2));
 	}, 180_000);
@@ -2673,6 +2680,7 @@ describe('guide template API', () => {
 
 it('validates duration query bounds and forwards unrestricted and inclusive values', async () => {
 	const { app, services } = await fixture();
+	vi.spyOn(services.schedulingWorkers, 'databaseBacked', 'get').mockReturnValue(false);
 	const libraryId = randomUUID();
 	const browse = vi.spyOn(services.repository, 'browseMedia');
 	for (const [query, minimumDurationSeconds, maximumDurationSeconds] of [

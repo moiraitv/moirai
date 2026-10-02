@@ -119,6 +119,17 @@ guidance before running commands. It does not replace these repository guideline
 - When implementing code that may touch the database, avoid changes that permanently increase the number of queries run per request. Run queries only when they are necessary to retrieve or modify data for that request.
 - When extra queries are unavoidable, minimize them and keep their cost scoped to the workflows that need them. Avoid introducing repeated or per-item queries when the data can reasonably be fetched together.
 - Consider performance and documented resource limits in affected workflows, without adding complexity for speculative optimization.
+- Treat live playback startup and uninterrupted delivery as the highest responsiveness priority.
+  Minimize time to the first playable output within the hardware's constraints. Live tunes should
+  take priority over periodic playout preparation, guide generation, scans, and other background work.
+- Keep slow computation and substantial database reads off the HTTP thread when reasonable. Preserve
+  bounded queue admission and worker capacity for live playback; promote and reuse existing
+  preparation for the same channel instead of duplicating it. Preserve atomic transactions,
+  playback correctness, security controls, and documented resource limits when prioritizing work.
+- Verify playback responsiveness under contention from scans, scheduling, guide requests, and periodic
+  preparation. Measure the full path to playable output, including queue waits, reads, asset
+  preparation, FFmpeg startup, and delivery; launching FFmpeg alone does not prove playback has
+  started. Use behavioral contention tests without fragile CI timing thresholds.
 - Do not assume third-party services will obey requested budgets or timing targets exactly. Allow a
   small, explicit, bounded overage or finishing grace when safe, so an otherwise valid result is not
   discarded for a minor overrun. Keep requested budgets unchanged, stop starting additional optional

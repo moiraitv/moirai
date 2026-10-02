@@ -1,4 +1,5 @@
-import { type AiProgress, type AiProgressDetails } from '@moirai/shared';
+import { loadWorkerGuide, GuideWorkerError, clearWorkerGuide } from './guide-worker';
+import { XMLTV_EPG_DAYS, type AiProgress, type AiProgressDetails } from '@moirai/shared';
 import { readAiSelection } from './ai-selection-stream';
 import { aiGenerationSchema, type AiGeneration, type AiGenerationRequest } from '@moirai/shared';
 import type { AiContentSelectionRequest, AiContentSelectionResponse, AiStatus, AiSettingsSave, AiSettingsStatus, AiProvider, SequencePreview } from '@moirai/shared';
@@ -76,6 +77,9 @@ let activeAuthenticationTransitions = 0;
 /** Update the synchronizer token after authentication state changes. */
 export function setApiCsrfToken(value: string | null): void {
 	csrfToken = value;
+	if (value === null) {
+		void clearWorkerGuide().catch(() => undefined);
+	}
 }
 
 /** Observe session expiry without coupling the HTTP client to the router or Pinia. */
@@ -530,10 +534,25 @@ export const api = {
 			method: 'POST', ...(signal ? { signal } : {}),
 			body: JSON.stringify(body),
 		}),
-	scheduleGuide: (startDate: string, days = 7) =>
-		request<ScheduleGuide>(
-			`/api/v1/schedule-guide?${new URLSearchParams({ startDate, days: String(days) })}`,
-		),
+	scheduleGuide: async (startDate: string, days = XMLTV_EPG_DAYS): Promise<ScheduleGuide> => {
+		const generation = authenticationGeneration;
+		if (typeof Worker === 'undefined') {
+			return request<ScheduleGuide>(`/api/v1/schedule-guide?${new URLSearchParams({ startDate, days: String(days) })}`);
+		}
+		try {
+			return await loadWorkerGuide(`/api/v1/schedule-guide?${new URLSearchParams({ startDate, days: String(days) })}`);
+		}
+		catch (error) {
+			if (error instanceof GuideWorkerError && error.body && error.status) {
+				if (error.status === 401 && error.body.code === 'authentication_required'
+					&& activeAuthenticationTransitions === 0 && generation === authenticationGeneration) {
+					unauthorizedListener?.();
+				}
+				throw new ApiError(error.body, error.status);
+			}
+			throw error;
+		}
+	},
 	guideSegment: (channelId: string, segmentId: string) =>
 		request<GuideSegmentDetail>(
 			`/api/v1/channels/${channelId}/guide-segments/${segmentId}`,

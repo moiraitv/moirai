@@ -1,3 +1,4 @@
+import type { PlayoutReadRequest } from '../playback/playout-preparation.js';
 import { buildEtvPlayoutFiles } from '../playback/playout-output.js';
 import { timedJob } from './job-timing.js';
 import { DatabaseJobReader, type DatabaseReadRequest } from './database-jobs.js';
@@ -39,6 +40,7 @@ parentPort.on('message', async (message: {
 	input: Omit<GenerateTimelineInput, 'catalog'> & { catalog?: GenerateTimelineInput['catalog'] };
 } | { id: number; kind: 'preview'; input: PreviewJob }
 | { id: number; kind: 'read'; input: { request: DatabaseReadRequest; revision: string } }
+| { id: number; kind: 'playout-read'; input: { request: PlayoutReadRequest; revision: string } }
 | { id: number; kind: 'playout'; input: Parameters<typeof buildEtvPlayoutFiles> }
 | { id: number; kind: 'materialize'; input: { timeZone: string; revision: string; guideDays: number } }
 | { kind: 'write-result'; writeId: number; error?: SchedulingWorkerErrorPayload }) => {
@@ -54,6 +56,12 @@ parentPort.on('message', async (message: {
 		return;
 	}
 	try {
+		if (message.kind === 'playout-read') {
+			const reader = databaseReader();
+			const result = await timedJob(() => reader.readPlayout(message.input.request, message.input.revision));
+			parentPort!.postMessage({ id: message.id, ...result });
+			return;
+		}
 		if (message.kind === 'playout') {
 			parentPort!.postMessage({ id: message.id, result: buildEtvPlayoutFiles(...message.input) });
 			return;

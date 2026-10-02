@@ -721,6 +721,17 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			: publicMaterializationStatus({ ...row, status: row.status, windowStart: row.windowStart!, windowEnd: row.windowEnd!, committedAt: row.committedAt!, inputFingerprint: row.inputFingerprint ?? '' }));
 	}
 
+	/** Load complete committed checkpoints together, including state needed by extending channels. */
+	async listMaterializationCheckpoints(): Promise<TimelineMaterializationRecord[]> {
+		const rows = await this.db.select().from(timelineMaterializations)
+			.where(ne(timelineMaterializations.inputFingerprint, UNCOMMITTED_FAILURE_FINGERPRINT));
+		return rows.map(row => ({ channelId: row.channelId, revision: row.revision, health: row.status,
+			windowStart: row.windowStart, windowEnd: row.windowEnd, continuationAt: row.continuationAt,
+			inputFingerprint: row.inputFingerprint, baseState: row.baseState, issues: row.issues,
+			guideOccurrences: row.guideOccurrences, committedAt: row.committedAt,
+			pendingSince: row.pendingSince, applyAfter: row.applyAfter, lastError: row.lastError }));
+	}
+
 	/** List committed timeline windows for all channels. */
 	async listTimelineMaterializations(): Promise<TimelineMaterializationRecord[]> {
 		return (await this.db

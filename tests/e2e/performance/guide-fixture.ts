@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { channelSchema } from '@moirai/shared/api-contracts';
 
 /** Install deterministic, isolated guide responses without touching an application database. */
-export async function installGuideFixture(page: Page, channelCount = 20, segmentsPerDay = 48, grouped = false, artwork = false): Promise<void> {
+export async function installGuideFixture(page: Page, channelCount = 20, segmentsPerDay = 48, grouped = false, artwork = false, guideDays = 7): Promise<void> {
 	const channels = Array.from({ length: channelCount }, (_, index) => channelSchema.parse({
 		id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
 		number: grouped ? `1.${index + 1}` : String(index + 1), name: grouped ? `Synthetic ${index + 1} with a longer channel name that wraps across several lines` : `Synthetic ${index + 1}`,
@@ -26,7 +26,7 @@ export async function installGuideFixture(page: Page, channelCount = 20, segment
 			data = { status: 'ready', activeSessionCount: 0, maxActiveSessions: 4, sessions: [] };
 		}
 		else if (url.pathname.endsWith('/capabilities')) {
-			data = { timeZone: 'UTC', publicUrl: 'http://localhost', publicUrlStatus: 'configured' };
+			data = { timeZone: 'UTC', publicUrl: 'http://localhost', publicUrlStatus: 'configured', guideDays };
 		}
 		else if (url.pathname.endsWith('/scheduling/overview')) {
 			data = { programs: [], templates: [], channelSchedules: [] };

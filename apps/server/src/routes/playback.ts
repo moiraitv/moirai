@@ -175,7 +175,7 @@ export function registerPlaybackRoutes(
 		}),
 	}, async (request, reply) => {
 		clearViewingPreferencesSchema.parse(request.body);
-		repository.clearViewingPreferences();
+		await repository.clearViewingPreferences();
 		return reply.status(204).send();
 	});
 	app.post('/api/v1/playback/hardware-acceleration/predict', {

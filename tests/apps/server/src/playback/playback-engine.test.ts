@@ -14,6 +14,30 @@ import { PlayoutSynchronizer } from '@server/playback/playout-synchronizer.js';
 import type { Repository } from '@server/repository/index.js';
 
 describe('playback engine fallback changes', () => {
+	it('requests live preparation once for concurrent tunes to the same channel', async () => {
+		const channel = { id: randomUUID() } as Channel;
+		const syncChannel = vi.fn(async () => '/playout');
+		const engine = new PlaybackEngine(
+			{ getPlaybackSettings: vi.fn(async () => ({ maxActiveSessions: 4 })) } as unknown as Repository,
+			{ syncChannel } as unknown as PlayoutSynchronizer,
+			{ publish: vi.fn() },
+			{} as FastifyBaseLogger,
+			{} as HardwareAccelerationResolver,
+			'/engine',
+			'/streams',
+			'http://localhost',
+			1_000,
+			1_000,
+		);
+		const internals = engine as unknown as { running: boolean; engineError: string | null; launchSession(channel: Channel): Promise<void> };
+		internals.running = true;
+		internals.engineError = null;
+		const launch = vi.spyOn(internals, 'launchSession').mockResolvedValue();
+		await Promise.all([engine.ensureSession(channel), engine.ensureSession(channel)]);
+		expect(syncChannel).toHaveBeenCalledExactlyOnceWith(channel.id, true);
+		expect(launch).toHaveBeenCalledOnce();
+	});
+
 	it.each([true, false])('resets schedule with consumers stopped and resumes only prior active playback (%s)', async (active) => {
 		const channel = { id: randomUUID() } as Channel;
 		const order: string[] = [];

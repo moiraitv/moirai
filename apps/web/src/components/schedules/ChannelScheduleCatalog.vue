@@ -20,7 +20,8 @@ import {
 	scheduleAssignmentName,
 	templateRepresentativeStyle,
 } from '../../channel-schedule-display';
-import { upcomingScheduleSummary, type ScheduleSummaryWindow } from '../../channel-schedule-preview';
+import type { ScheduleSummaryWindow } from '../../channel-schedule-preview';
+import { useGuideSummaries } from '../../guide-summaries';
 import type { UpcomingGuideStatus } from '../../upcoming-schedule-guide';
 import { schedulingDurationLabel } from '../../schedule-diagnostics';
 import { programColorStyle } from '../../program-colors';
@@ -38,10 +39,11 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 const failedChannelLogos = ref<Set<string>>(new Set());
-const upcomingSummaries = computed(() => new Map((props.summaryStatus === 'ready' || props.summaryStatus === 'stale')
-	? props.guide?.channels.map((entry) =>
-		[entry.channelId, upcomingScheduleSummary(entry.preview, props.summaryWindow)])
-	: []));
+const { summaries: upcomingSummaries, loading: summariesLoading, error: summariesError } = useGuideSummaries(
+	() => props.guide,
+	() => props.summaryWindow,
+	() => props.summaryStatus === 'ready' || props.summaryStatus === 'stale',
+);
 const channelSearch = computed(() => {
 	const value = route.query.q;
 	return typeof value === 'string' ? value : '';
@@ -83,11 +85,14 @@ function nextDaySummary(id: string): string {
 		return 'No programming';
 	}
 
-	if (props.summaryStatus === 'loading') {
+	if (props.summaryStatus === 'loading' || summariesLoading.value) {
 		return 'Loading preview…';
 	}
 	if (props.summaryStatus === 'incomplete') {
 		return 'Preview incomplete';
+	}
+	if (summariesError.value) {
+		return 'Preview unavailable';
 	}
 
 	const summary = upcomingSummaries.value.get(id);
@@ -187,6 +192,7 @@ onMounted(() => {
 			</label>
 		</div>
 
+		<p v-if="summariesError" class="notice error" role="status">Schedule previews are unavailable. {{ summariesError }}</p>
 		<div class="schedule-channel-list">
 			<template v-for="row in channelRows" :key="row.key">
 				<h3 v-if="row.type === 'family'" class="schedule-channel-family">{{ row.label }}</h3>

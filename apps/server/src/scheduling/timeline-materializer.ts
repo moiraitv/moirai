@@ -1,5 +1,5 @@
 import { applyMaterializationWrite, type MaterializationWriter } from './materialization-writes.js';
-import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
+import { InputFingerprintContext, inputFingerprint, referencedPrograms } from './input-fingerprint.js';
 import { StaleSemanticDecisionError } from '../repository/semantic.js';
 import { Temporal } from '@js-temporal/polyfill';
 import {
@@ -27,7 +27,6 @@ import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
 import { mergeGuideOccurrences, recoverGuideOccurrences } from '../guide/occurrences.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates, resolveProgramSchedule } from './direct-program-templates.js';
-import { stableJsonFingerprint } from '../stable-json.js';
 import { currentTimestamp, yieldToEventLoop } from '../time.js';
 
 /** Delay between background checks of the durable rolling schedule window. */
@@ -37,180 +36,6 @@ const MATERIALIZATION_INTERVAL_MS = 60_000;
  * today's final advertised day, so midnight does not uncover the far edge before the next pass.
  */
 const MATERIALIZED_LOOKAHEAD_DAYS = 1;
-
-/** Return whether a media group is contained by any selected group. */
-function belongsToGroup(
-	groupId: string | null,
-	candidates: Set<string>,
-	parents: Record<string, string | null>,
-): boolean {
-	let current = groupId;
-	const visited = new Set<string>();
-	while (current && !visited.has(current)) {
-		if (candidates.has(current)) {
-			return true;
-		}
-
-		visited.add(current);
-		current = parents[current] ?? null;
-	}
-	return false;
-}
-
-/** Collect every program reachable from the selected schedule resources. */
-function referencedPrograms(
-	templateIds: Set<string>,
-	templates: ScheduleTemplate[],
-	programs: SchedulingProgram[],
-	seedProgramIds: string[] = [],
-): SchedulingProgram[] {
-	const ids = new Set<string>(seedProgramIds);
-	for (const template of templates) {
-		if (!templateIds.has(template.id)) {
-			continue;
-		}
-
-		for (const slot of template.slots) {
-			if (slot.programId) {
-				ids.add(slot.programId);
-			}
-			if (slot.filler.mode === 'configured') {
-				ids.add(slot.filler.config.programId);
-			}
-		}
-		if (template.defaultFiller) {
-			ids.add(template.defaultFiller.programId);
-		}
-	}
-	let changed = true;
-	while (changed) {
-		changed = false;
-		for (const program of programs) {
-			if (ids.has(program.id) && program.config.type === 'similarity' && !ids.has(program.config.sourceProgramId)) {
-				ids.add(program.config.sourceProgramId);
-				changed = true;
-			}
-			if (!ids.has(program.id) || program.config.type !== 'sequence') {
-				continue;
-			}
-
-			for (const entry of program.config.entries) {
-				if (!ids.has(entry.programId)) {
-					ids.add(entry.programId);
-					changed = true;
-				}
-			}
-		}
-	}
-	return programs.filter((program) => ids.has(program.id));
-}
-
-/** Hash programming inputs that determine whether committed future output is stale. */
-function inputFingerprint(
-	schedule: ChannelSchedule,
-	templates: ScheduleTemplate[],
-	programs: SchedulingProgram[],
-	catalog: SchedulingCatalog,
-): string {
-	// Restrict templates and recursively referenced programs to this channel schedule.
-	const virtualTemplates = directProgramTemplates(schedule.channelId, schedule, programs);
-	const templateIds = new Set([
-		schedule.defaultTemplateId,
-		...schedule.layers.map((layer) => layer.templateId),
-		...virtualTemplates.map((template) => template.id),
-	].filter((id): id is string => id !== null));
-	const selectedTemplates = [...templates, ...virtualTemplates]
-		.filter((template) => templateIds.has(template.id))
-		.sort((left, right) => left.id.localeCompare(right.id));
-	const selectedPrograms = referencedPrograms(
-		templateIds,
-		[...templates, ...virtualTemplates],
-		programs,
-		[
-			...(schedule.defaultFiller ? [schedule.defaultFiller.programId] : []),
-			...(schedule.defaultProgramId ? [schedule.defaultProgramId] : []),
-			...schedule.layers.flatMap((layer) => layer.programId ? [layer.programId] : []),
-		],
-	).sort((left, right) => left.id.localeCompare(right.id));
-
-	// Collect only catalog scopes that can affect those programs.
-	const libraryIds = new Set<string>();
-	const itemIds = new Set<string>();
-	const groupIds = new Set<string>();
-	for (const program of selectedPrograms) {
-		if (program.config.type === 'theme') {
-			libraryIds.add(program.config.libraryId);
-			continue;
-		}
-		if (program.config.type !== 'content') {
-			continue;
-		}
-
-		const source = program.config.source;
-		if (source.type === 'item') {
-			itemIds.add(source.itemId);
-		}
-		else if (source.type === 'group') {
-			groupIds.add(source.groupId);
-		}
-		else {
-			libraryIds.add(source.libraryId);
-			if (source.type === 'group-collection') {
-				for (const groupId of source.groupIds) {
-					groupIds.add(groupId);
-				}
-			}
-		}
-	}
-
-	// Include matching media while ignoring transient availability in the durable fingerprint.
-	const selectedMedia = catalog.media
-		.filter(
-			(media) =>
-				libraryIds.has(media.libraryId)
-				|| itemIds.has(media.id)
-				|| belongsToGroup(media.groupId, groupIds, catalog.groupParents),
-		)
-		.map((media) => ({ ...media, availability: 'ignored' }))
-		.sort((left, right) => left.id.localeCompare(right.id));
-	const selectedLibraryIds = new Set(libraryIds);
-	for (const media of selectedMedia) {
-		selectedLibraryIds.add(media.libraryId);
-	}
-
-	// Include the ancestor hierarchy and library attributes used during materialization.
-	const selectedGroupIds = new Set(groupIds);
-	for (const media of selectedMedia) {
-		let groupId = media.groupId;
-		while (groupId && !selectedGroupIds.has(groupId)) {
-			selectedGroupIds.add(groupId);
-			groupId = catalog.groupParents[groupId] ?? null;
-		}
-	}
-
-	// Hash stable authored inputs and catalog eligibility data together.
-	return stableJsonFingerprint({
-		schedule,
-		templates: selectedTemplates.map(templatePlaybackInput),
-		programs: selectedPrograms,
-		catalog: {
-			semantic: semanticSchedulingFingerprint(schedule.channelId, selectedPrograms, catalog),
-			media: selectedMedia,
-			groupParents: Object.fromEntries(
-				[...selectedGroupIds].map((id) => [id, catalog.groupParents[id] ?? null]),
-			),
-			groupTitles: Object.fromEntries(
-				[...selectedGroupIds].map((id) => [id, catalog.groupTitles[id] ?? null]),
-			),
-			libraryNames: Object.fromEntries(
-				[...selectedLibraryIds].map((id) => [id, catalog.libraryNames[id] ?? null]),
-			),
-			libraryEnabled: Object.fromEntries(
-				[...selectedLibraryIds].map((id) => [id, catalog.libraryEnabled?.[id] ?? true]),
-			),
-		},
-	});
-}
 
 /** Restore the selection state recorded immediately after a committed segment. */
 function stateAfter(
@@ -449,7 +274,7 @@ export class TimelineMaterializer {
 		this.dirty = true;
 		this.revision += 1;
 		const operation = Promise.resolve().then(async () => {
-			this.repository.resetChannelScheduleState(channelId);
+			await this.repository.resetChannelScheduleState(channelId);
 			this.events.publish({ type: 'timeline.changed', data: { channelId, status: 'pending' } });
 			await this.materializeAll();
 		});
@@ -503,6 +328,10 @@ export class TimelineMaterializer {
 			return;
 		}
 
+		const records = this.repository.listMaterializationCheckpoints
+			? new Map((await this.repository.listMaterializationCheckpoints()).map(record => [record.channelId, record]))
+			: null;
+		const fingerprints = new InputFingerprintContext();
 		const programsPromise = this.repository.listPrograms();
 		const [schedules, templates, programs, playbackSettings] = await Promise.all([
 			this.repository.listChannelSchedules(),
@@ -513,13 +342,22 @@ export class TimelineMaterializer {
 		if (schedules.length === 0) {
 			return;
 		}
+		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' }).toString();
+		const eligibleSchedules = records ? schedules.filter(schedule => {
+			const record = records.get(schedule.channelId);
+			return !record || record.health === 'failed' || !record.applyAfter || Temporal.Instant.compare(record.applyAfter, now) <= 0
+				|| record.issues.some(issue => issue.code === 'source-unavailable' || issue.code === 'media-duration-missing');
+		}) : schedules;
+		if (eligibleSchedules.length === 0) {
+			return;
+		}
 		const preferenceAsOf = currentTimestamp();
 		const viewingPreferences = playbackSettings.viewingPreferencesEnabled
 			? this.repository.viewingPreferenceScores(preferenceAsOf)
 			: { itemScores: {}, showScores: {} };
 		const catalog = await this.repository.getSchedulingCatalog(
 			programs,
-			schedulingRootProgramIds(templates, schedules),
+			schedulingRootProgramIds(templates, eligibleSchedules),
 		);
 		const occupancyStart = currentTimestamp();
 		const today = Temporal.Instant.from(occupancyStart).toZonedDateTimeISO(this.timeZone).toPlainDate();
@@ -552,6 +390,8 @@ export class TimelineMaterializer {
 					catalog,
 					viewingPreferences,
 					occupiedMedia,
+					records,
+					fingerprints,
 				)
 				: null;
 			// Observe preparation failures while a previous commit awaits its writer acknowledgement.
@@ -587,7 +427,18 @@ export class TimelineMaterializer {
 		sourceCatalog: SchedulingCatalog,
 		viewingPreferences: ViewingPreferenceScores,
 		occupiedMedia: OccupiedMediaInterval[],
+		records: Map<string, TimelineMaterializationRecord> | null = null,
+		fingerprints = new InputFingerprintContext(),
 	): Promise<(() => Promise<void>) | null> {
+		// Deferred channels need neither catalog hashing nor state-bearing segment reads.
+		let current = records ? records.get(schedule.channelId) ?? null : await this.repository.getTimelineMaterialization(schedule.channelId);
+		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' });
+		if (current?.health !== 'failed' && current?.applyAfter
+			&& Temporal.Instant.compare(now, current.applyAfter) < 0
+			&& !current.issues.some(issue => issue.code === 'source-unavailable' || issue.code === 'media-duration-missing')) {
+			return null;
+		}
+
 		// Resolve the base template and desired rolling guide window.
 		const resolved = resolveProgramSchedule(schedule.channelId, schedule, templates, programs);
 		const template = resolved.template;
@@ -595,15 +446,18 @@ export class TimelineMaterializer {
 			return null;
 		}
 
-		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' });
 		const today = now.toZonedDateTimeISO(this.timeZone).toPlainDate();
 		const desiredStart = startOfDate(today, this.timeZone);
 		const desiredEndDate = today.add({ days: this.guideDays + MATERIALIZED_LOOKAHEAD_DAYS });
 		const desiredEnd = startOfDate(desiredEndDate, this.timeZone);
-		const currentFingerprint = inputFingerprint(schedule, templates, programs, sourceCatalog);
+		const currentFingerprint = inputFingerprint(schedule, templates, programs, sourceCatalog, fingerprints);
 
 		// Load the current commit and its state-bearing segments once.
-		let current = await this.repository.getTimelineMaterialization(schedule.channelId);
+		if (current && current.health !== 'failed' && !current.pendingSince && !current.applyAfter
+			&& current.inputFingerprint === currentFingerprint && Temporal.Instant.compare(current.windowEnd, desiredEnd) >= 0
+			&& Temporal.Instant.compare(current.continuationAt, current.windowEnd) >= 0) {
+			return null;
+		}
 		const retryingFailure = current?.health === 'failed';
 		const existing = current
 			? await this.repository.listMaterializedTimelineSegments(
@@ -641,7 +495,7 @@ export class TimelineMaterializer {
 		}
 
 		if (
-			!recoveringEmptyTimeline
+			!retryImmediately
 			&& current?.applyAfter
 			&& Temporal.Instant.compare(now, current.applyAfter) < 0
 		) {

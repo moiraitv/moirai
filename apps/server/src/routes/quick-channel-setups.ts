@@ -69,7 +69,7 @@ export function registerQuickChannelSetupRoutes(
 		}),
 	}, async (request, reply) => {
 		const input = quickChannelSetupCreateSchema.parse(request.body);
-		const result = repository.createQuickChannelSetup(input, config.maxExplicitMediaItems);
+		const result = await repository.createQuickChannelSetup(input, config.maxExplicitMediaItems);
 		events.publish({
 			type: 'scheduling.changed',
 			data: { entity: 'program', change: 'created', id: result.program.id },

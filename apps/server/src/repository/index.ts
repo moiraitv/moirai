@@ -91,6 +91,13 @@ export type {
  * centralizing catalog invalidation and cross-domain queries for service callers.
  */
 export class Repository extends LibraryRepository {
+	/** Invalidate cached eligibility only after scan reconciliation has committed successfully. */
+	override async reconcileScan(...args: Parameters<LibraryRepository['reconcileScan']>) {
+		const result = await super.reconcileScan(...args);
+		this.invalidateSchedulingCatalog();
+		return result;
+	}
+
 	/** Ignore or restore an unchanged media finding in the current accepted source. */
 	setMediaIssueIgnored(libraryId: string, path: string, code: string, fingerprint: string, ignored: boolean) {
 		return setMediaIssueIgnored(this.database, libraryId, path, code, fingerprint, ignored);
@@ -483,6 +490,11 @@ export class Repository extends LibraryRepository {
 	/** List materialization health and pending state for all channels. */
 	async listTimelineMaterializationStatuses(): Promise<ChannelTimelineMaterializationStatus[]> {
 		return this.scheduling.listTimelineMaterializationStatuses();
+	}
+
+	/** Load complete materialization checkpoints once for a background generation pass. */
+	async listMaterializationCheckpoints(): Promise<TimelineMaterializationRecord[]> {
+		return this.scheduling.listMaterializationCheckpoints();
 	}
 
 	/** List committed timeline windows for all channels. */

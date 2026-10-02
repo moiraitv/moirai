@@ -1,4 +1,3 @@
-import type { SchedulingProgram } from '@moirai/shared';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { stat, writeFile } from 'node:fs/promises';
@@ -11,6 +10,12 @@ import { renderCreditTemplate } from './credit-renderer.js';
 import { isImageSubtitle, subtitleCandidates, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from './subtitle-selection.js';
 
 import { SubtitleSnapshotStore } from './subtitle-snapshots.js';
+
+/** Only inherited subtitle fields are needed for main-thread asset preparation. */
+export interface SubtitleProgram {
+	id: string;
+	config: { subtitlePreferences?: SubtitlePreferences | undefined };
+}
 
 /** Invoke FFmpeg without a shell and with bounded execution/output. */
 const execute = promisify(execFile);
@@ -38,7 +43,7 @@ export class SubtitleAssets {
 	}
 
 	/** Prepare all referenced selections in bounded metadata batches, isolating per-item failures. */
-	async prepare(channel: Channel, guide: ScheduleGuide, programs?: Promise<SchedulingProgram[]>): Promise<PreparedSubtitles> {
+	async prepare(channel: Channel, guide: ScheduleGuide, programs?: Promise<SubtitleProgram[]>): Promise<PreparedSubtitles> {
 		try {
 			return await this.prepareSelections(channel, guide, programs);
 		}
@@ -49,7 +54,7 @@ export class SubtitleAssets {
 	}
 
 	/** Resolve metadata and prepare selections, omitting individual failed subtitles. */
-	private async prepareSelections(channel: Channel, guide: ScheduleGuide, suppliedPrograms?: Promise<SchedulingProgram[]>): Promise<PreparedSubtitles> {
+	private async prepareSelections(channel: Channel, guide: ScheduleGuide, suppliedPrograms?: Promise<SubtitleProgram[]>): Promise<PreparedSubtitles> {
 		const result: PreparedSubtitles = new Map();
 		const programs = new Map((await (suppliedPrograms ?? this.repository.listPrograms())).map((program) => [program.id, program.config.subtitlePreferences ?? {}]));
 		const segments = guide.channels.flatMap((entry) => entry.preview.segments)

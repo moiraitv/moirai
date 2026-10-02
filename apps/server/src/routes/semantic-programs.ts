@@ -17,7 +17,7 @@ export function registerSemanticProgramRoutes(app: FastifyInstance, repository: 
 	}, async (request, reply) => {
 		const result = await schedulingWorkers.read({ kind: 'similarity', config: semanticProgramConfigSchema.parse(request.body) }, workerRequestSignal(reply));
 		if (result.preferences?.length) {
-			repository.semantic.preferences.catalog(result.preferences);
+			await repository.semantic.preferences.catalog(result.preferences);
 			requestEmbeddingWork?.();
 		}
 		return sendWorkerJson(reply, result.body);
@@ -30,9 +30,9 @@ export function registerSemanticProgramRoutes(app: FastifyInstance, repository: 
 	}, async (request, reply) => {
 		const result = await schedulingWorkers.read({ kind: 'similarity', config: semanticProgramConfigSchema.parse(request.body), retry: true }, workerRequestSignal(reply));
 		if (result.preferences?.length) {
-			repository.semantic.preferences.catalog(result.preferences);
+			await repository.semantic.preferences.catalog(result.preferences);
 		}
-		const queued = repository.semantic.retryFailed(result.retryItemIds ?? [], result.preferences ?? []);
+		const queued = await repository.semantic.retryFailed(result.retryItemIds ?? [], result.preferences ?? []);
 		if (queued) {
 			repository.invalidateSchedulingCatalog();
 			requestEmbeddingWork?.(true);

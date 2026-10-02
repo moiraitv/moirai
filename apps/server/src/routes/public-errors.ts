@@ -1,3 +1,4 @@
+import { DatabaseWriteQueueFullError } from '../repository/writer.js';
 import { EncodingProfileError } from '../repository/encoding-profiles.js';
 import { CreditTemplateError } from '../repository/credit-templates.js';
 import { GuideTemplateError } from '../repository/guide-templates.js';
@@ -132,12 +133,12 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		return response(requestId, 409, 'conflict', error.message, true);
 	}
 
-	if (error instanceof SchedulingQueueFullError) {
+	if (error instanceof SchedulingQueueFullError || error instanceof DatabaseWriteQueueFullError) {
 		return response(
 			requestId,
 			503,
 			'service_unavailable',
-			'Scheduling is busy; retry shortly',
+			error instanceof DatabaseWriteQueueFullError ? 'Database updates are busy; retry shortly' : 'Scheduling is busy; retry shortly',
 			true,
 			undefined,
 			'1',

@@ -11,14 +11,14 @@ export type MaterializationWrite
 export type MaterializationWriter = (write: MaterializationWrite) => Promise<void>;
 
 /** Apply one worker proposal through the same transaction and revision checks as local generation. */
-export function applyMaterializationWrite(repository: Repository, write: MaterializationWrite): void {
+export async function applyMaterializationWrite(repository: Repository, write: MaterializationWrite): Promise<void> {
 	if (write.kind === 'pending') {
-		repository.markTimelinePending(write.channelIds, write.applyAfter, write.pendingSince);
+		await repository.markTimelinePending(write.channelIds, write.applyAfter, write.pendingSince);
 	}
 	else if (write.kind === 'failed') {
-		repository.markTimelineFailed(write.channelId, write.message, write.failedAt);
+		await repository.markTimelineFailed(write.channelId, write.message, write.failedAt);
 	}
 	else {
-		repository.commitMaterializedTimeline(write.input);
+		await repository.commitMaterializedTimeline(write.input);
 	}
 }

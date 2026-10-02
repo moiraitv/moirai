@@ -1,3 +1,4 @@
+import type { PlayoutPreparation } from './playout-preparation.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { prepareMediaStreams, type PreparedMediaStreams } from './audio-selection.js';
 import { SubtitleAssets, type PreparedSubtitles } from './subtitle-assets.js';
@@ -43,6 +44,7 @@ export interface PlayoutSynchronizationFailure {
 export class PlayoutSynchronizer {
 	private readonly active = new Map<string, Promise<string>>();
 	private readonly pending = new Set<string>();
+	private readonly liveChannels = new Set<string>();
 	private readonly configurationWrites = new Map<string, Promise<unknown>>();
 	private readonly subtitleModes = new Map<string, Channel['subtitleMode']>();
 	private readonly failures = new Map<string, PlayoutSynchronizationFailure>();
@@ -173,11 +175,17 @@ export class PlayoutSynchronizer {
 		return new Map(this.failures);
 	}
 
-	/** Ensure one channel's current rolling window exists on disk. */
-	syncChannel(channelId: string): Promise<string> {
+	/** Ensure current playout, promoting an existing periodic pass for a live viewer without repeating it. */
+	syncChannel(channelId: string, live = false): Promise<string> {
+		if (live) {
+			this.liveChannels.add(channelId);
+			this.workers?.promotePlayout(channelId);
+		}
 		const existing = this.active.get(channelId);
 		if (existing) {
-			this.pending.add(channelId);
+			if (!live) {
+				this.pending.add(channelId);
+			}
 			return existing;
 		}
 
@@ -258,6 +266,9 @@ export class PlayoutSynchronizer {
 			}
 			throw error;
 		}
+		finally {
+			this.liveChannels.delete(channelId);
+		}
 	}
 
 	/** Schedule the next rolling-window reconciliation. */
@@ -275,7 +286,7 @@ export class PlayoutSynchronizer {
 
 	/** Build and atomically replace one channel's complete daily document set. */
 	private async performChannelSync(channelId: string): Promise<string> {
-		const channel = await this.repository.getChannel(channelId);
+		let channel = await this.repository.getChannel(channelId);
 		if (!channel) {
 			throw new Error('Channel not found');
 		}
@@ -283,18 +294,17 @@ export class PlayoutSynchronizer {
 		const startDate = Temporal.Now.plainDateISO(this.timeZone).toString();
 		// Publish tomorrow before midnight even when the public guide contains only today.
 		const playoutDays = Math.max(2, this.guideDays);
-		const guide = await readCommittedGuideAfterMaterializing(
-			async () => this.workers?.databaseBacked
-				? JSON.parse((await this.workers.read({ kind: 'channel-guide', channelId: channel.id,
-					timeZone: this.timeZone, startDate, days: playoutDays, guideDays: playoutDays, publicUrl: '' })).body) as Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>
-				: readCommittedChannelScheduleGuide(
-					this.repository,
-					this.timeZone,
-					channel.id,
-					startDate,
-					playoutDays,
-					playoutDays,
-				),
+		const publicationRevision = this.workers?.playoutRevision(channelId);
+		const preparation = this.workers?.databaseBacked
+			? await readCommittedGuideAfterMaterializing(
+				async () => this.workers!.playoutRead({ kind: 'playout-preparation', channelId,
+					timeZone: this.timeZone, startDate, days: playoutDays }, this.liveChannels.has(channelId)) as Promise<PlayoutPreparation>,
+				this.ensureMaterialized,
+			)
+			: null;
+		channel = preparation?.channel ?? channel;
+		const guide = preparation?.guide ?? await readCommittedGuideAfterMaterializing(
+			() => readCommittedChannelScheduleGuide(this.repository, this.timeZone, channel.id, startDate, playoutDays, playoutDays),
 			this.ensureMaterialized,
 		);
 		const fallback = await this.fallbackFillers.resolve(channel.id);
@@ -306,13 +316,22 @@ export class PlayoutSynchronizer {
 		if (!resolvedFolder.startsWith(`${resolvedRoot}${path.sep}`)) {
 			throw new Error('Playback output directory is outside its configured root');
 		}
-		const programs = this.repository.listPrograms();
+		const sourcePrograms = preparation ? null : this.repository.listPrograms();
+		const programs = preparation ? Promise.resolve(preparation.programs) : sourcePrograms!;
 		const selections = await this.subtitles.prepare(channel, guide, programs);
-		const streams = await programs.then((items) => prepareMediaStreams(this.repository, channel, guide, items)).catch(() => ({ audio: new Map(), video: new Map() }));
+		const streams = preparation ? undefined : await sourcePrograms!.then((items) => prepareMediaStreams(this.repository, channel, guide, items)).catch(() => ({ audio: new Map(), video: new Map() }));
 		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
 		return this.withChannelConfiguration(channelId, async () => {
+			const files = preparation
+				? await this.workers!.playoutRead({ kind: 'playout-documents', channelId,
+					timeZone: this.timeZone, startDate, days: playoutDays, fallback, subtitles: selections }, this.liveChannels.has(channelId)) as Map<string, string>
+				: null;
+			if (preparation && publicationRevision !== this.workers!.playoutRevision(channelId)) {
+				this.pending.add(channelId);
+				return resolvedFolder;
+			}
 			await this.beforeSubtitleModeChange(channelId, subtitleMode);
-			const generated = await this.channelFiles(channel, guide, fallback, selections, streams);
+			const generated = await this.channelFiles(channel, guide, fallback, selections, streams, files ?? undefined);
 			const publicationStarted = performance.now();
 
 			for (const [filename, content] of generated) {
@@ -376,11 +395,12 @@ export class PlayoutSynchronizer {
 		fallback: Awaited<ReturnType<FallbackFillerStore['resolve']>>,
 		subtitles?: PreparedSubtitles,
 		streams?: PreparedMediaStreams,
+		preparedFiles?: Map<string, string>,
 	): Promise<Map<string, string>> {
 		const files = new Map<string, string>();
 		const input: Parameters<typeof buildEtvPlayoutFiles> = [[channel], guide,
 			new Map([[channel.id, fallback]]), subtitles, streams?.audio, streams?.video];
-		const generated = this.workers ? await this.workers.playout(input) : buildEtvPlayoutFiles(...input);
+		const generated = preparedFiles ?? (this.workers ? await this.workers.playout(input, this.liveChannels.has(channel.id)) : buildEtvPlayoutFiles(...input));
 		for (const [relativePath, content] of generated) {
 			const filename = path.posix.basename(relativePath);
 			if (!PLAYOUT_FILENAME.test(filename)) {

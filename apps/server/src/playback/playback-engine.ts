@@ -361,7 +361,7 @@ export class PlaybackEngine {
 
 		this.reservations.add(channel.id);
 		try {
-			await this.playout.syncChannel(channel.id);
+			await this.playout.syncChannel(channel.id, true);
 			if (!this.running) {
 				throw new PlaybackUnavailableError('Playback engine is stopping');
 			}

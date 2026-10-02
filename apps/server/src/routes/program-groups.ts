@@ -38,7 +38,7 @@ export function registerProgramGroupRoutes(app: FastifyInstance, repository: Rep
 			return reply.status(201).send({ program, created: true, addedGroupCount: groups.length, alreadySelectedCount: 0 });
 		}
 
-		const result = repository.appendProgramGroups(input.destination.programId, libraryId, input.selection.groupIds);
+		const result = await repository.appendProgramGroups(input.destination.programId, libraryId, input.selection.groupIds);
 		if (result.status === 'not-found') {
 			throw app.httpErrors.notFound('Program not found');
 		}

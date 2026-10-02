@@ -193,7 +193,7 @@ export function registerSchedulingRoutes(
 			});
 		}
 
-		const result = repository.appendProgramItems(
+		const result = await repository.appendProgramItems(
 			input.destination.programId,
 			libraryId,
 			itemIds,

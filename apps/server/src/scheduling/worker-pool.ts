@@ -1,3 +1,4 @@
+import { PlayoutPreparationReader, type PlayoutReadRequest, type PlayoutPreparation } from '../playback/playout-preparation.js';
 import { buildEtvPlayoutFiles } from '../playback/playout-output.js';
 import type { JobTimings } from './job-timing.js';
 import type { ResponsivenessMonitor } from '../operations/responsiveness.js';
@@ -34,6 +35,7 @@ export class SchedulingQueueFullError extends Error {
 type JobInput = { kind: 'generate'; input: GenerateTimelineInput }
 	| { kind: 'preview'; input: PreviewJob }
 	| { kind: 'read'; input: { request: DatabaseReadRequest; revision: string } }
+	| { kind: 'playout-read'; input: { request: PlayoutReadRequest; revision: string } }
 	| { kind: 'playout'; input: Parameters<typeof buildEtvPlayoutFiles> }
 	| { kind: 'materialize'; input: { timeZone: string; revision: string; guideDays: number } };
 
@@ -51,6 +53,8 @@ interface Job {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
 	background: boolean;
+	playback: boolean;
+	live: boolean;
 	queuedAt: number;
 	cleanup?: () => void;
 	finish?: (() => void) | undefined;
@@ -122,7 +126,7 @@ export function schedulingWorkerError(payload: SchedulingWorkerErrorPayload): Er
 
 /**
  * Bound CPU-heavy timeline generation and offload production work from Fastify's event loop. The pool
- * enforces fixed worker and queue capacity, propagates worker failures, and can retire idle workers
+	 * enforces fixed worker and queue capacity, propagates worker failures, and can retire idle workers
  * when the process needs to release resources.
  */
 export class SchedulingWorkerPool {
@@ -135,13 +139,29 @@ export class SchedulingWorkerPool {
 	private localPreview: PreviewExecutor | null = null;
 	private localReader: DatabaseJobReader | null = null;
 	private readRevision = 0;
+	private sharedPlayoutRevision = 0;
+	private readonly channelPlayoutRevisions = new Map<string, number>();
 	private interactiveStreak = 0;
 	private readonly previews = new Map<string, SharedRead<PreviewResults[PreviewRequest['kind']]>>();
 	private readonly reads = new Map<string, SharedRead<DatabaseReadResult>>();
 
-	/** Drop in-flight read identities when authoritative data changes. */
-	invalidateReads(): void {
+	/** Refresh read caches while isolating channel publication from unrelated background progress. */
+	invalidateReads(event?: LiveEventInput): void {
 		this.readRevision += 1;
+		if (event?.type === 'timeline.changed' || event?.type === 'channel.changed') {
+			this.channelPlayoutRevisions.set(event.data.channelId, this.readRevision);
+		}
+		else if (!event || (event.type === 'library.changed' && event.data.change !== 'watcher-status' && event.data.change !== 'change-detected')
+			|| (event.type === 'scan.changed' && event.data.affectsProgramming)
+			|| (event.type === 'scheduling.changed' && (event.data.entity === 'program' || event.data.entity === 'credit-template'))) {
+			// Shared media facts and rendering preferences can affect existing committed playback.
+			this.sharedPlayoutRevision = this.readRevision;
+		}
+	}
+
+	/** Validate publication against this channel and shared playback inputs, excluding read-only progress. */
+	playoutRevision(channelId: string): string {
+		return `${this.sharedPlayoutRevision}:${this.channelPlayoutRevisions.get(channelId) ?? 0}`;
 	}
 
 	/** File-backed databases can be read independently without transferring their catalogs. */
@@ -246,15 +266,40 @@ export class SchedulingWorkerPool {
 		return consumeRead(shared, signal) as Promise<PreviewResults[K]>;
 	}
 
-	/** Prepare validated playout documents off-thread while their owner retains publication rights. */
-	async playout(input: Parameters<typeof buildEtvPlayoutFiles>): Promise<Map<string, string>> {
+	/** Global authoritative revision for refreshing worker-owned read snapshots. */
+	get preparationRevision(): string {
+		return `${this.previewContext!.repository.schedulingCatalogRevision}:${this.readRevision}`;
+	}
+
+	/** Prepare compact asset requests off-thread; live tunes use priority and reserved admission. */
+	async playoutRead(request: PlayoutReadRequest, live = false): Promise<PlayoutPreparation | Map<string, string>> {
+		if (!this.databaseBacked) {
+			return new PlayoutPreparationReader(this.previewContext!.repository).read(request);
+		}
+		return this.enqueue({ kind: 'playout-read', input: { request, revision: this.preparationRevision } }, undefined, {}, live);
+	}
+
+	/** Promote a queued periodic preparation when a viewer tunes to its channel. */
+	promotePlayout(channelId: string): void {
+		for (const job of this.queue) {
+			if ((job.task.kind === 'playout-read' && job.task.input.request.channelId === channelId)
+				|| (job.task.kind === 'playout' && job.task.input[0].some(channel => channel.id === channelId))) {
+				job.live = true;
+				job.background = false;
+			}
+		}
+		this.dispatch();
+	}
+
+	/** Build documents off-thread with live priority while the caller retains publication rights. */
+	async playout(input: Parameters<typeof buildEtvPlayoutFiles>, live = false): Promise<Map<string, string>> {
 		if (this.closing) {
 			throw new Error('Scheduling workers are shutting down');
 		}
 		if (this.workerCount === 0) {
 			return buildEtvPlayoutFiles(...input);
 		}
-		return this.enqueue({ kind: 'playout', input });
+		return this.enqueue({ kind: 'playout', input }, undefined, {}, live);
 	}
 
 	/** Admit either job kind through the same worker and queue capacity limits. */
@@ -262,18 +307,22 @@ export class SchedulingWorkerPool {
 		task: JobInput,
 		signal?: AbortSignal,
 		callbacks: Pick<Job, 'write' | 'event'> = {},
+		live = false,
 	): Promise<T> {
 		if (this.closing) {
 			return Promise.reject(new Error('Scheduling workers are shutting down'));
 		}
-		if (this.queue.length + this.slots.filter((slot) => slot.job).length >= this.queueLimit) {
-			throw new SchedulingQueueFullError(this.queueLimit);
+		// Add at most one live admission per worker; unrelated work cannot consume this reserve.
+		const admissionLimit = this.queueLimit + (live ? Math.max(1, this.workerCount) : 0);
+		if (this.queue.length + this.slots.filter((slot) => slot.job).length >= admissionLimit) {
+			throw new SchedulingQueueFullError(admissionLimit);
 		}
 
 		this.ensureWorkers();
 		return new Promise<T>((resolve, reject) => {
 			const job: Job = { id: this.nextId++, task, resolve: (value) => resolve(value as T), reject,
-				background: task.kind === 'materialize' || task.kind === 'playout', queuedAt: performance.now(), ...callbacks };
+				background: task.kind === 'materialize' || (!live && (task.kind === 'playout' || task.kind === 'playout-read')),
+				playback: task.kind === 'playout' || task.kind === 'playout-read', live, queuedAt: performance.now(), ...callbacks };
 			const abort = (): void => {
 				const index = this.queue.indexOf(job);
 				if (index !== -1) {
@@ -407,7 +456,7 @@ export class SchedulingWorkerPool {
 		});
 	}
 
-	/** Assign queued scheduling jobs to idle workers. */
+	/** Serve live tunes first and reserve a worker from periodic playout and materialization work. */
 	private dispatch(): void {
 		for (const slot of this.slots) {
 			if (slot.job) {
@@ -417,8 +466,11 @@ export class SchedulingWorkerPool {
 			const backgroundAllowed = this.workerCount === 1
 				|| this.slots.filter(entry => entry.job?.background).length < this.workerCount - 1;
 			const interactive = this.queue.findIndex(entry => !entry.background);
+			const live = this.queue.findIndex(entry => entry.live);
+			const playback = backgroundAllowed ? this.queue.findIndex(entry => entry.playback) : -1;
 			const background = backgroundAllowed ? this.queue.findIndex(entry => entry.background) : -1;
-			const index = background !== -1 && (interactive === -1 || this.interactiveStreak >= 3) ? background : interactive;
+			const index = live !== -1 ? live : playback !== -1 ? playback
+				: background !== -1 && (interactive === -1 || this.interactiveStreak >= 3) ? background : interactive;
 			const job = index === -1 ? undefined : this.queue.splice(index, 1)[0];
 			if (!job) {
 				return;
@@ -429,7 +481,7 @@ export class SchedulingWorkerPool {
 			job.finish = this.previewContext?.responsiveness?.begin(`worker.${job.task.kind}`);
 			this.interactiveStreak = job.background ? 0 : this.interactiveStreak + 1;
 			slot.job = job;
-			if (job.task.kind === 'read' || job.task.kind === 'materialize' || job.task.kind === 'playout') {
+			if (job.task.kind === 'read' || job.task.kind === 'materialize' || job.task.kind === 'playout-read' || job.task.kind === 'playout') {
 				slot.worker.postMessage({ id: job.id, kind: job.task.kind, input: job.task.input });
 				continue;
 			}

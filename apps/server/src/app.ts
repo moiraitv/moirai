@@ -1,7 +1,7 @@
 import { ResponsivenessMonitor } from './operations/responsiveness.js';
 import { fileURLToPath } from 'node:url';
 import { EmbeddingService } from './semantic/service.js';
-import { SemanticRepository } from './repository/semantic.js';
+import { DatabaseWriter, writerRepository } from './repository/writer.js';
 import { existsSync } from 'node:fs';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
@@ -93,7 +93,12 @@ export async function buildApp(
 	});
 	app.addHook('onResponse', async (request) => requestTimings.get(request)?.());
 	app.addHook('onRequestAbort', async (request) => requestTimings.get(request)?.());
-	const repository = new Repository(db);
+	// Migrations have finished; runtime writes have exactly one off-thread owner.
+	const databaseWriter = db.$client.name !== ':memory:' ? new DatabaseWriter(db.$client.name, responsiveness) : null;
+	if (databaseWriter) {
+		db.$client.pragma('query_only = ON');
+	}
+	const repository = databaseWriter ? writerRepository(new Repository(db, true), databaseWriter) : new Repository(db);
 	const authentication = new AuthenticationService(
 		repository,
 		config,
@@ -193,7 +198,7 @@ export async function buildApp(
 		config.debug,
 	);
 
-	const embeddings = new EmbeddingService(new SemanticRepository(db), events, fileURLToPath(new URL('./embedding-model/', import.meta.url)));
+	const embeddings = new EmbeddingService(repository.semantic, events, fileURLToPath(new URL('./embedding-model/', import.meta.url)));
 	const unsubscribeEmbeddings = events.subscribe((event) => embeddings.handleEvent(event));
 
 	// Register optional resource consumers in the order they should be shed.
@@ -244,7 +249,7 @@ export async function buildApp(
 	const unsubscribeEpg = events.subscribe((event) => {
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed'
 			|| event.type === 'embeddings.changed' || event.type === 'scan.changed' || event.type === 'library.changed') {
-			schedulingWorkers.invalidateReads();
+			schedulingWorkers.invalidateReads(event);
 		}
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed') {
 			epg.invalidate();
@@ -277,6 +282,7 @@ export async function buildApp(
 		playout,
 		mediaProbe,
 		resourcePressure,
+		databaseWriter ?? undefined,
 	);
 
 	// Configure parsers and shared Fastify plugins before route registration.
@@ -332,6 +338,8 @@ export async function buildApp(
 		unregisterPressureShedders.forEach((unregister) => unregister());
 		await resourcePressure.close();
 		events.close();
+		await scanner.close();
+		await databaseWriter?.close();
 		await logs.close();
 	});
 

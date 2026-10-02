@@ -205,11 +205,11 @@ describe('debug configuration', () => {
 });
 
 describe('guide horizon configuration', () => {
-	it('defaults to seven days and accepts a bounded custom horizon', () => {
+	it('defaults to three days and preserves an explicit seven-day horizon', () => {
 		vi.stubEnv('MOIRAI_GUIDE_DAYS', undefined);
-		expect(loadConfig().guideDays).toBe(7);
-		vi.stubEnv('MOIRAI_GUIDE_DAYS', '3');
 		expect(loadConfig().guideDays).toBe(3);
+		vi.stubEnv('MOIRAI_GUIDE_DAYS', '7');
+		expect(loadConfig().guideDays).toBe(7);
 		expect(loadConfig({ guideDays: 14 }).guideDays).toBe(14);
 	});
 

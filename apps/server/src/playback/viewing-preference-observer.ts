@@ -113,7 +113,7 @@ export class ViewingPreferenceObserver {
 		}
 
 		encounter.scored = true;
-		this.repository.recordViewingPreference(
+		await this.repository.recordViewingPreference(
 			encounter.mediaItemId,
 			encounter.type === 'initial' ? 2 : 1,
 			encounter.type,
