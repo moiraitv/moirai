@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
-import { MAX_TIMELINE_SEGMENTS, type FillerBudget, type SelectionStateRecord } from '@moirai/shared';
+import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, MAX_TIMELINE_SEGMENTS, type FillerBudget, type SelectionStateRecord } from '@moirai/shared';
 import { TimelineMaterializationLimitError } from './limits.js';
 import { changedStateRecords, selectProgram, type SelectionContext } from './selection.js';
 import type { AiringSpan } from './mid-roll.js';
@@ -33,6 +33,18 @@ export interface FillerProgress {
 	/** Original stage capacity survives continuation into another scheduling day. */
 	fullBudgetSeconds?: number;
 }
+/** Compare resolved roll supply at millisecond precision, without changing budget or selection. */
+export function fillerBudgetShortfall(
+	initial: FillerProgress,
+	remaining: FillerProgress,
+	threshold = DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT,
+): boolean {
+	const scale = initial.unit === 'seconds' ? 1_000 : 1;
+	const requested = Math.round(initial.remaining * scale);
+	const missing = Math.round(remaining.remaining * scale);
+	return requested > 0 && (requested - missing) * 100 < requested * threshold;
+}
+
 /** Resolve a budget at its actual playback position. */
 export function fillerProgress(budget: FillerBudget, start: string, timeZone: string, identity: string, available = 86_400): FillerProgress {
 	if (budget.type === 'count') {

@@ -68,7 +68,7 @@ Choose **All conditions** when every rule must match, or **Any condition** when 
 
 For example, consider these three numeric rules under **All conditions**: elapsed content of at least 600 seconds, at least 600 seconds since the last accepted break, and at least 120 seconds of content remaining. This keeps breaks ten minutes apart and avoids a break near the end.
 
-Rules can contain up to 100 conditions and groups, nested up to eight levels. Each video uses at most 256 possible break points. If the Source Program cannot supply the requested filler, content resumes immediately and schedule diagnostics report the shortfall. Tail filler can still fill time left in the slot afterward.
+Rules can contain up to 100 conditions and groups, nested up to eight levels. Each video uses at most 256 possible break points. If the Source Program cannot supply the requested filler, content resumes immediately. By default, schedule diagnostics warn when less than 80% of a pre-roll, mid-roll, or post-roll budget plays. Change this percentage in [Settings](/playback/settings). Time budgets compare duration; quantity budgets compare clips played. Tail filler can still fill time left in the slot afterward.
 
 ## Assign filler
 

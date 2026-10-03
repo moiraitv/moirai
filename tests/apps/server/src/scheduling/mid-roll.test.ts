@@ -605,3 +605,63 @@ it('continues an existing migrated empty-slot filler cursor instead of starting 
 		.toMatchObject({ type: 'sequential', lastItemId: uuid(2) });
 	expect(continued.proposedState.some(record => record.consumerKey.startsWith('fallback:'))).toBe(false);
 });
+
+describe('roll shortfall tolerance', () => {
+	it.each(['pre-roll', 'mid-roll', 'post-roll'] as const)('warns below the strict percentage for %s without changing playback or state', stage => {
+		const options = fixture(1_500);
+		options.catalog.media[1]!.durationSeconds = 96;
+		const budget = { type: 'duration' as const, seconds: 120, policy: 'next-fit-only' as const };
+		if (stage === 'mid-roll') {
+			settings(options).budget = budget;
+		}
+		else {
+			options.template.defaultMidRoll = null;
+			options.template[stage === 'pre-roll' ? 'defaultPreRoll' : 'defaultPostRoll'] = { presetId: uuid(401), programId: uuid(11) };
+			options.catalog.fillerPresets = { [uuid(401)]: { budget } };
+		}
+		const original = structuredClone(options);
+		const quiet = generateTimelineDetailed(options);
+		expect(quiet.issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(false);
+		const noisy = generateTimelineDetailed({ ...options, fillerShortfallWarningThresholdPercent: 100 });
+		expect(noisy.issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(true);
+		for (const field of ['segments', 'proposedState', 'stateTransitions', 'continuation'] as const) {
+			expect(noisy[field]).toEqual(quiet[field]);
+		}
+		expect(options).toEqual(original);
+		options.catalog.media[1]!.durationSeconds = 95.999;
+		expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(true);
+		options.catalog.media[1]!.durationSeconds = 96.001;
+		expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(false);
+	});
+	it('disables only budget-shortfall diagnostics at zero', () => {
+		const options = fixture();
+		settings(options).budget = { type: 'duration', seconds: 120, policy: 'next-fit-only' };
+		options.catalog.media[1]!.durationSeconds = null;
+		const noisy = generateTimelineDetailed(options);
+		const quiet = generateTimelineDetailed({ ...options, fillerShortfallWarningThresholdPercent: 0 });
+		expect(noisy.issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(true);
+		expect(quiet.issues).toEqual(noisy.issues.filter(issue => issue.code !== 'mid-roll-shortfall'));
+		expect(quiet.segments).toEqual(noisy.segments);
+	});
+});
+
+it('applies warning tolerance to clock padding at the actual mid-roll position', () => {
+	const options = fixture(1_600);
+	settings(options).budget = { type: 'pad', minutes: 15, policy: 'next-fit-only' };
+	options.catalog.media[1]!.durationSeconds = 240;
+	expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(false);
+	options.catalog.media[1]!.durationSeconds = 239.999;
+	expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(true);
+});
+
+it.each([{ type: 'count', count: 1 }, { type: 'random-count', minimum: 1, maximum: 1 }] as const)('reports a missing resolved quantity for $type but suppresses zero quantities', budget => {
+	const options = fixture();
+	settings(options).budget = budget;
+	options.catalog.media[1]!.durationSeconds = null;
+	expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(true);
+	options.fillerShortfallWarningThresholdPercent = 0;
+	expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(false);
+	options.fillerShortfallWarningThresholdPercent = 100;
+	settings(options).budget = { type: 'random-count', minimum: 0, maximum: 0 };
+	expect(generateTimelineDetailed(options).issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(false);
+});

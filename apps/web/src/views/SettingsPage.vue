@@ -9,12 +9,13 @@ import type {
 	ViewingPreferenceSummary,
 	FallbackFillerStatus,
 } from '@moirai/shared';
-import { playbackSettingsSchema } from '@moirai/shared';
+import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, playbackSettingsSchema } from '@moirai/shared';
 import { useFieldValidation, numericInputAttributes } from '../field-validation';
 import { api } from '../api';
 import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import LoadingState from '../components/LoadingState.vue';
+import FillerWarningSettings from '../components/FillerWarningSettings.vue';
 import FallbackFillerEditor from '../components/FallbackFillerEditor.vue';
 import AiSettingsPanel from '../components/AiSettingsPanel.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -27,16 +28,17 @@ import { liveEvents } from '../live-events';
 const settings = reactive<PlaybackSettings>({
 	maxActiveSessions: 4,
 	viewingPreferencesEnabled: true,
+	fillerShortfallWarningThresholdPercent: DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT,
 });
 const savedSettings = ref<PlaybackSettings | null>(null);
 const status = ref<PlaybackEngineStatus | null>(null);
 const initialLoading = ref(true);
-const savingSection = ref<'playback' | 'viewing-preferences' | null>(null);
+const savingSection = ref<'playback' | 'viewing-preferences' | 'filler' | null>(null);
 const message = ref('');
 const settingsLoadError = ref('');
 const statusError = ref('');
 const statusLoading = ref(true);
-const saveErrors = reactive({ playback: '', 'viewing-preferences': '' });
+const saveErrors = reactive({ playback: '', 'viewing-preferences': '', filler: '' });
 const historyError = ref('');
 const capacityValidation = useFieldValidation(() => playbackSettingsSchema.safeParse(settings));
 const capacityAttributes = numericInputAttributes(playbackSettingsSchema.shape.maxActiveSessions.removeDefault());
@@ -49,7 +51,6 @@ const fallbackStatus = ref<FallbackFillerStatus | null>(null);
 const fallbackFile = ref<File | null>(null);
 const removeFallbackOnSave = ref(false);
 const fallbackLoading = ref(true);
-const savingFallback = ref(false);
 const fallbackError = ref('');
 const fallbackLoadError = ref('');
 const playbackSettingsDirty = computed(() => savedSettings.value !== null
@@ -57,7 +58,13 @@ const playbackSettingsDirty = computed(() => savedSettings.value !== null
 const playbackSettingsValid = computed(() => playbackSettingsSchema.shape.maxActiveSessions.safeParse(settings.maxActiveSessions).success);
 const viewingPreferenceSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.viewingPreferencesEnabled !== savedSettings.value.viewingPreferencesEnabled);
+const fillerSettingsDirty = computed(() => savedSettings.value !== null
+	&& settings.fillerShortfallWarningThresholdPercent !== savedSettings.value.fillerShortfallWarningThresholdPercent);
 const fallbackDirty = computed(() => fallbackFile.value !== null || removeFallbackOnSave.value);
+const fillerBlockDirty = computed(() => fillerSettingsDirty.value || fallbackDirty.value);
+const fillerBlockValid = computed(() => savedSettings.value !== null && !initialLoading.value
+	&& !fallbackLoading.value && !fallbackLoadError.value && !fallbackError.value
+	&& playbackSettingsSchema.shape.fillerShortfallWarningThresholdPercent.safeParse(settings.fillerShortfallWarningThresholdPercent).success);
 const aiSettingsDirty = ref(false);
 const aiSettingsSaving = ref(false);
 const refreshingStatus = ref(false);
@@ -156,37 +163,15 @@ async function refreshFallback(showLoading = false): Promise<void> {
 	}
 }
 
-/** Discard the staged fallback replacement or removal without changing the active override. */
-function resetFallbackDraft(): void {
+/** Discard warning and fallback drafts together without changing the saved settings or asset. */
+function resetFillerDraft(): void {
+	if (savedSettings.value) {
+		settings.fillerShortfallWarningThresholdPercent = savedSettings.value.fillerShortfallWarningThresholdPercent;
+	}
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
 	fallbackError.value = '';
-}
-
-/** Apply the staged global fallback replacement or removal. */
-async function saveFallback(): Promise<void> {
-	if (!fallbackDirty.value || savingFallback.value || savingSection.value !== null) {
-		return;
-	}
-
-	savingFallback.value = true;
-	message.value = '';
-	fallbackError.value = '';
-	try {
-		fallbackStatus.value = fallbackFile.value
-			? await api.uploadGlobalFallbackFiller(fallbackFile.value)
-			: await api.deleteGlobalFallbackFiller();
-		fallbackLoadError.value = '';
-		fallbackFile.value = null;
-		removeFallbackOnSave.value = false;
-		message.value = 'Global fallback filler saved.';
-	}
-	catch (cause) {
-		fallbackError.value = errorMessage(cause);
-	}
-	finally {
-		savingFallback.value = false;
-	}
+	saveErrors.filler = '';
 }
 
 /** Permanently remove learned viewing history after the two-step scores-dialog control. */
@@ -233,11 +218,12 @@ async function refreshStatus(): Promise<void> {
 }
 
 /** Persist one settings panel while retaining drafts owned by the other panel. */
-async function save(section: 'playback' | 'viewing-preferences'): Promise<void> {
+async function save(section: 'playback' | 'viewing-preferences' | 'filler'): Promise<void> {
 	const baseline = savedSettings.value;
 	const sectionDirty = section === 'playback'
 		? playbackSettingsDirty.value && playbackSettingsValid.value
-		: viewingPreferenceSettingsDirty.value;
+		: section === 'viewing-preferences' ? viewingPreferenceSettingsDirty.value
+			: fillerBlockDirty.value && fillerBlockValid.value;
 	if (!baseline || savingSection.value || !sectionDirty) {
 		return;
 	}
@@ -246,8 +232,22 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 	savingSection.value = section;
 	message.value = '';
 	saveErrors[section] = '';
+	let fallbackSaved = false;
 	try {
-		const authoritative = await api.savePlaybackSettings({
+		// Validate and publish the asset before saving the warning threshold.
+		if (section === 'filler' && fallbackDirty.value) {
+			fallbackStatus.value = fallbackFile.value
+				? await api.uploadGlobalFallbackFiller(fallbackFile.value)
+				: await api.deleteGlobalFallbackFiller();
+			fallbackLoadError.value = '';
+			fallbackFile.value = null;
+			removeFallbackOnSave.value = false;
+			fallbackSaved = true;
+		}
+
+		const authoritative = section === 'filler' && !fillerSettingsDirty.value ? baseline : await api.savePlaybackSettings({
+			fillerShortfallWarningThresholdPercent: section === 'filler'
+				? submitted.fillerShortfallWarningThresholdPercent : baseline.fillerShortfallWarningThresholdPercent,
 			maxActiveSessions: section === 'playback'
 				? submitted.maxActiveSessions
 				: baseline.maxActiveSessions,
@@ -268,7 +268,10 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 		) {
 			settings.viewingPreferencesEnabled = authoritative.viewingPreferencesEnabled;
 		}
-		message.value = section === 'playback'
+		if (section === 'filler' && settings.fillerShortfallWarningThresholdPercent === submitted.fillerShortfallWarningThresholdPercent) {
+			settings.fillerShortfallWarningThresholdPercent = authoritative.fillerShortfallWarningThresholdPercent;
+		}
+		message.value = section === 'filler' ? 'Filler settings saved.' : section === 'playback'
 			? 'Playback settings saved.'
 			: 'Viewing preference settings saved.';
 		if (section === 'playback') {
@@ -276,7 +279,9 @@ async function save(section: 'playback' | 'viewing-preferences'): Promise<void> 
 		}
 	}
 	catch (cause) {
-		saveErrors[section] = errorMessage(cause);
+		saveErrors[section] = fallbackSaved
+			? `Fallback saved, but warning settings could not be saved. ${errorMessage(cause)}`
+			: errorMessage(cause);
 	}
 	finally {
 		savingSection.value = null;
@@ -312,11 +317,12 @@ onUnmounted(() => {
 const unsavedSections = computed(() => [
 	playbackSettingsDirty.value ? 'playback capacity' : '',
 	viewingPreferenceSettingsDirty.value ? 'viewing preferences' : '',
+	fillerSettingsDirty.value ? 'filler warnings' : '',
 	fallbackDirty.value ? 'fallback filler' : '',
 	aiSettingsDirty.value ? 'AI provider' : '',
 ].filter(Boolean));
 useDraftProtection(() => unsavedSections.value.length > 0);
-onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && !aiSettingsSaving.value && (!unsavedSections.value.length || await requestConfirmation({
+onBeforeRouteLeave(async () => !savingSection.value && !aiSettingsSaving.value && (!unsavedSections.value.length || await requestConfirmation({
 	key: 'discard-settings',
 	title: 'Discard Unsaved Changes?',
 	message: `Leave without saving changes to ${unsavedSections.value.join(', ')}?`,
@@ -372,9 +378,17 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 					<code>{{ status.contractRevision.slice(0, 12) }}</code>
 				</template>
 			</aside>
-			<section class="panel fallback-filler-panel span-2">
-				<p class="eyebrow">Playback safety</p>
-				<h2>Global fallback filler</h2>
+			<form class="panel fallback-filler-panel span-2" @submit.prevent="save('filler')">
+				<h2>Filler Settings</h2>
+				<FillerWarningSettings
+					v-model="settings.fillerShortfallWarningThresholdPercent"
+					:baseline="savedSettings?.fillerShortfallWarningThresholdPercent ?? null"
+					:loading="initialLoading"
+					:load-error="settingsLoadError"
+					:busy="savingSection !== null"
+					@retry="loadSettings"
+				/>
+				<h3 class="filler-settings-divider">Global Fallback Filler</h3>
 				<p>Used when a channel has no channel-specific fallback and its schedule leaves time uncovered.</p>
 				<FallbackFillerEditor
 					v-model:selected-file="fallbackFile"
@@ -383,33 +397,33 @@ onBeforeRouteLeave(async () => !savingSection.value && !savingFallback.value && 
 					removal-source="Bundled Moirai fallback after save"
 					:status="fallbackStatus"
 					:loading="fallbackLoading"
-					:disabled="savingFallback || savingSection !== null"
+					:disabled="savingSection !== null"
 					@validation-error="fallbackError = $event"
 				/>
 				<p v-if="fallbackError" class="notice error">{{ fallbackError }}</p>
-				<div v-if="fallbackLoadError"><p class="notice error" role="alert">{{ fallbackLoadError }}</p><button type="button" class="button secondary" :disabled="fallbackLoading || savingFallback" @click="refreshFallback(true)">Retry Fallback</button></div>
+				<div v-if="fallbackLoadError"><p class="notice error" role="alert">{{ fallbackLoadError }}</p><button type="button" class="button secondary" :disabled="fallbackLoading || savingSection !== null" @click="refreshFallback(true)">Retry Fallback</button></div>
+				<p v-if="saveErrors.filler" class="notice error" role="alert">{{ saveErrors.filler }}</p>
 				<div class="form-actions">
 					<TwoStepActionButton
 						class="button secondary"
-						label="Reset fallback draft"
-						confirm-label="Confirm Reset fallback draft"
+						label="Reset filler settings draft"
+						confirm-label="Confirm Reset filler settings draft"
 						confirm-text="Confirm Reset"
 						tone="caution"
-						:disabled="!fallbackDirty || savingFallback || savingSection !== null"
-						@confirm="resetFallbackDraft"
+						:disabled="!fillerBlockDirty || savingSection !== null"
+						@confirm="resetFillerDraft"
 					>
 						<RefreshCw :size="17" />Reset
 					</TwoStepActionButton>
 					<button
-						type="button"
+						type="submit"
 						class="button"
-						:disabled="!fallbackDirty || savingFallback || savingSection !== null"
-						@click="saveFallback"
+						:disabled="!fillerBlockDirty || !fillerBlockValid || savingSection !== null"
 					>
-						<Save :size="17" />{{ savingFallback ? 'Saving…' : 'Save Fallback' }}
+						<Save :size="17" />{{ savingSection === 'filler' ? 'Saving…' : 'Save Filler Settings' }}
 					</button>
 				</div>
-			</section>
+			</form>
 			<section class="panel viewing-preferences-panel span-2">
 				<p class="eyebrow">Local viewing preferences</p>
 				<h2>Learn what viewers choose</h2>

@@ -1,3 +1,4 @@
+import { SettingsRepository } from '@server/repository/settings.js';
 import { EpgService } from '@server/guide/epg.js';
 import { DatabaseJobReader } from '@server/scheduling/database-jobs.js';
 import { buildEtvPlayoutFiles } from '@server/playback/playout-output.js';
@@ -635,3 +636,26 @@ it.each([
 	expect(result.days).toBe(1);
 	expect(result.segments[0]!.start).toBe(midnight);
 }, 20_000);
+
+it('reads roll warning tolerance once per preview and applies it in local and worker generation', async () => {
+	const f = await setup();
+	const saved = await f.repository.fillerPresets.save({ kind: 'pre-roll', name: 'Partial introduction', description: '', budget: { type: 'duration', seconds: 24000, policy: 'next-fit-only' } });
+	const base = await template(f, f.source.id);
+	await f.repository.updateScheduleTemplate(base.id, { defaultPreRoll: { presetId: saved.preset.id, programId: f.source.id } });
+	const request = { kind: 'channel' as const, timeZone: 'UTC', input: channelScheduleDraftPreviewSchema.parse({ channelId: f.channel.id, startDate: '2026-09-19', days: 1, schedule: { defaultTemplateId: base.id, layers: [] } }) };
+	const executor = new PreviewExecutor(f.database.db);
+	const settings = await f.repository.getPlaybackSettings();
+	for (const threshold of [100, 90, 0]) {
+		await f.repository.setPlaybackSettings({ ...settings, fillerShortfallWarningThresholdPercent: threshold });
+		const reads = vi.spyOn(SettingsRepository.prototype, 'getPlaybackSettings');
+		const local = await executor.run({ request, revision: 1 });
+		expect(reads).toHaveBeenCalledTimes(1);
+		reads.mockRestore();
+		const worker = await f.workers.preview(request);
+		expect(local).toHaveProperty('segments');
+		expect(worker).toEqual(local);
+		if ('issues' in local) {
+			expect(local.issues.some(issue => issue.code === 'mid-roll-shortfall')).toBe(threshold === 100);
+		}
+	}
+});

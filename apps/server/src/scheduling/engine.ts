@@ -20,7 +20,7 @@ import type {
 	TimelineSegment,
 	ViewingPreferenceScores,
 } from '@moirai/shared';
-import { countLabel, MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
+import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, countLabel, MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
 import { instantFor, resolveScheduleDay, type ResolvedScheduleSlot } from './schedule-day.js';
 import { guideOccurrence } from '../guide/occurrences.js';
 import type { GuideOccurrence } from '@moirai/shared';
@@ -36,6 +36,8 @@ import {
 
 /** Authored rules, catalog, state, and time window needed to resolve a timeline. */
 export interface GenerateTimelineInput {
+	/** Roll budget warning tolerance; omitted values use the shared default. */
+	fillerShortfallWarningThresholdPercent?: number;
 	channelId: string;
 	timeZone: string;
 	startDate: string;
@@ -226,6 +228,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				break generation;
 			}
 			const context: SelectionContext = {
+				fillerShortfallWarningThresholdPercent: input.fillerShortfallWarningThresholdPercent ?? DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT,
 				programs,
 				stateFingerprints,
 				catalog: input.catalog,

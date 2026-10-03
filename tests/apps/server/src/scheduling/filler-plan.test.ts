@@ -1,3 +1,4 @@
+import { fillerBudgetShortfall, fillerProgress } from '@server/scheduling/filler-plan.js';
 import { expect, it } from 'vitest';
 import { clockPaddingSeconds, randomFillerCount } from '@server/scheduling/filler-plan.js';
 import { fillerPresetCreateSchema, midRollSettingsSchema, DEFAULT_MID_ROLL_PREDICATE } from '@moirai/shared';
@@ -27,3 +28,26 @@ it('rejects reversed random bounds and non-tail remaining-slot budgets', () => {
 	expect(midRollSettingsSchema.safeParse({ fallbackIntervalSeconds: 600, predicate: DEFAULT_MID_ROLL_PREDICATE, budget: { type: 'remaining' } }).success).toBe(false);
 });
 
+
+it.each(['seconds', 'count'] as const)('compares %s budgets at the exact threshold', unit => {
+	const initial = { unit, remaining: 120 };
+	expect(fillerBudgetShortfall(initial, { unit, remaining: 24 })).toBe(false);
+	expect(fillerBudgetShortfall(initial, { unit, remaining: 25 })).toBe(true);
+	expect(fillerBudgetShortfall(initial, { unit, remaining: 23 })).toBe(false);
+	expect(fillerBudgetShortfall(initial, initial, 0)).toBe(false);
+	expect(fillerBudgetShortfall(initial, { unit, remaining: 1 }, 100)).toBe(true);
+	expect(fillerBudgetShortfall(initial, { unit, remaining: 0 }, 100)).toBe(false);
+	expect(fillerBudgetShortfall({ unit, remaining: 0 }, { unit, remaining: 0 }, 100)).toBe(false);
+});
+it('uses resolved random quantities and clock padding rather than authored bounds', () => {
+	const random = fillerProgress({ type: 'random-count', minimum: 0, maximum: 20 }, '2026-01-05T00:01:00Z', 'UTC', 'random');
+	expect(random.unit).toBe('count');
+	expect(fillerBudgetShortfall(random, { ...random, remaining: 0 })).toBe(false);
+	expect(fillerBudgetShortfall(random, { ...random, remaining: 1 }, 100)).toBe(random.remaining > 0);
+	const padding = fillerProgress({ type: 'pad', minutes: 5, policy: 'next-fit-only' }, '2026-01-05T00:03:00Z', 'UTC', 'pad');
+	expect(padding.remaining).toBe(120);
+	expect(fillerBudgetShortfall(padding, { ...padding, remaining: 24 })).toBe(false);
+	expect(fillerBudgetShortfall(padding, { ...padding, remaining: 24.001 })).toBe(true);
+	const zero = fillerProgress({ type: 'pad', minutes: 5, policy: 'next-fit-only' }, '2026-01-05T00:05:00Z', 'UTC', 'pad');
+	expect(fillerBudgetShortfall(zero, zero, 100)).toBe(false);
+});

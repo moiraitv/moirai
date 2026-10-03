@@ -440,8 +440,14 @@
 }
 
 .fallback-filler-panel > h2,
-.fallback-filler-panel > p {
+.fallback-filler-panel > p,
+.fallback-filler-panel > h3 {
 	margin: 0;
+}
+
+.filler-settings-divider {
+	border-top: 1px solid rgba(143, 168, 187, 0.18);
+	padding-top: 18px;
 }
 
 .fallback-filler-editor {

@@ -82,8 +82,19 @@ describe('channel external contracts', () => {
 		expect(playbackSettingsSchema.parse({})).toEqual({
 			maxActiveSessions: 4,
 			viewingPreferencesEnabled: true,
+			fillerShortfallWarningThresholdPercent: 80,
 		});
 		expect(playbackSettingsSchema.safeParse({ maxActiveSessions: 32 }).success).toBe(true);
 		expect(playbackSettingsSchema.safeParse({ maxActiveSessions: 33 }).success).toBe(false);
 	});
+});
+
+it('defaults legacy settings and validates whole filler warning percentages', () => {
+	expect(playbackSettingsSchema.parse({ maxActiveSessions: 8 }).fillerShortfallWarningThresholdPercent).toBe(80);
+	for (const value of [0, 90, 100]) {
+		expect(playbackSettingsSchema.safeParse({ fillerShortfallWarningThresholdPercent: value }).success).toBe(true);
+	}
+	for (const value of [-1, 101, 89.5, '90', NaN]) {
+		expect(playbackSettingsSchema.safeParse({ fillerShortfallWarningThresholdPercent: value }).success).toBe(false);
+	}
 });

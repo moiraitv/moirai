@@ -270,7 +270,7 @@ export class PlaybackEngine {
 		};
 	}
 
-	/** Persist a new capacity limit and notify connected status views. */
+	/** Persist playback and filler diagnostic settings without rewriting committed schedules. */
 	async updateSettings(settings: PlaybackSettings): Promise<PlaybackSettings> {
 		const saved = await this.repository.setPlaybackSettings(settings);
 		this.viewingPreferences?.setEnabled(saved.viewingPreferencesEnabled);

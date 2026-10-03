@@ -1081,6 +1081,19 @@ migrations or commits. Reports contain the fixed clock, input fingerprint, timin
 a decision digest instead of media or authentication data. Compare identical input fingerprints;
 matching decision digests preserve spans, state, issues, and continuation decisions.
 
+Settings groups global fallback asset management and roll budget-warning tolerance under Filler
+Settings, with shared Save and two-step Reset actions for both drafts. Fallback changes are published
+before warning settings; a later settings-save failure retains the saved asset and the unsaved
+threshold for retry. A defaulted integer playback-settings field,
+`fillerShortfallWarningThresholdPercent`, accepts 0–100 and defaults legacy JSON to 80 without a
+migration. Pre/mid/post shortfall warnings compare supplied duration at millisecond precision, or
+played clip counts, against the resolved budget using a strict percentage comparison. Zero budgets
+never warn; 0 disables these warnings and 100 warns for any incomplete budget. Other diagnostics and
+tail/fallback behavior remain independent. Materialization reads the value once per pass and previews
+once per preparation, forwarding it to worker generation. Changes affect new warnings only: they do
+not invalidate fingerprints, regenerate committed coverage, or reset selection state. Stored warnings
+remain until their coverage is replaced.
+
 Budgets support fixed duration, clock padding, fixed count, and an inclusive random count of 0–100.
 Tail additionally supports remaining-slot budgets. Each clock pad resolves independently at its actual
 start in the channel's time zone, including DST transitions; exact boundaries require no filler.

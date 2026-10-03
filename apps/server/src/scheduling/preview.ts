@@ -4,6 +4,7 @@ import type {
 	ChannelScheduleDraftPreview, QuickChannelSetupCreate, SchedulingProgram, TimelinePreview, SequencePreview,
 } from '@moirai/shared';
 import { quickChannelSetupPreviewResultSchema, type QuickChannelSetupPreviewResult } from '@moirai/shared/api-contracts';
+import { SettingsRepository } from '../repository/settings.js';
 import { ChannelRepository } from '../repository/channels.js';
 import { QuickChannelSetupRepository } from '../repository/quick-channel-setups.js';
 import { SchedulingRepository } from '../repository/scheduling.js';
@@ -84,9 +85,11 @@ export class PreviewExecutor {
 		}
 		let prepared: PreparedPreview;
 		try {
+			const settings = await new SettingsRepository(this.db).getPlaybackSettings();
 			prepared = job.request.kind === 'channel'
 				? await this.channel(job.request)
 				: job.request.kind === 'sequence' ? await this.sequence(job.request) : await this.quickSetup(job.request);
+			prepared.input.fillerShortfallWarningThresholdPercent = settings.fillerShortfallWarningThresholdPercent;
 		}
 		finally {
 			if (snapshot) {

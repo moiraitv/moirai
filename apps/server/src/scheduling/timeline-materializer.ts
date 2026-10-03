@@ -393,6 +393,7 @@ export class TimelineMaterializer {
 					programs,
 					catalog,
 					viewingPreferences,
+					playbackSettings.fillerShortfallWarningThresholdPercent,
 					occupiedMedia,
 					records,
 					fingerprints,
@@ -430,6 +431,7 @@ export class TimelineMaterializer {
 		programs: SchedulingProgram[],
 		sourceCatalog: SchedulingCatalog,
 		viewingPreferences: ViewingPreferenceScores,
+		fillerShortfallWarningThresholdPercent: number,
 		occupiedMedia: OccupiedMediaInterval[],
 		records: Map<string, TimelineMaterializationRecord> | null = null,
 		fingerprints = new InputFingerprintContext(),
@@ -580,6 +582,7 @@ export class TimelineMaterializer {
 				catalog,
 				state: initialState,
 				viewingPreferences,
+				fillerShortfallWarningThresholdPercent,
 				occupiedMedia: occupiedMedia
 					.filter((entry) => entry.channelId !== schedule.channelId)
 					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),
@@ -598,6 +601,7 @@ export class TimelineMaterializer {
 				catalog,
 				state: initialState,
 				viewingPreferences,
+				fillerShortfallWarningThresholdPercent,
 				occupiedMedia: occupiedMedia
 					.filter((entry) => entry.channelId !== schedule.channelId)
 					.map(({ mediaItemId, start, finish }) => ({ mediaItemId, start, finish })),

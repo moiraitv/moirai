@@ -1,4 +1,5 @@
 import './documentation/mid-roll';
+import './documentation/filler-settings';
 import './documentation/sequence-preview';
 import './documentation/duration-filters';
 import './documentation/sequence-ordering';

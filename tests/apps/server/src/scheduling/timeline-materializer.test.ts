@@ -117,6 +117,7 @@ function fixture() {
 		getPlaybackSettings: vi.fn(async () => ({
 			maxActiveSessions: 4,
 			viewingPreferencesEnabled: true,
+			fillerShortfallWarningThresholdPercent: 80,
 		})),
 		viewingPreferenceScores: vi.fn(() => ({ itemScores: {}, showScores: {} })),
 		getSchedulingCatalog: vi.fn(async () => catalog),
@@ -1160,4 +1161,31 @@ it('does not reconstruct state-bearing spans for unchanged channels with complet
 	expect(test.repository.listMaterializedTimelineSegments).not.toHaveBeenCalled();
 	expect(test.repository.getSelectionState).not.toHaveBeenCalled();
 	expect(test.repository.commitMaterializedTimeline).not.toHaveBeenCalled();
+});
+
+it('loads warning tolerance once per pass, forwards it to generation, and retains committed coverage after a change', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const workers = new SchedulingWorkerPool(1, 4);
+	const generate = vi.spyOn(workers, 'generate');
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC', workers);
+	try {
+		await materializer.runNow();
+		expect(test.repository.getPlaybackSettings).toHaveBeenCalledTimes(1);
+		expect(generate.mock.calls[0]?.[0].fillerShortfallWarningThresholdPercent).toBe(80);
+		const original = structuredClone(test.materialization());
+		const spans = structuredClone(test.segments());
+		const commits = vi.mocked(test.repository.commitMaterializedTimeline).mock.calls.length;
+		vi.mocked(test.repository.getPlaybackSettings).mockResolvedValue({ maxActiveSessions: 4, viewingPreferencesEnabled: true, fillerShortfallWarningThresholdPercent: 0 });
+		await materializer.runNow(true);
+		expect(test.repository.getPlaybackSettings).toHaveBeenCalledTimes(2);
+		expect(generate).toHaveBeenCalledTimes(1);
+		expect(test.repository.commitMaterializedTimeline).toHaveBeenCalledTimes(commits);
+		expect(test.materialization()).toEqual(original);
+		expect(test.segments()).toEqual(spans);
+	}
+	finally {
+		await workers.close();
+	}
 });

@@ -1,5 +1,5 @@
 import { TimelineMaterializationLimitError } from './limits.js';
-import { planFiller } from './filler-plan.js';
+import { fillerBudgetShortfall, planFiller } from './filler-plan.js';
 import type { FillerSettings } from '@moirai/shared';
 import { MAX_TIMELINE_SEGMENTS, MAX_MID_ROLL_POINTS, matchesMidRollPredicate, type ResolvedMidRollConfig, type SchedulableMedia,
 	type SelectionStateRecord } from '@moirai/shared';
@@ -125,7 +125,7 @@ export function planAiring(
 		}
 		state = result.state;
 		durationSeconds += result.durationSeconds;
-		if (result.progress.remaining > 0) {
+		if (fillerBudgetShortfall(result.initialProgress, result.progress, context.fillerShortfallWarningThresholdPercent)) {
 			addIssue(context, { code: 'mid-roll-shortfall', message: 'Filler could not supply the requested break budget. Content resumes immediately.',
 				programId: settings.programId, mediaItemId: media.id,
 				occurrence: { start, finish: null, boundaryOrigin: context.boundaryOrigin } });

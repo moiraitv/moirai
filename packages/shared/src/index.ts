@@ -522,10 +522,15 @@ export function effectiveChannelTvgId(channel: Pick<Channel, 'id' | 'number'>): 
 	return `C${channel.number}.${shortId}.moirai.tv`;
 }
 
+/** Minimum percentage supplied before roll budget-shortfall warnings are suppressed. */
+export const DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT = 80;
+
 /** Validate settings that can be changed without restarting the playback engine. */
 export const playbackSettingsSchema = z.object({
 	maxActiveSessions: z.number().int().min(1).max(32).default(4),
 	viewingPreferencesEnabled: z.boolean().default(true),
+	fillerShortfallWarningThresholdPercent: z.number().int().min(0).max(100)
+		.default(DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT),
 });
 /** Shared wire contract for playback settings. */
 export type PlaybackSettings = z.infer<typeof playbackSettingsSchema>;

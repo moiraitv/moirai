@@ -1950,6 +1950,7 @@ describe('API', () => {
 		expect(saved.json()).toEqual({
 			maxActiveSessions: 6,
 			viewingPreferencesEnabled: true,
+			fillerShortfallWarningThresholdPercent: 80,
 		});
 		const status = await app.inject({ url: '/api/v1/playback/status' });
 		expect(status.headers['cache-control']).toBe('private, no-store');

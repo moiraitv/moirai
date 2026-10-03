@@ -41,6 +41,8 @@ export type SelectionFitMode = 'best-fit' | 'first-fit-arbitrary';
 
 /** Immutable catalog indexes and mutable proposed state used during selection. */
 export interface SelectionContext {
+	/** Diagnostic tolerance only; never changes filler selection or its state. */
+	fillerShortfallWarningThresholdPercent?: number;
 	/** Filler-only membership and whole-stage budget, independent of the remainder. */
 	fillerSelection?: { fullBudgetSeconds: number; allowTruncation: boolean } | undefined;
 	/** Cache semantic source membership for carried filler items within one generation. */
