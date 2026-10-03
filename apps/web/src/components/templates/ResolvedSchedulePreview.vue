@@ -2,6 +2,7 @@
 import { useDisclosureState } from '../../disclosure-state';
 import { RefreshCw } from '@lucide/vue';
 import type { TimelinePreview } from '@moirai/shared';
+import PreviewFillerLegend from './PreviewFillerLegend.vue';
 import ResolvedGuideTrack from './ResolvedGuideTrack.vue';
 import AnimatedDisclosure from '../AnimatedDisclosure.vue';
 
@@ -43,6 +44,7 @@ const issuesOpen = useDisclosureState('resolved-schedule-issues', false);
 				<span>{{ updating ? 'Updating resolved schedule…' : 'Schedule changed — refreshing preview...' }}</span>
 			</div>
 		</div>
+		<div v-if="preview?.segments.some(segment => segment.fillerStage)" class="schedule-preview-legend"><PreviewFillerLegend /></div>
 		<AnimatedDisclosure v-if="preview?.issues.length" v-model="issuesOpen" class="timeline-issues compact-preview-issues">
 			<template #summary><span>
 				{{ preview.issues.length }} preview issue{{ preview.issues.length === 1 ? '' : 's' }}

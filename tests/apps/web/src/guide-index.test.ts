@@ -30,6 +30,15 @@ describe('guide interval selection', () => {
 		}
 	});
 
+	it('resolves a split airing anchor outside its remaining displayed interval', () => {
+		const anchor = interval('anchor', 0, 10);
+		const resumed = interval('resumed', 60, 90);
+		const index = guideIntervalIndex([anchor, resumed]);
+		expect(index.query(60, 90)).toEqual([resumed]);
+		expect(index.get('anchor')).toBe(anchor);
+		expect(index.get('missing')).toBeUndefined();
+	});
+
 	it('reuses an immutable snapshot index without reusing a replaced array', () => {
 		const values = [interval('one', 0, 1)];
 		expect(guideIntervalIndex(values)).toBe(guideIntervalIndex(values));

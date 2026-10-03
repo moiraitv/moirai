@@ -67,7 +67,15 @@ endpoint.onmessage = event => {
 		if (request.snapshot === snapshot) {
 			const indexes = request.range.segmentsOnly ? segments : listings;
 			for (const channelId of request.range.channelIds) {
-				result.push([channelId, indexes.get(channelId)?.query(request.range.start, request.range.finish, request.range.minimumDuration) ?? []]);
+				const index = indexes.get(channelId);
+				const values = index?.query(request.range.start, request.range.finish, request.range.minimumDuration) ?? [];
+				if (request.range.segmentsOnly && request.range.includeSegmentId) {
+					const anchor = index?.get(request.range.includeSegmentId);
+					if (anchor && !values.some(value => value.id === anchor.id)) {
+						values.push(anchor);
+					}
+				}
+				result.push([channelId, values]);
 			}
 		}
 		endpoint.postMessage({ id: request.id, snapshot, listings: result });

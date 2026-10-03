@@ -258,3 +258,111 @@ test('excludes Sequence Programs from filler defaults, slot overrides, and fallb
 	await expect(defaults.getByRole('checkbox')).toBeDisabled();
 	await expect(defaults.getByRole('combobox', { name: 'Source Program', exact: true }).locator('option')).toHaveCount(0);
 });
+
+test('previews filler break ticks in both editors and captures their legends', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
+	const { channel, program, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const presets: Record<string, string> = {};
+	for (const kind of ['pre-roll', 'mid-roll', 'post-roll', 'tail']) {
+		const created = await page.request.post('/api/v1/filler-presets', {
+			headers: requestHeaders,
+			data: { kind, name: `${kind} preview`, budget: { type: 'duration', seconds: kind === 'tail' ? 120 : 30, policy: 'next-truncate' },
+				...(kind === 'mid-roll' ? { fallbackIntervalSeconds: 1800, predicate: { type: 'always', negated: false } } : {}) },
+		});
+		expect(created.ok(), await created.text()).toBe(true);
+		presets[kind] = (await created.json()).id;
+	}
+	const current = await page.request.get(`/api/v1/schedule-templates/${template.id}`);
+	expect(current.ok()).toBe(true);
+	const saved = await page.request.patch(`/api/v1/schedule-templates/${template.id}`, {
+		headers: requestHeaders,
+		data: { ...await current.json(),
+			defaultPreRoll: { presetId: presets['pre-roll'], programId: program.id },
+			defaultMidRoll: { presetId: presets['mid-roll'], programId: program.id },
+			defaultPostRoll: { presetId: presets['post-roll'], programId: program.id },
+			defaultFiller: { presetId: presets.tail, programId: program.id, policy: 'next-truncate' } },
+	});
+	expect(saved.ok(), await saved.text()).toBe(true);
+	const assigned = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
+		headers: requestHeaders, data: { defaultTemplateId: template.id, defaultFiller: { programId: program.id, policy: 'next-truncate' } },
+	});
+	expect(assigned.ok(), await assigned.text()).toBe(true);
+
+	await page.goto(`/schedules/templates/${template.id}`);
+	const templatePreview = page.locator('.resolved-preview');
+	await expect(templatePreview.locator('.preview-filler-tick.stage-mid-roll').first()).toBeVisible({ timeout: 30_000 });
+	await expect(templatePreview.getByLabel('Filler tick legend')).toBeVisible();
+	await captureSection(page, templatePreview, 'template-filler-preview.png');
+
+	await page.goto(`/schedules/channels/${channel.id}`);
+	const preview = page.locator('.scheduling-preview-dock');
+	for (const kind of ['pre-roll', 'mid-roll', 'post-roll', 'tail', 'fallback']) {
+		await expect(preview.locator(`.preview-filler-tick.stage-${kind}`).first()).toBeVisible({ timeout: 30_000 });
+	}
+	await expect(preview.getByLabel('Filler tick legend')).toBeVisible();
+	const secondAiring = await preview.locator('.resolved-segment.role-primary').nth(1).boundingBox();
+	const secondPreRoll = await preview.locator('.preview-filler-tick.stage-pre-roll').nth(1).boundingBox();
+	expect(Math.abs(secondAiring!.x - secondPreRoll!.x)).toBeLessThan(2);
+	expect(secondPreRoll!.width).toBe(2);
+	const fallback = preview.locator('.preview-filler-tick.stage-fallback').first();
+	const fallbackBounds = await fallback.boundingBox();
+	const strip = await preview.locator('.preview-filler-ticks').boundingBox();
+	const fallbackPercent = await fallback.evaluate(element => Number.parseFloat((element as HTMLElement).style.width));
+	expect(fallbackBounds!.width).toBeGreaterThan(2);
+	expect(fallbackBounds!.width).toBeCloseTo(strip!.width * fallbackPercent / 100, 1);
+	await captureSection(page, preview, 'channel-filler-preview.png');
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(preview.getByLabel('Filler tick legend')).toBeVisible();
+	const bounds = await preview.getByLabel('Filler tick legend').boundingBox();
+	expect(bounds!.width).toBeLessThanOrEqual(390);
+});
+
+test('opens hover and click details for a split airing shown after its anchor span', async ({ page, documentationServer }) => {
+	const { channel, program, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const presetResponse = await page.request.post('/api/v1/filler-presets', {
+		headers: requestHeaders, data: { kind: 'mid-roll', name: 'Overrun regression',
+			budget: { type: 'duration', seconds: 30, policy: 'next-truncate' },
+			fallbackIntervalSeconds: 1800, predicate: { type: 'always', negated: false } },
+	});
+	expect(presetResponse.ok()).toBe(true);
+	const preset = await presetResponse.json();
+	const configured = await page.request.patch(`/api/v1/schedule-templates/${template.id}`, {
+		headers: requestHeaders, data: { defaultMidRoll: { presetId: preset.id, programId: program.id } },
+	});
+	expect(configured.ok()).toBe(true);
+	const assigned = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
+		headers: requestHeaders, data: { defaultTemplateId: template.id },
+	});
+	expect(assigned.ok()).toBe(true);
+	const response = await page.request.get('/api/v1/schedule-guide?startDate=2026-01-15&days=1');
+	expect(response.ok(), await response.text()).toBe(true);
+	const guide = await response.json() as import('@moirai/shared').ScheduleGuide;
+	const row = guide.channels.find(value => value.channelId === channel.id)!;
+	const residualStart = '2026-01-15T10:30:00Z';
+	const anchor = row.preview.segments.find(segment => segment.id === segment.airing?.primarySegmentId
+		&& Date.parse(segment.finish) <= Date.parse(residualStart) && Date.parse(segment.airing.finish) > Date.parse(residualStart))!;
+	expect(anchor).toBeDefined();
+	const entry = row.entries!.find(value => value.segmentId === anchor.id)!;
+	expect(entry).toBeDefined();
+	// Model the remaining item after a scheduled display block, retaining real committed detail IDs.
+	await page.route('**/api/v1/schedule-guide?**', route => route.fulfill({ json: {
+		...guide, channels: [{ ...row, entries: [{ ...entry, start: residualStart }] }],
+	} }));
+	for (const useWorker of [true, false]) {
+		if (!useWorker) {
+			await page.addInitScript(() => {
+				Object.defineProperty(window, 'Worker', { value: undefined });
+			});
+		}
+		await page.goto('/guide');
+		const item = page.locator('button.guide-programme.role-primary').first();
+		await expect(item).toBeVisible({ timeout: 30_000 });
+		await item.hover();
+		await expect(page.getByRole('tooltip').getByRole('heading')).toBeVisible();
+		await item.click();
+		const details = page.locator('.guide-preview-modal');
+		await expect(details).toBeVisible();
+		await expect(details.locator('#guide-preview-title')).not.toHaveText('Programme details');
+		await details.getByRole('button', { name: 'Close', exact: true }).click();
+	}
+});

@@ -19,6 +19,7 @@ interface IndexedInterval<T> {
  */
 export class GuideIntervalIndex<T extends GuideInterval> {
 	private readonly entries: IndexedInterval<T>[];
+	private identities: Map<string, T> | null = null;
 
 	constructor(values: readonly T[]) {
 		this.entries = values.map(value => ({
@@ -39,6 +40,12 @@ export class GuideIntervalIndex<T extends GuideInterval> {
 		const entry = this.entries[middle]!;
 		entry.maximumFinish = Math.max(entry.finish, this.buildBounds(start, middle), this.buildBounds(middle + 1, end));
 		return entry.maximumFinish;
+	}
+
+	/** Resolve a listing by identity independently of its displayed or physical time interval. */
+	get(id: string): T | undefined {
+		this.identities ??= new Map(this.entries.map(entry => [entry.value.id, entry.value]));
+		return this.identities.get(id);
 	}
 
 	/** Return chronological overlaps, including tiny intervals drawn at a minimum pixel width. */

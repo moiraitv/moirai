@@ -10,6 +10,7 @@ import type { RecordedTimelineIssue } from './timeline-issues.js';
 export interface AiringSpan {
 	media: SchedulableMedia;
 	role: 'primary' | 'filler';
+	fillerStage?: 'pre-roll' | 'mid-roll' | 'post-roll' | undefined;
 	programId: string;
 	programAncestry?: string[] | undefined;
 	sequenceEntryPath?: string[] | undefined;
@@ -104,7 +105,7 @@ export function planAiring(
 	}
 
 	// Expand each stage at its actual clock position using isolated selection state.
-	const insert = (settings: FillerSettings & { programId: string }, key: string, point: string): void => {
+	const insert = (settings: FillerSettings & { programId: string }, key: string, point: string, stage: NonNullable<AiringSpan['fillerStage']>): void => {
 		const start = new Date(Date.parse(sourceContext.selectionStart) + Math.round(durationSeconds * 1_000)).toISOString();
 		const result = planFiller(
 			settings.programId,
@@ -118,7 +119,10 @@ export function planAiring(
 			undefined,
 			MAX_TIMELINE_SEGMENTS - spans.length,
 		);
-		spans.push(...result.spans);
+		for (const span of result.spans) {
+			span.fillerStage = stage;
+			spans.push(span);
+		}
 		state = result.state;
 		durationSeconds += result.durationSeconds;
 		if (result.progress.remaining > 0) {
@@ -128,17 +132,17 @@ export function planAiring(
 		}
 	};
 	if (rolls.pre) {
-		insert(rolls.pre, rolls.pre.consumerKey, 'pre');
+		insert(rolls.pre, rolls.pre.consumerKey, 'pre', 'pre-roll');
 	}
 	let sourceStart = 0;
 	for (const point of accepted) {
 		appendPrimary(sourceStart, point);
 		sourceStart = point;
-		insert(config!, fillerConsumerKey, String(point));
+		insert(config!, fillerConsumerKey, String(point), 'mid-roll');
 	}
 	appendPrimary(sourceStart, media.durationSeconds!);
 	if (rolls.post) {
-		insert(rolls.post, rolls.post.consumerKey, 'post');
+		insert(rolls.post, rolls.post.consumerKey, 'post', 'post-roll');
 	}
 	return { spans, durationSeconds, issues: context.issues };
 }

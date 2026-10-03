@@ -4,6 +4,7 @@ import FillerAssignmentsEditor from '../components/schedules/FillerAssignmentsEd
 import FillerAssignmentEditor from '../components/schedules/FillerAssignmentEditor.vue';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
+import PreviewFillerLegend from '../components/templates/PreviewFillerLegend.vue';
 import ResolvedGuideTrack from '../components/templates/ResolvedGuideTrack.vue';
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -1264,6 +1265,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 										</span>
 										<span> {{ entry.name }}<small v-if="entry.isBase"> (Base {{ draft.defaultProgramId ? 'program' : 'template' }})</small> </span>
 									</div>
+									<PreviewFillerLegend v-if="preview?.segments.some(segment => segment.fillerStage)" />
 								</div>
 								<AnimatedDisclosure
 									v-if="preview?.issues.length"

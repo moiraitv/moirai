@@ -188,6 +188,7 @@ describe('mid-roll airing expansion', () => {
 		expect(filler.map(span => span.mediaItemId)).toEqual([uuid(2), uuid(3)]);
 		expect(filler.map(span => (Date.parse(span.finish) - Date.parse(span.start)) / 1_000)).toEqual([70, 60]);
 		expect(filler.every(span => !span.truncated)).toBe(true);
+		expect(filler.every(span => span.fillerStage === 'mid-roll')).toBe(true);
 	});
 	it('keeps expansion bounded with large primary and filler pools and future channel occupancy', () => {
 		const options = fixture(1_230);
@@ -350,6 +351,7 @@ describe('mid-roll airing expansion', () => {
 		expect(spans.at(-1)?.finish).toBe(new Date(Date.parse('2026-01-05T00:00:00Z') + seconds * 1_000).toISOString().replace('.000Z', 'Z'));
 		expect(spans[0]?.airing?.truncated).toBe(true);
 		expect(spans.at(-1)?.sourceFinishSeconds).toBe(seconds === 610 ? 10 : 1_180);
+		expect(spans.filter(span => span.role === 'filler').every(span => span.fillerStage === 'mid-roll')).toBe(true);
 	});
 
 	it('honors slot disable and configured overrides over inherited defaults', () => {
@@ -453,6 +455,7 @@ it('groups introductions and closings around each primary item and preserves dis
 	const result = generateTimelineDetailed(options);
 	const spans = result.segments.slice(0, 3);
 	expect(spans.map(span => span.role)).toEqual(['filler', 'primary', 'filler']);
+	expect(spans.map(span => span.fillerStage)).toEqual(['pre-roll', undefined, 'post-roll']);
 	expect(spans[0]!.airing?.primarySegmentId).toBe(spans[1]!.id);
 	expect(new Set(spans.map(span => span.airing?.id)).size).toBe(1);
 	expect(result.proposedState.map(record => record.consumerKey)).toEqual(expect.arrayContaining([
@@ -477,6 +480,7 @@ it('runs a bounded whole-item tail before independently truncating channel fallb
 	const result = generateTimelineDetailed(options);
 	const fills = result.segments.filter(segment => segment.role === 'filler' && Date.parse(segment.start) < Date.parse('2026-01-05T00:22:30Z'));
 	expect(fills.map(segment => Date.parse(segment.finish) - Date.parse(segment.start))).toEqual([30_000, 30_000, 30_000, 30_000, 30_000]);
+	expect(fills.map(segment => segment.fillerStage)).toEqual(['tail', 'tail', 'tail', 'fallback', 'fallback']);
 	expect(result.proposedState.some(record => record.consumerKey.startsWith('fallback:'))).toBe(true);
 	options.template.slots[0]!.filler = { mode: 'disabled' };
 	const disabled = generateTimelineDetailed(options);
@@ -515,7 +519,7 @@ it('does not mark complete primary content truncated when only post-roll is cut'
 	options.catalog.fillerPresets = { [uuid(401)]: { budget: { type: 'count', count: 1 } } };
 	const result = generateTimelineDetailed(options);
 	expect(result.segments[0]).toMatchObject({ role: 'primary', truncated: false, airing: { truncated: false } });
-	expect(result.segments[1]).toMatchObject({ role: 'filler', truncated: true });
+	expect(result.segments[1]).toMatchObject({ role: 'filler', fillerStage: 'post-roll', truncated: true });
 });
 
 it('enforces the shared speculative span ceiling before accepting another filler item', () => {

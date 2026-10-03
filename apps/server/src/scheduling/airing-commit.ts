@@ -1,6 +1,6 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type { ScheduleTemplate, ScheduleSlot, SelectionStateRecord, TimelineSegment } from '@moirai/shared';
-import type { AiringPlan } from './mid-roll.js';
+import type { AiringPlan, AiringSpan } from './mid-roll.js';
 import { changedStateRecords, type SelectionResult } from './selection.js';
 import { durationBetween, plusSeconds, segment, stableSegmentId } from './timeline-segment.js';
 
@@ -22,7 +22,7 @@ export function commitAiring(
 	slot: ScheduleSlot,
 	layerId: string | null,
 ): void {
-	const spans = plan?.spans ?? [{ media: selected.media, role: 'primary' as const, programId: slot.programId!,
+	const spans: AiringSpan[] = plan?.spans ?? [{ media: selected.media, role: 'primary' as const, programId: slot.programId!,
 		sourceStartSeconds: 0, sourceFinishSeconds: selected.media.durationSeconds!, truncated: false, stateDelta: [] }];
 	const anchorId = stableSegmentId([context.channelId, slot.id, 'primary', selected.media.id, start.toString()]);
 	const grouped = spans.some(span => span.role === 'filler');
@@ -48,7 +48,7 @@ export function commitAiring(
 		const naturalEnd = plusSeconds(spanStart, span.sourceFinishSeconds - span.sourceStartSeconds);
 		const spanEnd = Temporal.Instant.compare(naturalEnd, finish) > 0 ? finish : naturalEnd;
 		const entry = segment({ channelId: context.channelId, templateId: template.id, slotId: slot.id,
-			scheduleLayerId: layerId, role: span.role, programId: span.programId, mediaItemId: span.media.id,
+			scheduleLayerId: layerId, role: span.role, fillerStage: span.fillerStage, programId: span.programId, mediaItemId: span.media.id,
 			title: span.media.title, playbackPath: span.media.playbackPath,
 			playbackParts: span.media.playbackParts ?? [{ playbackPath: span.media.playbackPath, durationSeconds: span.media.durationSeconds! }],
 			start: spanStart, finish: spanEnd, sourceStartSeconds: span.sourceStartSeconds,

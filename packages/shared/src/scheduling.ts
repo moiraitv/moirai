@@ -1118,6 +1118,8 @@ export interface TimelineSegment {
 	programAncestry?: string[] | undefined;
 	id: string;
 	role: 'primary' | 'filler' | 'dead-air';
+	/** Filler stage for generated previews; stored timeline reads may omit it. */
+	fillerStage?: 'pre-roll' | 'mid-roll' | 'post-roll' | 'tail' | 'fallback' | undefined;
 	channelId: string;
 	scheduleLayerId: string | null;
 	templateId: string;

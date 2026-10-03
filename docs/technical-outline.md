@@ -1207,6 +1207,13 @@ distinguishes intentional off-air time from boundary, source, filler, and otherw
 When several warnings match a gap, its boundary rejection takes precedence over incidental
 skipped-media warnings so the diagnostic action opens the relevant boundary editor.
 Channel fallback filler can be reviewed and edited directly from the base schedule inspector.
+Draft schedule previews label generated filler spans with an optional stage and show one elapsed-time
+marker per continuous break, including fallback, sized to its clipped duration with a two-pixel
+minimum and a compact legend. Labels remain optional for stored timeline reads; preview markers do
+not infer stages from source Programs or add database reads.
+Guide item inspection resolves physical anchor IDs independently of displayed intervals, including
+airing remnants after scheduled blocks. Worker queries include only the requested anchor alongside
+intersecting spans; lazy identity indexes retain snapshot ownership without extra HTTP or database reads.
 Channel-card summaries and warning styling cover the next 24 elapsed hours, excluding finished gaps
 and clipping ongoing gaps to their remaining duration. Counts update locally each minute and when
 the page becomes visible. Cached guides are reused when their actual returned range covers the

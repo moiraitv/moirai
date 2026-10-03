@@ -16,8 +16,13 @@ it('does not publish an incomplete capture set and publishes a complete set', as
 		await expect(publishScreenshots(stage, destination)).rejects.toThrow();
 		expect(await readFile(path.join(destination, screenshotNames[0]), 'utf8')).toBe('approved');
 		await Promise.all(screenshotNames.map((name) => writeFile(path.join(stage, name), 'new capture')));
+		await writeFile(path.join(stage, 'template-filler-preview.png'), 'template filler capture');
+		await writeFile(path.join(stage, 'channel-filler-preview.png'), 'channel filler capture');
 		await publishScreenshots(stage, destination);
 		expect(await readFile(path.join(destination, screenshotNames[0]), 'utf8')).toBe('new capture');
+		expect(await readFile(path.join(destination, 'template-preview.png'), 'utf8')).toBe('new capture');
+		expect(await readFile(path.join(destination, 'template-filler-preview.png'), 'utf8')).toBe('template filler capture');
+		expect(await readFile(path.join(destination, 'channel-filler-preview.png'), 'utf8')).toBe('channel filler capture');
 	}
 	finally {
 		await rm(root, { recursive: true, force: true });

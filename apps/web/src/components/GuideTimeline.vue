@@ -377,7 +377,8 @@ async function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focu
 		const guide = props.guide;
 		try {
 			const result = await queryWorkerGuide(guide, { channelIds: [entry.channelId], start: Date.parse(entry.start),
-				finish: Date.parse(entry.finish), minimumDuration: 0, segmentsOnly: true });
+				finish: Date.parse(entry.finish), minimumDuration: 0, segmentsOnly: true,
+				includeSegmentId: 'segmentId' in entry ? entry.segmentId ?? undefined : undefined });
 			if (pinnedProgramme.value !== entry || props.guide !== guide) {
 				return;
 			}
@@ -401,8 +402,7 @@ async function openEntry(entry: TimelineSegment | GuideEntry, event: Event, focu
 	}
 	else {
 		const segment = 'segmentId' in entry
-			? guideIntervalIndex(activeSegments.value).query(Date.parse(entry.start), Date.parse(entry.finish))
-				.find(segment => segment.id === entry.segmentId) : entry;
+			? entry.segmentId ? guideIntervalIndex(activeSegments.value).get(entry.segmentId) : undefined : entry;
 		if (event.type === 'click') {
 			itemPreview.value?.close();
 			if (segment) {

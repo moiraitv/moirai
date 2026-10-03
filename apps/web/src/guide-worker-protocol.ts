@@ -8,6 +8,8 @@ export interface GuideWorkerRange {
 	finish: number;
 	minimumDuration: number;
 	segmentsOnly?: boolean;
+	/** Include an inspected item’s physical anchor even when it lies outside the query interval. */
+	includeSegmentId?: string | undefined;
 }
 
 /** Browser worker owns one active guide for fetching, viewport queries, and rolling summaries. */

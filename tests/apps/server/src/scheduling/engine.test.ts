@@ -2293,6 +2293,8 @@ it('continues a random tail budget across midnight without restarting or resampl
 		state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)) });
 	const whole = generateTimelineDetailed({ ...options, days: 2 });
 	expect([...first.segments, ...continued.segments]).toEqual(whole.segments);
+	expect(continued.segments.filter(span => span.mediaItemId === uuid(2)).every(span => span.fillerStage === 'tail')).toBe(true);
+	expect(continued.segments.filter(span => span.mediaItemId === uuid(4)).every(span => span.fillerStage === 'fallback')).toBe(true);
 	expect(continued.proposedState.map(record => ({ ...record, updatedAt: '' }))).toEqual(whole.proposedState.map(record => ({ ...record, updatedAt: '' })));
 });
 
@@ -2323,6 +2325,7 @@ it('checkpoints fallback progress independently when an exhausted tail hands off
 	const continued = generateTimelineDetailed({ ...options, startDate: '2026-01-06', initialCursor: first.continuationAt,
 		state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)) });
 	expect(continued.segments.slice(0, 4).map(entry => entry.mediaItemId)).toEqual(Array(4).fill(fallbackMedia.id));
+	expect(continued.segments.slice(0, 4).map(entry => entry.fillerStage)).toEqual(Array(4).fill('fallback'));
 	expect(continued.segments[0]!.start).toBe('2026-01-06T00:00:00Z');
 	expect(continued.segments[3]!.finish).toBe('2026-01-06T01:00:00Z');
 });

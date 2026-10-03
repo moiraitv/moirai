@@ -117,6 +117,10 @@ Choose **Save** to store the schedule and return to the channel schedule list. I
 
 Saved changes normally become active at the next local midnight, protecting programming that has already been committed. When offered, **Apply after current item** brings a change forward without cutting the item viewers are currently watching.
 
+![Layered schedule preview showing filler ticks and their compact legend](/screenshots/channel-filler-preview.png)
+
+Markers below the preview timeline show the start and duration of each filler break. The legend identifies pre-roll, mid-roll, post-roll, tail, and channel fallback, and you can hover over a tick for its time range.
+
 ## Channel default fillers
 
 In the base schedule inspector, use **Channel default filler** to choose filler for the channel. Select a type in the movie illustration or the type selector:

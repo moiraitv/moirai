@@ -122,9 +122,9 @@ Filler can occupy time that the main ![](/icons/list-video.svg) Program cannot f
 
 ## Preview and use the Template
 
-![Resolved Template preview with scheduled media, gaps, and preview issues](/screenshots/template-preview.png)
+![Resolved Template preview with filler ticks, gaps, and preview issues](/screenshots/template-filler-preview.png)
 
-Use the resolved preview to see actual start and finish times rather than relying only on the authored grid. Warnings call out missing media, invalid durations, and gaps that would otherwise become dead air.
+Use the resolved preview to see actual start and finish times rather than relying only on the authored grid. Markers below the preview timeline show the start and duration of each filler break. The legend identifies pre-roll, mid-roll, post-roll, tail, and channel fallback, and you can hover over a tick to see its time range. Warnings call out missing media, invalid durations, and gaps that would otherwise become dead air.
 
 Save the ![](/icons/calendar-range.svg) Template, then assign it through a ![](/icons/tv-minimal-play.svg) [Channel Schedule](/scheduling/channel-schedules). Saving a ![](/icons/calendar-range.svg) Template alone does not assign it to a ![](/icons/tv-minimal.svg) Channel.
 

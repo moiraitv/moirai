@@ -784,6 +784,7 @@
 }
 
 .resolved-track {
+	position: relative;
 	margin-top: 12px;
 	min-height: 82px;
 	display: flex;
@@ -829,8 +830,11 @@
 }
 
 .resolved-segment {
-	min-width: 5px;
-	padding: 12px 8px;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	min-width: 0;
+	padding: 12px 0;
 	display: grid;
 	align-content: center;
 	gap: 5px;
@@ -854,6 +858,7 @@
 
 .resolved-segment strong,
 .resolved-segment small {
+	margin: 0 8px;
 	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1041,4 +1046,67 @@
 
 .template-workspace .scheduling-workspace-content {
 	grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.preview-filler-ticks {
+	position: relative;
+	height: 25px;
+	margin: 0 1px;
+}
+
+.stage-pre-roll {
+	--filler-tick-color: #79caff;
+	--filler-tick-offset: 0px;
+}
+
+.stage-mid-roll {
+	--filler-tick-color: #f5cc75;
+	--filler-tick-offset: 4px;
+}
+
+.stage-post-roll {
+	--filler-tick-color: #c9a1ff;
+	--filler-tick-offset: 8px;
+}
+
+.stage-tail {
+	--filler-tick-color: #75dfb6;
+	--filler-tick-offset: 12px;
+}
+
+.stage-fallback {
+	--filler-tick-color: #f397ac;
+	--filler-tick-offset: 16px;
+}
+
+.preview-filler-tick,
+.preview-filler-symbol {
+	width: 2px;
+	height: 8px;
+	background: var(--filler-tick-color);
+}
+
+.preview-filler-tick {
+	position: absolute;
+	top: var(--filler-tick-offset);
+	min-width: 2px;
+}
+
+.preview-filler-legend {
+	margin-left: auto;
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 9px;
+	font-size: 0.65rem;
+}
+
+.preview-filler-legend > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.preview-filler-symbol {
+	display: inline-block;
+	flex: 0 0 auto;
 }

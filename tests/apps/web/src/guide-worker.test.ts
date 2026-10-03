@@ -38,6 +38,24 @@ it('returns compact summaries and retrieves indexed block spans only for the req
 	expect(endpoint.postMessage.mock.lastCall?.[0].listings).toEqual([['channel', []]]);
 });
 
+it('includes an overrun item’s earlier anchor without duplicating it or leaking other channels', async () => {
+	const anchor = { ...span, id: 'anchor', start: '2026-10-01T19:00:00Z', finish: '2026-10-01T19:10:00Z' };
+	const resumed = { ...span, id: 'resumed', start: '2026-10-01T20:00:00Z', finish: '2026-10-01T20:30:00Z' };
+	vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ ...guide, channels: [
+		{ ...guide.channels[0], preview: { segments: [anchor, resumed], issues: [] } },
+		{ channelId: 'other', preview: { segments: [{ ...span, id: 'foreign' }], issues: [] } },
+	] }) } as Response);
+	await load();
+	const range = { channelIds: ['channel'], start: Date.parse(resumed.start), finish: Date.parse(resumed.finish),
+		minimumDuration: 0, segmentsOnly: true, includeSegmentId: anchor.id };
+	endpoint.onmessage({ data: { id: 2, kind: 'query', snapshot: 1, range } });
+	expect(endpoint.postMessage.mock.lastCall?.[0].listings).toEqual([['channel', [resumed, anchor]]]);
+	endpoint.onmessage({ data: { id: 3, kind: 'query', snapshot: 1, range: { ...range, includeSegmentId: resumed.id } } });
+	expect(endpoint.postMessage.mock.lastCall?.[0].listings).toEqual([['channel', [resumed]]]);
+	endpoint.onmessage({ data: { id: 4, kind: 'query', snapshot: 1, range: { ...range, includeSegmentId: 'foreign' } } });
+	expect(endpoint.postMessage.mock.lastCall?.[0].listings).toEqual([['channel', [resumed]]]);
+});
+
 it('rejects superseded snapshot queries and releases authenticated listings on clear', async () => {
 	await load();
 	await load(2);
