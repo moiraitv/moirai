@@ -1,3 +1,4 @@
+import './documentation/mid-roll';
 import './documentation/sequence-preview';
 import './documentation/duration-filters';
 import './documentation/sequence-ordering';
@@ -344,9 +345,19 @@ test('captures Templates', { tag: '@docs-screenshot' }, async ({ page, documenta
 	await expect(advanced.getByRole('combobox', { name: 'Playback state', exact: true })).toBeVisible();
 	await captureSection(page, advanced.getByTestId('slot-playback-fields'), 'template-slot-playback.png');
 	await captureSection(page, advanced.getByRole('group', { name: /^Outgoing boundary/u }), 'template-slot-boundary.png');
-	const filler = advanced.getByRole('group', { name: 'Filler', exact: true });
+	const slotFiller = advanced.getByRole('group', { name: 'Slot filler', exact: true });
+	await slotFiller.getByRole('radio', { name: /^Tail Filler / }).check();
+	const filler = advanced.getByRole('group', { name: 'Tail filler', exact: true });
 	await filler.getByRole('combobox', { name: 'Mode', exact: true }).selectOption('configured');
-	await captureSection(page, filler, 'template-slot-filler.png');
+	// Keep the complete override above the sticky preview dock in this section capture.
+	const viewport = page.viewportSize()!;
+	await page.setViewportSize({ ...viewport, height: 1200 });
+	await captureSection(page, slotFiller, 'template-slot-filler.png');
+	await page.setViewportSize(viewport);
+	const midRoll = templateEditor.getByRole('group', { name: 'Template default mid-roll', exact: true });
+	await midRoll.getByRole('checkbox').check();
+	await midRoll.getByRole('combobox', { name: 'Preset', exact: true }).selectOption({ label: 'Two-minute breaks' });
+	await captureSection(page, templateEditor.getByRole('group', { name: 'Template default filler', exact: true }), 'template-mid-roll.png');
 
 });
 test('suggests a matching first channel template and preserves a saved override', async ({ page, documentationServer }) => {

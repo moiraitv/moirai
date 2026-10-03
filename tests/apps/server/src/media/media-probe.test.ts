@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
+import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_MID_ROLL_POINTS } from '@moirai/shared';
 import {
 	MediaProbe,
 	MediaProbeError,
@@ -35,6 +35,8 @@ describe('media probe output', () => {
 			],
 		}), 42)).toEqual({
 			durationMilliseconds: 65_000,
+			chapters: [],
+			chapterLimitExceeded: false,
 			fileSizeBytes: 42,
 			container: 'matroska,webm',
 			streams: [
@@ -341,4 +343,84 @@ it('retains bounded alternate titles and audio-description dispositions', () => 
 		{ index: 1, codec_type: 'audio', tags: { title: ' Main ', 'TITLE-eng': 'main', 'TITLE-fra': 'Original', handler_name: 'English Original' }, disposition: { visual_impaired: 1 } },
 	] }), 100);
 	expect(result.streams[1]).toMatchObject({ title: 'Main', titleAliases: ['Main', 'Original', 'English Original'], isAudioDescription: true });
+});
+
+it('normalizes chapter facts without discarding playable content for malformed markers', () => {
+	const result = parseMediaProbeOutput(JSON.stringify({
+		format: { duration: '120' }, streams: [{ codec_type: 'video', duration: '120' }],
+		chapters: [
+			{ start_time: '0', end_time: '30.125', tags: { TITLE: ' Act 1 ' } },
+			{ start_time: '-1', end_time: '20' },
+			{ start_time: '30.125', end_time: '999', tags: { title: 'Final' } },
+			{ start_time: '40', end_time: '10' },
+			null,
+		],
+	}), 42);
+	expect(result.durationMilliseconds).toBe(120_000);
+	expect(result.chapters).toEqual([
+		{ startSeconds: 0, finishSeconds: 30.125, title: 'Act 1' },
+		{ startSeconds: 30.125, finishSeconds: 120, title: 'Final' },
+	]);
+	expect(parseMediaProbeOutput(JSON.stringify({ format: { duration: '10' },
+		streams: [{ codec_type: 'video', duration: '10' }], chapters: 'invalid' }), 1).chapters).toEqual([]);
+});
+
+it('bounds a chapter list at the scheduling cap and flags one extra marker', () => {
+	const duration = MAX_MID_ROLL_POINTS + 2;
+	const chapters = (count: number) => Array.from({ length: count }, (_, index) => ({
+		start_time: String(index), end_time: String(index + 1), tags: { title: `Chapter ${index}` },
+	}));
+	const probe = (count: number) => parseMediaProbeOutput(JSON.stringify({
+		format: { duration: String(duration) },
+		streams: [{ codec_type: 'video', duration: String(duration) }],
+		chapters: chapters(count),
+	}), 1);
+	expect(probe(MAX_MID_ROLL_POINTS)).toMatchObject({ chapterLimitExceeded: false, chapters: { length: MAX_MID_ROLL_POINTS } });
+	expect(probe(MAX_MID_ROLL_POINTS + 1)).toMatchObject({ chapterLimitExceeded: true, chapters: { length: MAX_MID_ROLL_POINTS } });
+});
+
+
+it.each(['chapters', 'metadata'])('retries an oversized probe once without chapters (%s)', async scenario => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-probe-overflow-'));
+	roots.push(root);
+	const file = path.join(root, 'fixture.mkv');
+	const log = path.join(root, 'calls');
+	await writeFile(file, JSON.stringify({ scenario, log }));
+	const probe = new MediaProbe(path.resolve('tests/fixtures/fake-ffprobe-overflow.mjs'), 1, 2_000);
+	try {
+		await probe.start();
+		if (scenario === 'chapters') {
+			await expect(probe.probe(root, file)).resolves.toMatchObject({ durationMilliseconds: 120_000,
+				chapters: [], chapterLimitExceeded: true, streams: [{ type: 'video', codec: 'h264' }] });
+		}
+		else {
+			await expect(probe.probe(root, file)).rejects.toMatchObject({ code: 'invalid-output' });
+		}
+		expect((await readFile(log, 'utf8')).trim().split('\n')).toEqual(['chapters', 'metadata']);
+	}
+	finally {
+		await probe.close();
+	}
+});
+
+it('does not retry chapter overflow after caller cancellation', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-probe-cancel-overflow-'));
+	roots.push(root);
+	const file = path.join(root, 'fixture.mkv');
+	const log = path.join(root, 'calls');
+	await writeFile(file, JSON.stringify({ scenario: 'abort', log }));
+	const probe = new MediaProbe(path.resolve('tests/fixtures/fake-ffprobe-overflow.mjs'), 1, 2_000);
+	const controller = new AbortController();
+	try {
+		await probe.start();
+		const pending = probe.probe(root, file, controller.signal);
+		const rejected = expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+		await expect.poll(async () => readFile(log, 'utf8').catch(() => '')).toBe('chapters\n');
+		controller.abort();
+		await rejected;
+		expect(await readFile(log, 'utf8')).toBe('chapters\n');
+	}
+	finally {
+		await probe.close();
+	}
 });

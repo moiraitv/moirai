@@ -1,6 +1,7 @@
 import type {
 	ChannelScheduleConfig,
 	ScheduleTemplate,
+	ScheduleSlot,
 	TimelineIssue,
 	TimelinePreview,
 	TimelineSegment,
@@ -18,7 +19,7 @@ export interface DeadAirDiagnostic {
 	explanation: string;
 	issue: TimelineIssue | null;
 	fillerOrigin: 'channel' | 'template' | 'slot' | null;
-	/** A programmed slot can opt out of every inherited filler source. */
+	/** A programmed slot can opt out of inherited tail filler independently of channel fallback. */
 	slotFillerDisabled?: boolean;
 	/** Direct assignment owning this synthetic slot, when present. */
 	directProgramId?: string | null;
@@ -75,6 +76,41 @@ function issueForSegment(issues: TimelineIssue[], segment: TimelineSegment): Tim
 	return firstMatch;
 }
 
+/** Applicable filler source and the editor that owns its assignment. */
+interface DiagnosticFillerSource {
+	origin: NonNullable<DeadAirDiagnostic['fillerOrigin']>;
+	programId: string;
+}
+
+/** Resolve scheduled tail and independent fallback sources in their execution order. */
+function fillerSources(
+	slot: ScheduleSlot | undefined,
+	template: ScheduleTemplate | undefined,
+	schedule: ChannelScheduleConfig | null,
+): DiagnosticFillerSource[] {
+	const sources: DiagnosticFillerSource[] = [];
+	if (slot?.programId === null) {
+		if (schedule?.defaultTailFiller?.legacyEmptySlots) {
+			sources.push({ origin: 'channel', programId: schedule.defaultTailFiller.programId });
+		}
+	}
+	else if (slot?.filler.mode === 'configured') {
+		sources.push({ origin: 'slot', programId: slot.filler.config.programId });
+	}
+	else if (slot?.filler.mode === 'inherit') {
+		if (template?.defaultFiller) {
+			sources.push({ origin: 'template', programId: template.defaultFiller.programId });
+		}
+		else if (schedule?.defaultTailFiller) {
+			sources.push({ origin: 'channel', programId: schedule.defaultTailFiller.programId });
+		}
+	}
+	if (schedule?.defaultFiller) {
+		sources.push({ origin: 'channel', programId: schedule.defaultFiller.programId });
+	}
+	return sources;
+}
+
 /** Classify one dead-air segment using its authored slot and nearby runtime diagnostics. */
 function deadAirDiagnostic(
 	segment: TimelineSegment,
@@ -86,7 +122,13 @@ function deadAirDiagnostic(
 	const template = templates.find((candidate) => candidate.id === segment.templateId);
 	const slot = template?.slots.find((candidate) => candidate.id === segment.slotId);
 	const durationSeconds = Math.max(0, (Date.parse(segment.finish) - Date.parse(segment.start)) / 1_000);
-	if (slot?.programId === null && schedule?.defaultFiller) {
+	const sources = fillerSources(slot, template, schedule);
+	const matchedSource = issue ? sources.find(source => source.programId === issue.programId) : undefined;
+	if (matchedSource && issue && (issue.code.startsWith('source-') || issue.code.startsWith('media-'))) {
+		return { segment, durationSeconds, category: 'filler', label: 'Filler source needs attention',
+			explanation: issue.message, issue, fillerOrigin: matchedSource.origin };
+	}
+	if (slot?.programId === null && sources.length > 0) {
 		return {
 			segment,
 			durationSeconds,
@@ -120,36 +162,7 @@ function deadAirDiagnostic(
 		};
 	}
 
-	const fillerOrigin = slot?.filler.mode === 'configured'
-		? 'slot'
-		: slot?.filler.mode === 'inherit' && template?.defaultFiller
-			? 'template'
-			: slot?.filler.mode === 'inherit' && schedule?.defaultFiller
-				? 'channel'
-				: null;
-	const fillerProgramId = fillerOrigin === 'slot' && slot?.filler.mode === 'configured'
-		? slot.filler.config.programId
-		: fillerOrigin === 'template'
-			? template?.defaultFiller?.programId
-			: fillerOrigin === 'channel'
-				? schedule?.defaultFiller?.programId
-				: null;
-	if (
-		fillerOrigin
-		&& issue !== null
-		&& issue.programId === fillerProgramId
-		&& (issue.code.startsWith('source-') || issue.code.startsWith('media-'))
-	) {
-		return {
-			segment,
-			durationSeconds,
-			category: 'filler',
-			label: 'Filler source needs attention',
-			explanation: issue.message,
-			issue,
-			fillerOrigin,
-		};
-	}
+	const fillerOrigin = sources.at(-1)?.origin ?? null;
 	if (issue?.code.startsWith('source-') || issue?.code.startsWith('media-')) {
 		return {
 			segment,

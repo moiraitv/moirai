@@ -6,8 +6,20 @@ import type { MoiraiDatabase } from '../db/index.js';
 const tables: Record<Exclude<ResourceUsageKind, 'media'>, string> = {
 	program: 'scheduling_programs', template: 'schedule_templates',
 	'encoding-profile': 'encoding_profiles', 'credit-template': 'credit_templates',
-	'guide-template': 'guide_templates',
+	'guide-template': 'guide_templates', 'mid-roll-preset': 'filler_presets', 'filler-preset': 'filler_presets',
 };
+
+/** Find stage assignments in each owner without expanding scheduling catalogs. */
+function fillerReferences(id: string, key: 'programId' | 'presetId'): SQL {
+	return sql`SELECT 'template' AS kind, t.id, t.name, 'Default filler' AS role FROM schedule_templates t,
+		json_tree(json_array(json(t.default_filler), json(t.default_mid_roll), json(t.default_pre_roll), json(t.default_post_roll))) j
+		WHERE j.key = ${key} AND j.value = ${id}
+		UNION ALL SELECT 'template', t.id, t.name, 'Slot filler' FROM schedule_slots s JOIN schedule_templates t ON t.id = s.template_id,
+		json_tree(json_array(json(s.filler), json(s.mid_roll), json(s.pre_roll), json(s.post_roll))) j WHERE j.key = ${key} AND j.value = ${id}
+		UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Schedule filler' FROM channel_schedules s JOIN channels c ON c.id = s.channel_id,
+		json_tree(json_array(json_extract(s.config, '$.defaultFiller'), json_extract(s.config, '$.defaultTailFiller'), json_extract(s.config, '$.defaultMidRoll'), json_extract(s.config, '$.defaultPreRoll'), json_extract(s.config, '$.defaultPostRoll'))) j
+		WHERE j.key = ${key} AND j.value = ${id}`;
+}
 
 /** Select only direct authored references, retaining repeated occurrences for their owner count. */
 function references(kind: Exclude<ResourceUsageKind, 'media'>, id: string): SQL {
@@ -21,20 +33,16 @@ function references(kind: Exclude<ResourceUsageKind, 'media'>, id: string): SQL 
 			WHERE json_extract(p.config, '$.type') = 'similarity' AND json_extract(p.config, '$.sourceProgramId') = ${id}
 			UNION ALL SELECT 'template', t.id, t.name, 'Slot program'
 			FROM schedule_slots s JOIN schedule_templates t ON t.id = s.template_id WHERE s.program_id = ${id}
-			UNION ALL SELECT 'template', t.id, t.name, 'Slot filler'
-			FROM schedule_slots s JOIN schedule_templates t ON t.id = s.template_id
-			WHERE json_extract(s.filler, '$.mode') = 'configured' AND json_extract(s.filler, '$.config.programId') = ${id}
-			UNION ALL SELECT 'template', id, name, 'Default filler' FROM schedule_templates
-			WHERE json_extract(default_filler, '$.programId') = ${id}
-			UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Schedule filler'
-			FROM channel_schedules s JOIN channels c ON c.id = s.channel_id
-			WHERE json_extract(s.config, '$.defaultFiller.programId') = ${id}
+			UNION ALL ${fillerReferences(id, 'programId')}
 			UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Base program'
 			FROM channel_schedules s JOIN channels c ON c.id = s.channel_id
 			WHERE s.default_program_id = ${id}
 			UNION ALL SELECT 'channel-schedule', c.id, c.name, 'Conditional program'
 			FROM channel_schedule_layers l JOIN channels c ON c.id = l.channel_id
 			WHERE l.program_id = ${id}`;
+	}
+	if (kind === 'mid-roll-preset' || kind === 'filler-preset') {
+		return fillerReferences(id, 'presetId');
 	}
 	if (kind === 'template') {
 		return sql`

@@ -6,6 +6,7 @@ import {
 	type ScheduleTemplateCreate,
 } from '@moirai/shared';
 import { randomUuid } from './random-uuid';
+import { cloneContractValue } from './reactive-clone';
 
 /** Factory used to assign identities when a slot is split. */
 export type IdFactory = () => string;
@@ -137,6 +138,9 @@ export function splitScheduleSlot(
 		startSeconds: splitSeconds,
 		...(slot.guide ? { guide: { ...slot.guide } } : {}),
 		startEligibility: { ...slot.startEligibility },
+		...(slot.midRoll ? { midRoll: cloneContractValue(slot.midRoll) } : {}),
+		...(slot.preRoll ? { preRoll: cloneContractValue(slot.preRoll) } : {}),
+		...(slot.postRoll ? { postRoll: cloneContractValue(slot.postRoll) } : {}),
 		filler: slot.filler.mode === 'configured'
 			? { mode: 'configured', config: { ...slot.filler.config } }
 			: { ...slot.filler },

@@ -4,7 +4,7 @@ import type { ScheduleDaySummary, ScheduleSummaryWindow } from './channel-schedu
 import { queryGuideSummaries } from './guide-worker';
 import { errorMessage } from './error-message';
 
-/** Refresh rolling counts without publishing stale responses or treating pending work as empty. */
+/** Refresh rolling counts without publishing a superseded response as the current preview. */
 export function useGuideSummaries(
 	guide: () => ScheduleGuide | null,
 	window: () => ScheduleSummaryWindow,
@@ -18,13 +18,15 @@ export function useGuideSummaries(
 		onCleanup(() => {
 			cancelled = true;
 		});
-		summaries.value = new Map();
 		error.value = '';
-		loading.value = Boolean(snapshot && active);
 		if (!snapshot || !active) {
+			summaries.value = new Map();
+			loading.value = false;
 			return;
 		}
 
+		// Keep the last counts so dead-air styling stays until this window resolves.
+		loading.value = true;
 		try {
 			const result = await queryGuideSummaries(snapshot, range);
 			if (!cancelled) {

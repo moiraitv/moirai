@@ -1,7 +1,9 @@
+import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import {
 	MAX_MEDIA_DURATION_MILLISECONDS,
+	MAX_MID_ROLL_POINTS,
 	type MediaSubtitleTrack,
 	type ScanIssue,
 } from '@moirai/shared';
@@ -65,6 +67,16 @@ export function collapseMultipartItems(
 			0,
 		);
 
+		let chapterOffset = 0;
+		const chapters = members.flatMap((item) => {
+			const duration = (item.durationMilliseconds ?? 0) / 1_000;
+			const points = normalizeMediaChapters(item.technicalMetadata.chapters, duration).map(chapter => ({
+				...chapter, startSeconds: chapter.startSeconds + chapterOffset, finishSeconds: chapter.finishSeconds + chapterOffset,
+			}));
+			chapterOffset += duration;
+			return points;
+		});
+
 		representative.aliasIds = members.slice(1).map((item) => item.id);
 		representative.multipartStatus = status;
 		representative.parts = parts;
@@ -78,9 +90,12 @@ export function collapseMultipartItems(
 			: status === 'complete'
 				? members.find((item) => item.probeErrorCode)?.probeErrorCode ?? null
 				: `multipart-${status}`;
+
 		representative.technicalMetadata = {
 			...representative.technicalMetadata,
 			fileSizeBytes,
+			chapters: chapters.slice(0, MAX_MID_ROLL_POINTS),
+			chapterLimitExceeded: chapterInputExceedsLimit(chapters) || members.some(item => item.technicalMetadata.chapterLimitExceeded === true),
 			parts: members.map((item) => item.technicalMetadata),
 		};
 		representative.fingerprint = createHash('sha256')

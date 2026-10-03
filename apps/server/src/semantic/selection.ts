@@ -1,3 +1,4 @@
+import { eligibleFiller, selectFillerCandidate } from '../scheduling/filler-cycle.js';
 import { selectOrderedCandidate } from '../scheduling/candidate-selection.js';
 import { semanticSource } from './source.js';
 import { passesSemanticExclusions, preferenceIssue } from './refinement.js';
@@ -37,11 +38,17 @@ export function chooseSimilarity(
 	if (program.config.type !== 'similarity' && program.config.type !== 'theme') {
 		return null;
 	}
+	const config = program.config;
 	const baseKey = semanticConsumerKey(consumer);
 	const key = baseKey.includes(':entry:') ? `${baseKey}:program:${programId}` : baseKey;
 	const record = state.get(key);
 	const prior = record?.value.type === 'similarity' && record.value.seed.programId === programId ? record.value : null;
 	const corpus = context.catalog.semantic;
+	const fillerSources = context.fillerSemanticSources ??= new Map();
+	if (context.fillerSelection && !fillerSources.has(programId)) {
+		const source = semanticSource(config, [...context.programs.values()], context.catalog);
+		fillerSources.set(programId, new Set(source.valid ? source.items.map(media => media.id) : []));
+	}
 	let seed: SimilaritySeed | undefined = prior?.seed;
 	let consumed = prior?.consumedItemIds ?? [];
 	let recentSeeds = prior?.recentSeeds ?? [];
@@ -53,7 +60,14 @@ export function chooseSimilarity(
 		return null;
 	};
 
-	if (!seed || seed.itemIds.every((id) => consumed.includes(id))) {
+	const deferredIds = context.fillerSelection ? prior?.fillerCycle?.remainingItemIds ?? [] : [];
+	const refillFiller = Boolean(context.fillerSelection && prior?.fillerCycle && !deferredIds.some(id => {
+		const mediaId = context.catalog.mediaAliases?.[id] ?? id;
+		const media = context.catalog.mediaById?.get(mediaId) ?? context.catalog.media.find(item => item.id === mediaId);
+		return media && fillerSources.get(programId)!.has(media.id) && passesSemanticExclusions(media, config, context.catalog)
+			&& semanticMediaEligible(media, context.catalog) && eligibleFiller(media, context);
+	}));
+	if (!seed || refillFiller || seed.itemIds.every((id) => consumed.includes(id))) {
 		const generation = (seed?.generation ?? 0) + 1;
 		const previous = seed?.itemIds ?? [];
 		seed = corpus?.seeds.find((entry) => entry.consumerKey === key && entry.programId === programId && entry.generation === generation);
@@ -94,18 +108,23 @@ export function chooseSimilarity(
 	if (seed.itemIds.length < seed.config.quantity) {
 		report(`Current set contains ${seed.itemIds.length} related items; fewer than the requested quantity are available.`, false);
 	}
-	const remaining = seed.itemIds.filter((id) => !consumed.includes(id));
+	const remaining = context.fillerSelection ? [...new Set([...deferredIds, ...seed.itemIds])] : seed.itemIds.filter((id) => !consumed.includes(id));
 	const playable = remaining.flatMap((id) => {
 		const mediaId = context.catalog.mediaAliases?.[id] ?? id;
 		const media = context.catalog.mediaById?.get(mediaId) ?? context.catalog.media.find((item) => item.id === mediaId);
 		// Playback follows catalog aliases, but committed membership keeps its original identity.
-		return media && semanticMediaEligible(media, context.catalog) ? [{ id, media }] : [];
+		return media && semanticMediaEligible(media, context.catalog) && (!context.fillerSelection || (fillerSources.get(programId)!.has(media.id) && passesSemanticExclusions(media, config, context.catalog))) ? [{ id, media }] : [];
 	});
 	if (playable.length < remaining.length) {
 		report('Some remaining items in the current set are unavailable. The set will wait for them.', playable.length === 0);
 	}
-	// Preserve seed order for primary starts; filler chooses the longest expanded duration that fits.
-	const media = selectOrderedCandidate(playable.map(entry => entry.media), context, fitSeconds, fitMode, true);
+	// Keep filler membership separate from semantic seed consumption and preserve ranked ordering.
+	const proposed: SelectionStateRecord = { consumerKey: key, configFingerprint: 'similarity-v1', updatedAt: context.now,
+		value: { type: 'similarity', seed, recentSeeds, consumedItemIds: consumed,
+			...(prior?.fillerCycle ? { fillerCycle: prior.fillerCycle } : {}) } };
+	const media = context.fillerSelection
+		? selectFillerCandidate(playable.map(entry => entry.media), proposed, context, fitSeconds, () => playable.map(entry => entry.media))
+		: selectOrderedCandidate(playable.map(entry => entry.media), context, fitSeconds, fitMode, true);
 	const selected = media ? playable.find(entry => entry.media === media) : undefined;
 	if (!selected) {
 		if (playable.length && fitSeconds !== null) {
@@ -113,7 +132,9 @@ export function chooseSimilarity(
 		}
 		return null;
 	}
-	state.set(key, { consumerKey: key, configFingerprint: 'similarity-v1', updatedAt: context.now,
-		value: { type: 'similarity', seed, recentSeeds, consumedItemIds: [...consumed, selected.id] } });
+	if (proposed.value.type === 'similarity') {
+		proposed.value.consumedItemIds = [...consumed, selected.id];
+	}
+	state.set(key, proposed);
 	return selected.media;
 }

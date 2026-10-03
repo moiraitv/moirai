@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { isFillerProgram, canonicalFillerPolicy } from '@moirai/shared';
 import { Pencil } from '@lucide/vue';
 import type { FillerConfig, SchedulingProgram } from '@moirai/shared';
 
@@ -10,10 +12,11 @@ const emit = defineEmits<{
 	'update:modelValue': [value: FillerConfig | null];
 	'edit-program': [programId: string];
 }>();
+const fillerPrograms = computed(() => props.programs.filter(isFillerProgram));
 
 /** Enable channel fallback filler with the first program, or remove its configuration. */
 function toggleFiller(enabled: boolean): void {
-	const programId = props.programs[0]?.id;
+	const programId = fillerPrograms.value[0]?.id;
 	emit(
 		'update:modelValue',
 		enabled && programId ? { programId, policy: 'best-fit-or-truncate' } : null,
@@ -45,14 +48,13 @@ function programName(id: string): string {
 		<fieldset>
 			<legend>Channel fallback filler</legend>
 			<p class="layer-boundary-description">
-				Used for authored no-program slots and programmed slots that inherit filler without a
-				template default.
+				Covers remaining gaps after tail filler, including authored no-program slots.
 			</p>
 			<label class="check-row boundary-unlimited-control">
 				<input
 					type="checkbox"
 					:checked="modelValue !== null"
-					:disabled="programs.length === 0"
+					:disabled="!modelValue && fillerPrograms.length === 0"
 					@change="toggleFiller(($event.target as HTMLInputElement).checked)"
 				/>
 				<span>Configure channel filler</span>
@@ -64,7 +66,7 @@ function programName(id: string): string {
 							:value="modelValue.programId"
 							@change="updateProgram(($event.target as HTMLSelectElement).value)"
 						>
-							<option v-for="program in programs" :key="program.id" :value="program.id">
+							<option v-for="program in fillerPrograms" :key="program.id" :value="program.id">
 								{{ program.name }}
 							</option>
 						</select>
@@ -78,15 +80,13 @@ function programName(id: string): string {
 						</button>
 					</span>
 				</label>
-				<label><span>Selection policy</span>
+				<label><span>Fitting Behavior</span>
 					<select
-						:value="modelValue.policy"
+						:value="canonicalFillerPolicy(modelValue.policy)"
 						@change="updatePolicy(($event.target as HTMLSelectElement).value as FillerConfig['policy'])"
 					>
-						<option value="best-fit-or-truncate">Best fit or truncate</option>
-						<option value="best-fit-only">Best fit only</option>
-						<option value="next-truncate">Next and truncate</option>
-						<option value="next-fit-only">Next only if it fits</option>
+						<option value="next-truncate">Allow Truncation</option>
+						<option value="next-fit-only">Whole Items Only</option>
 					</select>
 				</label>
 			</template>

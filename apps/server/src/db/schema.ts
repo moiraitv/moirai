@@ -1,3 +1,5 @@
+import type { AnyFillerPresetCreate, FillerAssignment, FillerKind } from '@moirai/shared';
+import type { MidRollConfig } from '@moirai/shared';
 import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
@@ -419,6 +421,9 @@ export const scheduleTemplates = sqliteTable('schedule_templates', {
 	period: text('period').$type<'day'>().notNull().default('day'),
 	schedulingUpdatedAt: text('scheduling_updated_at'),
 	defaultFiller: text('default_filler', { mode: 'json' }).$type<FillerConfig | null>(),
+	defaultMidRoll: text('default_mid_roll', { mode: 'json' }).$type<MidRollConfig | null>(),
+	defaultPreRoll: text('default_pre_roll', { mode: 'json' }).$type<FillerAssignment | null>(),
+	defaultPostRoll: text('default_post_roll', { mode: 'json' }).$type<FillerAssignment | null>(),
 	...timestamps,
 }, (table) => [uniqueIndex('schedule_templates_name_key_unique').on(table.nameKey)]);
 
@@ -444,6 +449,9 @@ export const scheduleSlots = sqliteTable(
 			.notNull(),
 		guide: text('guide', { mode: 'json' }).$type<ScheduleSlot['guide']>().notNull().default({ mode: 'items' }),
 		filler: text('filler', { mode: 'json' }).$type<ScheduleSlot['filler']>().notNull(),
+		midRoll: text('mid_roll', { mode: 'json' }).$type<ScheduleSlot['midRoll']>().notNull().default({ mode: 'inherit' }),
+		preRoll: text('pre_roll', { mode: 'json' }).$type<ScheduleSlot['preRoll']>().notNull().default({ mode: 'inherit' }),
+		postRoll: text('post_roll', { mode: 'json' }).$type<ScheduleSlot['postRoll']>().notNull().default({ mode: 'inherit' }),
 	},
 	(table) => [
 		uniqueIndex('schedule_slots_template_position').on(table.templateId, table.position),
@@ -611,6 +619,7 @@ export const materializedTimelineSegments = sqliteTable(
 		sourceStartSeconds: integer('source_start_seconds').notNull(),
 		sourceFinishSeconds: integer('source_finish_seconds'),
 		truncated: integer('truncated', { mode: 'boolean' }).notNull(),
+		airing: text('airing', { mode: 'json' }).$type<import('@moirai/shared').TimelineAiring | null>(),
 		mediaSnapshot: text('media_snapshot', { mode: 'json' }).$type<
       (SchedulableMedia & { seriesTitle?: string | null }) | null
 		>(),
@@ -620,6 +629,10 @@ export const materializedTimelineSegments = sqliteTable(
 	(table) => [
 		index('materialized_segments_channel_start_idx').on(table.channelId, table.startsAt),
 		index('materialized_segments_channel_finish_idx').on(table.channelId, table.finishesAt),
+		index('materialized_segments_start_idx').on(table.startsAt, table.channelId),
+		index('materialized_segments_airing_id_idx').on(sql`json_extract(${table.airing}, '$.id')`),
+		index('materialized_segments_channel_airing_id_idx').on(table.channelId, sql`json_extract(${table.airing}, '$.id')`),
+		index('materialized_segments_channel_airing_finish_idx').on(table.channelId, sql`coalesce(json_extract(${table.airing}, '$.finish'), ${table.finishesAt})`),
 	],
 );
 
@@ -808,3 +821,15 @@ export const ignoredMediaIssues = sqliteTable('ignored_media_issues', {
 	code: text('code').notNull(),
 	fingerprint: text('fingerprint').notNull(),
 }, table => [uniqueIndex('ignored_media_issues_key').on(table.libraryId, table.relativePath, table.code)]);
+
+/** Reusable guided break behavior with protected built-in examples. */
+export const fillerPresets = sqliteTable('filler_presets', {
+	id: text('id').primaryKey(), name: text('name').notNull(), nameKey: text('name_key').notNull(),
+	kind: text('kind').$type<FillerKind>().notNull(),
+	config: text('config', { mode: 'json' }).$type<AnyFillerPresetCreate>().notNull(),
+	isBuiltin: integer('is_builtin', { mode: 'boolean' }).notNull().default(false),
+	...timestamps,
+}, table => [uniqueIndex('filler_presets_kind_name_key_unique').on(table.kind, table.nameKey)]);
+
+/** Compatibility schema name for existing Mid-Roll integrations. */
+export const midRollPresets = fillerPresets;

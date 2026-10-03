@@ -108,6 +108,8 @@ export function registerGuideRoutes(
 			throw app.httpErrors.notFound('Guide segment not found');
 		}
 
+		const airing = record.segment.airing;
+		const airingRecords = airing ? await repository.listMaterializedTimelineSegments(airing.start, airing.finish, channelId) : [];
 		const media = record.mediaSnapshot;
 		const [program, template, library, catalogItem] = await Promise.all([
 			record.segment.programId ? repository.getProgram(record.segment.programId) : null,
@@ -119,6 +121,10 @@ export function registerGuideRoutes(
 		void _playbackPath;
 		const detail: GuideSegmentDetail = {
 			segment: safeSegment,
+			...(airing ? { airingSegments: airingRecords.filter(row => row.segment.airing?.id === airing.id).map(({ segment }) => ({
+				id: segment.id, role: segment.role, title: segment.title, start: segment.start, finish: segment.finish,
+				sourceStartSeconds: segment.sourceStartSeconds, sourceFinishSeconds: segment.sourceFinishSeconds,
+			})) } : {}),
 			media: media
 				? {
 					id: media.id,

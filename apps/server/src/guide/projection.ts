@@ -4,9 +4,9 @@ import type { GuideEntry, GuideOccurrence, ScheduleTemplate, TimelineSegment } f
 export function itemGuideEntry(segment: TimelineSegment): GuideEntry {
 	return {
 		id: segment.id, channelId: segment.channelId, kind: 'item',
-		start: segment.start, finish: segment.finish, title: segment.title, description: '',
+		start: segment.airing?.start ?? segment.start, finish: segment.airing?.finish ?? segment.finish, title: segment.title, description: '',
 		programId: segment.programId, segmentId: segment.id, occurrenceId: null,
-		role: segment.role, truncated: segment.truncated,
+		role: segment.role, truncated: segment.airing?.truncated ?? segment.truncated,
 		posterUrl: segment.posterUrl ?? null,
 		landscapeUrl: segment.landscapeUrl ?? null,
 		fanartUrl: segment.fanartUrl ?? null,
@@ -84,7 +84,7 @@ export function projectGuideEntries(
 	const normalized = normalizeScheduledBlocks(scheduled);
 	const blocks = [...normalized, ...subtractBlocks(drift, normalized)]
 		.sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
-	const items = segments.map(itemGuideEntry).sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
+	const items = segments.filter(segment => !segment.airing || segment.id === segment.airing.primarySegmentId).map(itemGuideEntry).sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
 	return [...blocks, ...subtractBlocks(items, blocks)]
 		.sort((left, right) => Date.parse(left.start) - Date.parse(right.start))
 		.map((entry) => ({ ...entry, id: `${entry.id}/${entry.start}/${entry.finish}` }));

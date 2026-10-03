@@ -883,7 +883,8 @@ other controls wait 250 ms without shortening a pending text delay. Superseded p
 are aborted and stale results ignored. Embedding events coalesce into serial, quiet sample refreshes
 at most once per second; overview events also coalesce. Already queued inference may finish and cache
 its result. Semantic selection
-honors primary first-item fitting and longest-fitting filler, retaining seed order for duration ties.
+honors primary first-item fitting. Filler follows ranked ordering without replacement, carrying
+oversized members ahead of later semantic sets while enforcing current source eligibility.
 
 Each persistent scheduling consumer owns immutable, ordered seed generations in SQLite, including
 across occurrence resets. Consumption advances only with committed timeline segments; previews and
@@ -950,8 +951,7 @@ per-entry quotas, and proportional balanced rotation. Shuffle modes accept stabl
 channel regeneration randomness when unseeded. Balanced rotation avoids the previous entry when
 another remains, breaking proportional-deficit ties by authored order. Counts measure leaf selections,
 including nested sequences. Parent cycle state is bounded by entry count and persists independently
-of child cursors. Shuffled blocks retain the active block on filler fit rejection, allowing the filler
-policy to leave a gap or truncate without interleaving another block. Explicit Ordered and legacy
+of child cursors. Primary shuffled blocks retain their existing handoff rules. Explicit Ordered and legacy
 omitted ordering preserve existing progress, including preference-bearing legacy fingerprints; ordering
 changes restart the parent cycle without resetting child episode progress. User-guide example schedules
 cover movie shuffles, genre double features, sitcom rotations, all four sequence modes, and a weekend
@@ -1037,12 +1037,117 @@ Fit rejection requires playable candidates that exceed the duration limit. Unava
 or missing sources retain their source diagnostics, and completed sequences do not produce false
 boundary failures.
 
-### Materialization and determinism
+### Filler presets and roll stages
 
-Each generation indexes other-channel occupancy by media item once, avoiding full schedule scans
-for each candidate. Ordered selection stops when its winner is known; longest-fit selection uses one
-stable pass. Speculative branches share untouched cursor records and clone records before mutation.
-State deltas skip identical records, and Program cursor fingerprints are cached within each generation.
+The Filler navigation section owns Pre-Rolls, Mid-Rolls, Post-Rolls, and Tail Fillers. Presets keep
+behavior separate from source Programs and have case-insensitive names unique within their immutable
+kind. Protected examples can be duplicated; referenced presets cannot be deleted.
+
+Pre-roll and post-roll surround each primary item and share its airing envelope with mid-roll.
+Expanded durations participate in fitting and collision checks. Filler state is independently scoped
+by stage, and speculative selection is committed only for scheduled spans. Tail runs once after
+primary programming within the resolved slot boundary, followed by independent channel fallback.
+Disabling tail does not disable independently authored fallback; new no-program slots use only
+channel fallback. Migration 0040 moves the former channel filler to a single tail assignment and
+clears fallback. A compatibility flag on that migrated assignment retains filler in empty slots
+under the original `filler` consumer key. Explicitly replacing the assignment adopts the new behavior.
+Migration 0041 repairs the duplicated legacy assignments created by the earlier development migration,
+leaving distinct fallback assignments, committed spans, and selection records unchanged.
+
+Filler selects the first fitting unused item in source order instead of the longest fit. Independent
+stage/slot queues persist versioned membership in selection-value JSON without a schema migration.
+Sequential order, seeded shuffle/random order, and weighted order produce cycles without replacement;
+weights affect order within each cycle. Deferred oversized items retain their positions, and a new
+eligible cycle is appended behind them only after whole-stage-eligible membership is exhausted.
+No item is queued twice. A smaller remainder cannot prematurely replenish a cycle, and collision
+preference never spends membership. Truncating policies search complete fits first, then consume a
+truncated queued item. Legacy policy values remain accepted as whole-item or truncation aliases.
+Semantic filler carries deferred members ahead of new ranked sets. Filler sources accept Content,
+Similar Items, and Theme Programs; editors and server validation exclude Sequence Programs.
+Catalog indexes append to owned arrays, and seeded ordering computes each candidate key once.
+Candidate membership indexes are shared within a generation without caching position-dependent fit
+or collision results. Speculative filler branches replace borrowed queue arrays before mutation.
+Accepted airings commit state only for emitted spans; tail continuation starts from explicit initial
+stage progress. Complete per-segment selection checkpoints and persisted formats remain unchanged.
+
+Each generation indexes other-channel occupancy by media item once and shares that lookup with
+speculative filler selection, avoiding full schedule scans for each candidate.
+Ordered selection stops when its winner is known; longest-fit selection uses one stable pass.
+Speculative branches share untouched cursor records and clone records before mutation. State deltas
+skip identical records, and Program cursor fingerprints are cached within each generation.
+`node --import tsx scripts/benchmark-filler.ts --database PATH --channel NUMBER --now ISO_INSTANT`
+compares three- and seven-day generation against an existing database opened read-only, with no
+migrations or commits. Reports contain the fixed clock, input fingerprint, timing, span counts, and
+a decision digest instead of media or authentication data. Compare identical input fingerprints;
+matching decision digests preserve spans, state, issues, and continuation decisions.
+
+Budgets support fixed duration, clock padding, fixed count, and an inclusive random count of 0–100.
+Tail additionally supports remaining-slot budgets. Each clock pad resolves independently at its actual
+start in the channel's time zone, including DST transitions; exact boundaries require no filler.
+Whole-item policies can stop early, while truncating policies reach time budgets when media is
+available. Random quantities use deterministic generation and break identities. Tail continuation
+retains remaining quantities or seconds and original stage capacity to avoid resampling,
+restarting a budget, or mistaking a continuation remainder for a full eligible cycle. Switching from
+tail to fallback checkpoints the fallback budget even when no filler item is currently available,
+so recovery resumes that stage independently of an exhausted tail budget.
+
+Migration `0040_filler_presets` moves existing Mid-Rolls into shared storage without changing IDs,
+adds pre/post assignments, converts tail policies to protected remaining-slot presets, and seeds
+channel tail defaults from existing channel filler. Channel fallback and committed timelines are
+preserved. Legacy Mid-Roll endpoints and policy-only tail inputs remain supported. Preset settings are
+loaded together for reachable scheduling inputs, with no per-item database queries.
+
+### Mid-roll filler
+
+Mid-roll is opt-in and independent of tail filler. Channel and template defaults inherit into
+programmed slots unless a slot disables or overrides them. Breaks use bounded, millisecond-normalized
+embedded chapters, offset across multipart files, with a timed fallback only when usable interior
+chapter points are absent. A probe-version bump refreshes chapters during ordinary rescans.
+If chapter output exceeds the 256 KiB ffprobe cap, one retry omits chapters while preserving playback
+facts and flags the chapter limit. Both attempts retain the output cap, process timeout, and cancellation;
+metadata that still exceeds the cap fails rather than retrying again.
+
+Per-break count budgets consume full Program items; duration budgets reuse tail filler policies.
+The default Two-minute breaks preset uses next-fit-only: it follows the Program cursor and ends
+each break when the next complete item exceeds the remaining budget, without truncation.
+Named presets own budgets, fallback intervals, and guided predicates independently of assignment
+Programs and appear as Mid-Rolls in the interface. A combined assignment interface on templates,
+channel schedules, and slot overrides uses a native radio group to select one stage editor and highlight its gaps on an illustrative 137-minute movie.
+One preset catalog request serves the visual and selected controls. The chapterless example evaluates
+the selected mid-roll interval and guided predicate with the shared 256-point bound; quantity budgets
+use 30-second example items and random-range midpoints, and clock budgets use a 20:03 start. Inactive
+gaps remain visible, while configured and inherited template assignments appear active.
+A checkbox enables the assignment and its settings, and unchecking it removes the assignment.
+Unchecking a slot override restores inheritance. Two protected built-ins can be duplicated into custom
+presets. Typed all/any groups and excluded leaves support numeric comparisons, point intervals, and exact chapter
+titles. Conditions contain no executable expressions and allow at most 100 nodes and eight levels.
+At most 256 candidate points are retained per item. A longer chapter list sets the chapter-limit
+flag and keeps only that many normalized chapters. Speculative expansion uses the 50,000-segment
+timeline ceiling.
+Unavailable or non-fitting filler shortens a break and resumes content. The diagnostic is recorded
+at that break, so later breaks in the same item stay distinct.
+
+Primary selection evaluates actual expanded airing duration against existing fit, drift, and
+truncation rules with isolated filler state. Rejected candidates consume neither cursor. Mid-roll has
+separate persistent or occurrence-scoped consumers and never recursively decorates filler. Accepted
+airings emit through their resolved finish across generation cutoffs; source offsets retain complete
+content coverage. Guide reads cap only spans intersecting the requested window, then retrieve companion airing spans
+in the same indexed query. Expression indexes support airing lookup and channel history retention;
+ended anchors do not displace in-window spans under the guide cap. Complete companion airings can
+add bounded edge spans outside the requested window.
+Group envelopes survive window retention and present one primary guide/XMLTV entry
+with individual spans available in details. Pending application and recovery wait for the full airing.
+
+The unshipped `0039_mid_roll` schema adds presets, nullable template assignments, inherited slot
+settings, and timeline grouping without changing released schedules or selection state. Assignments
+validate both preset and Program references. Names are case-insensitively unique; built-ins and
+referenced presets cannot be deleted. Preset behavior enters scheduling fingerprints and worker cache
+identities, while names and descriptions do not affect playback. Catalog and guide loading reuse
+batched reads; preset settings require one scoped read only for jobs with assignments, and grouped
+details read their airing's spans on demand. The authenticated CRUD API and usage disclosure expose
+custom preset management without adding queries to ordinary playback reads.
+
+### Materialization and determinism
 
 Saved channel schedules become durable rolling timelines in SQLite. The advertised XMLTV and playout
 window uses `MOIRAI_GUIDE_DAYS` (1–14 local days, default 3), validated at startup and
@@ -1125,8 +1230,10 @@ Generation records all slots consumed by the final advertised item, including th
 midnight. The commit retains these deferred warnings through its continuation cursor; guide queries
 still filter them to their requested range, and subsequent rolls preserve them without inventing
 warnings for intervals skipped by an unrelated incremental cursor.
-Disabled slot filler directs diagnostics to the template; configuring channel filler cannot override
-that opt-out. Boundary deep links focus their selected control after the editor finishes loading.
+Diagnostics resolve slot/template/channel tail separately from channel fallback, matching source
+issues to the applicable filler Program and assignment editor. Migrated empty-slot tail assignments
+with `legacyEmptySlots` are filler gaps rather than authored off-air. Disabled tail directs diagnostics
+to the template only when no independent channel fallback is configured. Boundary deep links focus their selected control after the editor finishes loading.
 Warning popovers remain open while pointer or focus transfers into their diagnostic action; Tab
 reaches the action from its badge, a second Tab continues to the next guide control, Shift+Tab returns
 to the badge, and Escape closes it and restores badge focus.
@@ -1214,7 +1321,7 @@ are calculated against retained segment indexes in the worker; catalog summaries
 and failed queries from loaded empty results. Successful guide responses are accepted before waiting
 for materialization status, so a status failure reports an error without invalidating the displayed
 guide's listings, previews, or summaries. Superseded responses are discarded; session
-clearing releases the snapshot.
+clearing releases the snapshot. Filler simulation remains local with a per-simulation preset lookup.
 
 Channel persistence invalidates read caches immediately and defers coalesced change notifications and
 playout follow-up beyond its response path. Unassigned channels do not request timeline generation.
@@ -1459,8 +1566,11 @@ is interrupted.
 
 When local viewing preferences are enabled, each approximate client and media encounter must remain
 active for two minutes before it is recorded. The initial item in a tune session contributes two
-points and later items contribute one. Only media and show references, encounter type, points, and
-time are persisted; network addresses and User-Agents are not. Effective scores use a 180-day
+points and later items contribute one. Pre-roll, mid-roll, and post-roll spans belong to the primary
+airing's encounter, so breaks and resumed content do not earn additional scores. The observer caches
+the primary item through the airing's finish; joining during inserted filler requires one anchor
+lookup, while joining during primary content requires none. Only media and show references, encounter
+type, points, and time are persisted; network addresses and User-Agents are not. Effective scores use a 180-day
 half-life, and negligible events are pruned after two years. Administrators can inspect the strongest
 decayed preferences from a Current scores dialog on Settings, with artwork, hierarchy labels, and
 the catalog plot hover, disable both collection and application, or permanently clear the history
@@ -1521,6 +1631,11 @@ Production builds run `security:audit` before documentation approval checks and 
 The npm audit covers runtime, development, and optional dependencies and fails on any reported
 vulnerability, including low severity, or an unsuccessful audit request. Docker uses this same gate;
 production builds require access to the npm advisory service.
+The local `build:docker` script defaults to these gates and a `moirai:local` image for `linux/amd64`.
+An explicit `--skip-build-checks` sets the build-stage-only `MOIRAI_SKIP_BUILD_CHECKS=true` argument,
+running the ordinary build without audit or approval checks. Dependency installation and compilation
+remain required; approval records and dependencies are unchanged. Release workflows retain the gated
+default.
 The Transformers.js 3.8.1 dependency uses a scoped Sharp 0.35.4 override to remove vulnerable
 image libraries while retaining ONNX runtime support for Intel macOS development.
 
@@ -1696,6 +1811,9 @@ Markdown in an accessible modal drawer. The public `/help/contextual-help.json` 
 matching full-page path and review state. Vite development serves the generated manifest and source
 screenshots directly from the docs workspace.
 
+Filler administration routes share the `filler.presets` help topic, including mid-roll chapter and
+break conditions.
+
 Resource editor titles expose help with explicit topic IDs, including nested editors whose route
 belongs to another resource. Help immediately receives focus and makes the underlying editor inert;
 Tab stays inside the drawer and Escape dismisses only help. Closing help restores its opener without
@@ -1704,7 +1822,7 @@ navigating, saving, or discarding the editor draft.
 Each authored page is hashed from normalized Markdown and every referenced local screenshot. A
 versioned registry records explicitly approved digests and timestamps; prose, link, or screenshot
 changes therefore return the page to `needs-review`. Drafts remain visible in normal builds with a
-warning, while `build:production` and Docker builds reject any outstanding review. The generated
+warning, while `build:production` and default Docker builds reject any outstanding review. The generated
 `/help/review.html` dashboard and `docs:user:review:list` command expose the review queue. Guide
 sidebar links show review badges from the same generated manifest, refreshed when the guide builds. The
 guide outlines added or changed Markdown blocks and changed images using verified approval diffs.

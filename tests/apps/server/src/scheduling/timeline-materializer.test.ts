@@ -1064,6 +1064,72 @@ it('uses a custom horizon plus one day and preserves commits when the horizon sh
 	expect(test.materialization()?.windowEnd).toBe('2026-08-30T00:00:00Z');
 });
 
+it('commits cross-window mid-roll airings completely and waits through a break before applying changes', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	const setup = fixture();
+	const fillerId = randomUUID();
+	setup.programs[0]!.config = { type: 'content', source: { type: 'item', itemId: setup.catalog.media[0]!.id }, strategy: { type: 'sequential' } };
+	setup.catalog.media[1]!.durationSeconds = 61;
+	setup.programs.push({ ...setup.programs[0]!, id: fillerId, name: 'Mid-roll',
+		config: { type: 'content', source: { type: 'item', itemId: setup.catalog.media[1]!.id }, strategy: { type: 'sequential' } } });
+	setup.template.defaultMidRoll = { programId: fillerId, presetId: randomUUID() };
+	setup.catalog.midRollPresets = { [setup.template.defaultMidRoll.presetId]: { fallbackIntervalSeconds: 1_800,
+		predicate: { type: 'always', negated: false }, budget: { type: 'count', count: 1 } } };
+	setup.template.slots[0]!.startEligibility = { type: 'allow-overrun' };
+	setup.template.boundaries[0]!.policy = 'finish-left';
+	setup.template.boundaries[0]!.maxDriftSeconds = null;
+	const materializer = new TimelineMaterializer(setup.repository, setup.events, 'UTC', undefined, undefined, 1);
+	await materializer.runNow(true);
+	const initial = setup.segments();
+	const lastAiring = initial.findLast(record => record.segment.airing)?.segment.airing;
+	expect(lastAiring).toBeTruthy();
+	expect(Date.parse(lastAiring!.start)).toBeLessThan(Date.parse(setup.materialization()!.windowEnd));
+	expect(Date.parse(lastAiring!.finish)).toBeGreaterThan(Date.parse(setup.materialization()!.windowEnd));
+	expect(initial.filter(record => record.segment.airing?.id === lastAiring!.id).at(-1)?.segment.finish).toBe(lastAiring!.finish);
+	const midRoll = initial.find(record => record.segment.role === 'filler')!.segment;
+	vi.setSystemTime(new Date(Date.parse(midRoll.start) + 1_000));
+	setup.template.defaultMidRoll = null;
+	setup.template.updatedAt = '2026-08-23T00:30:01Z';
+	await materializer.applyNow(setup.channelId);
+	const commit = vi.mocked(setup.repository.commitMaterializedTimeline).mock.calls.at(-1)![0];
+	expect(commit.replaceFrom).toBe(midRoll.airing!.finish);
+	expect(setup.segments().filter(record => record.segment.airing?.id === midRoll.airing!.id))
+		.toEqual(initial.filter(record => record.segment.airing?.id === midRoll.airing!.id));
+});
+
+it('stages preset behavior edits without changing assignments and applies them after the current airing', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	const setup = fixture();
+	const presetId = randomUUID();
+	const fillerId = randomUUID();
+	setup.programs[0]!.config = { type: 'content', source: { type: 'item', itemId: setup.catalog.media[0]!.id }, strategy: { type: 'sequential' } };
+	setup.catalog.media[1]!.durationSeconds = 30;
+	setup.programs.push({ ...setup.programs[0]!, id: fillerId, name: 'Mid-roll',
+		config: { type: 'content', source: { type: 'item', itemId: setup.catalog.media[1]!.id }, strategy: { type: 'sequential' } } });
+	setup.template.defaultMidRoll = { programId: fillerId, presetId };
+	setup.catalog.midRollPresets = { [presetId]: { fallbackIntervalSeconds: 1_800,
+		predicate: { type: 'always', negated: false }, budget: { type: 'count', count: 1 } } };
+	const materializer = new TimelineMaterializer(setup.repository, setup.events, 'UTC', undefined, undefined, 1);
+	await materializer.runNow(true);
+	const assignment = structuredClone(setup.template.defaultMidRoll);
+	const original = structuredClone(setup.segments());
+	const first = original.find(record => record.segment.airing)!.segment;
+	setup.catalog.midRollPresets[presetId]!.budget = { type: 'count', count: 2 };
+	vi.setSystemTime(new Date(Date.parse(first.start) + 1_000));
+	await materializer.runNow(true);
+	expect(setup.materialization()?.health).toBe('pending');
+	expect(setup.segments()).toEqual(original);
+	expect(setup.template.defaultMidRoll).toEqual(assignment);
+	await materializer.applyNow(setup.channelId);
+	const commit = vi.mocked(setup.repository.commitMaterializedTimeline).mock.calls.at(-1)![0];
+	expect(commit.replaceFrom).toBe(first.airing!.finish);
+	const next = commit.segments.find(record => record.segment.airing)!.segment.airing!;
+	expect(commit.segments.filter(record => record.segment.airing?.id === next.id && record.segment.role === 'filler')).toHaveLength(2);
+});
+
+
 it('skips deferred channels before catalog, occupancy, and state-bearing segment reads', async () => {
 	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));

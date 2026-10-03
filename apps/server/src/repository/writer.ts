@@ -102,7 +102,7 @@ export class DatabaseWriter {
 		this.releaseCapacity();
 		if (this.active || this.queue.length) {
 			await new Promise<void>(resolve => {
-				this.drain = resolve;
+				this.drain = resolve; 
 			});
 		}
 		await this.worker.terminate();
@@ -172,8 +172,9 @@ export function writerRepository(repository: Repository, writer: DatabaseWriter)
 							domain === 'semantic' || domain === 'preferences' || (domain === 'root'
 								&& ['recoverInterruptedScans', 'beginScan', 'reconcileScan', 'applyMissingItemPresence', 'failScan', 'cancelScan', 'pruneScanHistory', 'markTimelinePending', 'markTimelineFailed', 'commitMaterializedTimeline', 'recordViewingPreference', 'pruneViewingPreferences', 'setWatcherStatus', 'markChangeDetected'].includes(property)),
 						);
-						if (domain === 'semantic' || domain === 'preferences' || (domain === 'root'
-							&& !['recordViewingPreference', 'clearViewingPreferences', 'pruneViewingPreferences', 'pruneScanHistory', 'markTimelinePending', 'markTimelineFailed', 'beginScan', 'cancelScan', 'failScan', 'setWatcherStatus'].includes(property))) {
+						if (domain === 'semantic' || domain === 'preferences' || domain === 'fillerPresets'
+							|| domain === 'midRollPresets' || (domain === 'root'
+								&& !['recordViewingPreference', 'clearViewingPreferences', 'pruneViewingPreferences', 'pruneScanHistory', 'markTimelinePending', 'markTimelineFailed', 'beginScan', 'cancelScan', 'failScan', 'setWatcherStatus'].includes(property))) {
 							repository.invalidateSchedulingCatalog();
 						}
 						return result;

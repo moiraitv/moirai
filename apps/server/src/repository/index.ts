@@ -1,3 +1,5 @@
+import { FillerPresetRepository } from './filler-presets.js';
+import { MidRollPresetRepository } from './mid-roll-presets.js';
 import { readAiCatalog } from './ai-catalog.js';
 import { setMediaIssueIgnored } from './ignored-media-issues.js';
 import { listTailAssessments, setSilentEndingAcceptance } from './media-tail-assessments.js';
@@ -130,6 +132,9 @@ export class Repository extends LibraryRepository {
 		return audioMetadata(this.database, ids);
 	}
 
+	/** Reusable guided break behavior for channel, template, and slot assignments. */
+	readonly fillerPresets: FillerPresetRepository;
+	readonly midRollPresets: MidRollPresetRepository;
 	/** Reusable audio/video profiles and linked channel settings. */
 	readonly encodingProfiles: EncodingProfileRepository;
 	/** Reusable credit templates and subtitle playback metadata. */
@@ -151,6 +156,8 @@ export class Repository extends LibraryRepository {
 		super(database);
 		this.semantic = new SemanticRepository(database);
 		this.authentication = new AuthenticationRepository(database);
+		this.fillerPresets = new FillerPresetRepository(database);
+		this.midRollPresets = new MidRollPresetRepository(database);
 		this.encodingProfiles = new EncodingProfileRepository(database);
 		this.creditTemplates = new CreditTemplateRepository(database);
 		this.guideTemplates = new GuideTemplateRepository(database);
@@ -454,8 +461,9 @@ export class Repository extends LibraryRepository {
 	async getSchedulingCatalog(
 		programs?: SchedulingProgram[],
 		rootProgramIds?: Iterable<string>,
+		presetIds: string[] = [],
 	): Promise<SchedulingCatalog> {
-		return this.scheduling.getSchedulingCatalog(programs, rootProgramIds);
+		return this.scheduling.getSchedulingCatalog(programs, rootProgramIds, presetIds);
 	}
 
 	/** Load current artwork URLs for explicit media identifiers. */

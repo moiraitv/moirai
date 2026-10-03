@@ -178,7 +178,7 @@ it.each([
 it('discards an older fetch even when the mocked transport ignores its abort signal', async () => {
 	let resolve!: (response: Response) => void;
 	vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>(complete => {
-		resolve = complete;
+		resolve = complete; 
 	}));
 	endpoint.onmessage({ data: { id: 1, kind: 'load', url: '/api/v1/schedule-guide' } });
 	await load(2);

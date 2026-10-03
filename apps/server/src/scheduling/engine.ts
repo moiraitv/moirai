@@ -1,4 +1,11 @@
-import { createHash } from 'node:crypto';
+import { planFiller, type FillerProgress } from './filler-plan.js';
+import { legacyTailPresetId, type FillerSettings } from '@moirai/shared';
+import { TimelineMaterializationLimitError } from './limits.js';
+export { TimelineMaterializationLimitError } from './limits.js';
+import { planAiring, type AiringPlan } from './mid-roll.js';
+import { durationBetween, plusSeconds, segment } from './timeline-segment.js';
+import { commitAiring } from './airing-commit.js';
+import { resolveAiringFiller, resolveTailFiller } from './filler-assignment.js';
 import { Temporal } from '@js-temporal/polyfill';
 import type {
 	ChannelSchedule,
@@ -21,22 +28,11 @@ import { publicTimelineIssue, type RecordedTimelineIssue } from './timeline-issu
 import type { BoundaryRejection, TimelineContinuation } from './continuation.js';
 import {
 	addIssue,
-	changedStateRecords,
 	indexOccupiedMedia,
 	selectProgram,
 	type SelectionResult,
 	type SelectionContext,
 } from './selection.js';
-
-/** Report a preview whose media granularity exceeds the segment resource limit. */
-export class TimelineMaterializationLimitError extends Error {
-	readonly statusCode = 422;
-
-	constructor(readonly limit: number) {
-		super(`Timeline preview exceeds the ${limit.toLocaleString('en-US')} segment limit`);
-		this.name = 'TimelineMaterializationLimitError';
-	}
-}
 
 /** Authored rules, catalog, state, and time window needed to resolve a timeline. */
 export interface GenerateTimelineInput {
@@ -76,48 +72,9 @@ export interface TimelineGeneration extends TimelinePreview {
 	stateTransitions: TimelineStateTransition[];
 }
 
-/** Return exact millisecond-backed elapsed seconds between two absolute instants. */
-function durationBetween(start: Temporal.Instant, finish: Temporal.Instant): number {
-	return Math.max(0, (finish.epochMilliseconds - start.epochMilliseconds) / 1_000);
-}
-
-/** Advance an instant by an elapsed duration while preserving millisecond precision. */
-function plusSeconds(start: Temporal.Instant, seconds: number): Temporal.Instant {
-	return start.add({ milliseconds: Math.round(seconds * 1_000) });
-}
-
-/** Create a repeatable identifier for one materialized timeline segment. */
-function stableSegmentId(parts: string[]): string {
-	const hex = createHash('sha256').update(parts.join(':')).digest('hex').slice(0, 32);
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
-}
-
-/** Build one concrete timeline segment from selected media. */
-function segment(
-	input: Omit<TimelineSegment, 'id' | 'start' | 'finish'> & {
-		start: Temporal.Instant;
-		finish: Temporal.Instant;
-	},
-): TimelineSegment {
-	const start = input.start.toString();
-	const finish = input.finish.toString();
-	return {
-		...input,
-		id: stableSegmentId([
-			input.channelId,
-			input.slotId,
-			input.role,
-			input.mediaItemId ?? 'none',
-			start,
-		]),
-		start,
-		finish,
-	};
-}
-
 /** Build the stable key that scopes persistent selection state. */
 function consumerKey(
-	role: 'primary' | 'filler',
+	role: 'primary' | 'filler' | 'mid-roll' | 'pre-roll' | 'post-roll' | 'tail' | 'fallback',
 	input: GenerateTimelineInput,
 	template: ScheduleTemplate,
 	slot: ScheduleSlot,
@@ -126,27 +83,6 @@ function consumerKey(
 ): string {
 	const base = `${role}:${input.channelId}:${template.id}:${slot.id}:${programId}`;
 	return slot.stateScope === 'occurrence' ? `${base}:${date.toString()}` : base;
-}
-
-/** Resolve filler using slot, template, then channel inheritance. */
-function fillerFor(
-	slot: ScheduleSlot,
-	template: ScheduleTemplate,
-	schedule: ChannelSchedule,
-): FillerConfig | null {
-	if (slot.programId === null) {
-		return schedule.defaultFiller;
-	}
-
-	if (slot.filler.mode === 'disabled') {
-		return null;
-	}
-
-	if (slot.filler.mode === 'configured') {
-		return slot.filler.config;
-	}
-
-	return template.defaultFiller ?? schedule.defaultFiller;
 }
 
 /** Returns whether an overrun satisfies a finite boundary or an explicit unlimited finish. */
@@ -207,11 +143,13 @@ function generationProgram(program: SchedulingProgram, seed?: string): Schedulin
 export function generateTimelineDetailed(input: GenerateTimelineInput): TimelineGeneration {
 	// Initialize reusable indexes, selection state, issue tracking, and output limits.
 	const programs = new Map(input.programs.map((program) => [program.id, generationProgram(program, input.schedule.generationSeed)]));
-	let state = new Map(input.state.map((record) => [record.consumerKey, structuredClone(record)]));
+	const state = new Map(input.state.map((record) => [record.consumerKey, structuredClone(record)]));
 	const issues: RecordedTimelineIssue[] = [];
 	const issueKeys = new Set<string>();
 	const issueIndex = new Map<string, RecordedTimelineIssue>();
 	const candidateCache: SelectionContext['candidateCache'] = new Map();
+	const candidateIndexes: NonNullable<SelectionContext['candidateIndexes']> = new WeakMap();
+	const fillerSemanticSources = new Map<string, Set<string>>();
 	const stateFingerprints: NonNullable<SelectionContext['stateFingerprints']> = new Map();
 	const occupiedMediaIndex = indexOccupiedMedia(input.occupiedMedia ?? []);
 	const blockedPrograms = new Set<string>();
@@ -235,7 +173,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			activeContinuation.hadPrimary = true;
 		}
 		continuation = activeContinuation && Temporal.Instant.compare(entry.finish, activeContinuation.intervalEnd) < 0
-			? { ...activeContinuation, at: entry.finish, phase: entry.role === 'primary' ? 'primary' : 'filler' }
+			? { ...activeContinuation, at: entry.finish, phase: entry.role === 'primary' || entry.airing ? 'primary' : activeContinuation.phase === 'primary' ? 'filler' : activeContinuation.phase }
 			: null;
 		stateTransitions.push({ segmentId: entry.id, stateDelta, continuation });
 	};
@@ -258,12 +196,6 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			&& instantFor(Temporal.PlainDate.from(saved.date), resolved.endSeconds, input.timeZone).toString() === saved.intervalEnd)
 		? saved : null;
 
-	const appendSelectedSegment = (entry: TimelineSegment, selected: SelectionResult): void => {
-		const stateDelta = changedStateRecords(state, selected.state);
-		appendSegment({ ...entry, programAncestry: selected.programAncestry ?? [],
-			...(selected.sequenceEntryPath ? { sequenceEntryPath: selected.sequenceEntryPath } : {}) }, stateDelta);
-		state = selected.state;
-	};
 
 	// Follow actual handoffs until covered, then record slots consumed by the final committed item.
 	// Early drift and media-duration limits bound lookahead even when several handoffs share a cursor.
@@ -298,6 +230,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				stateFingerprints,
 				catalog: input.catalog,
 				candidateCache,
+				candidateIndexes,
+				fillerSemanticSources,
 				blockedPrograms,
 				fitRejectionCount: 0,
 				issues,
@@ -315,11 +249,13 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			};
 			let primaryCount = resume?.hadPrimary ? 1 : 0;
 			let boundaryRejection: BoundaryRejection | null = resume?.boundaryRejection ?? null;
-			const resumingFiller = resume?.phase === 'filler';
+			const resumingFiller = Boolean(resume && resume.phase !== 'primary');
+			const resumedStage = resume?.phase;
+			const resumedProgress = resume?.fillerProgress;
 			activeContinuation = {
 				at: cursor.toString(), date: date.toString(), templateId: template.id, slotId: slot.id,
 				scheduleLayerId: layerId, intervalStart: nominalStart.toString(), intervalEnd: nominalEnd.toString(),
-				boundaryOrigin, phase: resumingFiller ? 'filler' : 'primary', hadPrimary: primaryCount > 0, boundaryRejection,
+				boundaryOrigin, phase: resumedStage ?? 'primary', ...(resumedProgress ? { fillerProgress: resumedProgress } : {}), hadPrimary: primaryCount > 0, boundaryRejection,
 			};
 			resume = null;
 			let resolvedEnd = nominalEnd;
@@ -362,6 +298,35 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				const layerTransition = boundaryOrigin !== 'template';
 				const layerFinishesOutgoing = layerTransition && boundary.policy === 'finish-left';
 				const fitSeconds = primaryFitSeconds(slot, boundary, layerTransition, durationBetween(cursor, nominalEnd));
+				const { midRoll, pre, post, midRollConsumerKey } = resolveAiringFiller(
+					slot,
+					template,
+					input.schedule,
+					input.catalog,
+					(kind, programId) => consumerKey(kind, input, template, slot, programId, date),
+				);
+				const plans = new Map<string, AiringPlan>();
+				const planned = (media: SelectionResult['media']): AiringPlan | null => {
+					if (!midRoll && !pre && !post) {
+						return null;
+					}
+					let plan = plans.get(media.id);
+					if (!plan) {
+						plan = planAiring(
+							media,
+							slot.programId!,
+							midRoll,
+							state,
+							context,
+							midRollConsumerKey,
+							input.timeZone,
+							{ ...(pre ? { pre } : {}), ...(post ? { post } : {}), ...(input.schedule.generationSeed ? { seed: input.schedule.generationSeed } : {}) },
+						);
+						plans.set(media.id, plan);
+					}
+					return plan;
+				};
+				context.mediaDuration = midRoll || pre || post ? media => planned(media)!.durationSeconds : undefined;
 				const previousFitRejections = context.fitRejectionCount;
 				let selected = selectProgram(
 					slot.programId,
@@ -402,32 +367,19 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					break;
 				}
 
-				const naturalFinish = plusSeconds(cursor, selected.media.durationSeconds!);
+				const plan = planned(selected.media);
+				context.mediaDuration = undefined;
+				const naturalFinish = plusSeconds(cursor, plan?.durationSeconds ?? selected.media.durationSeconds!);
 				const crossesBoundary = Temporal.Instant.compare(naturalFinish, nominalEnd) > 0;
 				if (!crossesBoundary) {
-					appendSelectedSegment(
-						segment({
-							role: 'primary',
-							channelId: input.channelId,
-							scheduleLayerId: layerId,
-							templateId: template.id,
-							slotId: slot.id,
-							programId: slot.programId,
-							mediaItemId: selected.media.id,
-							title: selected.media.title,
-							playbackPath: selected.media.playbackPath,
-							playbackParts: selected.media.playbackParts ?? [{
-								playbackPath: selected.media.playbackPath,
-								durationSeconds: selected.media.durationSeconds!,
-							}],
-							start: cursor,
-							finish: naturalFinish,
-							sourceStartSeconds: 0,
-							sourceFinishSeconds: selected.media.durationSeconds,
-							truncated: false,
-						}),
-						selected,
-					);
+					if (plan) {
+						for (const issue of plan.issues) {
+							for (const occurrence of issue.occurrences ?? []) {
+								addIssue(context, { ...issue, occurrence });
+							}
+						}
+					}
+					commitAiring({ channelId: input.channelId, state, appendSegment }, selected, plan, cursor, naturalFinish, template, slot, layerId);
 					cursor = naturalFinish;
 					primaryCount += 1;
 					continue;
@@ -446,6 +398,13 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					? boundary.fallback === 'truncate-left'
 					: slot.startEligibility.type === 'allow-truncate'
 						|| (eligibleForOverrun && boundary.fallback === 'truncate-left');
+				const firstPrimaryIndex = plan?.spans.findIndex(span => span.role === 'primary') ?? 0;
+				const preDuration = plan?.spans.slice(0, firstPrimaryIndex).reduce((seconds, span) => seconds + span.sourceFinishSeconds - span.sourceStartSeconds, 0) ?? 0;
+				if (!finishLeft && truncate && preDuration >= durationBetween(cursor, nominalEnd)) {
+					boundaryRejection = { code: 'boundary-start-rejected', message: 'Pre-roll would consume the entire remaining slot without primary content.',
+						programId: slot.programId, mediaItemId: selected.media.id, scheduleLayerId: boundaryLayerId };
+					break;
+				}
 				if (!finishLeft && !truncate) {
 					if (canStartIncomingEarly(boundary, cursor, nominalEnd)) {
 						resolvedEnd = cursor;
@@ -465,30 +424,14 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				}
 
 				const finish = finishLeft ? naturalFinish : nominalEnd;
-				const playedSeconds = durationBetween(cursor, finish);
-				appendSelectedSegment(
-					segment({
-						role: 'primary',
-						channelId: input.channelId,
-						scheduleLayerId: layerId,
-						templateId: template.id,
-						slotId: slot.id,
-						programId: slot.programId,
-						mediaItemId: selected.media.id,
-						title: selected.media.title,
-						playbackPath: selected.media.playbackPath,
-						playbackParts: selected.media.playbackParts ?? [{
-							playbackPath: selected.media.playbackPath,
-							durationSeconds: selected.media.durationSeconds!,
-						}],
-						start: cursor,
-						finish,
-						sourceStartSeconds: 0,
-						sourceFinishSeconds: playedSeconds,
-						truncated: !finishLeft,
-					}),
-					selected,
-				);
+				if (plan) {
+					for (const issue of plan.issues) {
+						for (const occurrence of issue.occurrences ?? []) {
+							addIssue(context, { ...issue, occurrence });
+						}
+					}
+				}
+				commitAiring({ channelId: input.channelId, state, appendSegment }, selected, plan, cursor, finish, template, slot, layerId);
 				cursor = finish;
 				primaryCount += 1;
 				resolvedEnd = finish;
@@ -508,70 +451,61 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				resolvedEnd = cursor;
 			}
 
-			// Fill unused time with interruptible filler according to the inherited policy.
-			activeContinuation.boundaryRejection = boundaryRejection;
-			if (Temporal.Instant.compare(cursor, resolvedEnd) < 0) {
-				const filler = fillerFor(slot, template, input.schedule);
-				if (filler) {
-					while (Temporal.Instant.compare(cursor, resolvedEnd) < 0 && Temporal.Instant.compare(cursor, windowEnd) < 0) {
-						context.selectionStart = cursor.toString();
-						const available = durationBetween(cursor, resolvedEnd);
-						const bestFit
-							= filler.policy === 'best-fit-only' || filler.policy === 'best-fit-or-truncate';
-						let selected = selectProgram(
-							filler.programId,
-							consumerKey('filler', input, template, slot, filler.programId, date),
-							state,
-							context,
-							bestFit ? available : null,
-						);
-						if (!selected && filler.policy === 'best-fit-or-truncate') {
-							selected = selectProgram(
-								filler.programId,
-								consumerKey('filler', input, template, slot, filler.programId, date),
-								state,
-								context,
-							);
-						}
-						if (!selected) {
-							break;
-						}
-
-						const naturalFinish = plusSeconds(cursor, selected.media.durationSeconds!);
-						const fits = Temporal.Instant.compare(naturalFinish, resolvedEnd) <= 0;
-						if (!fits && (filler.policy === 'next-fit-only' || filler.policy === 'best-fit-only')) {
-							break;
-						}
-
-						const finish = fits ? naturalFinish : resolvedEnd;
-						appendSelectedSegment(
-							segment({
-								role: 'filler',
-								channelId: input.channelId,
-								scheduleLayerId: layerId,
-								templateId: template.id,
-								slotId: slot.id,
-								programId: filler.programId,
-								mediaItemId: selected.media.id,
-								title: selected.media.title,
-								playbackPath: selected.media.playbackPath,
-								playbackParts: selected.media.playbackParts ?? [{
-									playbackPath: selected.media.playbackPath,
-									durationSeconds: selected.media.durationSeconds!,
-								}],
-								start: cursor,
-								finish,
-								sourceStartSeconds: 0,
-								sourceFinishSeconds: durationBetween(cursor, finish),
-								truncated: !fits,
-							}),
-							selected,
-						);
-						cursor = finish;
+			// Run tail once, then independently cover remaining time with channel fallback.
+			context.mediaDuration = undefined;
+			activeContinuation!.boundaryRejection = boundaryRejection;
+			const tail = resolveTailFiller(slot, template, input.schedule);
+			const stages: Array<{ phase: 'tail' | 'fallback'; config: FillerConfig; settings: FillerSettings }> = [];
+			if (tail && resumedStage !== 'fallback') {
+				const settings = input.catalog.fillerPresets?.[tail.presetId ?? legacyTailPresetId(tail.policy)]
+					?? (!tail.presetId ? { budget: { type: 'remaining' as const, policy: tail.policy } } : null);
+				if (!settings) {
+					throw new Error('Selected tail filler preset is unavailable');
+				}
+				stages.push({ phase: 'tail', config: tail, settings });
+			}
+			if (input.schedule.defaultFiller) {
+				stages.push({ phase: 'fallback', config: input.schedule.defaultFiller,
+					settings: { budget: { type: 'remaining', policy: input.schedule.defaultFiller.policy } } });
+			}
+			for (const stage of stages) {
+				if (Temporal.Instant.compare(cursor, resolvedEnd) >= 0 || Temporal.Instant.compare(cursor, windowEnd) >= 0) {
+					break;
+				}
+				context.selectionStart = cursor.toString();
+				const available = durationBetween(cursor, resolvedEnd);
+				const result = planFiller(
+					stage.config.programId,
+					stage.settings.budget,
+					state,
+					context,
+					consumerKey(stage.phase === 'tail' ? 'filler' : 'fallback', input, template, slot, stage.config.programId, date),
+					input.timeZone,
+					`${input.schedule.generationSeed ?? ''}:${input.channelId}:${slot.id}:${date}:${stage.phase}`,
+					available,
+					resumedStage === stage.phase ? resumedProgress : undefined,
+				);
+				activeContinuation!.phase = stage.phase;
+				const progress: FillerProgress = { ...result.initialProgress };
+				activeContinuation!.fillerProgress = { ...progress };
+				for (const span of result.spans) {
+					if (Temporal.Instant.compare(cursor, windowEnd) >= 0) {
+						break;
 					}
+					const finish = plusSeconds(cursor, span.sourceFinishSeconds);
+					progress.remaining -= progress.unit === 'count' ? 1 : span.sourceFinishSeconds;
+					activeContinuation!.fillerProgress = { ...progress };
+					appendSegment(segment({ role: 'filler', channelId: input.channelId, scheduleLayerId: layerId, templateId: template.id,
+						slotId: slot.id, programId: span.programId, mediaItemId: span.media.id, title: span.media.title,
+						playbackPath: span.media.playbackPath, playbackParts: span.media.playbackParts ?? [{ playbackPath: span.media.playbackPath, durationSeconds: span.media.durationSeconds! }],
+						start: cursor, finish, sourceStartSeconds: 0, sourceFinishSeconds: span.sourceFinishSeconds,
+						truncated: span.truncated, programAncestry: span.programAncestry, sequenceEntryPath: span.sequenceEntryPath }), span.stateDelta);
+					for (const record of span.stateDelta) {
+						state.set(record.consumerKey, record);
+					}
+					cursor = finish;
 				}
 			}
-
 			// Materialize any remaining gap explicitly so downstream output stays continuous.
 			const gapEnd = Temporal.Instant.compare(resolvedEnd, windowEnd) < 0 ? resolvedEnd : windowEnd;
 			if (Temporal.Instant.compare(cursor, gapEnd) < 0) {

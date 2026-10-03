@@ -1,0 +1,137 @@
+.filler-assignments {
+	padding: 20px 22px;
+	min-width: 0;
+}
+
+.filler-example-caption {
+	font-weight: 600;
+	margin-block: 1rem 0.75rem;
+}
+
+.filler-example {
+	overflow-x: auto;
+	padding: 5px 4px;
+}
+
+.filler-example-track {
+	display: flex;
+	gap: 3px;
+	min-width: 480px;
+	height: 64px;
+}
+
+.filler-example-content {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-basis: 0;
+	min-width: 4px;
+	background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+	border-radius: 5px;
+	overflow: hidden;
+	color: var(--muted);
+	font-size: 0.75rem;
+
+	span {
+		padding-inline: 8px;
+	}
+}
+
+.filler-example-gap {
+	flex-basis: 24px;
+	min-width: 24px;
+	padding: 0;
+	border: 1px dashed var(--line);
+	border-radius: 5px;
+	background: repeating-linear-gradient(
+		135deg,
+		transparent,
+		transparent 5px,
+		color-mix(in srgb, var(--muted) 10%, transparent) 5px,
+		color-mix(in srgb, var(--muted) 10%, transparent) 10px
+	);
+	color: var(--muted);
+	font-size: 0.7rem;
+
+	&.is-active {
+		border-style: solid;
+		background: color-mix(in srgb, var(--accent) 30%, var(--panel));
+		color: #eef3f8;
+	}
+
+	&.is-selected {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+}
+
+.filler-example-endpoints {
+	display: flex;
+	justify-content: space-between;
+	min-width: 480px;
+	margin-top: 8px;
+	font-size: 0.75rem;
+	color: var(--muted);
+}
+
+.filler-stage-selector {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 1rem;
+
+	label {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		gap: 8px;
+		padding: 10px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		cursor: pointer;
+		font-size: 0.85rem;
+		color: var(--muted);
+	}
+
+	label.is-selected {
+		border-color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+	}
+
+	label.is-active {
+		color: #eef3f8;
+	}
+
+	input {
+		width: 16px;
+		height: 16px;
+		min-height: 0;
+		flex: 0 0 auto;
+		padding: 0;
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	small {
+		display: block;
+		margin-top: 3px;
+		color: var(--muted);
+		font-size: 0.7rem;
+	}
+}
+
+.filler-example-detail {
+	font-size: 0.85rem;
+	margin-block: 1rem 0.5rem;
+}
+
+.filler-selected-assignment .template-default-filler-panel {
+	border: 0;
+	box-shadow: none;
+	padding: 0;
+	background: transparent;
+}
+
+.mid-roll-slot-mode > .template-default-filler-panel {
+	margin-top: 1rem;
+}

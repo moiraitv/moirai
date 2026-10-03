@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import TailFillerEditor from '../components/schedules/TailFillerEditor.vue';
+import FillerAssignmentsEditor from '../components/schedules/FillerAssignmentsEditor.vue';
+import FillerAssignmentEditor from '../components/schedules/FillerAssignmentEditor.vue';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import ResolvedGuideTrack from '../components/templates/ResolvedGuideTrack.vue';
@@ -1167,11 +1170,13 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												"
 											></span>
 										</div>
-										<ChannelFillerEditor
-											v-model="draft.defaultFiller"
-											:programs="programs"
-											@edit-program="quickEditingProgramId = $event"
-										/>
+										<FillerAssignmentsEditor heading="Channel default filler" :assignments="{ 'pre-roll': draft.defaultPreRoll, 'mid-roll': draft.defaultMidRoll, 'post-roll': draft.defaultPostRoll, tail: draft.defaultTailFiller }">
+											<template #pre-roll><FillerAssignmentEditor v-model="draft.defaultPreRoll" kind="pre-roll" :programs="programs" heading="Channel default pre-roll" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
+											<template #mid-roll><FillerAssignmentEditor v-model="draft.defaultMidRoll" :programs="programs" heading="Channel default mid-roll" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
+											<template #post-roll><FillerAssignmentEditor v-model="draft.defaultPostRoll" kind="post-roll" :programs="programs" heading="Channel default post-roll" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
+											<template #tail><TailFillerEditor v-model="draft.defaultTailFiller" :programs="programs" heading="Channel default tail filler" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
+										</FillerAssignmentsEditor>
+										<ChannelFillerEditor v-model="draft.defaultFiller" :programs="programs" @edit-program="quickEditingProgramId = $event" />
 									</section>
 								</div>
 

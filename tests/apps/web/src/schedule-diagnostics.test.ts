@@ -59,6 +59,75 @@ const preview = {
 } as TimelinePreview;
 
 describe('schedule dead-air diagnostics', () => {
+	it.each([true, false])('recognizes empty-slot legacy channel tail only when its compatibility flag is %s', legacyEmptySlots => {
+		const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [preview.segments[1]!], issues: [] }, [template], {
+			...schedule, defaultTailFiller: { programId: 'tail', policy: 'best-fit-only', legacyEmptySlots },
+		});
+		expect(diagnostic).toMatchObject({ category: legacyEmptySlots ? 'filler' : 'authored', fillerOrigin: legacyEmptySlots ? 'channel' : null });
+		if (legacyEmptySlots) {
+			expect(deadAirAction(diagnostic!)).toMatchObject({ type: 'channel-filler' });
+		}
+	});
+
+	it('recognizes inherited channel tail without a fallback assignment', () => {
+		const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [preview.segments[0]!], issues: [] }, [template], {
+			...schedule, defaultTailFiller: { programId: 'tail', policy: 'best-fit-only' },
+		});
+		expect(diagnostic).toMatchObject({ category: 'filler', fillerOrigin: 'channel' });
+		expect(deadAirAction(diagnostic!)).toMatchObject({ type: 'channel-filler' });
+	});
+
+	it('attributes a source failure in a migrated empty slot to channel filler', () => {
+		const gap = preview.segments[1]!;
+		const issue = { ...preview.issues[0]!, code: 'source-unavailable', programId: 'legacy-tail',
+			slotId: gap.slotId, scheduleLayerId: null,
+			occurrences: [{ start: gap.start, finish: gap.finish, boundaryOrigin: 'template' as const }] };
+		const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [gap], issues: [issue] }, [template], {
+			...schedule, defaultTailFiller: { programId: 'legacy-tail', policy: 'best-fit-only', legacyEmptySlots: true },
+		});
+		expect(diagnostic).toMatchObject({ category: 'filler', fillerOrigin: 'channel', explanation: issue.message });
+		expect(deadAirAction(diagnostic!)).toMatchObject({ type: 'channel-filler' });
+	});
+
+	it('keeps channel fallback applicable when slot tail is disabled', () => {
+		const disabled = { ...template, slots: template.slots.map(slot => ({ ...slot, filler: { mode: 'disabled' as const } })) };
+		const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [preview.segments[0]!], issues: [] }, [disabled], {
+			...schedule, defaultTailFiller: { programId: 'tail', policy: 'best-fit-only' },
+			defaultFiller: { programId: 'fallback', policy: 'best-fit-only' },
+		});
+		expect(diagnostic).toMatchObject({ category: 'filler', fillerOrigin: 'channel' });
+		expect(deadAirAction(diagnostic!)).toMatchObject({ type: 'channel-filler' });
+	});
+
+	it.each(['source-unavailable', 'media-duration-missing'])('identifies %s issues on channel tail, fallback, and primary sources separately', code => {
+		for (const programId of ['tail', 'fallback', 'program']) {
+			const gap = preview.segments[0]!;
+			const issue = { ...preview.issues[0]!, code, programId, message: `Unavailable ${programId}`,
+				occurrences: [{ start: gap.start, finish: gap.finish, boundaryOrigin: 'template' as const }] };
+			const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [gap], issues: [issue] }, [template], {
+				...schedule, defaultTailFiller: { programId: 'tail', policy: 'best-fit-only' },
+				defaultFiller: { programId: 'fallback', policy: 'best-fit-only' },
+			});
+			expect(diagnostic).toMatchObject({ category: programId === 'program' ? 'source' : 'filler',
+				fillerOrigin: programId === 'program' ? null : 'channel', explanation: issue.message });
+			expect(deadAirAction(diagnostic!)).toMatchObject({ type: programId === 'program' ? 'program' : 'channel-filler' });
+		}
+	});
+
+	it.each(['slot', 'template'] as const)('matches an issue on %s tail before the separate channel fallback', origin => {
+		const tail = { programId: 'local-tail', policy: 'best-fit-only' as const };
+		const configured = { ...template, defaultFiller: origin === 'template' ? tail : null,
+			slots: template.slots.map(slot => origin === 'slot' ? { ...slot, filler: { mode: 'configured' as const, config: tail } } : slot) };
+		const gap = preview.segments[0]!;
+		const issue = { ...preview.issues[0]!, code: 'source-unavailable', programId: tail.programId,
+			occurrences: [{ start: gap.start, finish: gap.finish, boundaryOrigin: 'template' as const }] };
+		const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [gap], issues: [issue] }, [configured], {
+			...schedule, defaultFiller: { programId: 'fallback', policy: 'best-fit-only' },
+		});
+		expect(diagnostic).toMatchObject({ category: 'filler', fillerOrigin: origin });
+		expect(deadAirAction(diagnostic!)).toMatchObject({ type: 'template', templateId: template.id });
+	});
+
 	it.each(['template', 'layer-entry', 'layer-exit'] as const)('prioritizes the %s gap rejection over an earlier skipped-media warning', (origin) => {
 		const gap = { ...preview.segments[0]!, start: '2026-09-02T19:00:00Z' };
 		const boundaryIssue = {
@@ -105,10 +174,10 @@ describe('schedule dead-air diagnostics', () => {
 		expect(deadAirAction(diagnostic!)).toMatchObject({ type: 'program', programId: sourceIssue.programId });
 	});
 
-	it('routes unused time in a programmed slot with filler disabled to its template, even when channel filler exists', () => {
+	it('routes a disabled tail to its template when only inherited channel tail is configured', () => {
 		const disabled = { ...template, slots: template.slots.map((slot) => ({ ...slot, filler: { mode: 'disabled' as const } })) };
 		const [diagnostic] = deadAirDiagnostics({ ...preview, segments: [preview.segments[0]!], issues: [] }, [disabled], {
-			...schedule, defaultFiller: { programId: 'channel-filler', policy: 'best-fit-only' },
+			...schedule, defaultTailFiller: { programId: 'channel-filler', policy: 'best-fit-only' },
 		});
 		expect(diagnostic).toMatchObject({ category: 'unfilled', slotFillerDisabled: true });
 		expect(deadAirAction(diagnostic!)).toEqual({ type: 'template', templateId: template.id, label: 'Review filler' });

@@ -358,20 +358,6 @@ it('validates sequence ordering and seed input without changing legacy defaults'
 	expect(parsed).toMatchObject({ ordering: { type: 'shuffled-blocks', seed: 'demo' } });
 });
 
-it.each(['best-fit-only', 'best-fit-or-truncate'] as const)('preserves shuffled blocks across $0 filler windows', (policy) => {
-	const initial = fixture({ type: 'shuffled-blocks', seed: '0' }, false, [2, 2]);
-	initial.catalog.media[0]!.durationSeconds = 60;
-	initial.catalog.media[1]!.durationSeconds = 30;
-	initial.catalog.media.push(media(99, 1000));
-	initial.programs.push(contentProgram(99, 99));
-	initial.template = template([{ programId: uuid(99), startSeconds: 0 }, { programId: null, startSeconds: 90 }], { programId: uuid(2000), policy });
-	const result = generateTimelineDetailed({ ...initial, days: 3 });
-	const filler = result.segments.filter((segment) => segment.role === 'filler');
-	expect(filler.map((segment) => segment.title)).toEqual(['Item 1', 'Item 1', 'Item 2', 'Item 2']);
-	expect(filler[1]!.truncated).toBe(policy === 'best-fit-or-truncate');
-	expect(filler[1]!.start).toBe(policy === 'best-fit-only' ? '2026-01-06T00:00:00Z' : '2026-01-05T00:01:00Z');
-});
-
 it('preserves a stored legacy preference-bearing cursor after saving explicit Ordered', async () => {
 	const directory = await mkdtemp(path.join(tmpdir(), 'moirai-sequence-legacy-'));
 	const database = createDatabase(path.join(directory, 'test.sqlite'), path.resolve('drizzle'));

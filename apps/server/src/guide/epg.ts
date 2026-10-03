@@ -139,7 +139,7 @@ async function renderChannelListings(
 	const byId = new Map(segments.map((segment) => [segment.id, segment]));
 	const contextChannel = channelContext(channel, publicUrl, id);
 	const listings: Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }> = [];
-	for (const entry of channelGuide?.entries ?? segments.map(itemGuideEntry)) {
+	for (const entry of channelGuide?.entries ?? segments.filter(segment => !segment.airing || segment.id === segment.airing.primarySegmentId).map(itemGuideEntry)) {
 		const segment = entry.segmentId ? byId.get(entry.segmentId) : undefined;
 		const timedSegment = segment
 			? { ...segment, start: entry.start, finish: entry.finish }

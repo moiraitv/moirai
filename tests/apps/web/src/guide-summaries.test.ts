@@ -33,12 +33,17 @@ it('keeps pending summaries distinct from empty and ignores superseded responses
 		expect(state.summaries.value).toEqual(result);
 		expect(state.loading.value).toBe(false);
 		expect(queryGuideSummaries).toHaveBeenLastCalledWith(guide, range.value);
+		range.value = { ...range.value, start: 2_000 };
+		await nextTick();
+		expect(state.loading.value).toBe(true);
+		expect(state.summaries.value).toEqual(result);
 		snapshot.value = { ...guide };
 		await nextTick();
 		scope.stop();
-		completions[2]!(new Map());
+		completions[3]!(new Map());
 		await nextTick();
 		expect(state.loading.value).toBe(true);
+		expect(state.summaries.value).toEqual(result);
 	}
 	finally {
 		scope.stop();

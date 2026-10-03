@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { describe, expect, it, vi } from 'vitest';
 import type { SchedulableMedia, SelectionStateRecord } from '@moirai/shared';
 import { selectOrderedCandidate } from '@server/scheduling/candidate-selection.js';
 import { changedStateRecords, cloneState, indexOccupiedMedia, selectProgram, type SelectionContext } from '@server/scheduling/selection.js';
+
+vi.mock('node:crypto', async importOriginal => {
+	const original = await importOriginal<typeof import('node:crypto')>();
+	return { ...original, createHash: vi.fn(original.createHash) };
+});
 
 function media(id: string, durationSeconds: number): SchedulableMedia {
 	return { id, durationSeconds, libraryId: 'library', groupId: null, kind: 'movie', title: id, sortTitle: id,
@@ -47,6 +53,19 @@ describe('candidate selection equivalence', () => {
 		}
 	});
 
+	it('expands only the winner when later movies have future occupancy', () => {
+		const items = Array.from({ length: 1_000 }, (_, i) => media(`movie-${i}`, 120));
+		const c = context(items);
+		c.occupiedMedia = items.map(item => ({ mediaItemId: item.id, start: '2026-01-02T00:00:00Z', finish: '2026-01-03T00:00:00Z' }));
+		c.occupiedMediaIndex = indexOccupiedMedia(c.occupiedMedia);
+		let expanded = 0;
+		c.mediaDuration = () => {
+			expanded += 1;
+			return 180;
+		};
+		expect(selectOrderedCandidate(items, c, null, 'first-fit-arbitrary', true)?.id).toBe('movie-0');
+		expect(expanded).toBe(1);
+	});
 });
 
 describe('speculative state ownership', () => {
@@ -112,4 +131,76 @@ describe('speculative state ownership', () => {
 		expect(record.value).toEqual({ type: 'sequential', nextIndex: 0, lastItemId: null });
 		expect(copy.get('key')).not.toBe(record);
 	});
+});
+
+it('reuses membership indexes across filler branches without caching clock-dependent choices', async () => {
+	const { candidateIndex } = await import('@server/scheduling/candidate-index.js');
+	const items = Array.from({ length: 1000 }, (_, index) => media(`item-${index}`, 30));
+	const c = context(items);
+	const first = candidateIndex(items, c);
+	const branch = { ...c, selectionStart: '2026-01-02T00:00:00Z' };
+	expect(candidateIndex(items, branch)).toBe(first);
+	expect(first.byId.size).toBe(items.length);
+	expect(first.byId.get('item-999')).toBe(items[999]);
+	expect(candidateIndex([...items], c)).not.toBe(first);
+	c.occupiedMedia = [{ mediaItemId: 'item-0', start: c.selectionStart, finish: '2026-01-01T01:00:00Z' }];
+	branch.occupiedMedia = c.occupiedMedia;
+	expect(selectOrderedCandidate(items, c, 30, 'first-fit-arbitrary')?.id).toBe('item-1');
+	expect(selectOrderedCandidate(items, branch, 30, 'first-fit-arbitrary')?.id).toBe('item-0');
+});
+
+it('builds library and group indexes in catalog order without modifying input media', async () => {
+	const { indexSchedulingCatalog } = await import('@server/scheduling/catalog.js');
+	const items = Array.from({ length: 5000 }, (_, index) => ({ ...media(`item-${index}`, 30), groupId: index % 2 ? 'odd' : 'even' }));
+	const c = context(items);
+	const before = structuredClone(items);
+	const indexed = indexSchedulingCatalog(c.catalog);
+	expect(indexed.mediaByLibrary?.get('library')).toEqual(items);
+	expect(indexed.mediaByGroup?.get('odd')).toEqual(items.filter(item => item.groupId === 'odd'));
+	expect(indexed.mediaByGroup?.get('even')).toEqual(items.filter(item => item.groupId === 'even'));
+	expect(items).toEqual(before);
+	expect(c.catalog.mediaByLibrary).toBeUndefined();
+});
+
+it.each(['shuffle', 'random', 'weighted-random'] as const)('hashes each %s ordering key once for primary and filler selection', strategy => {
+	const items = Array.from({ length: 1000 }, (_, index) => media(`item-${index}`, 30));
+	for (const filler of [false, true]) {
+		const c = context(items);
+		c.programs.set('program', { id: 'program', name: 'Program', createdAt: c.now, updatedAt: c.now,
+			config: { type: 'content', source: { type: 'library-query', libraryId: 'library', kinds: [], genres: [] }, strategy: { type: strategy, seed: 'fixture' } } });
+		if (filler) {
+			c.fillerSelection = { fullBudgetSeconds: 120, allowTruncation: false };
+		}
+		vi.mocked(createHash).mockClear();
+		expect(selectProgram('program', 'consumer', new Map(), c)?.media).toBeDefined();
+		expect(vi.mocked(createHash).mock.calls.length).toBeLessThanOrEqual(items.length + 2);
+	}
+});
+
+it('does not repeatedly iterate growing library or group arrays during indexing', async () => {
+	const { indexSchedulingCatalog } = await import('@server/scheduling/catalog.js');
+	const items = Array.from({ length: 1000 }, (_, index) => ({ ...media(`item-${index}`, 30), groupId: 'group' }));
+	const c = context(items);
+	const original = Array.prototype[Symbol.iterator];
+	let visits = 0;
+	Array.prototype[Symbol.iterator] = function (this: unknown[]) {
+		const iterator = original.call(this);
+		const next = iterator.next.bind(iterator);
+		const tracked = this === items || this[0] === items[0];
+		iterator.next = () => {
+			const result = next();
+			if (tracked && !result.done) {
+				visits += 1;
+			}
+			return result;
+		};
+		return iterator;
+	};
+	try {
+		indexSchedulingCatalog(c.catalog);
+	}
+	finally {
+		Array.prototype[Symbol.iterator] = original;
+	}
+	expect(visits).toBeLessThanOrEqual(items.length * 3);
 });

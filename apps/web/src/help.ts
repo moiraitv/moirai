@@ -13,6 +13,7 @@ export const helpTopicIds = [
 	'playback.guide-templates',
 	'playback.encoding-profiles',
 	'scheduling.templates',
+	'filler.presets',
 	'scheduling.channel-schedules',
 	'playback.settings',
 	'operations.account',
@@ -66,6 +67,12 @@ export function helpTopicForPath(pathname: string): string {
 	}
 	if (pathname.startsWith('/schedules/programs')) {
 		return 'scheduling.programs';
+	}
+	if (pathname.startsWith('/filler/mid-rolls') || pathname.startsWith('/schedules/mid-roll-presets')) {
+		return 'filler.presets';
+	}
+	if (pathname.startsWith('/filler')) {
+		return 'filler.presets';
 	}
 	if (pathname.startsWith('/schedules/templates')) {
 		return 'scheduling.templates';

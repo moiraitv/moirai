@@ -66,6 +66,15 @@ afterEach(async () => {
 });
 
 describe('user documentation review tracking', () => {
+	it('validates section links against their guide page and still rejects missing pages', async () => {
+		const { paths, pagePath } = await fixture();
+		const source = await readFile(pagePath, 'utf8');
+		await writeFile(pagePath, `${source}\n[Section](/example#example)\n[Full path](/help/example.html#example)\n`);
+		await expect(loadUserDocPages(paths)).resolves.toHaveLength(1);
+		await writeFile(pagePath, `${source}\n[Missing](/missing#example)\n`);
+		await expect(loadUserDocPages(paths)).rejects.toThrow('links to missing guide page');
+	});
+
 	it('migrates matching legacy approvals without changing approval times or read-only commands', async () => {
 		const { paths, pagePath } = await fixture();
 		const digest = await pageDigest(await readFile(pagePath, 'utf8'), paths.publicRoot);

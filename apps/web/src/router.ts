@@ -1,3 +1,4 @@
+import FillerPresetsPage from './views/FillerPresetsPage.vue';
 import EncodingProfilesPage from './views/EncodingProfilesPage.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import CreditTemplatesPage from './views/CreditTemplatesPage.vue';
@@ -37,6 +38,9 @@ export const router = createRouter({
 		{ path: '/channels', component: ChannelsPage },
 		{ path: '/quick', component: QuickSetupPage },
 		{ path: '/schedules', redirect: '/schedules/channels' },
+		{ path: '/schedules/mid-roll-presets', redirect: '/filler/mid-rolls' },
+		{ path: '/filler', redirect: '/filler/pre-rolls' },
+		...(['pre-roll', 'mid-roll', 'post-roll', 'tail'] as const).map(kind => ({ path: `/filler/${kind === 'tail' ? 'tail-fillers' : `${kind}s`}`, component: FillerPresetsPage, props: { kind } })),
 		{ path: '/schedules/templates', component: TemplatesPage },
 		{ path: '/schedules/templates/:id', component: TemplatesPage },
 		{ path: '/schedules/channels', component: ChannelSchedulesPage },

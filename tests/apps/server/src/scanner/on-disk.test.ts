@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
-import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
+import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_MID_ROLL_POINTS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
 import { MEDIA_PROBE_VERSION, MediaProbeError, mediaProbeFingerprint, parseMediaProbeOutput } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 import { MAX_MEDIA_SCAN_ATTEMPTS } from '@server/scanner/scan-queue.js';
@@ -935,4 +935,44 @@ it('retries unchanged failed probes even when the current fingerprint matches', 
 		probeFingerprint: fingerprint, probeStatus: 'complete', probeErrorCode: null, durationMilliseconds: 60_000,
 	});
 	expect(result.issues.some(issue => issue.code === 'media_missing_duration')).toBe(false);
+});
+
+it('preserves cached chapter metadata and offsets multipart chapter positions', async () => {
+	const fixture = await library();
+	await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Film part1.mkv'), 'video');
+	await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Film part2.mkv'), 'video');
+	const probeMedia = vi.fn().mockResolvedValue({ durationMilliseconds: 90_000, fileSizeBytes: 5,
+		container: 'matroska', streams: [], resolution: null, tags: {},
+		chapters: [{ startSeconds: 0, finishSeconds: 30.125, title: 'Act' },
+			{ startSeconds: 30.125, finishSeconds: 90, title: 'End' }], chapterLimitExceeded: false });
+	const first = await discoverOnDisk(fixture, { probeMedia });
+	expect(first.items).toHaveLength(1);
+	expect(first.items[0]!.technicalMetadata.chapters).toEqual([
+		{ startSeconds: 0, finishSeconds: 30.125, title: 'Act' },
+		{ startSeconds: 30.125, finishSeconds: 90, title: 'End' },
+		{ startSeconds: 90, finishSeconds: 120.125, title: 'Act' },
+		{ startSeconds: 120.125, finishSeconds: 180, title: 'End' },
+	]);
+	// A separate single-file scan exercises the actual probe-cache restore path.
+	const single = await library();
+	await writeFile(path.join(single.sourceConfig.scanRoot, 'Single.mkv'), 'video');
+	const original = await discoverOnDisk(single, { probeMedia });
+	probeMedia.mockClear();
+	const cached = await discoverOnDisk(single, { probeMedia, probeCache: new Map([['Single.mkv', original.items[0]!]]) });
+	expect(probeMedia).not.toHaveBeenCalled();
+	expect(cached.items[0]!.technicalMetadata.chapters).toEqual(original.items[0]!.technicalMetadata.chapters);
+});
+
+it('keeps multipart chapters within the scheduling bound and flags the overflow', async () => {
+	const fixture = await library();
+	await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Film part1.mkv'), 'video');
+	await writeFile(path.join(fixture.sourceConfig.scanRoot, 'Film part2.mkv'), 'video');
+	const chapters = Array.from({ length: 200 }, (_, index) => ({
+		startSeconds: index * 0.2, finishSeconds: index * 0.2 + 0.1, title: '',
+	}));
+	const probeMedia = vi.fn().mockResolvedValue({ durationMilliseconds: 90_000, fileSizeBytes: 5,
+		container: 'matroska', streams: [], resolution: null, tags: {}, chapters, chapterLimitExceeded: false });
+	const result = await discoverOnDisk(fixture, { probeMedia });
+	expect(result.items[0]!.technicalMetadata.chapters).toHaveLength(MAX_MID_ROLL_POINTS);
+	expect(result.items[0]!.technicalMetadata.chapterLimitExceeded).toBe(true);
 });

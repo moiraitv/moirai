@@ -384,7 +384,7 @@ describe('readCommittedScheduleGuide', () => {
 				windowEnd: at(168), issues: JSON.parse(JSON.stringify(issues)) as RecordedTimelineIssue[],
 			}],
 		);
-		const result = await readCommittedScheduleGuide(repository, 'UTC', '2026-08-26', 1);
+		const result = await readCommittedScheduleGuide(repository, 'UTC', '2026-08-26', 1, { guideDays: 7 });
 		const warning = result.guide.channels[0]?.preview.issues[0];
 		expect(warning).toMatchObject({ occurrenceCount: 24, scheduleLayerId: issue.scheduleLayerId });
 		expect(warning?.occurrences).toHaveLength(24);

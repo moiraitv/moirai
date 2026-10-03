@@ -1,4 +1,6 @@
 import { loadWorkerGuide, GuideWorkerError, clearWorkerGuide } from './guide-worker';
+import type { AnyFillerPreset, AnyFillerPresetCreate, FillerKind } from '@moirai/shared';
+import type { MidRollPreset, MidRollPresetCreate } from '@moirai/shared';
 import { XMLTV_EPG_DAYS, type AiProgress, type AiProgressDetails } from '@moirai/shared';
 import { readAiSelection } from './ai-selection-stream';
 import { aiGenerationSchema, type AiGeneration, type AiGenerationRequest } from '@moirai/shared';
@@ -263,6 +265,14 @@ export const api = {
 	mediaAirings: (id: string, page = 1) => request<MediaAirings>(`/api/v1/media/${id}/airings?page=${page}&pageSize=20`),
 	resourceUsage: (kind: ResourceUsageKind, id: string, page = 1) => request<ResourceUsage>(`/api/v1/resource-usage/${kind}/${id}?page=${page}&pageSize=50`),
 	setDefaultEncodingProfile: (id: string) => request<EncodingProfile>(`/api/v1/encoding-profiles/${id}/default`, { method: 'PUT' }),
+	fillerPresets: (kind?: FillerKind) => request<AnyFillerPreset[]>(`/api/v1/filler-presets${kind ? `?kind=${kind}` : ''}`),
+	createFillerPreset: (input: AnyFillerPresetCreate) => request<AnyFillerPreset>('/api/v1/filler-presets', { method: 'POST', body: JSON.stringify(input) }),
+	updateFillerPreset: (id: string, input: AnyFillerPresetCreate) => request<AnyFillerPreset>(`/api/v1/filler-presets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+	deleteFillerPreset: (id: string) => request<void>(`/api/v1/filler-presets/${id}`, { method: 'DELETE' }),
+	midRollPresets: () => request<MidRollPreset[]>('/api/v1/mid-roll-presets'),
+	createMidRollPreset: (body: MidRollPresetCreate) => request<MidRollPreset>('/api/v1/mid-roll-presets', { method: 'POST', body: JSON.stringify(body) }),
+	updateMidRollPreset: (id: string, body: MidRollPresetCreate) => request<MidRollPreset>(`/api/v1/mid-roll-presets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+	deleteMidRollPreset: (id: string) => request<void>(`/api/v1/mid-roll-presets/${id}`, { method: 'DELETE' }),
 	encodingProfiles: () => request<EncodingProfile[]>('/api/v1/encoding-profiles'),
 	createEncodingProfile: (body: EncodingProfileCreate) => request<EncodingProfile>('/api/v1/encoding-profiles', { method: 'POST', body: JSON.stringify(body) }),
 	updateEncodingProfile: (id: string, body: EncodingProfileCreate) => request<EncodingProfile>(`/api/v1/encoding-profiles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),

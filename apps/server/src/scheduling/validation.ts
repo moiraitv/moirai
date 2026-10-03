@@ -5,7 +5,7 @@ import type {
 	ScheduleTemplateCreate,
 	SchedulingProgram,
 } from '@moirai/shared';
-import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
+import { isFillerProgram, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 
 /** Report an invalid relationship between authored scheduling resources. */
 export class SchedulingValidationError extends Error {
@@ -21,10 +21,16 @@ function referencedProgramIds(config: ProgramConfig): string[] {
 		: config.type === 'similarity' ? [config.sourceProgramId] : [];
 }
 
-/** Ensure a filler reference exists and cannot recursively select filler. */
-function assertFillerProgram(filler: FillerConfig | null, programIds: Set<string>): void {
-	if (filler && !programIds.has(filler.programId)) {
-		throw new SchedulingValidationError(`Filler program ${filler.programId} does not exist`);
+/** Reject missing or composite filler sources before persistence or planning. */
+export function assertFillerProgram(filler: Pick<FillerConfig, 'programId'> | null | undefined, programs: ReadonlyMap<string, SchedulingProgram>): void {
+	if (filler) {
+		const program = programs.get(filler.programId);
+		if (!program) {
+			throw new SchedulingValidationError(`Filler program ${filler.programId} does not exist`);
+		}
+		if (!isFillerProgram(program)) {
+			throw new SchedulingValidationError('Sequence Programs cannot be used as filler sources');
+		}
 	}
 }
 
@@ -79,7 +85,7 @@ export function validateTemplate(
 	template: ScheduleTemplateCreate,
 	programs: SchedulingProgram[],
 ): void {
-	const programIds = new Set(programs.map((program) => program.id));
+	const programIds = new Map(programs.map((program) => [program.id, program]));
 	const slots = [...template.slots].sort((a, b) => a.startSeconds - b.startSeconds);
 	if (slots[0]?.startSeconds !== 0) {
 		throw new SchedulingValidationError('A daily template must begin at 00:00');
@@ -101,11 +107,25 @@ export function validateTemplate(
 		if (slot.programId !== null && slot.filler.mode === 'configured') {
 			assertFillerProgram(slot.filler.config, programIds);
 		}
+		for (const rule of [slot.preRoll, slot.postRoll]) {
+			if (rule?.mode === 'configured') {
+				assertFillerProgram(rule.config, programIds);
+			}
+		}
+		if (slot.midRoll?.mode === 'configured') {
+			if (slot.programId === null) {
+				throw new SchedulingValidationError('A no-program slot cannot configure mid-roll');
+			}
+			assertFillerProgram(slot.midRoll.config, programIds);
+		}
 		if (slot.programId === null && slot.filler.mode !== 'disabled') {
 			throw new SchedulingValidationError('A no-program slot must disable slot filler');
 		}
 	}
 	assertFillerProgram(template.defaultFiller, programIds);
+	assertFillerProgram(template.defaultMidRoll, programIds);
+	assertFillerProgram(template.defaultPreRoll, programIds);
+	assertFillerProgram(template.defaultPostRoll, programIds);
 
 	if (template.boundaries.length !== slots.length) {
 		throw new SchedulingValidationError('A template must have one boundary after every slot');
@@ -141,7 +161,7 @@ export function validateTemplate(
 export function validateChannelSchedule(
 	config: ChannelScheduleConfig,
 	templateIds: Set<string>,
-	programIds: Set<string>,
+	programIds: ReadonlyMap<string, SchedulingProgram>,
 ): void {
 	if (Boolean(config.defaultTemplateId) === Boolean(config.defaultProgramId)) {
 		throw new SchedulingValidationError('Choose exactly one base template or program');
@@ -173,4 +193,8 @@ export function validateChannelSchedule(
 		}
 	}
 	assertFillerProgram(config.defaultFiller, programIds);
+	assertFillerProgram(config.defaultMidRoll, programIds);
+	assertFillerProgram(config.defaultPreRoll, programIds);
+	assertFillerProgram(config.defaultPostRoll, programIds);
+	assertFillerProgram(config.defaultTailFiller, programIds);
 }

@@ -124,3 +124,39 @@ it('paginates current and upcoming committed showings without realizing missing 
 	expect(mediaAirings(db, item, 1, 20)).toEqual({ items: [], total: 0 });
 	expect(db.select().from(timelineMaterializations).all()).toEqual([]);
 });
+
+it('lists split primary airings once with full bounds while retaining individual filler showings', () => {
+	const { db, libraryId, addItem } = fixture();
+	const item = addItem('Movie'), alias = randomUUID();
+	db.insert(mediaItemAliases).values({ aliasId: alias, itemId: item, libraryId }).run();
+	const channel = randomUUID(), template = randomUUID();
+	db.insert(channels).values({ id: channel, number: '4', name: 'Cinema', config: {} as never }).run();
+	db.insert(scheduleTemplates).values({ id: template, name: 'Day' }).run();
+	db.insert(channelSchedules).values({ channelId: channel, defaultTemplateId: template, config: {} as never }).run();
+	const now = Date.now();
+	const at = (minutes: number) => new Date(now + minutes * 60000).toISOString();
+	db.insert(timelineMaterializations).values({ channelId: channel, status: 'pending', windowStart: at(-5), windowEnd: at(100),
+		continuationAt: at(100), inputFingerprint: 'committed', baseState: [], issues: [], committedAt: at(-5) }).run();
+	const addAiring = (start: number, finish: number) => {
+		const anchor = randomUUID();
+		const airing = { id: randomUUID(), primarySegmentId: anchor, start: at(start), finish: at(finish), truncated: false };
+		for (const [id, role, from, to] of [[anchor, 'primary', start + 1, start + 4],
+			[randomUUID(), 'filler', start + 4, start + 5], [randomUUID(), 'primary', start + 5, finish]] as const) {
+			db.insert(materializedTimelineSegments).values({ id, channelId: channel, templateId: template, slotId: randomUUID(), mediaItemId: alias,
+				role, title: 'Movie', startsAt: at(from), finishesAt: at(to), sourceStartSeconds: 0, truncated: false, stateDelta: [], airing }).run();
+		}
+		return anchor;
+	};
+	addAiring(-20, -10);
+	const current = addAiring(-10, 10);
+	const upcoming = addAiring(20, 40);
+	const result = mediaAirings(db, item, 1, 2)!;
+	expect(result.total).toBe(3);
+	expect(result.items).toEqual([
+		expect.objectContaining({ id: current, startsAt: at(-10), finishesAt: at(10) }),
+		expect.objectContaining({ id: upcoming, startsAt: at(20), finishesAt: at(40) }),
+	]);
+	expect(mediaAirings(db, item, 2, 2)?.items).toEqual([
+		expect.objectContaining({ startsAt: at(24), finishesAt: at(25) }),
+	]);
+});

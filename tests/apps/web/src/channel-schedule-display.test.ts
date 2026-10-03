@@ -141,6 +141,6 @@ describe('channel schedule summaries', () => {
 			{ templateId: 'heroes', predicate: timeslot },
 			{ templateId: 'feature', predicate: weekdays },
 			{ templateId: 'late', predicate: timeslot },
-		]), templates)).toBe('Sci-Fi Movie Loop with 3 conditional templates');
+		]), templates)).toBe('Sci-Fi Movie Loop with 3 conditional layers');
 	});
 });

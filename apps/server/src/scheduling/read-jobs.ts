@@ -1,3 +1,4 @@
+import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { timePhase, recordJobPhase } from './job-timing.js';
 import { Temporal } from '@js-temporal/polyfill';
 import {
@@ -186,6 +187,7 @@ async function persisted(repository: Repository, request: Extract<SchedulingRead
 	const catalog = await repository.getSchedulingCatalog(
 		programs,
 		schedulingRootProgramIds(templates, [schedule]),
+		referencedMidRollPresetIds(templates, [schedule]),
 	);
 	const resolved = resolveProgramSchedule(id, schedule, templates, programs);
 	const template = resolved.template;
@@ -245,6 +247,10 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 				defaultProgramId: null,
 				layers: [],
 				defaultFiller: currentSchedule?.defaultFiller ?? null,
+				defaultMidRoll: currentSchedule?.defaultMidRoll ?? null,
+				defaultPreRoll: currentSchedule?.defaultPreRoll ?? null,
+				defaultPostRoll: currentSchedule?.defaultPostRoll ?? null,
+				defaultTailFiller: currentSchedule?.defaultTailFiller ?? null,
 				createdAt: currentSchedule?.createdAt ?? timestamp,
 				updatedAt: timestamp,
 			};
@@ -263,6 +269,7 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 	const catalog = await repository.getSchedulingCatalog(
 		programs,
 		schedulingRootProgramIds(previewTemplates, [previewSchedule]),
+		referencedMidRollPresetIds(previewTemplates, [previewSchedule]),
 	);
 	readComplete();
 	const generated = timePhase('compute', () => generateTimelineDetailed({

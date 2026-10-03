@@ -1,3 +1,5 @@
+export * from './all-filler-presets.js';
+export * from './filler-presets.js';
 export * from './ai-progress.js';
 export * from './ai-generation.js';
 export * from './audio.js';
@@ -311,7 +313,7 @@ export const playbackEventDataSchema = z.object({
 });
 /** Validate the scheduling event data contract at runtime. */
 export const schedulingEventDataSchema = z.object({
-	entity: z.enum(['program', 'template', 'assignment', 'credit-template', 'guide-template']),
+	entity: z.enum(['program', 'template', 'assignment', 'credit-template', 'guide-template', 'mid-roll-preset', 'filler-preset']),
 	change: z.enum(['created', 'updated', 'deleted']),
 	id: idSchema,
 });

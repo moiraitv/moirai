@@ -1,3 +1,5 @@
+import { registerFillerPresetRoutes } from './filler-presets.js';
+import { registerMidRollPresetRoutes } from './mid-roll-presets.js';
 import { registerResourceUsageRoutes } from './resource-usage.js';
 import { registerEncodingProfileRoutes } from './encoding-profiles.js';
 import { registerCreditTemplateRoutes } from './credit-templates.js';
@@ -64,6 +66,8 @@ export function registerHttpRoutes(
 	registerCreditTemplateRoutes(app, dependencies);
 	registerGuideTemplateRoutes(app, dependencies);
 	registerEncodingProfileRoutes(app, dependencies);
+	registerFillerPresetRoutes(app, dependencies);
+	registerMidRollPresetRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);
 	registerAiRoutes(app, dependencies);

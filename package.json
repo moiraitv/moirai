@@ -19,6 +19,7 @@
     "dev": "npm run docs:user:manifest && node --env-file-if-exists=.env scripts/dev.mjs",
     "build": "npm run build -w @moirai/shared && npm run build -w @moirai/ersatztv-contract && npm run build -w @moirai/server && npm run build -w @moirai/web && npm run build -w @moirai/docs",
     "build:production": "npm run security:audit && npm run docs:user:review:check && npm run build",
+    "build:docker": "node scripts/build-docker.mjs",
     "security:audit": "npm audit --audit-level=low --include=dev --include=optional",
     "start": "npm run start -w @moirai/server",
     "auth:reset": "node --env-file-if-exists=.env apps/server/dist/auth-reset.js",

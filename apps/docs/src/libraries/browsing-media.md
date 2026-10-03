@@ -41,7 +41,7 @@ Open an item to inspect its artwork, plot, credits, source paths, subtitles, and
 
 ![Indexed media details](/screenshots/media-item.png)
 
-Open **Used by** at the right edge of the item page to see programs that select it directly or currently match it through a library query. **Playing at** lists current and upcoming showings on channel schedules, with channel names and start/end times.
+Open **Used by** at the right edge of the item page to see programs that select it directly or currently match it through a library query. **Playing at** lists current and upcoming showings on channel schedules, with channel names and start/end times. Content with pre-roll, mid-roll, or post-roll filler appears once for its full airing, including the breaks. Filler items have their own individual showings.
 
 ![Media usage and realized showings](/screenshots/media-item-usage.png)
 

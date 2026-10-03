@@ -251,11 +251,12 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 			if (!target || /^(?:https?:|mailto:|#)/u.test(target)) {
 				continue;
 			}
-			const publicTarget = target.startsWith('/help/')
-				? target
-				: target === '/'
+			const pathname = target.split('#')[0]!;
+			const publicTarget = pathname.startsWith('/help/')
+				? pathname
+				: pathname === '/'
 					? '/help/'
-					: `/help${target}.html`;
+					: `/help${pathname}.html`;
 			if (!pagePaths.has(publicTarget)) {
 				throw new Error(`${page.relativePath} links to missing guide page ${target}`);
 			}

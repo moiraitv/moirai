@@ -94,7 +94,7 @@ function coversRange(
 	return Temporal.Instant.compare(coveredUntil, requestedEnd) >= 0;
 }
 
-/** Shorten an oversized guide to the last complete local day before its overflow row. */
+/** Bound intersecting guide spans by complete days without charging companion airing spans. */
 export function boundedGuideWindow(
 	requestedStart: Temporal.PlainDate,
 	requestedEnd: Temporal.PlainDate,
@@ -107,7 +107,11 @@ export function boundedGuideWindow(
 	rows: MaterializedSegmentRecord[];
 	segmentLimitApplied: boolean;
 } {
-	if (rows.length <= limit) {
+	const start = requestedStart.toZonedDateTime(timeZone).epochMilliseconds;
+	const end = requestedEnd.toZonedDateTime(timeZone).epochMilliseconds;
+	const intersecting = rows.filter(row => Date.parse(row.segment.finish) > start
+		&& Date.parse(row.segment.start) < end);
+	if (intersecting.length <= limit) {
 		return {
 			days: requestedStart.until(requestedEnd, { largestUnit: 'days' }).days,
 			endDate: requestedEnd,
@@ -116,7 +120,7 @@ export function boundedGuideWindow(
 		};
 	}
 
-	const overflow = rows[limit]!;
+	const overflow = intersecting[limit]!;
 	const endDate = Temporal.Instant.from(overflow.segment.start)
 		.toZonedDateTimeISO(timeZone)
 		.toPlainDate();
@@ -129,7 +133,7 @@ export function boundedGuideWindow(
 	return {
 		days,
 		endDate,
-		rows: rows.filter((row) => row.segment.start < rangeEnd),
+		rows: rows.filter((row) => (row.segment.airing?.start ?? row.segment.start) < rangeEnd),
 		segmentLimitApplied: true,
 	};
 }
@@ -328,7 +332,7 @@ export async function readCommittedScheduleGuide(
 		const resolved = projectBlocks && hasDirectAssignments
 			? resolveProgramSchedule(schedule.channelId, schedule, templates, programs)
 			: { schedule, templates };
-		const entries = projectBlocks
+		const entries = (projectBlocks || segments.some(segment => segment.airing))
 			? projectGuideEntries(
 				schedule.channelId,
 				segments,
@@ -350,7 +354,7 @@ export async function readCommittedScheduleGuide(
 			: [];
 		return {
 			channelId: schedule.channelId,
-			...(entries.some((entry) => entry.kind === 'block') ? { entries } : {}),
+			...(entries.length > 0 ? { entries } : {}),
 			preview: {
 				channelId: schedule.channelId,
 				timeZone,

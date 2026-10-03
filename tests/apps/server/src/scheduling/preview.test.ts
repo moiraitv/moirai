@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
-	channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
+	channelCreateSchema, channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
 	SECONDS_PER_SCHEDULING_DAY,
 } from '@moirai/shared';
 import { timelinePreviewSchema, quickChannelSetupPreviewResultSchema } from '@moirai/shared/api-contracts';
@@ -371,6 +371,37 @@ it('keeps interactive reads available while a background commit waits for its au
 		await vi.waitFor(() => expect(writes).toBeGreaterThan(0), { timeout: 10_000 });
 		const result = await workers.read({ kind: 'overview' });
 		expect(JSON.parse(result.body).channelSchedules).toHaveLength(1);
+	}
+	finally {
+		release();
+		await background;
+	}
+}, 20_000);
+
+it('prepares and builds playout on the reserved worker before a background commit is released', async () => {
+	const f = await setup();
+	const base = await template(f, f.source.id);
+	await f.repository.setChannelSchedule(f.channel.id, { defaultTemplateId: base.id, layers: [], defaultFiller: null });
+	const channel = await f.repository.createChannel(channelCreateSchema.parse({ number: '41', name: 'Fallback' }));
+	const workers = new SchedulingWorkerPool(2, 4, { db: f.database.db, repository: f.repository });
+	cleanups.push(() => workers.close());
+	let release!: () => void;
+	const gate = new Promise<void>(resolve => {
+		release = resolve;
+	});
+	let writes = 0;
+	const background = workers.materialize('UTC', async () => {
+		writes += 1;
+		await gate;
+	}, () => undefined);
+	try {
+		await vi.waitFor(() => expect(writes).toBeGreaterThan(0), { timeout: 10_000 });
+		const request = { channelId: channel.id, timeZone: 'UTC', startDate: Temporal.Now.plainDateISO('UTC').toString(), days: 3 };
+		const preparation = await workers.playoutRead({ ...request, kind: 'playout-preparation' }, true);
+		expect(preparation).toMatchObject({ channel: { id: channel.id } });
+		const documents = await workers.playoutRead({ ...request, kind: 'playout-documents', fallback: { path: '/fixture/fallback.mp4', durationMilliseconds: 60_000, hasAudio: false } }, true);
+		expect(documents).toBeInstanceOf(Map);
+		expect((documents as Map<string, string>).size).toBeGreaterThan(0);
 	}
 	finally {
 		release();

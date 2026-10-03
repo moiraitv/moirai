@@ -1,3 +1,4 @@
+import type { FillerProgress } from './filler-plan.js';
 import type { TimelineIssue, TimelineIssueOccurrence } from '@moirai/shared';
 
 /** A deferred boundary failure, emitted only if filler leaves an actual gap. */
@@ -16,7 +17,8 @@ export interface TimelineContinuation {
 	intervalStart: string;
 	intervalEnd: string;
 	boundaryOrigin: TimelineIssueOccurrence['boundaryOrigin'];
-	phase: 'primary' | 'filler';
+	phase: 'primary' | 'filler' | 'tail' | 'fallback';
+	fillerProgress?: FillerProgress;
 	hadPrimary: boolean;
 	boundaryRejection: BoundaryRejection | null;
 }

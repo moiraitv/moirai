@@ -3,7 +3,7 @@ import type { Repository } from '../repository/index.js';
 import type { MaterializedSegmentRecord } from '../repository/contracts.js';
 import type { PlaybackClientActivity } from './session-observability.js';
 
-/** Minimum continuous observation of one item before it represents a viewing choice. */
+/** Minimum continuous observation of one airing before it represents a viewing choice. */
 const QUALIFICATION_MS = 120_000;
 /** Keep preference encounters aligned with bounded playback-client observability. */
 const ACTIVE_CLIENT_WINDOW_MS = 90_000;
@@ -121,7 +121,7 @@ export class ViewingPreferenceObserver {
 		);
 	}
 
-	/** Return the current segment while caching it exactly to its committed finish time. */
+	/** Resolve grouped spans to their primary item and cache through the entire airing. */
 	private async currentSegment(
 		channelId: string,
 		nowMs: number,
@@ -137,7 +137,15 @@ export class ViewingPreferenceObserver {
 			new Date(nowMs + 1).toISOString(),
 			channelId,
 		);
-		const record = records[0] ?? null;
+		let record = records[0] ?? null;
+		const airing = record?.segment.airing;
+		if (record && airing) {
+			const primary = record.segment.role === 'primary'
+				? record
+				: await this.repository.getMaterializedTimelineSegment(channelId, airing.primarySegmentId);
+			record = primary ? { ...primary, segment: { ...primary.segment,
+				id: airing.primarySegmentId, start: airing.start, finish: airing.finish } } : null;
+		}
 		this.segmentCache.set(channelId, {
 			record,
 			validUntilMs: record ? Date.parse(record.segment.finish) : nowMs + 5_000,

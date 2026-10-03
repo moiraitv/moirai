@@ -1,3 +1,4 @@
+import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { applyMaterializationWrite, type MaterializationWriter } from './materialization-writes.js';
 import { InputFingerprintContext, inputFingerprint, referencedPrograms } from './input-fingerprint.js';
 import { StaleSemanticDecisionError } from '../repository/semantic.js';
@@ -130,6 +131,8 @@ function canRecoverEmptyTimeline(
 			programs,
 			[
 				...(schedule.defaultFiller ? [schedule.defaultFiller.programId] : []),
+				...[schedule.defaultPreRoll, schedule.defaultPostRoll, schedule.defaultTailFiller].flatMap(config => config ? [config.programId] : []),
+				...(schedule.defaultMidRoll ? [schedule.defaultMidRoll.programId] : []),
 				...(schedule.defaultProgramId ? [schedule.defaultProgramId] : []),
 				...schedule.layers.flatMap((layer) => layer.programId ? [layer.programId] : []),
 			],
@@ -358,6 +361,7 @@ export class TimelineMaterializer {
 		const catalog = await this.repository.getSchedulingCatalog(
 			programs,
 			schedulingRootProgramIds(templates, eligibleSchedules),
+			referencedMidRollPresetIds(templates, eligibleSchedules),
 		);
 		const occupancyStart = currentTimestamp();
 		const today = Temporal.Instant.from(occupancyStart).toZonedDateTimeISO(this.timeZone).toPlainDate();
@@ -512,12 +516,12 @@ export class TimelineMaterializer {
 				replaceFrom = current.applyAfter;
 				const active = existing.find(
 					({ segment }) =>
-						segment.start < replaceFrom
+						(segment.start < replaceFrom || (segment.airing && segment.start === replaceFrom && segment.airing.start < replaceFrom))
 						&& segment.finish > replaceFrom
 						&& segment.role !== 'dead-air',
 				);
 				if (active) {
-					replaceFrom = active.segment.finish;
+					replaceFrom = active.segment.airing?.finish ?? active.segment.finish;
 				}
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
@@ -528,12 +532,12 @@ export class TimelineMaterializer {
 						: desiredStart;
 				const active = existing.find(
 					({ segment }) =>
-						segment.start < replaceFrom
+						(segment.start < replaceFrom || (segment.airing && segment.start === replaceFrom && segment.airing.start < replaceFrom))
 						&& segment.finish > replaceFrom
 						&& segment.role !== 'dead-air',
 				);
 				if (active) {
-					replaceFrom = active.segment.finish;
+					replaceFrom = active.segment.airing?.finish ?? active.segment.finish;
 				}
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
@@ -607,7 +611,7 @@ export class TimelineMaterializer {
 		);
 		const media = new Map(catalog.media.map((item) => [item.id, item]));
 		const segments: MaterializedSegmentRecord[] = generated.segments
-			.filter((segment) => segment.start < desiredEnd)
+			.filter((segment) => (segment.airing?.start ?? segment.start) < desiredEnd)
 			.map((segment) => ({
 				segment,
 				mediaSnapshot: segment.mediaItemId

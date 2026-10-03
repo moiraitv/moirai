@@ -65,6 +65,7 @@ export default defineConfig({
 					{ text: 'Channels', link: '/scheduling/channels' },
 				],
 			},
+			{ text: 'Filler', items: [{ text: 'Filler presets', link: '/filler/presets' }] },
 			{
 				text: 'Playback',
 				items: [

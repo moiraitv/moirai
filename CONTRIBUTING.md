@@ -132,10 +132,18 @@ Capture fixtures normalize machine identifiers in their isolated log files, use 
 To build a locally tagged Docker image from the repository directory, run:
 
 ```sh
-docker build -t moirai:local .
+npm run build:docker
 ```
 
-Use `moirai:local` when starting a container from this development image. Docker builds enforce the documentation review gate described below.
+Use `moirai:local` when starting a container from this development image. The script targets `linux/amd64`; use `--tag IMAGE` or `--platform PLATFORM` after `--` to customize it. Docker builds enforce the documentation review and dependency audit gates described below by default.
+
+For a local test image while documentation approvals or dependency advisories are pending, explicitly bypass those two gates:
+
+```sh
+npm run build:docker -- --skip-build-checks
+```
+
+This runs the ordinary application build inside Docker, including compilation and guide generation. It does not approve documentation or modify dependency versions. Installation and compilation failures still stop the build. Direct Docker builds can use `--build-arg MOIRAI_SKIP_BUILD_CHECKS=true` for the same behavior; omitting it retains the gates. Release publishing continues to use the checked default.
 
 Run these commands from the repository root after the release's UI and documentation changes are ready:
 

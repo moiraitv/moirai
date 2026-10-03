@@ -42,11 +42,11 @@ export class PlayoutPreparationReader {
 			const [channel, guide, programs] = await timeAsyncPhase('read', () => Promise.all([
 				this.repository.getChannel(request.channelId),
 				readCommittedChannelScheduleGuide(
-					this.repository,
-					request.timeZone,
+					this.repository, 
+					request.timeZone, 
 					request.channelId,
-					request.startDate,
-					request.days,
+					request.startDate, 
+					request.days, 
 					request.days,
 				),
 				this.repository.listPrograms(),
@@ -60,11 +60,11 @@ export class PlayoutPreparationReader {
 		if (request.kind === 'playout-documents') {
 			const streams = await timeAsyncPhase('read', () => prepareMediaStreams(this.repository, channel, guide, programs));
 			return timePhase('compute', () => buildEtvPlayoutFiles(
-				[channel],
-				guide,
+				[channel], 
+				guide, 
 				new Map([[channel.id, request.fallback!]]),
-				request.subtitles,
-				streams.audio,
+				request.subtitles, 
+				streams.audio, 
 				streams.video,
 			));
 		}

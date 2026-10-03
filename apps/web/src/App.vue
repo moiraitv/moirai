@@ -61,6 +61,7 @@ function updateViewport(): void {
 	}
 }
 const libraryNavOpen = useDisclosureState('navigation-libraries', true);
+const fillerNavOpen = useDisclosureState('navigation-filler', true);
 const scheduleNavOpen = useDisclosureState('navigation-scheduling', true);
 const playbackNavOpen = useDisclosureState('navigation-playback', true);
 const playback = ref<PlaybackEngineStatus | null>(null);
@@ -270,6 +271,16 @@ onUnmounted(() => {
 
 				<div class="nav-section">
 					<div class="nav-section-heading">
+						<RouterLink class="nav-link nav-section-link" to="/filler"><ListVideo :size="18" /><span>Filler</span></RouterLink>
+						<button class="nav-section-toggle" :aria-expanded="fillerNavOpen" aria-label="Toggle filler navigation" @click="fillerNavOpen = !fillerNavOpen"><ChevronDown :size="16" :class="{ rotated: !fillerNavOpen }" /></button>
+					</div>
+					<Transition name="moirai-collapse"><div v-show="fillerNavOpen" class="library-nav">
+						<RouterLink v-for="entry in [{ path: 'pre-rolls', label: 'Pre-Rolls' }, { path: 'mid-rolls', label: 'Mid-Rolls' }, { path: 'post-rolls', label: 'Post-Rolls' }, { path: 'tail-fillers', label: 'Tail Fillers' }]" :key="entry.path" class="library-nav-link" :to="`/filler/${entry.path}`"><span class="library-nav-icon"><ListVideo :size="16" /></span><span>{{ entry.label }}</span></RouterLink>
+					</div></Transition>
+				</div>
+
+				<div class="nav-section">
+					<div class="nav-section-heading">
 						<RouterLink class="nav-link nav-section-link" to="/libraries">
 							<Library :size="18" /><span>Libraries</span>
 						</RouterLink>
@@ -345,7 +356,7 @@ onUnmounted(() => {
 				</span>
 			</div>
 			<ApplicationErrorPage v-if="applicationError" />
-			<RouterView v-else />
+			<RouterView v-else :key="route.path.startsWith('/filler/') ? route.path : 'page'" />
 		</main>
 	</div>
 	<HelpDrawer v-if="activeHelpTopic" :topic-id="activeHelpTopic" @close="closeHelp" />

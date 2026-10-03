@@ -37,9 +37,25 @@ export function schedulingRootProgramIds(
 			if (slot.programId) {
 				ids.add(slot.programId);
 			}
+			for (const rule of [slot.preRoll, slot.postRoll]) {
+				if (rule?.mode === 'configured') {
+					ids.add(rule.config.programId);
+				}
+			}
+			if (slot.midRoll?.mode === 'configured') {
+				ids.add(slot.midRoll.config.programId);
+			}
 			if (slot.filler.mode === 'configured') {
 				ids.add(slot.filler.config.programId);
 			}
+		}
+		for (const config of [template.defaultPreRoll, template.defaultPostRoll]) {
+			if (config) {
+				ids.add(config.programId);
+			}
+		}
+		if (template.defaultMidRoll) {
+			ids.add(template.defaultMidRoll.programId);
 		}
 		if (template.defaultFiller) {
 			ids.add(template.defaultFiller.programId);
@@ -53,6 +69,14 @@ export function schedulingRootProgramIds(
 			if (layer.programId) {
 				ids.add(layer.programId);
 			}
+		}
+		for (const config of [schedule.defaultPreRoll, schedule.defaultPostRoll, schedule.defaultTailFiller]) {
+			if (config) {
+				ids.add(config.programId);
+			}
+		}
+		if (schedule.defaultMidRoll) {
+			ids.add(schedule.defaultMidRoll.programId);
 		}
 		if (schedule.defaultFiller) {
 			ids.add(schedule.defaultFiller.programId);
@@ -153,9 +177,13 @@ export function indexSchedulingCatalog(catalog: SchedulingCatalog): SchedulingCa
 	const mediaByGroup = new Map<string, SchedulableMedia[]>();
 	for (const media of catalog.media) {
 		mediaById.set(media.id, media);
-		mediaByLibrary.set(media.libraryId, [...(mediaByLibrary.get(media.libraryId) ?? []), media]);
+		const library = mediaByLibrary.get(media.libraryId) ?? [];
+		library.push(media);
+		mediaByLibrary.set(media.libraryId, library);
 		if (media.groupId) {
-			mediaByGroup.set(media.groupId, [...(mediaByGroup.get(media.groupId) ?? []), media]);
+			const group = mediaByGroup.get(media.groupId) ?? [];
+			group.push(media);
+			mediaByGroup.set(media.groupId, group);
 		}
 	}
 	return { ...catalog, mediaById, mediaByLibrary, mediaByGroup };

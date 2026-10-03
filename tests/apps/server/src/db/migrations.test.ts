@@ -881,3 +881,80 @@ it.each([false, true])('backfills primary genres without changing metadata (work
 		expect(rows.map(row => JSON.parse(row.metadata))).toEqual(values);
 	}, worker);
 });
+
+it('adds protected presets and opt-in mid-roll assignments without changing prior schedule or timeline values', async () => {
+	await upgradeFrom('0038_direct_schedule_programs', sqlite => {
+		insertScheduleFoundation(sqlite);
+		sqlite.prepare(`INSERT INTO schedule_slots
+			(id, template_id, position, start_seconds, program_id, state_scope, start_eligibility, filler)
+			VALUES ('slot', 'template', 0, 0, 'program', 'persistent', '{"type":"require-fit"}', '{"mode":"inherit"}')`).run();
+		sqlite.prepare(`INSERT INTO channel_schedules (channel_id, default_template_id, config)
+			VALUES ('channel', 'template', '{"defaultFiller":null,"layers":[]}')`).run();
+		sqlite.prepare(`INSERT INTO materialized_timeline_segments
+			(id, channel_id, template_id, slot_id, role, title, starts_at, finishes_at, source_start_seconds, truncated, state_delta)
+			VALUES ('segment', 'channel', 'template', 'slot', 'dead-air', 'Dead air',
+			'2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z', 0, 0, '[]')`).run();
+	}, sqlite => {
+		expect(sqlite.prepare("SELECT name, is_builtin FROM filler_presets WHERE kind = 'mid-roll' ORDER BY name").all())
+			.toEqual([{ name: 'One-item breaks', is_builtin: 1 }, { name: 'Two-minute breaks', is_builtin: 1 }]);
+		expect(sqlite.prepare('SELECT default_filler, default_mid_roll FROM schedule_templates').get())
+			.toEqual({ default_filler: null, default_mid_roll: null });
+		expect(sqlite.prepare('SELECT filler, mid_roll, state_scope FROM schedule_slots').get())
+			.toEqual({ filler: '{"mode":"inherit"}', mid_roll: '{"mode":"inherit"}', state_scope: 'persistent' });
+		expect(sqlite.prepare('SELECT config FROM channel_schedules').get())
+			.toEqual({ config: '{"defaultFiller":null,"layers":[]}' });
+		expect(sqlite.prepare('SELECT id, airing, state_delta FROM materialized_timeline_segments').get())
+			.toEqual({ id: 'segment', airing: null, state_delta: '[]' });
+	});
+});
+
+it.each([false, true])('upgrades filler presets and preserves tail sources and policies through the real migration path (worker: %s)', async worker => {
+	const source = '00000000-0000-4000-8000-000000000001';
+	const legacy = { programId: source, policy: 'best-fit-only' };
+	const midId = 'a39c0000-0000-4000-8000-000000000001';
+	await upgradeFrom('0039_mid_roll', sqlite => {
+		insertScheduleFoundation(sqlite);
+		sqlite.prepare('UPDATE schedule_templates SET default_filler = ?, default_mid_roll = ?').run(JSON.stringify(legacy), JSON.stringify({ programId: source, presetId: midId }));
+		sqlite.prepare(`INSERT INTO schedule_slots (id, template_id, position, start_seconds, program_id, state_scope, start_eligibility, filler, mid_roll)
+			VALUES ('slot', 'template', 0, 0, 'program', 'persistent', '{"type":"require-fit"}', ?, '{"mode":"disabled"}')`).run(JSON.stringify({ mode: 'configured', config: legacy }));
+		sqlite.prepare('INSERT INTO channel_schedules (channel_id, default_template_id, config) VALUES (?, ?, ?)').run('channel', 'template', JSON.stringify({ defaultTemplateId: 'template', defaultFiller: legacy, layers: [] }));
+	}, sqlite => {
+		const tail = { ...legacy, presetId: 'a40c0000-0000-4000-8000-000000000004' };
+		const template = sqlite.prepare('SELECT * FROM schedule_templates').get() as { default_filler: string; default_mid_roll: string; default_pre_roll: null; default_post_roll: null };
+		expect(JSON.parse(template.default_filler)).toEqual(tail);
+		expect(JSON.parse(template.default_mid_roll)).toEqual({ programId: source, presetId: midId });
+		expect(template.default_pre_roll).toBeNull();
+		const slot = sqlite.prepare('SELECT * FROM schedule_slots').get() as { filler: string; mid_roll: string; pre_roll: string; post_roll: string };
+		expect(JSON.parse(slot.filler)).toEqual({ mode: 'configured', config: tail });
+		expect(JSON.parse(slot.mid_roll)).toEqual({ mode: 'disabled' });
+		expect(JSON.parse(slot.pre_roll)).toEqual({ mode: 'inherit' });
+		expect(JSON.parse(slot.post_roll)).toEqual({ mode: 'inherit' });
+		const { config } = sqlite.prepare('SELECT config FROM channel_schedules').get() as { config: string };
+		expect(JSON.parse(config)).toMatchObject({ defaultFiller: null, defaultTailFiller: { ...tail, legacyEmptySlots: true } });
+		expect(sqlite.prepare('SELECT count(*) AS total FROM filler_presets').get()).toEqual({ total: 8 });
+		expect(sqlite.pragma('foreign_key_check')).toEqual([]);
+	}, worker);
+});
+
+it.each([false, true])('repairs duplicated legacy channel filler without changing distinct authored fallback (worker: %s)', async worker => {
+	const legacy = { programId: '00000000-0000-4000-8000-000000000001', policy: 'next-fit-only' };
+	const tail = { ...legacy, presetId: 'a40c0000-0000-4000-8000-000000000006' };
+	const separate = { ...legacy, programId: '00000000-0000-4000-8000-000000000002' };
+	await upgradeFrom('0040_filler_presets', sqlite => {
+		insertScheduleFoundation(sqlite);
+		insertChannel(sqlite, 'separate', '2');
+		sqlite.prepare('INSERT INTO channel_schedules (channel_id, default_template_id, config) VALUES (?, ?, ?)')
+			.run('channel', 'template', JSON.stringify({ defaultTemplateId: 'template', layers: [], defaultFiller: legacy, defaultTailFiller: tail }));
+		sqlite.prepare('INSERT INTO channel_schedules (channel_id, default_template_id, config) VALUES (?, ?, ?)')
+			.run('separate', 'template', JSON.stringify({ defaultTemplateId: 'template', layers: [], defaultFiller: separate, defaultTailFiller: tail }));
+		sqlite.prepare('INSERT INTO selection_states (channel_id, consumer_key, config_fingerprint, value) VALUES (?, ?, ?, ?)')
+			.run('channel', 'filler:channel:template:slot:source', 'existing', '{"type":"sequential","nextIndex":4,"lastItemId":"old"}');
+	}, sqlite => {
+		const rows = sqlite.prepare('SELECT channel_id, config FROM channel_schedules ORDER BY channel_id').all() as Array<{ channel_id: string; config: string }>;
+		expect(JSON.parse(rows[0]!.config)).toMatchObject({ defaultFiller: null, defaultTailFiller: { ...tail, legacyEmptySlots: true } });
+		expect(JSON.parse(rows[1]!.config)).toMatchObject({ defaultFiller: separate, defaultTailFiller: tail });
+		expect(sqlite.prepare('SELECT consumer_key, value FROM selection_states').get()).toEqual({
+			consumer_key: 'filler:channel:template:slot:source', value: '{"type":"sequential","nextIndex":4,"lastItemId":"old"}',
+		});
+	}, worker);
+});

@@ -1,3 +1,4 @@
+import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { prepareSequencePreview } from './sequence-preview.js';
 import type {
 	ChannelScheduleDraftPreview, QuickChannelSetupCreate, SchedulingProgram, TimelinePreview, SequencePreview,
@@ -125,6 +126,7 @@ export class PreviewExecutor {
 		const catalog = await this.scheduling.getSchedulingCatalog(
 			programs,
 			schedulingRootProgramIds(templates, [{ ...schedule, ...input.schedule }]),
+			referencedMidRollPresetIds(templates, [input.schedule]),
 		);
 		return {
 			input: { channelId: input.channelId, timeZone, startDate: input.startDate, days: input.days,

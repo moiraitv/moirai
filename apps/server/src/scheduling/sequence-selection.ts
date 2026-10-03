@@ -123,7 +123,7 @@ function rotationEntry(
 	});
 }
 
-/** Advance one non-ordered cycle with state bounded by the number of authored entries. */
+/** Spend rotation quotas while preserving primary fit rejection and source blocking. */
 function selectRotation(
 	program: SchedulingProgram,
 	consumerKey: string,
@@ -150,17 +150,17 @@ function selectRotation(
 	for (let attempts = 0; attempts < config.entries.length; attempts += 1) {
 		const index = rotationEntry(config, rotation, consumerKey, excluded);
 		if (index === undefined) {
-			return null;
+			break;
 		}
 		const entry = config.entries[index]!;
 		const priorFitRejections = context.fitRejectionCount;
 		const selected = selectChild(
-			entry.programId, 
-			`${consumerKey}:entry:${entry.id}`, 
+			entry.programId,
+			`${consumerKey}:entry:${entry.id}`,
 			state,
-			context, 
-			fitSeconds, 
-			fitMode, 
+			context,
+			fitSeconds,
+			fitMode,
 			[...ancestry, program.id],
 		);
 		if (selected) {
@@ -205,12 +205,12 @@ function nextRotation(
 ): NonNullable<SequenceState['rotation']> {
 	const cycle = prior ? prior.cycle + 1 : 0;
 	const seed = config.ordering && 'seed' in config.ordering ? config.ordering.seed : '';
+	const order = config.entries.map((entry, index) => ({ index, key: randomUnit(`${seed}:${consumerKey}:${cycle}:${entry.id}`) }))
+		.sort((left, right) => left.key - right.key || left.index - right.index).map(entry => entry.index);
 	return {
 		cycle,
 		remaining: config.entries.map((entry) => entry.count),
-		order: config.entries.map((_, index) => index).sort((a, b) =>
-			randomUnit(`${seed}:${consumerKey}:${cycle}:${config.entries[a]!.id}`)
-			- randomUnit(`${seed}:${consumerKey}:${cycle}:${config.entries[b]!.id}`) || a - b),
+		order,
 		lastEntry: prior?.lastEntry ?? null,
 	};
 }

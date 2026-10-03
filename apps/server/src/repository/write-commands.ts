@@ -4,7 +4,7 @@ import type { Repository } from './index.js';
 export type WriteDomains = {
 	root: Repository;
 	preferences: Repository['semantic']['preferences'];
-} & Pick<Repository, 'authentication' | 'encodingProfiles' | 'creditTemplates' | 'guideTemplates' | 'semantic'>;
+} & Pick<Repository, 'authentication' | 'encodingProfiles' | 'creditTemplates' | 'guideTemplates' | 'fillerPresets' | 'midRollPresets' | 'semantic'>;
 
 /** Runtime mutations accepted by the single writer; reads remain on separate connections. */
 export const WRITE_METHODS = {
@@ -13,6 +13,8 @@ export const WRITE_METHODS = {
 	encodingProfiles: ['save', 'setDefault', 'delete'],
 	creditTemplates: ['save', 'delete'],
 	guideTemplates: ['save', 'setDefault', 'delete'],
+	fillerPresets: ['save', 'delete'],
+	midRollPresets: ['save', 'delete'],
 	semantic: ['reconcile', 'retryFailed', 'store', 'storeBatch', 'preparationError', 'pruneSeeds', 'commitSeeds'],
 	preferences: ['catalog', 'retryFailed', 'reconcile', 'preparationError', 'store'],
 } as const satisfies { [D in keyof WriteDomains]: readonly Extract<keyof WriteDomains[D], string>[] };

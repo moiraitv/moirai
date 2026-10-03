@@ -1,3 +1,4 @@
+import { timelineAiringSchema } from './mid-roll.js';
 import { SEMANTIC_HISTORY_LIMIT, MAX_SIMILARITY_QUANTITY, PROGRAM_PREVIEW_ITEM_LIMIT, semanticProgramConfigSchema } from './scheduling.js';
 import { z } from 'zod';
 import { guideEntrySchema } from './guide.js';
@@ -360,6 +361,7 @@ export type QuickChannelSetupResult = z.infer<typeof quickChannelSetupResultSche
 
 /** One concrete item, filler interval, or dead-air interval in a timeline. */
 export const timelineSegmentSchema = z.object({
+	airing: timelineAiringSchema.nullable().optional(),
 	sequenceEntryPath: z.array(z.uuid()).optional(),
 	id: idSchema,
 	role: z.enum(['primary', 'filler', 'dead-air']),
@@ -781,6 +783,8 @@ export const schedulingOverviewSchema = z.object({
 
 /** Safe source details returned for a selected committed guide segment. */
 export const guideSegmentDetailSchema = z.object({
+	airingSegments: z.array(timelineSegmentSchema.pick({ id: true, role: true, title: true, start: true, finish: true,
+		sourceStartSeconds: true, sourceFinishSeconds: true })).optional(),
 	segment: timelineSegmentSchema.omit({ playbackPath: true }),
 	media: z.object({
 		id: idSchema,

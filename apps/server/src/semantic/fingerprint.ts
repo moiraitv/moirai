@@ -14,7 +14,7 @@ export function semanticSchedulingFingerprint(channelId: string, programs: Sched
 	const libraryIds = new Set(programs.flatMap((program) => sourceIds.has(program.id)
 		&& program.config.type === 'content' && (program.config.source.type === 'collection' || program.config.source.type === 'ai') ? [program.config.source.libraryId] : program.config.type === 'theme' ? [program.config.libraryId] : []));
 	const ids = new Set(semantic.seeds.filter((seed) => programIds.has(seed.programId)
-		&& ['primary', 'filler'].some((role) => seed.consumerKey.startsWith(`${role}:${channelId}:`)))
+		&& ['primary', 'filler', 'mid-roll'].some((role) => seed.consumerKey.startsWith(`${role}:${channelId}:`)))
 		.flatMap((seed) => seed.itemIds));
 	for (const media of catalog.media) {
 		if (libraryIds.has(media.libraryId)) {

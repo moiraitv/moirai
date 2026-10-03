@@ -32,3 +32,7 @@ A template slot can show one guide listing, such as “Rock Music,” in place o
 ![A single-block listing with its actual items in a 30-minute hover preview and matching range markers](/screenshots/guide-single-block.png)
 
 Hover over a guide block to see a 30-minute zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. The preview follows the pointer while staying within the screen. Keyboard focus centers the crop on the block’s midpoint; tapping uses the tapped time.
+
+## Items with mid-roll breaks
+
+An episode or movie with mid-roll filler appears as one guide entry covering its full airing, including breaks. Open its details and expand **Content and mid-roll breaks** to inspect each content span and filler item. Playback resumes at the next content position after each break.

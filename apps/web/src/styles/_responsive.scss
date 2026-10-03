@@ -1152,3 +1152,13 @@
 		transition: none;
 	}
 }
+
+@media (max-width: 680px) {
+	.filler-assignments {
+		padding: 16px;
+	}
+
+	.filler-stage-selector {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

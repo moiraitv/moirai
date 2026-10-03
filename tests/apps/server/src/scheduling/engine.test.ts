@@ -233,7 +233,7 @@ describe('schedule timeline engine', () => {
 		expect(first.segments.at(-1)).toMatchObject({
 			role: 'filler', start: '2026-01-05T23:00:00Z', finish: '2026-01-06T00:30:00Z', truncated: false,
 		});
-		expect(first.continuation).toMatchObject({ date: '2026-01-06', phase: 'filler', hadPrimary: false });
+		expect(first.continuation).toMatchObject({ date: '2026-01-06', phase: 'fallback', hadPrimary: false });
 		const tail = generateTimelineDetailed({
 			...options, startDate: '2026-01-06', initialCursor: first.continuationAt,
 			state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)),
@@ -1755,13 +1755,13 @@ describe('schedule timeline engine', () => {
 		expect(Date.parse(primaries[1]!.start) - Date.parse(primaries[0]!.start)).toBe(50 * 60 * 1_000);
 	});
 
-	it('uses best-fitting filler, truncates a fallback, and never delays the next slot', () => {
+	it('uses Program-ordered filler, truncates a fallback, and never delays the next slot', () => {
 		const primary = media(1, 47 * 60);
 		const fillerShort = media(2, 10 * 60);
 		const fillerLong = media(3, 20 * 60);
 		const next = media(4, 60 * 60);
 		const primaryProgram = contentProgram(10, 1);
-		const fillerProgram = contentProgram(11, [2, 3]);
+		const fillerProgram = program(11, { type: 'content', source: { type: 'collection', libraryId: uuid(900), itemIds: [fillerShort.id, fillerLong.id], sort: { type: 'manual', itemIds: [fillerShort.id, fillerLong.id] } }, strategy: { type: 'sequential' } });
 		const nextProgram = contentProgram(12, 4);
 		const daily = template(
 			[
@@ -2271,4 +2271,58 @@ it.each([1, 2])('preserves sequence progress after audio edits with entry count 
 		expect(result.proposedState).toEqual(baseline.proposedState);
 	}
 	expect(primaryTitles(result)).toEqual([]);
+});
+
+it('continues a random tail budget across midnight without restarting or resampling it', () => {
+	const outgoing = contentProgram(10, 1);
+	const tailProgram = contentProgram(11, 2);
+	const unavailableFit = contentProgram(12, 3);
+	const fallback = contentProgram(13, 4);
+	const daily = template([
+		{ programId: unavailableFit.id, startSeconds: 0 },
+		{ programId: outgoing.id, startSeconds: 3600,
+			boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3600 } },
+	]);
+	const options = input([outgoing, tailProgram, unavailableFit, fallback], [media(1, 22.5 * 3600), media(2, 20 * 60), media(3, 4 * 3600), media(4, 15 * 60)], daily);
+	daily.defaultFiller = { programId: tailProgram.id, presetId: uuid(401), policy: 'next-fit-only' };
+	options.catalog.fillerPresets = { [uuid(401)]: { budget: { type: 'random-count', minimum: 3, maximum: 3 } } };
+	options.schedule.defaultFiller = { programId: fallback.id, policy: 'next-truncate' };
+	const first = generateTimelineDetailed(options);
+	expect(first.continuation).toMatchObject({ phase: 'tail', fillerProgress: { unit: 'count', remaining: 1 } });
+	const continued = generateTimelineDetailed({ ...options, startDate: '2026-01-06', initialCursor: first.continuationAt,
+		state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)) });
+	const whole = generateTimelineDetailed({ ...options, days: 2 });
+	expect([...first.segments, ...continued.segments]).toEqual(whole.segments);
+	expect(continued.proposedState.map(record => ({ ...record, updatedAt: '' }))).toEqual(whole.proposedState.map(record => ({ ...record, updatedAt: '' })));
+});
+
+it('checkpoints fallback progress independently when an exhausted tail hands off to unavailable fallback', () => {
+	const outgoing = contentProgram(10, 1);
+	const tailProgram = contentProgram(11, 2);
+	const unavailableFit = contentProgram(12, 3);
+	const fallback = contentProgram(13, 4);
+	const fallbackMedia = media(4, 15 * 60, { availability: 'unconfirmed' });
+	const daily = template([
+		{ programId: unavailableFit.id, startSeconds: 0 },
+		{ programId: outgoing.id, startSeconds: 3600,
+			boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right', earlyStartMaxDriftSeconds: 3600 } },
+	]);
+	const options = input(
+		[outgoing, tailProgram, unavailableFit, fallback],
+		[media(1, 22.5 * 3600), media(2, 20 * 60), media(3, 4 * 3600), fallbackMedia],
+		daily,
+	);
+	daily.defaultFiller = { programId: tailProgram.id, presetId: uuid(401), policy: 'next-fit-only' };
+	options.catalog.fillerPresets = { [uuid(401)]: { budget: { type: 'count', count: 1 } } };
+	options.schedule.defaultFiller = { programId: fallback.id, policy: 'next-truncate' };
+	const first = generateTimelineDetailed(options);
+	expect(first.continuation).toMatchObject({ phase: 'fallback', fillerProgress: { unit: 'seconds' } });
+	expect(first.continuation!.fillerProgress!.remaining).toBeGreaterThan(0);
+
+	fallbackMedia.availability = 'available';
+	const continued = generateTimelineDetailed({ ...options, startDate: '2026-01-06', initialCursor: first.continuationAt,
+		state: first.proposedState, initialContinuation: JSON.parse(JSON.stringify(first.continuation)) });
+	expect(continued.segments.slice(0, 4).map(entry => entry.mediaItemId)).toEqual(Array(4).fill(fallbackMedia.id));
+	expect(continued.segments[0]!.start).toBe('2026-01-06T00:00:00Z');
+	expect(continued.segments[3]!.finish).toBe('2026-01-06T01:00:00Z');
 });

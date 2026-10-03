@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import TailFillerEditor from '../schedules/TailFillerEditor.vue';
+import FillerAssignmentsEditor from '../schedules/FillerAssignmentsEditor.vue';
+import SlotTailFillerEditor from './SlotTailFillerEditor.vue';
+import FillerAssignmentEditor from '../schedules/FillerAssignmentEditor.vue';
+import SlotFillerEditor from './SlotFillerEditor.vue';
 import ResourceUsage from '../ResourceUsage.vue';
+import { setSlotProgram } from '../../template-slot-program';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
@@ -155,6 +161,9 @@ const previewDraftFingerprint = computed(() => {
 		id: draft.value.id,
 		period: draft.value.period,
 		defaultFiller: draft.value.defaultFiller,
+		defaultMidRoll: draft.value.defaultMidRoll,
+		defaultPreRoll: draft.value.defaultPreRoll,
+		defaultPostRoll: draft.value.defaultPostRoll,
 		slots: draft.value.slots,
 		boundaries: draft.value.boundaries,
 	});
@@ -578,71 +587,13 @@ function updateStartEligibility(type: ScheduleSlot['startEligibility']['type']):
 	markChanged();
 }
 
-/** Apply inherited, disabled, or configured filler with a valid default program. */
-function updateSlotFiller(mode: ScheduleSlot['filler']['mode']): void {
-	if (!selectedSlot.value) {
-		return;
-	}
-
-	const programId = programs.value[0]?.id;
-	if (mode === 'configured' && programId) {
-		selectedSlot.value.filler = {
-			mode,
-			config: { programId, policy: 'best-fit-or-truncate' },
-		};
-	}
-	else {
-		selectedSlot.value.filler = mode === 'disabled' ? { mode } : { mode: 'inherit' };
-	}
-	markChanged();
-}
-
 /** Keep filler configuration valid when a slot changes between programmed and fall-through. */
-function updateSlotProgram(): void {
+function updateSlotProgram(programId: string | null): void {
 	if (!selectedSlot.value) {
 		return;
 	}
 
-	if (selectedSlot.value.programId === null) {
-		selectedSlot.value.filler = { mode: 'disabled' };
-	}
-	else if (selectedSlot.value.filler.mode === 'disabled') {
-		selectedSlot.value.filler = { mode: 'inherit' };
-	}
-	markChanged();
-}
-
-/** Enable default filler with the first program, or remove the template default. */
-function toggleTemplateFiller(enabled: boolean): void {
-	if (!draft.value) {
-		return;
-	}
-
-	const programId = programs.value[0]?.id;
-	draft.value.defaultFiller
-		= enabled && programId ? { programId, policy: 'best-fit-or-truncate' } : null;
-	markChanged();
-}
-
-/** Replace the template filler program when its configuration is enabled. */
-function updateTemplateFillerProgram(programId: string): void {
-	if (!draft.value?.defaultFiller) {
-		return;
-	}
-
-	draft.value.defaultFiller.programId = programId;
-	markChanged();
-}
-
-/** Replace the template filler selection policy when its configuration is enabled. */
-function updateTemplateFillerPolicy(
-	policy: NonNullable<ScheduleTemplateCreate['defaultFiller']>['policy'],
-): void {
-	if (!draft.value?.defaultFiller) {
-		return;
-	}
-
-	draft.value.defaultFiller.policy = policy;
+	setSlotProgram(selectedSlot.value, programId);
 	markChanged();
 }
 
@@ -656,6 +607,9 @@ function templatePayload(): ScheduleTemplateCreate | null {
 		name: draft.value.name,
 		period: draft.value.period,
 		defaultFiller: draft.value.defaultFiller,
+		defaultMidRoll: draft.value.defaultMidRoll,
+		defaultPreRoll: draft.value.defaultPreRoll,
+		defaultPostRoll: draft.value.defaultPostRoll,
 		slots: draft.value.slots,
 		boundaries: draft.value.boundaries,
 	};
@@ -1000,8 +954,8 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 												<span class="template-program-control">
 													<span class="template-input-with-icon">
 														<Monitor :size="17" />
-														<select v-model="selectedSlot.programId" @change="updateSlotProgram">
-															<option :value="null">No program — fall through</option>
+														<select :value="selectedSlot.programId ?? ''" @change="updateSlotProgram(($event.target as HTMLSelectElement).value || null)">
+															<option value="">No program — fall through</option>
 															<option v-for="program in programs" :key="program.id" :value="program.id">
 																{{ program.name }}
 															</option>
@@ -1185,126 +1139,25 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 												>
 											</div>
 										</fieldset>
-										<fieldset>
-											<legend>Filler</legend>
-											<label
-											><span>Mode</span
-											><select
-												:value="selectedSlot.filler.mode"
-												@change="
-													updateSlotFiller(
-														($event.target as HTMLSelectElement)
-															.value as ScheduleSlot['filler']['mode'],
-													)
-												"
-											>
-												<option value="inherit">Inherit template/channel</option>
-												<option value="disabled">Disabled</option>
-												<option value="configured">Slot override</option>
-											</select></label
-											>
-											<div v-if="selectedSlot.filler.mode === 'configured'" class="form-grid template-slot-filler-fields">
-												<label>
-													<span>Program</span>
-													<span class="template-program-control">
-														<select
-															v-model="selectedSlot.filler.config.programId"
-															@change="markChanged"
-														>
-															<option v-for="program in programs" :key="program.id" :value="program.id">
-																{{ program.name }}
-															</option>
-														</select>
-														<button
-															type="button"
-															class="template-edit-program-button"
-															:aria-label="`Edit ${programName(selectedSlot.filler.config.programId)}`"
-															@click="editProgram(selectedSlot.filler.config.programId)"
-														>
-															<Pencil :size="16" />Edit
-														</button>
-													</span> </label
-												><label
-												><span>Selection policy</span
-												><select v-model="selectedSlot.filler.config.policy" @change="markChanged">
-													<option value="best-fit-or-truncate">Best fit or truncate</option>
-													<option value="best-fit-only">Best fit only</option>
-													<option value="next-truncate">Next and truncate</option>
-													<option value="next-fit-only">Next only if it fits</option>
-												</select></label
-												>
-											</div>
-										</fieldset>
+										<FillerAssignmentsEditor v-if="selectedSlot.programId" heading="Slot filler" :assignments="{ 'pre-roll': draft.defaultPreRoll, 'mid-roll': draft.defaultMidRoll, 'post-roll': draft.defaultPostRoll, tail: draft.defaultFiller }" :overrides="{ 'pre-roll': selectedSlot.preRoll, 'mid-roll': selectedSlot.midRoll, 'post-roll': selectedSlot.postRoll, tail: selectedSlot.filler }">
+											<template #pre-roll><SlotFillerEditor v-model="selectedSlot.preRoll" kind="pre-roll" heading="Slot pre-roll" :programs="programs" @update:model-value="markChanged" @edit-program="editProgram" /></template>
+											<template #mid-roll><SlotFillerEditor
+												v-model="selectedSlot.midRoll" :programs="programs"
+												@update:model-value="markChanged" @edit-program="editProgram" /></template>
+											<template #post-roll><SlotFillerEditor v-model="selectedSlot.postRoll" kind="post-roll" heading="Slot post-roll" :programs="programs" @update:model-value="markChanged" @edit-program="editProgram" /></template>
+											<template #tail><SlotTailFillerEditor v-model="selectedSlot.filler" :programs="programs" @update:model-value="markChanged" @edit-program="editProgram" /></template>
+										</FillerAssignmentsEditor>
 									</AnimatedDisclosure>
 								</section>
 
-								<section class="template-default-filler-panel editor-surface">
-									<div class="template-panel-heading">
-										<div>
-											<p class="eyebrow">Template behavior</p>
-											<h2>Template default filler</h2>
-										</div>
-									</div>
-									<p class="template-default-filler-description">
-										Used by programmed slots whose Filler mode is Inherit.
-									</p>
-									<div
-										class="template-default-filler-row"
-										:class="{ 'is-disabled': !draft.defaultFiller }"
-									>
-										<label class="template-default-filler-toggle">
-											<input
-												type="checkbox"
-												aria-label="Use template default filler"
-												:checked="draft.defaultFiller !== null"
-												:disabled="!draft.defaultFiller && programs.length === 0"
-												@change="toggleTemplateFiller(($event.target as HTMLInputElement).checked)"
-											/>
-										</label>
-										<label class="template-default-filler-field">
-											<span>Program</span>
-											<span class="template-program-control">
-												<select
-													:value="draft.defaultFiller?.programId ?? programs[0]?.id ?? ''"
-													:disabled="!draft.defaultFiller"
-													@change="updateTemplateFillerProgram(($event.target as HTMLSelectElement).value)"
-												>
-													<option v-for="program in programs" :key="program.id" :value="program.id">
-														{{ program.name }}
-													</option>
-												</select>
-												<button
-													type="button"
-													class="template-edit-program-button"
-													aria-label="Edit template default filler program"
-													:disabled="!draft.defaultFiller"
-													@click="draft.defaultFiller && editProgram(draft.defaultFiller.programId)"
-												>
-													<Pencil :size="16" />Edit
-												</button>
-											</span>
-										</label>
-										<label class="template-default-filler-field">
-											<span>Selection policy</span>
-											<select
-												:value="draft.defaultFiller?.policy ?? 'best-fit-or-truncate'"
-												:disabled="!draft.defaultFiller"
-												@change="
-													updateTemplateFillerPolicy(
-														($event.target as HTMLSelectElement).value as NonNullable<
-															ScheduleTemplateCreate['defaultFiller']
-														>['policy'],
-													)
-												"
-											>
-												<option value="best-fit-or-truncate">Best fit or truncate</option>
-												<option value="best-fit-only">Best fit only</option>
-												<option value="next-truncate">Next and truncate</option>
-												<option value="next-fit-only">Next only if it fits</option>
-											</select>
-										</label>
-									</div>
-								</section>
+								<FillerAssignmentsEditor heading="Template default filler" :assignments="{ 'pre-roll': draft.defaultPreRoll, 'mid-roll': draft.defaultMidRoll, 'post-roll': draft.defaultPostRoll, tail: draft.defaultFiller }">
+									<template #pre-roll><FillerAssignmentEditor v-model="draft.defaultPreRoll" kind="pre-roll" :programs="programs" heading="Template default pre-roll" eyebrow="Template behavior" @update:model-value="markChanged" @edit-program="editProgram" /></template>
+									<template #mid-roll><FillerAssignmentEditor
+										v-model="draft.defaultMidRoll" :programs="programs" heading="Template default mid-roll" eyebrow="Template behavior"
+										@update:model-value="markChanged" @edit-program="editProgram" /></template>
+									<template #post-roll><FillerAssignmentEditor v-model="draft.defaultPostRoll" kind="post-roll" :programs="programs" heading="Template default post-roll" eyebrow="Template behavior" @update:model-value="markChanged" @edit-program="editProgram" /></template>
+									<template #tail><TailFillerEditor v-model="draft.defaultFiller" :programs="programs" heading="Template default tail filler" eyebrow="Template behavior" @update:model-value="markChanged" @edit-program="editProgram" /></template>
+								</FillerAssignmentsEditor>
 
 							</ResourceUsage>
 						</div>

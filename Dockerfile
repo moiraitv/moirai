@@ -18,7 +18,12 @@ RUN npm ci
 
 FROM dependencies AS build
 COPY . .
-RUN npm run build:production
+ARG MOIRAI_SKIP_BUILD_CHECKS=false
+RUN case "$MOIRAI_SKIP_BUILD_CHECKS" in \
+        false) npm run build:production ;; \
+        true) echo 'Skipping dependency audit and documentation approval gates for this image.'; npm run build ;; \
+        *) echo >&2 'MOIRAI_SKIP_BUILD_CHECKS must be true or false'; exit 1 ;; \
+    esac
 
 FROM node:24-bookworm-slim AS node-runtime
 

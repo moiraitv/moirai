@@ -1,0 +1,58 @@
+.mid-roll-preset-list {
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.mid-roll-preset-card header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.mid-roll-preset-editor {
+	width: min(1000px, calc(100vw - 32px));
+}
+
+.mid-roll-settings {
+	margin-block: 1rem;
+}
+
+.mid-roll-predicate {
+	margin-top: 1rem;
+}
+
+.mid-roll-settings p,
+.mid-roll-settings small {
+	color: var(--muted);
+}
+
+.mid-roll-fallback {
+	padding-top: 1rem;
+}
+
+.mid-roll-settings:disabled {
+	color: var(--muted);
+	background: var(--panel);
+
+	legend,
+	label,
+	.predicate-negate {
+		color: var(--muted);
+	}
+
+	.predicate-node {
+		background: var(--panel);
+	}
+
+	input,
+	select,
+	button {
+		color: var(--muted);
+		border-color: var(--line);
+		background: var(--panel-2);
+		cursor: not-allowed;
+		box-shadow: none;
+	}
+}

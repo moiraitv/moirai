@@ -116,3 +116,22 @@ Hover over a guide block to see a zoomed timeline of its actual items, centered 
 Choose **Save** to store the schedule and return to the channel schedule list. If saving fails, the editor stays open with your changes; **Reset** discards pending changes after confirmation.
 
 Saved changes normally become active at the next local midnight, protecting programming that has already been committed. When offered, **Apply after current item** brings a change forward without cutting the item viewers are currently watching.
+
+## Channel default fillers
+
+In the base schedule inspector, use **Channel default filler** to choose filler for the channel. Select a type in the movie illustration or the type selector:
+
+- **Pre-Roll** plays before each episode or movie.
+- **Mid-Roll** plays at allowed breaks within an episode or movie.
+- **Post-Roll** plays after each episode or movie.
+- **Tail Filler** plays after the slot's main programming, within the time left before the next slot.
+
+Check the selected type's checkbox, then choose a **Preset** and **Source Program**. The preset sets how much filler to play; the Source Program chooses the clips. Uncheck the checkbox to remove that channel default. Manage presets under **Filler**; see [Filler presets](/filler/presets) for budgets and fitting, and [Mid-Roll break conditions](/filler/presets#mid-roll-break-conditions) for break conditions.
+
+Each type inherits separately. A programmed slot uses its channel default when it inherits filler and its template has no default for that type. A slot override takes precedence over both defaults. Disabling a type on a slot prevents that type from being inherited.
+
+Active gaps in the illustration are filled; inactive gaps have dashed outlines. The 137-minute example movie uses the selected Mid-Roll's timed interval and conditions. Use the resolved schedule preview to check your actual media.
+
+**Channel fallback filler** is configured separately below the defaults. It covers gaps left after tail filler, including no-program intervals. Unchecking tail does not disable fallback. No-program intervals do not use pre-roll, mid-roll, or post-roll; channel tail retained from older settings can still cover them until you replace that assignment.
+
+**Apply after current item** waits until the entire episode or movie, including its pre-roll, mid-roll, and post-roll filler, finishes before applying a pending change.

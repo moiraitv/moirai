@@ -114,11 +114,11 @@ Real media rarely ends exactly on a slot boundary. Under **Outgoing boundary**, 
 
 ### Fill remaining time
 
-![Slot filler override with Program and selection policy controls](/screenshots/template-slot-filler.png)
+![Tail filler override with preset and Source Program controls](/screenshots/template-slot-filler.png)
 
-Filler can occupy time that the main ![](/icons/list-video.svg) Program cannot fill. A slot can inherit the ![](/icons/calendar-range.svg) Template or ![](/icons/tv-minimal.svg) Channel settings, disable filler, or use a **Slot override** with its own filler ![](/icons/list-video.svg) Program.
+Filler can occupy time that the main ![](/icons/list-video.svg) Program cannot fill. Select **Tail Filler** in the slot’s combined filler interface. A slot can inherit the ![](/icons/calendar-range.svg) Template or ![](/icons/tv-minimal.svg) Channel tail settings, disable tail, or use a **Slot override** with its own preset and **Source Program**. Disabling tail leaves channel fallback available for any remaining gap.
 
-The filler choices distinguish finding a fitting item from taking the next item, and whether cutting an item is allowed: **Best fit or truncate**, **Best fit only**, **Next and truncate**, or **Next only if it fits**. Configure **Template default filler** when several slots should share the same filler rule.
+**Whole Items Only** plays complete clips that fit and can leave a gap if none fits. **Allow Truncation** searches for a complete clip first, then cuts a clip short if needed. Configure **Template default tail filler** when several slots should share the same filler rule. See [Filler presets](/filler/presets) for budgets and fitting behavior.
 
 ## Preview and use the Template
 
@@ -131,3 +131,24 @@ Save the ![](/icons/calendar-range.svg) Template, then assign it through a ![](/
 Keep templates focused on a reusable daily structure. Date-specific choices belong in channel schedule layers rather than copies of nearly identical templates.
 
 See [Example schedules](/scheduling/example-schedules) for movie channels, genre double features, sitcom rotations, and cartoon lineups.
+
+## Template default fillers
+
+![Template filler type selector with a Mid-Roll preset and Source Program](/screenshots/template-mid-roll.png)
+
+Under **Template default filler**, select a type in the movie illustration or the type selector:
+
+- **Pre-Roll** plays before each episode or movie.
+- **Mid-Roll** plays at allowed breaks within an episode or movie.
+- **Post-Roll** plays after each episode or movie.
+- **Tail Filler** fills time left after the slot’s main programming, before the next slot.
+
+Check the selected type’s checkbox to enable it, then choose a **Preset** and **Source Program**. The preset sets how much filler to play, and the Source Program chooses the clips. Uncheck the checkbox to remove that template default. Create presets under **Filler**; see [Filler presets](/filler/presets) for budgets and fitting, and [Mid-Roll break conditions](/filler/presets#mid-roll-break-conditions) for choosing breaks.
+
+Each type inherits separately. A programmed slot uses its template default when it inherits filler. If the template has no default for that type, the channel default applies. In the slot’s **Advanced scheduling behavior**, select a type under **Slot filler**, then choose whether to inherit, disable it, or use a **Slot override** with its own preset and source. Unchecking an override returns that type to inheritance; choose **Disabled** to stop inherited filler.
+
+Only the selected type’s settings are shown. Configured gaps appear active; unconfigured gaps remain inactive. The 137-minute movie illustration adjusts timed mid-roll points to the selected preset. Use the resolved preview to check your actual media.
+
+The complete episode or movie, including its pre-roll, mid-roll, and post-roll filler, must satisfy the slot’s item-start and boundary rules. A 20-minute episode with 30 seconds of filler needs 20 minutes 30 seconds to fit. A hard boundary may cut content or filler; a finish-outgoing rule considers the whole airing. The guide shows one episode or movie entry spanning this filler, with individual spans available in its details.
+
+Tail filler runs within the time left in the slot and never extends it. Channel fallback filler runs afterward if a gap remains. Disabling tail does not disable channel fallback. Pre-roll, mid-roll, and post-roll apply only to slots with a main Program.

@@ -1,3 +1,5 @@
+import { FillerPresetRepository } from './filler-presets.js';
+import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { createHash } from 'node:crypto';
 import { refinementTexts } from '../semantic/refinement.js';
 import { SemanticPreferenceRepository } from './semantic-preferences.js';
@@ -92,6 +94,7 @@ function publicMaterializationStatus(
 /** Columns required to reconstruct a public timeline segment without snapshot JSON. */
 const timelineSegmentColumns = {
 	id: materializedTimelineSegments.id,
+	airing: materializedTimelineSegments.airing,
 	role: materializedTimelineSegments.role,
 	channelId: materializedTimelineSegments.channelId,
 	scheduleLayerId: materializedTimelineSegments.scheduleLayerId,
@@ -113,6 +116,7 @@ const timelineSegmentColumns = {
 /** Guide list rows omit playback payloads that the timeline does not render. */
 const guideListSegmentColumns = {
 	id: materializedTimelineSegments.id,
+	airing: materializedTimelineSegments.airing,
 	role: materializedTimelineSegments.role,
 	channelId: materializedTimelineSegments.channelId,
 	scheduleLayerId: materializedTimelineSegments.scheduleLayerId,
@@ -145,6 +149,7 @@ function materializedSegmentRecord(
 	return {
 		segment: {
 			id: row.id,
+			airing: row.airing,
 			role: row.role,
 			channelId: row.channelId,
 			scheduleLayerId: row.scheduleLayerId,
@@ -275,7 +280,20 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	}
 
 	/** Load and cache the catalog subset referenced by the supplied programs. */
-	async getSchedulingCatalog(
+	async getSchedulingCatalog(programs?: SchedulingProgram[], rootProgramIds?: Iterable<string>, presetIds: string[] = []): Promise<SchedulingCatalog> {
+		const catalog = await this.getBaseSchedulingCatalog(programs, rootProgramIds);
+		if (presetIds.length === 0) {
+			return catalog;
+		}
+		const saved = new FillerPresetRepository(this.db).settings(presetIds);
+		const midRollPresets = Object.fromEntries(Object.entries(saved).map(([id, preset]) => [id, preset.kind === 'mid-roll'
+			? { kind: preset.kind, budget: preset.budget, predicate: preset.predicate, fallbackIntervalSeconds: preset.fallbackIntervalSeconds }
+			: { kind: preset.kind, budget: preset.budget }]));
+		return { ...catalog, fillerPresets: midRollPresets, midRollPresets: Object.fromEntries(Object.entries(midRollPresets).filter(([, preset]) => preset.kind === 'mid-roll')) as NonNullable<SchedulingCatalog['midRollPresets']>, ...(catalog.cacheKey ? { cacheKey: `${catalog.cacheKey}:mid-roll:${createHash('sha256').update(JSON.stringify(midRollPresets)).digest('hex')}` } : {}) };
+	}
+
+	/** Reuse the catalog cache independently of preset behavior and editor metadata. */
+	private async getBaseSchedulingCatalog(
 		programs?: SchedulingProgram[],
 		rootProgramIds?: Iterable<string>,
 	): Promise<SchedulingCatalog> {
@@ -410,6 +428,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						sortTitle: mediaItems.sortTitle,
 						playbackPath: mediaItems.playbackPath,
 						parts: mediaItems.parts,
+						technicalMetadata: mediaItems.technicalMetadata,
 						durationMilliseconds: mediaItems.durationMilliseconds,
 						seasonNumber: mediaItems.seasonNumber,
 						episodeNumber: mediaItems.episodeNumber,
@@ -545,8 +564,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		return indexSchedulingCatalog({
 			media: items.map((item) => {
 				const metadata = decodedMetadata(item.metadata);
+				const technical = item.technicalMetadata ?? {};
 				return {
 					id: item.id,
+					chapters: normalizeMediaChapters(technical.chapters, (item.durationMilliseconds ?? 0) / 1_000),
+					chapterLimitExceeded: technical.chapterLimitExceeded === true || chapterInputExceedsLimit(technical.chapters),
 					libraryId: item.libraryId,
 					groupId: item.groupId,
 					groupSortKey: groupSortKey(item.groupId),
@@ -844,7 +866,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		return rows.map(materializedSegmentRecord);
 	}
 
-	/** Read a chronologically bounded committed range for combined guide responses. */
+	/** Bound intersecting spans in one indexed query, retaining complete companion airings for guides. */
 	async listMaterializedTimelineSegmentsForGuide(
 		rangeStart: string,
 		rangeEnd: string,
@@ -855,19 +877,31 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		const columns = includeSnapshots
 			? { ...guideListSegmentColumns, mediaSnapshot: materializedTimelineSegments.mediaSnapshot }
 			: guideListSegmentColumns;
+		// Budget only intersecting spans, then recover their complete airings in the same query.
+		const airingId = sql<string>`json_extract(${materializedTimelineSegments.airing}, '$.id')`;
+		const window = this.db.$with('guide_window').as(this.db.select({
+			id: materializedTimelineSegments.id,
+			airingId: airingId.as('airing_id'),
+		}).from(materializedTimelineSegments).where(and(
+			gt(materializedTimelineSegments.finishesAt, rangeStart),
+			lt(materializedTimelineSegments.startsAt, rangeEnd),
+			channelIds?.length ? inArray(materializedTimelineSegments.channelId, channelIds) : undefined,
+		)).orderBy(asc(materializedTimelineSegments.startsAt), asc(materializedTimelineSegments.channelId)).limit(limit));
+		const matchedIds = this.db.select({ id: window.id }).from(window).union(this.db.select({
+			id: materializedTimelineSegments.id,
+		}).from(materializedTimelineSegments).where(and(
+			inArray(airingId, this.db.select({ airingId: window.airingId }).from(window).where(isNotNull(window.airingId))),
+			channelIds?.length ? inArray(materializedTimelineSegments.channelId, channelIds) : undefined,
+		)));
 		const rows = await this.db
+			.with(window)
 			.select(columns)
 			.from(materializedTimelineSegments)
-			.where(and(
-				gt(materializedTimelineSegments.finishesAt, rangeStart),
-				lt(materializedTimelineSegments.startsAt, rangeEnd),
-				channelIds?.length ? inArray(materializedTimelineSegments.channelId, channelIds) : undefined,
-			))
+			.where(inArray(materializedTimelineSegments.id, matchedIds))
 			.orderBy(
 				asc(materializedTimelineSegments.startsAt),
 				asc(materializedTimelineSegments.channelId),
-			)
-			.limit(limit);
+			);
 		await yieldToEventLoop();
 		return rows.map(materializedSegmentRecord);
 	}
@@ -965,7 +999,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				.where(
 					and(
 						eq(materializedTimelineSegments.channelId, input.channelId),
-						lte(materializedTimelineSegments.finishesAt, input.windowStart),
+						sql`coalesce(json_extract(${materializedTimelineSegments.airing}, '$.finish'), ${materializedTimelineSegments.finishesAt}) <= ${input.windowStart}`,
 					),
 				)
 				.run();
@@ -986,6 +1020,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 							title: segment.title,
 							playbackPath: segment.playbackPath,
 							playbackParts: segment.playbackParts,
+							airing: segment.airing ?? null,
 							programAncestry: segment.programAncestry ?? [],
 							startsAt: segment.start,
 							finishesAt: segment.finish,

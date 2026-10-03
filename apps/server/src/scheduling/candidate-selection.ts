@@ -29,12 +29,12 @@ export function selectOrderedCandidate(
 		if (strictFirst && !bestFit) {
 			fallback ??= media;
 			if (!collision) {
-				return fitSeconds === null || selectionDuration(media) <= fitSeconds ? media : null;
+				return fitSeconds === null || selectionDuration(media, context) <= fitSeconds ? media : null;
 			}
 			continue;
 		}
 
-		const duration = fitSeconds === null ? 0 : selectionDuration(media);
+		const duration = fitSeconds === null ? 0 : selectionDuration(media, context);
 		if (fitSeconds !== null && duration > fitSeconds) {
 			continue;
 		}
@@ -63,7 +63,7 @@ export function selectOrderedCandidate(
 	}
 
 	if (strictFirst && !bestFit) {
-		return fallback && (fitSeconds === null || selectionDuration(fallback) <= fitSeconds) ? fallback : null;
+		return fallback && (fitSeconds === null || selectionDuration(fallback, context) <= fitSeconds) ? fallback : null;
 	}
 	return hasNonCollision ? preferred ?? repeated : fallback ?? fallbackRepeated;
 }

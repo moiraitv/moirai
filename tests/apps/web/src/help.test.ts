@@ -15,6 +15,9 @@ describe('contextual help topics', () => {
 		expect(helpTopicForPath('/libraries/library-id/items/item-id')).toBe('libraries.browse');
 		expect(helpTopicForPath('/schedules/programs')).toBe('scheduling.programs');
 		expect(helpTopicForPath('/schedules/templates')).toBe('scheduling.templates');
+		expect(helpTopicForPath('/filler/pre-rolls')).toBe('filler.presets');
+		expect(helpTopicForPath('/filler/mid-rolls')).toBe('filler.presets');
+		expect(helpTopicForPath('/schedules/mid-roll-presets')).toBe('filler.presets');
 		expect(helpTopicForPath('/schedules/channels/channel-id')).toBe(
 			'scheduling.channel-schedules',
 		);

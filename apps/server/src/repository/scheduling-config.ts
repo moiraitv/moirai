@@ -1,3 +1,4 @@
+import { FillerPresetRepository } from './filler-presets.js';
 import { templatePlaybackInput } from '../scheduling/template-playback.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 import { validateCreditReference } from './subtitle-validation.js';
@@ -484,13 +485,18 @@ export class SchedulingConfigurationRepository {
 		const referencedAsFiller = templates.some(
 			(template) =>
 				template.defaultFiller?.programId === id
+				|| template.defaultMidRoll?.programId === id
+				|| template.defaultPreRoll?.programId === id || template.defaultPostRoll?.programId === id
 				|| template.slots.some(
-					(slot) => slot.filler.mode === 'configured' && slot.filler.config.programId === id,
+					(slot) => (slot.filler.mode === 'configured' && slot.filler.config.programId === id)
+						|| (slot.midRoll?.mode === 'configured' && slot.midRoll.config.programId === id)
+						|| [slot.preRoll, slot.postRoll].some(rule => rule?.mode === 'configured' && rule.config.programId === id),
 				),
 		);
 		const schedules = await this.db.select().from(channelSchedules);
 		const referencedByChannel = schedules.some(
-			(schedule) => schedule.config.defaultFiller?.programId === id,
+			(schedule) => schedule.config.defaultFiller?.programId === id || schedule.config.defaultMidRoll?.programId === id
+				|| [schedule.config.defaultPreRoll, schedule.config.defaultPostRoll, schedule.config.defaultTailFiller].some(config => config?.programId === id),
 		);
 		const referencedByDirectSchedule = schedules.some((schedule) => schedule.defaultProgramId === id);
 		const referencedByDirectLayer = (await this.db.select({ programId: channelScheduleLayers.programId })
@@ -519,6 +525,9 @@ export class SchedulingConfigurationRepository {
 			updatedAt: template.updatedAt,
 			schedulingUpdatedAt: template.schedulingUpdatedAt ?? template.updatedAt,
 			defaultFiller: template.defaultFiller ?? null,
+			defaultMidRoll: template.defaultMidRoll ?? null,
+			defaultPreRoll: template.defaultPreRoll ?? null,
+			defaultPostRoll: template.defaultPostRoll ?? null,
 			slots: slots
 				.filter((slot) => slot.templateId === template.id)
 				.map((slot) => ({
@@ -528,6 +537,9 @@ export class SchedulingConfigurationRepository {
 					stateScope: slot.stateScope,
 					startEligibility: slot.startEligibility,
 					filler: slot.filler,
+					midRoll: slot.midRoll ?? { mode: 'inherit' },
+					preRoll: slot.preRoll ?? { mode: 'inherit' },
+					postRoll: slot.postRoll ?? { mode: 'inherit' },
 					guide: slot.guide,
 				})),
 			boundaries: boundaries
@@ -575,6 +587,9 @@ export class SchedulingConfigurationRepository {
 			updatedAt: template.updatedAt,
 			schedulingUpdatedAt: template.schedulingUpdatedAt ?? template.updatedAt,
 			defaultFiller: template.defaultFiller ?? null,
+			defaultMidRoll: template.defaultMidRoll ?? null,
+			defaultPreRoll: template.defaultPreRoll ?? null,
+			defaultPostRoll: template.defaultPostRoll ?? null,
 			slots: slots.map((slot) => ({
 				id: slot.id,
 				startSeconds: slot.startSeconds,
@@ -582,6 +597,9 @@ export class SchedulingConfigurationRepository {
 				stateScope: slot.stateScope,
 				startEligibility: slot.startEligibility,
 				filler: slot.filler,
+				midRoll: slot.midRoll ?? { mode: 'inherit' },
+				preRoll: slot.preRoll ?? { mode: 'inherit' },
+				postRoll: slot.postRoll ?? { mode: 'inherit' },
 				guide: slot.guide,
 			})),
 			boundaries: boundaries.map((boundary) => ({
@@ -600,6 +618,7 @@ export class SchedulingConfigurationRepository {
 	/** Persist a new daily schedule template. */
 	async createScheduleTemplate(input: ScheduleTemplateCreate): Promise<ScheduleTemplate> {
 		validateTemplate(input, await this.listPrograms());
+		new FillerPresetRepository(this.db).validateAssignments([input]);
 		await this.assertTemplateIdentitiesAvailable(null, input);
 		const timestamp = currentTimestamp();
 		const id = randomUUID();
@@ -621,6 +640,9 @@ export class SchedulingConfigurationRepository {
 					nameKey,
 					period: input.period,
 					defaultFiller: input.defaultFiller,
+					defaultMidRoll: input.defaultMidRoll ?? null,
+					defaultPreRoll: input.defaultPreRoll ?? null,
+					defaultPostRoll: input.defaultPostRoll ?? null,
 					createdAt: timestamp,
 					updatedAt: timestamp,
 				})
@@ -657,11 +679,15 @@ export class SchedulingConfigurationRepository {
 			name: current.name,
 			period: current.period,
 			defaultFiller: current.defaultFiller,
+			defaultMidRoll: current.defaultMidRoll ?? null,
+			defaultPreRoll: current.defaultPreRoll ?? null,
+			defaultPostRoll: current.defaultPostRoll ?? null,
 			slots: current.slots,
 			boundaries: current.boundaries,
 		};
 		const updated = { ...currentInput, ...input } as ScheduleTemplateCreate;
 		validateTemplate(updated, await this.listPrograms());
+		new FillerPresetRepository(this.db).validateAssignments([updated]);
 		await this.assertTemplateIdentitiesAvailable(id, updated);
 		const nameKey = canonicalIdentityKey(updated.name);
 		const [nameConflict] = await this.db
@@ -684,6 +710,9 @@ export class SchedulingConfigurationRepository {
 					schedulingUpdatedAt: guideOnly ? current.schedulingUpdatedAt ?? current.updatedAt : updatedAt,
 					period: updated.period,
 					defaultFiller: updated.defaultFiller,
+					defaultMidRoll: updated.defaultMidRoll ?? null,
+					defaultPreRoll: updated.defaultPreRoll ?? null,
+					defaultPostRoll: updated.defaultPostRoll ?? null,
 					updatedAt,
 				})
 				.where(eq(scheduleTemplates.id, id))
@@ -814,13 +843,14 @@ export class SchedulingConfigurationRepository {
 		config = channelScheduleConfigSchema.parse(config);
 		const [templateRows, programRows] = await Promise.all([
 			this.db.select({ id: scheduleTemplates.id }).from(scheduleTemplates),
-			this.db.select({ id: schedulingPrograms.id }).from(schedulingPrograms),
+			this.db.select().from(schedulingPrograms),
 		]);
 		validateChannelSchedule(
 			config,
 			new Set(templateRows.map((template) => template.id)),
-			new Set(programRows.map((program) => program.id)),
+			new Map(programRows.map((program) => [program.id, program])),
 		);
+		new FillerPresetRepository(this.db).validateAssignments([], [config]);
 		await this.assertLayerIdentitiesAvailable(channelId, config.layers.map((layer) => layer.id));
 		const current = await this.getChannelSchedule(channelId);
 		config = { ...config, generationSeed: current?.generationSeed };
@@ -978,6 +1008,10 @@ export class SchedulingConfigurationRepository {
 					defaultProgramId: null,
 					layers: current?.layers ?? [],
 					defaultFiller: current?.defaultFiller ?? null,
+					defaultMidRoll: current?.defaultMidRoll ?? null,
+					defaultPreRoll: current?.defaultPreRoll ?? null,
+					defaultPostRoll: current?.defaultPostRoll ?? null,
+					defaultTailFiller: current?.defaultTailFiller ?? null,
 				};
 				tx.insert(channelSchedules)
 					.values({

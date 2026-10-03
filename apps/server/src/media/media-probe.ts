@@ -1,14 +1,15 @@
+import { chapterInputExceedsLimit, normalizeMediaChapters } from './chapters.js';
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Logger } from 'pino';
-import { MAX_MEDIA_DURATION_MILLISECONDS } from '@moirai/shared';
+import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_MID_ROLL_POINTS, type MediaChapter } from '@moirai/shared';
 import { resourceErrorCode, type ResourcePressureCoordinator } from '../operations/resource-pressure.js';
 import { inspectBlackTail, type BlackTailTarget } from './black-tail.js';
 import { primaryVideoStream } from './video-stream.js';
 import { openSourceFile } from './source-file.js';
 
 /** Probe contract version included in cache identities. */
-export const MEDIA_PROBE_VERSION = 9;
+export const MEDIA_PROBE_VERSION = 11;
 /** Maximum ffprobe JSON accepted from one media file. */
 const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 /** Maximum stream records retained from an untrusted container. */
@@ -73,6 +74,8 @@ export interface ProbedMediaStream {
 
 /** Playback-critical facts measured directly from a media file. */
 export interface MediaProbeResult {
+	chapters?: MediaChapter[];
+	chapterLimitExceeded?: boolean;
 	durationMilliseconds: number;
 	fileSizeBytes: number;
 	container: string | null;
@@ -89,6 +92,13 @@ export class MediaProbeError extends Error {
 	}
 }
 
+/** Distinguish bounded-output overflow from malformed JSON so only overflow permits one retry. */
+class ProbeOutputLimitError extends MediaProbeError {
+	constructor() {
+		super('invalid-output', 'ffprobe output exceeded its limit');
+	}
+}
+
 /** Health state exposed through the readiness service. */
 export interface MediaProbeHealth {
 	status: 'starting' | 'ready' | 'degraded' | 'stopping';
@@ -97,6 +107,7 @@ export interface MediaProbeHealth {
 
 /** Minimal ffprobe JSON shape consumed by the bounded parser. */
 interface ProbeDocument {
+	chapters?: Array<{ start_time?: string | number; end_time?: string | number; tags?: Record<string, unknown> }>;
 	format?: {
 		duration?: string | number;
 		format_name?: string;
@@ -274,8 +285,13 @@ export function parseMediaProbeOutput(output: string, fileSizeBytes: number): Me
 		throw new MediaProbeError('missing-duration', 'Media file has no usable video or eligible container duration');
 	}
 
+	const rawChapters = Array.isArray(document.chapters) ? document.chapters : [];
 	return {
 		durationMilliseconds: measuredDuration,
+		chapters: normalizeMediaChapters(rawChapters.slice(0, MAX_MID_ROLL_POINTS).filter(chapter => chapter && typeof chapter === 'object').map(chapter => ({
+			startSeconds: chapter.start_time, finishSeconds: chapter.end_time, title: tagged(chapter.tags, 'title'),
+		})), measuredDuration / 1_000),
+		chapterLimitExceeded: chapterInputExceedsLimit(rawChapters),
 		fileSizeBytes,
 		container: typeof document.format?.format_name === 'string'
 			? document.format.format_name.slice(0, 128)
@@ -362,22 +378,40 @@ export class MediaProbe {
 			signal?.throwIfAborted();
 			const source = await openSourceFile(scanRoot, file);
 			try {
-				const output = await this.run(
-					[
-						'-v',
-						'error',
-						'-show_entries',
-						'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,channels,duration,start_time:stream_tags:stream_disposition=default,forced,hearing_impaired,comment,visual_impaired,attached_pic',
-						'-of',
-						'json',
-						'-fd',
-						String(MEDIA_INPUT_DESCRIPTOR),
-						'fd:',
-					],
-					signal,
-					source.handle.fd,
-				);
+				const args = [
+					'-v',
+					'error',
+					'-show_entries',
+					'format=duration,format_name:format_tags=title,artist,album_artist,album,track,disc,date,year,genre:stream=index,codec_type,codec_name,width,height,channels,duration,start_time:stream_tags:stream_disposition=default,forced,hearing_impaired,comment,visual_impaired,attached_pic:chapter=start_time,end_time:chapter_tags=title',
+					'-of',
+					'json',
+					'-fd',
+					String(MEDIA_INPUT_DESCRIPTOR),
+					'fd:',
+				];
+				let output: string;
+				let omittedChapters = false;
+				try {
+					output = await this.run(args, signal, source.handle.fd);
+				}
+				catch (error) {
+					if (!(error instanceof ProbeOutputLimitError)) {
+						throw error;
+					}
+
+					// Keep usable playback facts when optional chapter output exceeds the same hard cap.
+					if (signal?.aborted) {
+						throw new MediaProbeError('cancelled', 'Media probe was cancelled');
+					}
+					const retry = args.map(arg => arg.replace(':chapter=start_time,end_time:chapter_tags=title', ''));
+					output = await this.run(retry, signal, source.handle.fd);
+					omittedChapters = true;
+				}
 				const result = parseMediaProbeOutput(output, source.stat.size);
+				if (omittedChapters) {
+					result.chapters = [];
+					result.chapterLimitExceeded = true;
+				}
 				this.state = { status: 'ready' };
 				return result;
 			}
@@ -504,6 +538,8 @@ export class MediaProbe {
 			let stdout = Buffer.alloc(0);
 			let stderr = Buffer.alloc(0);
 			let settled = false;
+			let stopped: MediaProbeError | undefined;
+			let force: NodeJS.Timeout | undefined;
 			const finish = (error?: MediaProbeError): void => {
 				if (settled) {
 					return;
@@ -511,6 +547,7 @@ export class MediaProbe {
 
 				settled = true;
 				clearTimeout(timeout);
+				clearTimeout(force);
 				signal?.removeEventListener('abort', cancel);
 				this.children.delete(child);
 				if (error) {
@@ -521,10 +558,13 @@ export class MediaProbe {
 				}
 			};
 			const stop = (error: MediaProbeError): void => {
+				if (settled || stopped) {
+					return;
+				}
+				stopped = error;
 				child.kill('SIGTERM');
-				const force = setTimeout(() => child.kill('SIGKILL'), 1_000);
+				force = setTimeout(() => child.kill('SIGKILL'), 1_000);
 				force.unref();
-				finish(error);
 			};
 			const cancel = (): void => stop(new MediaProbeError('cancelled', 'Media probe was cancelled'));
 			const timeout = setTimeout(
@@ -535,9 +575,12 @@ export class MediaProbe {
 
 			// Bound both output streams and translate child lifecycle events into probe errors.
 			child.stdout!.on('data', (chunk: Buffer) => {
+				if (settled || stopped) {
+					return;
+				}
 				stdout = Buffer.concat([stdout, chunk]);
 				if (stdout.length > MAX_PROBE_OUTPUT_BYTES) {
-					stop(new MediaProbeError('invalid-output', 'ffprobe output exceeded its limit'));
+					stop(new ProbeOutputLimitError());
 				}
 			});
 			child.stderr!.on('data', (chunk: Buffer) => {
@@ -550,9 +593,9 @@ export class MediaProbe {
 			});
 			child.once('close', (code) => {
 				finish(
-					code === 0
+					stopped ?? (code === 0
 						? undefined
-						: new MediaProbeError('probe-failed', 'ffprobe could not read the media file'),
+						: new MediaProbeError('probe-failed', 'ffprobe could not read the media file')),
 				);
 			});
 			signal?.addEventListener('abort', cancel, { once: true });

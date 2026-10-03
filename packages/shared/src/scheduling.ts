@@ -1,3 +1,10 @@
+import type { SelectionStateRecord } from './selection-state.js';
+export type { FillerCycle, SelectionStateRecord, SelectionStateValue } from './selection-state.js';
+import { fillerAssignmentSchema, slotFillerAssignmentSchema, type FillerSettings } from './filler-presets.js';
+import { fillerConfigSchema, slotFillerSchema } from './filler.js';
+import { midRollConfigSchema, slotMidRollSchema, type MidRollSettings, type MediaChapter, type TimelineAiring } from './mid-roll.js';
+export * from './filler.js';
+export * from './mid-roll.js';
 export * from './ai-selection.js';
 import { audioPreferencesSchema } from './audio.js';
 import { z } from 'zod';
@@ -550,31 +557,6 @@ export interface ProgramItemAdditionResult {
 	alreadySelectedCount: number;
 }
 
-/** Validate the filler selection policy contract at runtime. */
-export const fillerSelectionPolicySchema = z.enum([
-	'next-truncate',
-	'next-fit-only',
-	'best-fit-only',
-	'best-fit-or-truncate',
-]);
-/** Shared wire contract for filler selection policy. */
-export type FillerSelectionPolicy = z.infer<typeof fillerSelectionPolicySchema>;
-
-/** Validate the filler config contract at runtime. */
-export const fillerConfigSchema = z.object({
-	programId: z.uuid(),
-	policy: fillerSelectionPolicySchema.default('best-fit-or-truncate'),
-});
-/** Shared wire contract for filler config. */
-export type FillerConfig = z.infer<typeof fillerConfigSchema>;
-
-/** Validate the slot filler contract at runtime. */
-export const slotFillerSchema = z.discriminatedUnion('mode', [
-	z.object({ mode: z.literal('inherit') }),
-	z.object({ mode: z.literal('disabled') }),
-	z.object({ mode: z.literal('configured'), config: fillerConfigSchema }),
-]);
-
 /** Validate the start eligibility contract at runtime. */
 export const startEligibilitySchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('require-fit') }),
@@ -602,8 +584,15 @@ export const scheduleSlotSchema = z
 		guide: slotGuideSchema.optional(),
 		startEligibility: startEligibilitySchema.default({ type: 'require-fit' }),
 		filler: slotFillerSchema.default({ mode: 'inherit' }),
+		midRoll: slotMidRollSchema.optional(),
+		preRoll: slotFillerAssignmentSchema.optional(), postRoll: slotFillerAssignmentSchema.optional(),
 	})
 	.superRefine((slot, context) => {
+		for (const kind of ['preRoll', 'midRoll', 'postRoll'] as const) {
+			if (slot.programId === null && slot[kind]?.mode === 'configured') {
+				context.addIssue({ code: 'custom', path: [kind], message: 'A no-program slot cannot configure item filler' });
+			}
+		}
 		if (slot.programId === null && slot.filler.mode !== 'disabled') {
 			context.addIssue({
 				code: 'custom',
@@ -659,6 +648,9 @@ export const scheduleTemplateCreateSchema = z.object({
 	name: z.string().trim().min(1).max(120),
 	period: z.literal('day').default('day'),
 	defaultFiller: fillerConfigSchema.nullable().default(null),
+	defaultMidRoll: midRollConfigSchema.nullable().optional(),
+	defaultPreRoll: fillerAssignmentSchema.nullable().optional(),
+	defaultPostRoll: fillerAssignmentSchema.nullable().optional(),
 	slots: z.array(scheduleSlotSchema).min(1).max(200),
 	boundaries: z.array(scheduleBoundarySchema).min(1).max(200),
 });
@@ -920,6 +912,10 @@ export const channelScheduleConfigSchema = z.object({
 	defaultProgramId: z.uuid().nullable().default(null),
 	layers: z.array(channelScheduleLayerSchema).max(MAX_CHANNEL_SCHEDULE_LAYERS).default([]),
 	defaultFiller: fillerConfigSchema.nullable().default(null),
+	defaultTailFiller: fillerConfigSchema.nullable().optional(),
+	defaultMidRoll: midRollConfigSchema.nullable().optional(),
+	defaultPreRoll: fillerAssignmentSchema.nullable().optional(),
+	defaultPostRoll: fillerAssignmentSchema.nullable().optional(),
 }).refine((schedule) => (schedule.defaultTemplateId === null) !== (schedule.defaultProgramId === null), {
 	message: 'Choose exactly one base template or program',
 });
@@ -939,42 +935,10 @@ export interface ChannelSchedule extends ChannelScheduleConfig {
 	updatedAt: string;
 }
 
-/** Shared wire contract for selection state value. */
-export type SelectionStateValue
-	= | { type: 'similarity'; seed: SimilaritySeed; consumedItemIds: string[]; recentSeeds?: string[][] | undefined }
-		| { type: 'sequential'; nextIndex: number; lastItemId: string | null }
-		| {
-			type: 'shuffle';
-			cycle: number;
-			cycleItemIds: string[];
-			remainingItemIds: string[];
-			lastItemId: string | null;
-		}
-		| { type: 'random'; counter: number; lastItemId: string | null }
-		| { type: 'weighted-random'; counter: number; lastItemId: string | null }
-		| {
-			type: 'sequence';
-			entryIndex: number;
-			selectedInEntry: number;
-			completed: boolean;
-			rotation?: {
-				cycle: number;
-				remaining: number[];
-				order: number[];
-				lastEntry: number | null;
-			} | undefined;
-		};
-
-/** Shared wire contract for selection state record. */
-export interface SelectionStateRecord {
-	consumerKey: string;
-	configFingerprint: string;
-	value: SelectionStateValue;
-	updatedAt: string;
-}
-
 /** Shared wire contract for schedulable media. */
 export interface SchedulableMedia {
+	chapters?: MediaChapter[];
+	chapterLimitExceeded?: boolean;
 	id: string;
 	libraryId: string;
 	groupId: string | null;
@@ -1056,6 +1020,8 @@ export interface SemanticCatalog {
 
 /** Shared wire contract for scheduling catalog. */
 export interface SchedulingCatalog {
+	midRollPresets?: Record<string, MidRollSettings>;
+	fillerPresets?: Record<string, FillerSettings>;
 	semantic?: SemanticCatalog;
 	media: SchedulableMedia[];
 	/** In-process revision/scope identity used to avoid repeated worker transfers. */
@@ -1146,6 +1112,7 @@ export type ChannelScheduleDraftPreview = z.infer<typeof channelScheduleDraftPre
 
 /** Shared wire contract for timeline segment. */
 export interface TimelineSegment {
+	airing?: TimelineAiring | null | undefined;
 	/** Entry identities from the outermost Sequence to the selected leaf. */
 	sequenceEntryPath?: string[] | undefined;
 	programAncestry?: string[] | undefined;
@@ -1242,6 +1209,7 @@ export interface GuideSegmentMediaPreview {
 
 /** Source labels and safe metadata for one committed guide segment. */
 export interface GuideSegmentDetail {
+	airingSegments?: Array<Pick<TimelineSegment, 'id' | 'role' | 'title' | 'start' | 'finish' | 'sourceStartSeconds' | 'sourceFinishSeconds'>>;
 	segment: Omit<TimelineSegment, 'playbackPath'>;
 	media: GuideSegmentMediaPreview | null;
 	catalogItemPresent: boolean;

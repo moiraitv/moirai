@@ -46,6 +46,21 @@ describe('schedule geometry', () => {
 		expect(splitScheduleSlot(template, template.slots[0]!.id, 12 * 3_600).slots).toHaveLength(2);
 	});
 
+	it.each(['inherit', 'disabled', 'configured'] as const)('copies reactive %s mid-roll settings independently when splitting', (mode) => {
+		const template = reactive(initial());
+		template.slots[0]!.midRoll = mode === 'configured'
+			? { mode, config: { programId: 'filler-program', presetId: 'preset' } }
+			: { mode };
+		const result = splitScheduleSlot(template, 'slot-a', 12 * 3_600);
+		const copied = result.slots[1]!.midRoll!;
+		expect(copied).toEqual(template.slots[0]!.midRoll);
+		expect(copied).not.toBe(template.slots[0]!.midRoll);
+		if (copied.mode === 'configured') {
+			copied.config.programId = 'another-program';
+			expect(template.slots[0]!.midRoll).toMatchObject({ config: { programId: 'filler-program' } });
+		}
+	});
+
 	it('splits a slot while preserving the former outgoing boundary on the new right slot', () => {
 		const splitAt = 6 * 3_600;
 		const result = splitScheduleSlot(initial(), 'slot-a', splitAt, createId);

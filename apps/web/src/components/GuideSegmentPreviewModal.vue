@@ -112,11 +112,11 @@ const roleLabel = computed(() => {
 							<span>{{ roleLabel }}</span>
 							<span v-if="mediaCoordinates">{{ mediaCoordinates }}</span>
 							<span v-if="detail.media">{{ durationLabel(detail.media.durationSeconds) }}</span>
-							<span v-if="detail.segment.truncated">Truncated</span>
+							<span v-if="detail.segment.airing?.truncated ?? detail.segment.truncated">Truncated</span>
 						</div>
 						<p class="guide-preview-airtime">
 							<Clock3 :size="16" />
-							{{ timeLabel(detail.segment.start) }} – {{ timeLabel(detail.segment.finish) }}
+							{{ timeLabel(detail.segment.airing?.start ?? detail.segment.start) }} – {{ timeLabel(detail.segment.airing?.finish ?? detail.segment.finish) }}
 						</p>
 						<p v-if="detail.media?.plot" class="guide-preview-plot">{{ detail.media.plot }}</p>
 						<div v-if="detail.media?.genreNames.length" class="guide-preview-genres">
@@ -131,6 +131,14 @@ const roleLabel = computed(() => {
 						>
 							The media source is temporarily unavailable.
 						</p>
+						<details v-if="detail.airingSegments?.length" class="guide-preview-airing">
+							<summary>Content and mid-roll breaks</summary>
+							<ol>
+								<li v-for="span in detail.airingSegments" :key="span.id">
+									{{ timeLabel(span.start) }} – {{ timeLabel(span.finish) }} · {{ span.role === 'filler' ? 'Mid-roll' : 'Content' }}: {{ span.title }}
+								</li>
+							</ol>
+						</details>
 						<div class="guide-preview-source">
 							<h3>Schedule source</h3>
 							<p><ListVideo :size="16" /><span>Program</span><strong>{{ detail.source.programName ?? 'None' }}</strong></p>

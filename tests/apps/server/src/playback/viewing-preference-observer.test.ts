@@ -10,6 +10,41 @@ async function settle(): Promise<void> {
 }
 
 describe('viewing preference observer', () => {
+	it.each(['primary', 'filler'])('scores one primary airing across breaks when joining during %s', async (role) => {
+		const start = Date.parse('2026-01-01T00:00:00Z');
+		const at = (seconds: number) => new Date(start + seconds * 1000).toISOString();
+		const airing = { id: 'airing-1', primarySegmentId: 'primary-1', start: at(0), finish: at(1230), truncated: false };
+		const primary = { segment: { id: 'primary-1', mediaItemId: 'movie', role: 'primary', start: at(0), finish: at(600), airing } };
+		let current = role === 'primary' ? primary : { segment: { ...primary.segment, id: 'break', role: 'filler', mediaItemId: 'advert', start: at(600), finish: at(630) } };
+		const recordViewingPreference = vi.fn();
+		const list = vi.fn(async () => [current]);
+		const get = vi.fn(async () => primary);
+		const observer = new ViewingPreferenceObserver(
+			{ listMaterializedTimelineSegments: list,
+				getMaterializedTimelineSegment: get, recordViewingPreference } as unknown as Repository,
+			{ warn: vi.fn() } as unknown as FastifyBaseLogger,
+			true,
+		);
+		const joinedAt = role === 'primary' ? 0 : 610;
+		for (let seconds = joinedAt; seconds < 1230; seconds += 60) {
+			current = seconds >= 630 ? { segment: { ...primary.segment, id: 'resumed', start: at(630), finish: at(1230) } } : current;
+			observer.observe('channel', { key: 'client', started: seconds === joinedAt }, start + seconds * 1000);
+			await settle();
+		}
+		expect(recordViewingPreference).toHaveBeenCalledExactlyOnceWith('movie', 2, 'initial', at(joinedAt + 120));
+		expect(list).toHaveBeenCalledOnce();
+		expect(get).toHaveBeenCalledTimes(role === 'primary' ? 0 : 1);
+
+		// A later showing of the same movie is a distinct continued encounter.
+		current = { segment: { ...primary.segment, id: 'primary-2', start: at(1230), finish: at(2430),
+			airing: { ...airing, id: 'airing-2', primarySegmentId: 'primary-2', start: at(1230), finish: at(2430) } } };
+		for (const seconds of [1230, 1290, 1350]) {
+			observer.observe('channel', { key: 'client', started: false }, start + seconds * 1000);
+			await settle();
+		}
+		expect(recordViewingPreference).toHaveBeenNthCalledWith(2, 'movie', 1, 'continued', at(1350));
+	});
+
 	it('scores one initial encounter only after two minutes and deduplicates later requests', async () => {
 		const recordViewingPreference = vi.fn();
 		const repository = {

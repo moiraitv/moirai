@@ -1,3 +1,6 @@
+import { candidateIndex } from './candidate-index.js';
+import { assertFillerProgram } from './validation.js';
+import { selectFillerCandidate } from './filler-cycle.js';
 import { selectOrderedCandidate } from './candidate-selection.js';
 import { selectSequence } from './sequence-selection.js';
 import { chooseSimilarity } from '../semantic/selection.js';
@@ -38,6 +41,14 @@ export type SelectionFitMode = 'best-fit' | 'first-fit-arbitrary';
 
 /** Immutable catalog indexes and mutable proposed state used during selection. */
 export interface SelectionContext {
+	/** Filler-only membership and whole-stage budget, independent of the remainder. */
+	fillerSelection?: { fullBudgetSeconds: number; allowTruncation: boolean } | undefined;
+	/** Cache semantic source membership for carried filler items within one generation. */
+	fillerSemanticSources?: Map<string, Set<string>>;
+	/** Immutable candidate lookups shared by speculative selections in one generation. */
+	candidateIndexes?: WeakMap<SchedulableMedia[], ReturnType<typeof candidateIndex>>;
+	/** Optional primary airing duration, evaluated against isolated filler state. */
+	mediaDuration?: ((media: SchedulableMedia) => number) | undefined;
 	/** Configuration fingerprints shared by all branches in this generation. */
 	stateFingerprints?: Map<SchedulingProgram, { fingerprint: string; compatible: string | null }>;
 	programs: Map<string, SchedulingProgram>;
@@ -82,12 +93,12 @@ export function indexOccupiedMedia(occupiedMedia: SelectionContext['occupiedMedi
 	return index;
 }
 
-/** Read the playable candidate duration for fitting and collision checks. */
-export function selectionDuration(media: SchedulableMedia): number {
-	return media.durationSeconds!;
+/** Include inserted filler only while selecting primary media. */
+export function selectionDuration(media: SchedulableMedia, context: SelectionContext): number {
+	return context.mediaDuration?.(media) ?? media.durationSeconds!;
 }
 
-/** Check duration only when the same item's occupied interval has not ended. */
+/** Evaluate expanded duration only when the same item's occupied interval has not ended. */
 export function hasSelectionCollision(media: SchedulableMedia, context: SelectionContext): boolean {
 	if (context.occupiedMediaIndex) {
 		const intervals = context.occupiedMediaIndex.get(media.id);
@@ -96,12 +107,12 @@ export function hasSelectionCollision(media: SchedulableMedia, context: Selectio
 		}
 		const start = Date.parse(context.selectionStart);
 		return intervals.some(occupied =>
-			start < occupied.finish && start + selectionDuration(media) * 1_000 > occupied.start);
+			start < occupied.finish && start + selectionDuration(media, context) * 1_000 > occupied.start);
 	}
 	const start = Date.parse(context.selectionStart);
 	return context.occupiedMedia.some(occupied => occupied.mediaItemId === media.id
 		&& start < Date.parse(occupied.finish)
-		&& start + selectionDuration(media) * 1_000 > Date.parse(occupied.start));
+		&& start + selectionDuration(media, context) * 1_000 > Date.parse(occupied.start));
 }
 
 /** Return the show ancestor that shares preference across episodes. */
@@ -137,14 +148,18 @@ function weightedOrder(
 	counter: number,
 	context: SelectionContext,
 ): SchedulableMedia[] {
-	return [...candidates].sort((left, right) => {
-		const key = (candidate: SchedulableMedia): number => {
-			const hash = deterministicNumber(`${seed}:${consumerKey}:${counter}:${candidate.id}`);
-			const uniform = (hash + 1) / (0xffffffffffff + 2);
-			return -Math.log(uniform) / viewingPreferenceWeight(candidate, context);
-		};
-		return key(left) - key(right) || left.id.localeCompare(right.id);
-	});
+	return candidates.map(candidate => {
+		const hash = deterministicNumber(`${seed}:${consumerKey}:${counter}:${candidate.id}`);
+		const uniform = (hash + 1) / (0xffffffffffff + 2);
+		return { candidate, key: -Math.log(uniform) / viewingPreferenceWeight(candidate, context) };
+	}).sort((left, right) => left.key - right.key || left.candidate.id.localeCompare(right.candidate.id))
+		.map(entry => entry.candidate);
+}
+
+/** Compute one seeded key per candidate while retaining stable order for equal keys. */
+function seededOrder(candidates: SchedulableMedia[], seed: string, consumerKey: string, cycle: number): SchedulableMedia[] {
+	return candidates.map(candidate => ({ candidate, key: deterministicNumber(`${seed}:${consumerKey}:${cycle}:${candidate.id}`) }))
+		.sort((left, right) => left.key - right.key).map(entry => entry.candidate);
 }
 
 /** Derive a repeatable numeric value from a string seed. */
@@ -342,6 +357,7 @@ function candidatesFor(
 				: source.type === 'library-query' || source.type === 'group-collection'
 					? (mediaByLibrary.get(source.libraryId) ?? [])
 					: context.catalog.media;
+	const collectionIds = new Set((source.type === 'collection' || source.type === 'ai') ? source.itemIds.map(canonicalItemId) : []);
 	const matching = candidatePool.filter((media) => {
 		if (config.source.type === 'item') {
 			return media.id === canonicalItemId(config.source.itemId);
@@ -364,7 +380,7 @@ function candidatesFor(
 		if (config.source.type === 'collection' || config.source.type === 'ai') {
 			return (
 				media.libraryId === config.source.libraryId
-				&& config.source.itemIds.some((id) => canonicalItemId(id) === media.id)
+				&& collectionIds.has(media.id)
 			);
 		}
 
@@ -487,7 +503,10 @@ function candidatesFor(
 	return playable;
 }
 
-/** Own a cursor record before mutation, preserving compatible legacy progress or initializing it. */
+/**
+ * Own a cursor record before mutation, preserving compatible progress. Filler branches borrow
+ * immutable arrays; queue reconciliation replaces them before any membership changes.
+ */
 function stateFor(
 	state: Map<string, SelectionStateRecord>,
 	consumerKey: string,
@@ -495,11 +514,12 @@ function stateFor(
 	initial: SelectionStateValue,
 	now: string,
 	compatibleFingerprint: string | null = null,
+	filler = false,
 ): SelectionStateRecord {
 	const existing = state.get(consumerKey);
 	if (existing?.value.type === initial.type) {
 		if (existing.configFingerprint === configFingerprint) {
-			const owned = { ...existing, value: structuredClone(existing.value) };
+			const owned = { ...existing, value: filler ? { ...existing.value } : structuredClone(existing.value) };
 			state.set(consumerKey, owned);
 			return owned;
 		}
@@ -507,7 +527,7 @@ function stateFor(
 			compatibleFingerprint !== null
 			&& existing.configFingerprint === compatibleFingerprint
 		) {
-			const migrated = { ...existing, value: structuredClone(existing.value), configFingerprint, updatedAt: now };
+			const migrated = { ...existing, value: filler ? { ...existing.value } : structuredClone(existing.value), configFingerprint, updatedAt: now };
 			state.set(consumerKey, migrated);
 			return migrated;
 		}
@@ -639,6 +659,41 @@ function chooseContent(
 	const strategy = program.config.strategy;
 	const { fingerprint: stateConfig, compatible: legacyStateConfig } = stateFingerprints(program, context);
 
+	if (context.fillerSelection) {
+		const initial: SelectionStateValue = strategy.type === 'sequential' ? { type: 'sequential', nextIndex: 0, lastItemId: null }
+			: strategy.type === 'shuffle' ? { type: 'shuffle', cycle: 0, cycleItemIds: [], remainingItemIds: [], lastItemId: null }
+				: { type: strategy.type, counter: 0, lastItemId: null };
+		const record = stateFor(state, consumerKey, stateConfig, initial, context.now, legacyStateConfig, true);
+		const value = record.value;
+		const order = (cycle: number): SchedulableMedia[] => {
+			if (strategy.type === 'sequential') {
+				return candidates;
+			}
+			if (strategy.type === 'weighted-random') {
+				return weightedOrder(candidates, strategy.seed, consumerKey, cycle, context);
+			}
+			return seededOrder(candidates, strategy.seed, consumerKey, cycle);
+		};
+		const selected = selectFillerCandidate(candidates, record, context, fitSeconds, order);
+		if (selected) {
+			if (value.type === 'sequential') {
+				value.nextIndex = (candidates.indexOf(selected) + 1) % candidates.length;
+			}
+			else if (value.type === 'shuffle') {
+				value.cycle = value.fillerCycle!.cycle;
+				value.cycleItemIds = value.fillerCycle!.itemIds;
+				value.remainingItemIds = value.fillerCycle!.remainingItemIds;
+			}
+			else if (value.type === 'random' || value.type === 'weighted-random') {
+				value.counter += 1;
+			}
+			if ('lastItemId' in value) {
+				value.lastItemId = selected.id;
+			}
+		}
+		return selected;
+	}
+
 	// Advance a stable cursor through the source's natural media order.
 	if (strategy.type === 'sequential') {
 		const record = stateFor(
@@ -684,31 +739,19 @@ function chooseContent(
 		value.cycleItemIds = value.cycleItemIds.filter((id) => availableIds.has(id));
 		value.remainingItemIds = value.remainingItemIds.filter((id) => availableIds.has(id));
 		const known = new Set(value.cycleItemIds);
-		const added = candidates
-			.filter((candidate) => !known.has(candidate.id))
-			.sort(
-				(a, b) =>
-					deterministicNumber(`${strategy.seed}:${consumerKey}:${value.cycle}:${a.id}`)
-					- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.cycle}:${b.id}`),
-			);
+		const added = seededOrder(candidates.filter(candidate => !known.has(candidate.id)), strategy.seed, consumerKey, value.cycle);
 		value.remainingItemIds.push(...added.map((candidate) => candidate.id));
 		value.cycleItemIds.push(...added.map((candidate) => candidate.id));
 		if (value.remainingItemIds.length === 0) {
 			value.cycle += 1;
-			value.remainingItemIds = [...candidates]
-				.sort(
-					(a, b) =>
-						deterministicNumber(`${strategy.seed}:${consumerKey}:${value.cycle}:${a.id}`)
-						- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.cycle}:${b.id}`),
-				)
-				.map((candidate) => candidate.id);
+			value.remainingItemIds = seededOrder(candidates, strategy.seed, consumerKey, value.cycle).map(candidate => candidate.id);
 			value.cycleItemIds = [...value.remainingItemIds];
 			if (value.remainingItemIds.length > 1 && value.remainingItemIds[0] === value.lastItemId) {
 				value.remainingItemIds.push(value.remainingItemIds.shift()!);
 			}
 		}
 		const ordered = value.remainingItemIds
-			.map((id) => candidates.find((candidate) => candidate.id === id))
+			.map((id) => candidateIndex(candidates, context).byId.get(id))
 			.filter((candidate): candidate is SchedulableMedia => Boolean(candidate));
 		const selected = selectOrderedCandidate(ordered, context, fitSeconds, fitMode);
 		if (!selected) {
@@ -754,9 +797,7 @@ function chooseContent(
 		legacyStateConfig,
 	);
 	const value = record.value as Extract<SelectionStateValue, { type: 'random' }>;
-	const ordered = [...candidates].sort((a, b) =>
-		deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${a.id}`)
-		- deterministicNumber(`${strategy.seed}:${consumerKey}:${value.counter}:${b.id}`));
+	const ordered = seededOrder(candidates, strategy.seed, consumerKey, value.counter);
 	const selected = selectOrderedCandidate(ordered, context, fitSeconds, fitMode);
 	if (!selected) {
 		return null;
@@ -801,6 +842,11 @@ export function selectProgram(
 		});
 		context.blockedPrograms.add(programId);
 		return null;
+	}
+
+	context.candidateIndexes ??= new WeakMap();
+	if (context.fillerSelection) {
+		assertFillerProgram({ programId }, context.programs);
 	}
 
 	const state = new Map(sourceState);

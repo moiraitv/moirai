@@ -1,3 +1,4 @@
+import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { readNfo, readGroupNfo } from './on-disk-nfo.js';
 import { attachMediaIssueIdentities, recordMediaIssueInputs, type MediaIssueInputs } from './media-issue-identity.js';
 import { createHash } from 'node:crypto';
@@ -386,6 +387,9 @@ export async function discoverOnDisk(
 		) {
 			probeResult = {
 				durationMilliseconds: cachedProbe.durationMilliseconds,
+				chapters: normalizeMediaChapters(cachedProbe.technicalMetadata.chapters, cachedProbe.durationMilliseconds / 1_000),
+				chapterLimitExceeded: cachedProbe.technicalMetadata.chapterLimitExceeded === true
+					|| chapterInputExceedsLimit(cachedProbe.technicalMetadata.chapters),
 				fileSizeBytes: typeof cachedProbe.technicalMetadata.fileSizeBytes === 'number'
 					? cachedProbe.technicalMetadata.fileSizeBytes
 					: Number(mediaInfo.size),
@@ -815,6 +819,8 @@ export async function discoverOnDisk(
 					fileSizeBytes: probeResult.fileSizeBytes,
 					container: probeResult.container,
 					streams: probeResult.streams,
+					chapters: probeResult.chapters ?? [],
+					chapterLimitExceeded: probeResult.chapterLimitExceeded ?? false,
 					resolution: probeResult.resolution,
 					tags: probeResult.tags,
 				}

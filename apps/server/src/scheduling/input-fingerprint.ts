@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ChannelSchedule, ScheduleTemplate, SchedulingCatalog, SchedulingProgram, SchedulableMedia } from '@moirai/shared';
+import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates } from './direct-program-templates.js';
@@ -115,9 +116,25 @@ export function referencedPrograms(
 			if (slot.programId) {
 				ids.add(slot.programId);
 			}
+			for (const rule of [slot.preRoll, slot.postRoll]) {
+				if (rule?.mode === 'configured') {
+					ids.add(rule.config.programId);
+				}
+			}
+			if (slot.midRoll?.mode === 'configured') {
+				ids.add(slot.midRoll.config.programId);
+			}
 			if (slot.filler.mode === 'configured') {
 				ids.add(slot.filler.config.programId);
 			}
+		}
+		for (const config of [template.defaultPreRoll, template.defaultPostRoll]) {
+			if (config) {
+				ids.add(config.programId);
+			}
+		}
+		if (template.defaultMidRoll) {
+			ids.add(template.defaultMidRoll.programId);
 		}
 		if (template.defaultFiller) {
 			ids.add(template.defaultFiller.programId);
@@ -170,6 +187,8 @@ export function inputFingerprint(
 		programs,
 		[
 			...(schedule.defaultFiller ? [schedule.defaultFiller.programId] : []),
+			...[schedule.defaultPreRoll, schedule.defaultPostRoll, schedule.defaultTailFiller].flatMap(config => config ? [config.programId] : []),
+			...(schedule.defaultMidRoll ? [schedule.defaultMidRoll.programId] : []),
 			...(schedule.defaultProgramId ? [schedule.defaultProgramId] : []),
 			...schedule.layers.flatMap((layer) => layer.programId ? [layer.programId] : []),
 		],
@@ -213,6 +232,8 @@ export function inputFingerprint(
 		templates: selectedTemplates.map(template => context.playback(template)),
 		programs: selectedPrograms,
 		catalog: {
+			midRollPresets: Object.fromEntries(referencedMidRollPresetIds(selectedTemplates, [schedule])
+				.map(id => [id, catalog.fillerPresets?.[id] ?? catalog.midRollPresets?.[id]])),
 			semantic: semanticSchedulingFingerprint(schedule.channelId, selectedPrograms, catalog),
 			...scope,
 		},
