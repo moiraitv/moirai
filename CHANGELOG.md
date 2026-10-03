@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 - 2026-10-03
+
+### New
+
+- **Filler** now manages reusable **Pre-Roll**, **Mid-Roll**, **Post-Roll**, and **Tail Filler** presets. Choose a preset and Source Program pair at the channel, template, or schedule level with independent slot overrides.
+- Filler budgets support fixed duration, clock padding, fixed quantity, and random quantity; Tail Fillers can also fill the remaining slot. Mid-Rolls use video chapters or timed intervals with guided break conditions.
+- Template and channel schedule previews mark pre-roll, mid-roll, post-roll, tail, and fallback spans, with duration markers and a compact legend.
+- **Filler Settings** includes a budget-shortfall warning threshold for pre-roll, mid-roll, and post-roll. The default warns below **80%** of the requested duration or clip count; **0** disables these warnings and **100** warns for any incomplete budget.
+
+### Improvements
+
+- Significant performance enhancements to ensure active streams take priority over background schedule preparation and reuse preparation already running for the same channel. Database writes, catalog reads, and playout preparation do more work in background workers, with less repeated scheduling computation.
+- Guide fetching and indexing now run in a browser worker. Existing usable listings remain visible when a status refresh fails.
+
+### Changes
+
+- The guide and XMLTV feed now default to **three local days**. `MOIRAI_GUIDE_DAYS` still supports `1` to `14` for a longer horizon at additional processing cost.
+- Existing channel filler becomes a Tail Filler assignment, preserving its use in empty slots until that assignment is explicitly replaced. Tail filler and channel fallback can be configured independently.
+
 ## 0.5.0 - 2026-09-30
 
 ### New
