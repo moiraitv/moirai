@@ -96,6 +96,7 @@ test('captures libraries and scanning', { tag: '@docs-screenshot' }, async ({ pa
 		await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
 		await expect(page.locator('.source-outage-banner')).toBeInViewport();
 		await expect.poll(() => page.evaluate(() => {
+			window.scrollTo({ top: 0, behavior: 'instant' });
 			const header = document.querySelector('.library-page-header')!.getBoundingClientRect();
 			const warning = document.querySelector('.source-outage-banner')!.getBoundingClientRect();
 			return { belowHeader: warning.top >= header.bottom - 1, withinViewport: warning.bottom <= window.innerHeight + 1 };

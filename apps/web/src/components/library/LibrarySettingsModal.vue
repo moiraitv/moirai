@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import LibraryFields from './LibraryFields.vue';
-import { onBeforeRouteLeave } from 'vue-router';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
@@ -60,6 +59,7 @@ async function save(): Promise<void> {
 				? { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null }
 				: undefined,
 		});
+		allowRouteLeave = true;
 		emit('saved', library);
 	}
 	catch (cause) {
@@ -119,14 +119,18 @@ async function remove(): Promise<void> {
 }
 
 onMounted(() => dialog.value?.querySelector('input')?.focus());
-onBeforeRouteLeave(async () => allowRouteLeave || !visible.value || (!saving.value && !deleting.value && (!isDirty.value || await requestConfirmation({
-	key: `discard-library:${props.library.id}`,
-	title: 'Discard Unsaved Changes?',
-	message: 'Leave without saving these library settings?',
-	confirmLabel: 'Discard Changes',
-	cancelLabel: 'Keep Editing',
-	destructive: true,
-}))));
+/** Protect a library draft when its route or resource identity changes. */
+async function confirmNavigation(): Promise<boolean> {
+	return allowRouteLeave || !visible.value || (!saving.value && !deleting.value && (!isDirty.value || await requestConfirmation({
+		key: `discard-library:${props.library.id}`,
+		title: 'Discard Unsaved Changes?',
+		message: 'Leave without saving these library settings?',
+		confirmLabel: 'Discard Changes',
+		cancelLabel: 'Keep Editing',
+		destructive: true,
+	})));
+}
+defineExpose({ confirmNavigation });
 useDraftProtection(() => visible.value && isDirty.value);
 </script>
 

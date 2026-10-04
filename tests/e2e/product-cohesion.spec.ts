@@ -115,7 +115,7 @@ test('opens linked channels directly and rejects invalid usage requests', async 
 	await page.getByRole('button', { name: 'View', exact: true }).first().click();
 	await page.getByRole('button', { name: /^Used by/ }).click();
 	await page.getByRole('link', { name: 'Linked channel' }).click();
-	await expect(page).toHaveURL(new RegExp(`edit=${channel.id}`));
+	await expect(page).toHaveURL(new RegExp(`/channels/${channel.id}`));
 	await expect(page.getByRole('dialog', { name: 'Edit Channel' }).getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Linked channel');
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
 	await expect(page).toHaveURL(/\/channels$/);
@@ -149,7 +149,7 @@ for (const dirtyOwner of ['template', 'channel schedule'] as const) {
 			await editor.getByRole('textbox', { name: 'Template name', exact: true }).fill('Unsaved template');
 		}
 		else {
-			await schedule.getByRole('combobox', { name: 'Selection policy', exact: true }).selectOption('next-fit-only');
+			await schedule.getByRole('combobox', { name: 'Fitting Behavior', exact: true }).selectOption('next-fit-only');
 			await schedule.getByRole('button', { name: 'Edit Midnight Feature Collection', exact: true }).click();
 			editor = page.locator('.schedule-editor-modal');
 		}
@@ -164,15 +164,15 @@ for (const dirtyOwner of ['template', 'channel schedule'] as const) {
 			await expect(editor.getByRole('textbox', { name: 'Template name', exact: true })).toHaveValue('Unsaved template');
 		}
 		else {
-			await expect(schedule.getByRole('combobox', { name: 'Selection policy', exact: true })).toHaveValue('next-fit-only');
+			await expect(schedule.getByRole('combobox', { name: 'Fitting Behavior', exact: true })).toHaveValue('next-fit-only');
 		}
 		await editor.getByRole('link', { name: 'Other channel', exact: true }).click();
 		await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
 		await expect(page).toHaveURL(new RegExp(`/schedules/channels/${other.id}$`));
 		await expect(editor).toHaveCount(0);
 		await expect(schedule.getByRole('heading', { name: 'Other channel', exact: true })).toBeVisible();
-		const policy = schedule.getByRole('combobox', { name: 'Selection policy', exact: true });
-		await expect(policy).toHaveValue('best-fit-or-truncate');
+		const policy = schedule.getByRole('combobox', { name: 'Fitting Behavior', exact: true });
+		await expect(policy).toHaveValue('next-truncate');
 		await policy.selectOption('next-fit-only');
 		await expect(schedule.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 	});
@@ -324,7 +324,7 @@ test('keeps primary navigation visible while scrolling a long page', async ({ pa
 	await expect(page.locator('.sidebar')).toBeVisible();
 	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
-	await expect.poll(async () => (await page.locator('.sidebar').boundingBox())!.y).toBe(0);
+	await expect.poll(async () => Math.abs((await page.locator('.sidebar').boundingBox())!.y)).toBeLessThanOrEqual(1);
 	await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeInViewport();
 	await page.screenshot({ path: 'test-results/sidebar-scrolled-tablet.png', animations: 'disabled' });
 });

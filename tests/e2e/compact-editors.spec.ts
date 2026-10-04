@@ -146,7 +146,7 @@ test('remembers program media browsing and contains selection drawers', async ({
 
 	// A warm store must not expose an editable draft before its refresh finishes.
 	await page.goto('/schedules/programs');
-	await expect(page.getByRole('link', { name: `Compact program ${id}`, exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: `Compact program ${id}`, exact: true })).toBeVisible();
 	let releaseOverview!: () => void;
 	const overviewGate = new Promise<void>((resolve) => {
 		releaseOverview = resolve;

@@ -99,6 +99,7 @@ onMounted(() => {
 					<div v-else-if="error" class="notice error" role="alert">
 						<strong>Help is unavailable</strong>
 						<span>{{ error }}</span>
+						<button type="button" class="button secondary" @click="loadTopic">Retry</button>
 					</div>
 					<template v-else-if="topic">
 						<div v-if="topic.reviewStatus === 'needs-review'" class="help-review-warning" role="status">

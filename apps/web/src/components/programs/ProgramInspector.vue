@@ -3,7 +3,6 @@ import { X, Trash2 } from '@lucide/vue';
 import { useRoute } from 'vue-router';
 import type { SchedulingProgram, SchedulingProgramStatus } from '@moirai/shared';
 import ResourceUsage from '../ResourceUsage.vue';
-import TwoStepActionButton from '../TwoStepActionButton.vue';
 import SimilarItemsPreview from './SimilarItemsPreview.vue';
 import { programDetailComponent } from './program-inspector-registry';
 import { programDefinition, programTypeLabel, programValueLabel } from './program-catalog';
@@ -23,6 +22,6 @@ const route = useRoute();
 			<ResourceUsage kind="program" :resource-id="program.id" :revision="Date.parse(program.updatedAt)" inline />
 			<p class="muted">Updated {{ new Date(program.updatedAt).toLocaleString() }}</p>
 		</div>
-		<footer><RouterLink class="button" :to="{ path: `/schedules/programs/${program.id}`, query: route.query }">Edit Program</RouterLink><TwoStepActionButton :key="program.id" class="icon-button danger-icon" label="Delete Program" confirm-label="Confirm Delete Program" :disabled="deleting" @confirm="emit('delete', program)"><Trash2 :size="18" /></TwoStepActionButton></footer>
+		<footer><RouterLink class="button" :to="{ path: `/schedules/programs/${program.id}`, query: route.query }">Edit Program</RouterLink><button type="button" class="icon-button danger-icon" aria-label="Delete Program" :disabled="deleting" @click="emit('delete', program)"><Trash2 :size="18" /></button></footer>
 	</aside>
 </template>

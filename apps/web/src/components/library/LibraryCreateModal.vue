@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
 import { libraryCreateSchema, DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES, type LibraryCreate } from '@moirai/shared';
 import { api } from '../../api';
 import { errorMessage } from '../../error-message';
@@ -49,7 +48,11 @@ async function close(): Promise<void> {
 	await closeUnsavedEditor({ blocked: busy.value, dirty: dirty.value && !saved.value, key: 'unsaved-new-library', message: 'Save this library before closing?', save, discard: dismiss });
 }
 useDraftProtection(() => dirty.value && !saved.value && visible.value);
-onBeforeRouteLeave(async () => !busy.value && (saved.value || !dirty.value || await requestConfirmation({ key: 'discard-new-library', title: 'Discard Unsaved Changes?', message: 'Leave without adding this library?', confirmLabel: 'Discard Changes', cancelLabel: 'Keep Editing', destructive: true })));
+/** Retain the new library draft during cancelled browser navigation. */
+async function confirmNavigation(): Promise<boolean> {
+	return saved.value || (!busy.value && (!visible.value || !dirty.value || await requestConfirmation({ key: 'discard-new-library', title: 'Discard Unsaved Changes?', message: 'Leave without adding this library?', confirmLabel: 'Discard Changes', cancelLabel: 'Keep Editing', destructive: true })));
+}
+defineExpose({ confirmNavigation });
 onMounted(() => dialog.value?.querySelector('input')?.focus());
 </script>
 <template>

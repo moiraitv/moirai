@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import LibraryCreateModal from '../components/library/LibraryCreateModal.vue';
+import { useLibraryEditorRoute } from '../composables/useLibraryEditorRoute';
 import { onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { ChevronRight, FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
 import {
@@ -22,7 +24,8 @@ import { useLibrariesStore } from '../stores/libraries';
 
 const librariesStore = useLibrariesStore();
 const { libraries, loading, loaded, error: loadError } = storeToRefs(librariesStore);
-const showForm = ref(false);
+const router = useRouter();
+const { open: showForm, editor: creator, close: closeCreator } = useLibraryEditorRoute('create');
 const contentPreviews = ref(new Map<string, LibraryContentPreview>());
 const previewsLoading = ref(true);
 const previewsLoaded = ref(false);
@@ -92,6 +95,7 @@ function schedulePreviewRefresh(): void {
 }
 /** Refresh the catalog after the creator has persisted a library. */
 async function created(): Promise<void> {
+	await router.push('/libraries');
 	await librariesStore.load();
 	await loadContentPreviews();
 }
@@ -119,12 +123,12 @@ onUnmounted(() => {
 			eyebrow="Media sources"
 			title="Libraries"
 			description="Moirai watches each source, reconciles metadata, and keeps an index ready for scheduling."
-		><button class="button" @click="showForm = true">
+		><button class="button" @click="router.push('/libraries/new')">
 			<Plus :size="18" />
 			Add Library
 		</button></PageHeader
 		>
-		<LibraryCreateModal v-if="showForm" @close="showForm = false" @saved="created" />
+		<LibraryCreateModal v-if="showForm" ref="creator" @close="closeCreator" @saved="created" />
 		<p v-if="loadError" class="notice error">
 			{{ loadError }}
 			<button class="button ghost" @click="librariesStore.load">Retry</button>
@@ -198,7 +202,7 @@ onUnmounted(() => {
 			description="Choose a folder with media and Kodi-compatible NFO sidecars."
 		>
 			<template #icon><FolderOpen :size="37" /></template>
-			<button class="button" type="button" @click="showForm = true">
+			<button class="button" type="button" @click="router.push('/libraries/new')">
 				<Plus :size="18" />Add Library
 			</button>
 		</ResourceEmptyState>

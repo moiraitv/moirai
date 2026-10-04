@@ -222,7 +222,10 @@ refresh their sample on completed music scans while preserving the draft and ava
 
 Guide and Channels views check the scheduling date every minute and when a tab becomes visible.
 Guide requests clamp past start dates to today and discard expired navigation history, preserving
-future selections. Same-day checks do not issue network requests.
+future selections. Same-day checks do not issue network requests. Guide and Channels preserve
+selected dates in the `startDate` query, restoring browser history and replacing invalid or expired
+dates after the existing guide bounds are applied. History changes supersede pending reads even when
+returning to the displayed date; only the current read can normalize the URL.
 
 The channel editor checks canonical number conflicts locally against the loaded channel list,
 excluding itself, and shows up to three prefix matches. Existing groups supply autocomplete
@@ -630,7 +633,7 @@ Sequence previews sample distinct media across child previews in source order, b
 preview limit, without running selection or changing sequence counts. Sequence inspection also shows
 ordered, numbered source blocks with responsive thumbnails from the loaded status map and a sum of
 configured selections per cycle; source navigation does not fetch additional preview data.
-Inspector deletion uses inline two-step confirmation; list and editor deletion retain their modal confirmation.
+Inspector, list, and editor deletion use the shared permanent-deletion modal confirmation.
 
 A program separates content eligibility from selection behavior. Content sources include:
 
@@ -1796,6 +1799,9 @@ and the modal lifecycle with library settings, retaining Add and Scan and existi
 Program, template, and channel-schedule introductions live in their corresponding guide topics.
 Restricted Markdown callouts preserve their icon and card presentation in both the guide and Help
 drawer. Internal management links use ordinary guarded routes.
+Program deletion uses the shared permanent-deletion modal from the catalog, inspector, and editor.
+Clipboard successes use dismissible five-second toasts; failures remain in context until retry or
+dismissal. Credit-template selectors and contextual Help expose explicit read retry actions.
 
 Saved programs, templates, encoding profiles, credit templates, and guide templates expose Used by in the editor
 title bar, left of the close control, with a GitBranch icon and a live reference count. Expanding
@@ -1819,8 +1825,13 @@ committed timeline occurrences with channel names and times, including absorbed 
 never materializes schedules or advances selection state; empty results describe only committed
 showings. The media-only TV disclosure is anchored to the app content edge.
 Usage does not expand inheritance or downstream channels and does not replace authoritative deletion
-checks. Channel references open `/channels?edit=<id>`; missing channels are reported and route
-changes preserve dirty-editor guards.
+checks. Channel references open `/channels/<id>`; older `edit` and `new` query bookmarks redirect with
+history replacement. Channel, playback-resource, and filler editors use collection-relative
+`/new` and `/<id>` paths; duplication uses `/new?duplicate=<id>`. Library creation uses
+`/libraries/new`, and settings use `/libraries/<id>/settings`. Route leave and update guards preserve
+unsaved drafts, while accepted navigation retains its requested destination. Channel partial saves
+adopt the persisted ID without replacing a pending asset draft. Missing resources are reported only
+after a successful catalog read, independently of guide availability.
 
 Route state preserves sorting, filters, hierarchy, pagination, and within-page catalog anchors so
 browser back and forward navigation restore the same view. Loaded stores retain prior data when a user
@@ -1970,7 +1981,8 @@ Log and artwork megabyte settings are accepted only when they convert to finite,
 safe-integer byte counts. Invalid and overflowing values use their documented defaults.
 
 The Logs view provides bounded search, cursor pagination, live refresh that retains loaded older
-pages, one-line request entries, and structured details on demand. Filter changes reset the list. It
+pages, one-line request entries, and structured details on demand. Filter changes reset the list. Search and level use the `q` and `level` queries for reload and
+history restoration. Failed initial loads remain distinct from successful empty results. It
 pairs request-start and request-complete records to show method,
 endpoint, source IP, status, and duration together. Routine polling of log-reading endpoints suppresses
 only automatic access records; failures and file downloads remain logged. Successful readiness,

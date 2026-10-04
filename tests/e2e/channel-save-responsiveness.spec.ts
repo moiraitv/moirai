@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { authenticateAdministrator } from './authentication';
 
-for (const asset of ['fallback', 'logo'] as const) {
-	test(`keeps creation chrome and the persisted ID through a delayed ${asset} failure and retry`, async ({ page }) => {
+for (const { asset, navigating } of [{ asset: 'fallback', navigating: false }, { asset: 'logo', navigating: false }, { asset: 'fallback', navigating: true }] as const) {
+	test(`keeps creation chrome and the persisted ID through a delayed ${asset} failure and retry${navigating ? ' during navigation' : ''}`, async ({ page }) => {
 		const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
 		let channelId = '';
 		let creates = 0;
@@ -38,7 +38,13 @@ for (const asset of ['fallback', 'logo'] as const) {
 			await route.continue();
 		});
 		try {
-			await page.goto('/channels?new=1');
+			if (navigating) {
+				await page.goto('/channels');
+				await page.getByRole('button', { name: 'New Channel', exact: true }).click();
+			}
+			else {
+				await page.goto('/channels?new=1');
+			}
 			const editor = page.getByRole('dialog', { name: 'Create Channel', exact: true });
 			await editor.getByRole('textbox', { name: 'Number', exact: true }).fill('988');
 			await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('Responsive creation');
@@ -50,7 +56,14 @@ for (const asset of ['fallback', 'logo'] as const) {
 				await editor.locator('input[accept="image/*"]').setInputFiles({ name: 'logo.png', mimeType: 'image/png',
 					buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64') });
 			}
-			await editor.getByRole('button', { name: 'Save', exact: true }).click();
+			await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+			if (navigating) {
+				await page.goBack();
+				await page.getByRole('alertdialog').getByRole('button', { name: 'Save Changes', exact: true }).click();
+			}
+			else {
+				await editor.getByRole('button', { name: 'Save', exact: true }).click();
+			}
 			await expect.poll(() => channelId).not.toBe('');
 			await expect(editor).toBeVisible();
 			await expect(editor.getByRole('button', { name: 'Saving channel…', exact: true })).toBeVisible();
@@ -69,6 +82,7 @@ for (const asset of ['fallback', 'logo'] as const) {
 			release();
 			await expect(editor.getByText(asset === 'fallback' ? /Channel changes were saved, but the fallback filler was not/ : /Channel changes were saved, but the logo was not/)).toBeVisible();
 			await expect(editor).toBeVisible();
+			await expect(page).toHaveURL(new RegExp(`/channels/${channelId}$`));
 			await expect(page.getByRole('dialog', { name: 'Edit Channel', exact: true })).toBeHidden();
 			await editor.getByRole('button', { name: 'Save', exact: true }).click();
 			await expect.poll(() => uploads).toBe(2);

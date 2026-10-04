@@ -55,6 +55,7 @@ function setSelection(value: string): void {
 
 /** Load template choices without showing an empty collection before success. */
 async function load(): Promise<void> {
+	error.value = '';
 	try {
 		templates.value = await api.creditTemplates();
 		loaded.value = true;
@@ -84,7 +85,7 @@ onMounted(load);
 				<option v-for="item in templates" :key="item.id" :value="item.id">{{ item.name }}</option>
 			</select></label>
 			<LoadingState v-if="!loaded && !error" label="Loading credit templates…" />
-			<p v-if="error" class="notice error">{{ error }}</p>
+			<p v-if="error" class="notice error">{{ error }} <button type="button" class="button secondary" @click="load">Retry</button></p>
 			<p v-else-if="loaded && !templates.length" class="notice">Create a credit template to enable music video credits.</p>
 			<p v-else-if="pendingOn && loaded" class="field-error">Choose a credit template to enable credits.</p>
 			<p v-if="template && mode === 'convert'" class="notice">Burn mode is used while credits are enabled. Your Convert setting is retained.</p>

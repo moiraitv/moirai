@@ -70,11 +70,11 @@ test('protects library creation and each independent Settings draft on navigatio
 	await page.goBack();
 	await page.getByRole('button', { name: 'Keep Editing', exact: true }).click();
 	await expect(page.locator('.confirmation-modal-backdrop')).toHaveCount(0);
-	await expect(page).toHaveURL(/\/libraries$/u);
+	await expect(page).toHaveURL(/\/libraries\/new$/u);
 	await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unsaved library');
 	await page.goBack();
 	await page.getByRole('button', { name: 'Discard Changes', exact: true }).click();
-	await expect(page).toHaveURL(/\/channels$/u);
+	await expect(page).toHaveURL(/\/libraries$/u);
 	for (const section of ['capacity', 'preferences']) {
 		await page.goto('/settings');
 		if (section === 'capacity') {

@@ -3,10 +3,12 @@ import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = withDefaults(defineProps<{
 	message?: string;
+	inline?: boolean;
 	tone?: 'neutral' | 'success';
 	duration?: number;
 }>(), {
 	message: '',
+	inline: false,
 	tone: 'success',
 	duration: 5000,
 });
@@ -50,7 +52,7 @@ watch(() => props.message, showUpdatedMessage);
 </script>
 
 <template>
-	<Teleport to="body">
+	<Teleport to="body" :disabled="inline">
 		<Transition name="transient-toast" appear @after-leave="finishDismissal">
 			<div
 				v-if="visible"

@@ -6,7 +6,7 @@ import PageHelpButton from '../components/PageHelpButton.vue';
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Copy, Eye, FileCode, Info, Pencil, Plus } from '@lucide/vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { useResourceEditorRoute } from '../composables/useResourceEditorRoute';
 import { creditTemplateCreateSchema, MAX_CREDIT_TEMPLATE_LENGTH, MUSIC_VIDEO_CREDIT_TEMPLATE, type CreditTemplate } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
@@ -49,7 +49,7 @@ async function load(): Promise<void> {
 }
 
 /** Open a saved template or a new editable copy of the converted starter. */
-async function edit(template?: CreditTemplate, duplicate = false): Promise<void> {
+async function openDraft(template?: CreditTemplate, duplicate = false): Promise<void> {
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : template?.id;
 	readonlyTemplate.value = Boolean(template?.isBuiltin && !duplicate);
@@ -75,7 +75,7 @@ async function duplicateViewedTemplate(): Promise<void> {
 		return;
 	}
 	const collectionOpener = opener;
-	await edit(template, true);
+	await editorRoute.navigate(template, true);
 	opener = collectionOpener;
 }
 
@@ -83,6 +83,7 @@ async function duplicateViewedTemplate(): Promise<void> {
 function dismiss(): void {
 	open.value = false;
 	opener?.focus();
+	editorRoute.finish();
 }
 
 /** Save the full validated draft and return to the updated collection. */
@@ -150,12 +151,18 @@ async function remove(): Promise<void> {
 onMounted(() => {
 	void load();
 });
-onBeforeRouteLeave(async () => {
-	if (open.value) {
-		await close(); 
-	}
-	return !open.value; 
+const editorRoute = useResourceEditorRoute({
+	basePath: () => '/playback/credit-templates', resources: () => templates.value, ready: () => loaded.value,
+	isOpen: () => open.value, open: openDraft, close,
+	onMissing: () => {
+		error.value = 'Resource not found. It may have been deleted.';
+	},
 });
+
+/** Open a resource through its canonical editor path. */
+function edit(template?: CreditTemplate, duplicate = false): void {
+	void editorRoute.navigate(template, duplicate);
+}
 useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 </script>
 

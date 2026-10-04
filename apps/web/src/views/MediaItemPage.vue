@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useClipboardFeedback } from '../composables/useClipboardFeedback';
+import TransientToast from '../components/TransientToast.vue';
 import { isCrewRole, isNonActingRole } from '../media-credits';
 import AnimatedDisclosure from '../components/AnimatedDisclosure.vue';
 import { useDisclosureState } from '../disclosure-state';
@@ -49,7 +51,7 @@ const playButton = ref<HTMLButtonElement>();
 const showAllCredits = useDisclosureState('media-cast');
 const showAllAppearances = useDisclosureState('media-appearances');
 const showAllCrew = useDisclosureState('media-crew');
-const copyStatus = ref('');
+const { message: copyMessage, error: copyError, copy: copyPath } = useClipboardFeedback();
 const addToProgramOpen = ref(false);
 const programAdditionResult = ref<ProgramItemAdditionResult | ProgramGroupAdditionResult | null>(null);
 const usageRevision = ref(0);
@@ -104,22 +106,13 @@ function kindLabel(value: string): string {
 
 /** Return to the previous catalog location or the library root. */
 function back(): void {
-	if (window.history.length > 1) {
+	const previous = window.history.state?.back;
+	const catalogPath = `/libraries/${String(route.params.libraryId)}`;
+	if (typeof previous === 'string' && previous.split('?')[0] === catalogPath) {
 		router.back();
 	}
 	else {
 		void router.push(`/libraries/${String(route.params.libraryId)}`);
-	}
-}
-
-/** Copy a source path and report whether clipboard access succeeded. */
-async function copyPath(value: string, label: string): Promise<void> {
-	try {
-		await navigator.clipboard.writeText(value);
-		copyStatus.value = `${label} copied`;
-	}
-	catch {
-		copyStatus.value = `Unable to copy ${label.toLowerCase()}`;
 	}
 }
 
@@ -415,7 +408,8 @@ onUnmounted(closePlayer);
 					</p>
 				</article>
 			</div>
-			<p class="visually-hidden" aria-live="polite">{{ copyStatus }}</p>
+			<p v-if="copyError" class="notice error" role="alert">{{ copyError }} <button type="button" class="button secondary" @click="copyError = ''">Dismiss</button></p>
+			<TransientToast v-if="copyMessage" :message="copyMessage" @close="copyMessage = ''" />
 			<AddItemsToProgramModal
 				v-if="addToProgramOpen"
 				:library-id="item.libraryId"

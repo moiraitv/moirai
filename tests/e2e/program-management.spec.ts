@@ -129,10 +129,10 @@ test('keeps deletion errors inside the drawer and requires confirmation', async 
 	const inspector = page.locator('.program-inspector');
 	await inspector.getByRole('button', { name: 'Delete Program', exact: true }).click();
 	expect(attempted).toBe(false);
-	await inspector.getByRole('button', { name: 'Confirm Delete Program', exact: true }).press('Escape');
+	await page.getByRole('alertdialog').press('Escape');
 	await expect(inspector).toBeVisible();
 	await inspector.getByRole('button', { name: 'Delete Program', exact: true }).click();
-	await inspector.getByRole('button', { name: 'Confirm Delete Program', exact: true }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Delete Program', exact: true }).click();
 	await expect(inspector.getByRole('alert')).toContainText('Program is in use');
 	await expect(inspector).toBeVisible();
 });
@@ -258,12 +258,12 @@ test('shows indexed counts, unavailable tooltips, library labels and responsive 
 	await expect(page.locator('.program-management-columns')).not.toContainText('Updated');
 	for (const [width, visible] of [[1050, 6], [900, 5], [800, 4], [700, 3], [600, 0]]) {
 		await page.locator('.program-management-catalog').evaluate((element, size) => {
-			element.style.width = `${size}px`; 
+			element.style.width = `${size}px`;
 		}, width!);
 		await expect(page.locator('.program-mini-preview > span:visible')).toHaveCount(visible!);
 	}
 	await page.locator('.program-management-catalog').evaluate(element => {
-		element.style.width = ''; 
+		element.style.width = '';
 	});
 	await page.getByRole('button', { name: program.name, exact: true }).click();
 	const inspector = page.locator('.program-inspector');
@@ -274,20 +274,18 @@ test('shows indexed counts, unavailable tooltips, library labels and responsive 
 	await expect(inspector).not.toContainText('Media kinds');
 });
 
-test('disarms inspector deletion on selection change and outside interaction, and disables pending deletion', async ({ page }) => {
+test('cancels modal deletion and disables pending deletion', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`/schedules/programs?selected=${sourceId}`);
 	const inspector = page.locator('.program-inspector');
 	const remove = inspector.getByRole('button', { name: 'Delete Program', exact: true });
 	await remove.click();
-	await inspector.getByRole('heading', { name: 'Program 000', exact: true }).click();
-	await expect(remove).toBeVisible();
-	await remove.click();
+	await page.getByRole('alertdialog').press('Escape');
+	await expect(inspector).toBeVisible();
 	await page.getByRole('button', { name: 'Program 001', exact: true }).click();
-	await expect(remove).toBeVisible();
 	let release: () => void = () => {};
 	const gate = new Promise<void>(resolve => {
-		release = resolve; 
+		release = resolve;
 	});
 	let attempts = 0;
 	await page.route(`**/api/v1/programs/${programs[1]!.id}`, async route => {
@@ -296,10 +294,9 @@ test('disarms inspector deletion on selection change and outside interaction, an
 		await route.fulfill({ status: 204 });
 	});
 	await remove.click();
-	await inspector.getByRole('button', { name: 'Confirm Delete Program' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Delete Program', exact: true }).click();
 	await expect(remove).toBeDisabled();
-	await expect(page.getByRole('alertdialog')).toHaveCount(0);
-	expect(attempts).toBe(1);
+	await expect.poll(() => attempts).toBe(1);
 	release();
 	await expect(inspector).toHaveCount(0);
 });
@@ -331,12 +328,12 @@ test('renders counted Sequence blocks with bounded source previews and missing-s
 		await section.evaluate((element, value) => {
 			element.style.width = `${value}px`;
 		}, width!);
-		await expect(section.locator('li').first().locator('.program-mini-preview > span:visible')).toHaveCount(count!);
-		await expect(section.locator('li').last().locator('.program-mini-preview > span:visible')).toHaveCount(count!);
-		await expect(section.locator('li').first().locator('.program-source-more')).toBeVisible();
+		await expect(section.locator('.program-source-list > li').first().locator('.program-mini-preview > span:visible')).toHaveCount(count!);
+		await expect(section.locator('.program-source-list > li').last().locator('.program-mini-preview > span:visible')).toHaveCount(count!);
+		await expect(section.locator('.program-source-list > li').first().locator('.program-source-more')).toBeVisible();
 	}
-	await expect(section.locator('li').last().locator('strong')).toHaveCSS('text-overflow', 'ellipsis');
-	await expect(section.locator('li').last().locator('strong')).toHaveAttribute('title', nested.name);
+	await expect(section.locator('.program-source-list > li').last().locator('strong')).toHaveCSS('text-overflow', 'ellipsis');
+	await expect(section.locator('.program-source-list > li').last().locator('strong')).toHaveAttribute('title', nested.name);
 	await section.getByRole('button', { name: `5. ${nested.name}, 1 Item` }).focus();
 	await page.keyboard.press('Enter');
 	await expect(page.locator('#program-inspector-title')).toHaveText(nested.name);

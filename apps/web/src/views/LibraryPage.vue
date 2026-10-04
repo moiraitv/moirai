@@ -66,6 +66,7 @@ import LibraryScanHistoryModal from '../components/library/LibraryScanHistoryMod
 import TransientToast from '../components/TransientToast.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
 import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
+import { useLibraryEditorRoute } from '../composables/useLibraryEditorRoute';
 import VirtualLibraryCatalog from '../components/library/VirtualLibraryCatalog.vue';
 import {
 	catalogProgramQuery,
@@ -141,7 +142,7 @@ const initialLoading = ref(true);
 const mediaLoading = ref(false);
 const scanRequestPending = ref(false);
 const loadError = ref('');
-const showSettings = ref(false);
+const { open: showSettings, editor: settingsEditor, close: closeSettings } = useLibraryEditorRoute('settings');
 const showFilter = ref(false);
 const showReconciliation = ref(false);
 const {
@@ -572,7 +573,7 @@ let pendingAnchorBehavior: CatalogScrollBehavior | null = null;
 
 /** Update the route anchor without adding browser history. */
 function replaceObservedAnchor(key: string): void {
-	if (!key || routeAnchor.value === key) {
+	if (showSettings.value || !key || routeAnchor.value === key) {
 		return;
 	}
 
@@ -1005,7 +1006,6 @@ function handleKeydown(event: KeyboardEvent): void {
 		searchInput.value?.focus();
 	}
 	if (event.key === 'Escape') {
-		showSettings.value = false;
 		showFilter.value = false;
 		showReconciliation.value = false;
 	}
@@ -1014,7 +1014,7 @@ function handleKeydown(event: KeyboardEvent): void {
 /** Apply an updated library returned by the settings workflow. */
 async function finishSettings(updated: Library): Promise<void> {
 	library.value = updated;
-	showSettings.value = false;
+	await router.push({ path: `/libraries/${id.value}`, query: route.query });
 	actionError.value = '';
 	message.value = 'Library settings saved. Sync the library to apply source changes to the index.';
 	await librariesStore.load();
@@ -1193,7 +1193,7 @@ onUnmounted(() => {
 			</div>
 			<div class="library-header-tools">
 				<button class="square-button library-header-icon-button" aria-label="Sync library" :disabled="isScanRunning()" @click="scan"><RefreshCw :size="20" :class="{ spinning: isScanRunning() }" /></button>
-				<button class="square-button library-header-icon-button" aria-label="Library settings" @click="showSettings = true"><Settings :size="20" /></button>
+				<button class="square-button library-header-icon-button" aria-label="Library settings" @click="router.push({ path: `/libraries/${id}/settings`, query: route.query })"><Settings :size="20" /></button>
 				<label class="search-control">
 					<Search :size="19" />
 					<span class="sr-only">Search {{ library.name }}</span>
@@ -1409,7 +1409,7 @@ onUnmounted(() => {
 		<LibraryScanHistoryModal v-if="scanHistoryOpen" :library-id="id" :scans="scans" @close="scanHistoryOpen = false" @refresh="loadLibrary" />
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
-		<LibrarySettingsModal v-if="showSettings" :library="library" @close="showSettings = false" @saved="finishSettings" @deleted="finishDeletion" />
+		<LibrarySettingsModal v-if="showSettings" ref="settingsEditor" :key="library.id" :library="library" @close="closeSettings" @saved="finishSettings" @deleted="finishDeletion" />
 		<LibraryFilterModal v-if="showFilter" :key="filterModalInstance" :library-id="id" :library-type="library.typeKey" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
 		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />

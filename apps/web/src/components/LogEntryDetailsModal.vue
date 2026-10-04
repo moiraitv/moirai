@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Check, Copy, X } from '@lucide/vue';
+import { useClipboardFeedback } from '../composables/useClipboardFeedback';
+import TransientToast from './TransientToast.vue';
+import { computed, onMounted, ref } from 'vue';
+import { Copy, X } from '@lucide/vue';
 import type { LogEntry } from '@moirai/shared';
 import type { LogRequestCompletion } from '../log-entry-context';
 import { logRequestDetails } from '../log-entry-context';
@@ -14,8 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('close'));
 const dialog = ref<HTMLElement>();
-const copyStatus = ref<'entry' | 'context' | 'error' | ''>('');
-let copyTimer: ReturnType<typeof setTimeout> | undefined;
+const { message: copyMessage, error: copyError, copy } = useClipboardFeedback();
 /** Request metadata extracted from the incoming request context. */
 const request = computed(() => logRequestDetails(props.entry.context));
 /** Incoming and completion context presented as one request lifecycle. */
@@ -48,36 +49,12 @@ function formattedJson(value: unknown): string {
 	return JSON.stringify(value, null, 2);
 }
 
-/** Copy log data and briefly announce the result to assistive technology. */
+/** Copy structured log data with readable success and persistent failure feedback. */
 async function copyValue(value: unknown, kind: 'entry' | 'context'): Promise<void> {
-	clearTimeout(copyTimer);
-	try {
-		await navigator.clipboard.writeText(formattedJson(value));
-		copyStatus.value = kind;
-	}
-	catch {
-		copyStatus.value = 'error';
-	}
-	copyTimer = setTimeout(() => {
-		copyStatus.value = '';
-	}, 2_000);
+	await copy(formattedJson(value), kind === 'entry' ? 'Complete entry' : 'Context');
 }
 
-/** Human-readable status for clipboard actions. */
-const copyStatusLabel = computed(() => {
-	if (copyStatus.value === 'error') {
-		return 'Unable to copy';
-	}
-
-	if (copyStatus.value) {
-		return 'Copied';
-	}
-
-	return '';
-});
-
 onMounted(() => dialog.value?.focus());
-onBeforeUnmount(() => clearTimeout(copyTimer));
 </script>
 
 <template>
@@ -152,8 +129,7 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 								type="button"
 								@click="copyValue(combinedContext, 'context')"
 							>
-								<Check v-if="copyStatus === 'context'" :size="15" />
-								<Copy v-else :size="15" />
+								<Copy :size="15" />
 								Copy Context
 							</button>
 						</div>
@@ -162,13 +138,13 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 					</section>
 
 					<footer class="log-detail-actions">
-						<span role="status" aria-live="polite">{{ copyStatusLabel }}</span>
+						<p v-if="copyError" class="notice error" role="alert">{{ copyError }} <button type="button" @click="copyError = ''">Dismiss</button></p>
 						<button class="button secondary" type="button" @click="copyValue(copyableEntry, 'entry')">
-							<Check v-if="copyStatus === 'entry'" :size="17" />
-							<Copy v-else :size="17" />
+							<Copy :size="17" />
 							Copy Complete Entry
 						</button>
 					</footer>
+					<TransientToast v-if="copyMessage" inline :message="copyMessage" @close="copyMessage = ''" />
 				</section>
 			</div>
 		</Transition>

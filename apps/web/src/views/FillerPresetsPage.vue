@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { useResourceEditorRoute } from '../composables/useResourceEditorRoute';
 import { Copy, Eye, Pencil, Plus } from '@lucide/vue';
 import { BUILTIN_MID_ROLL_PRESETS, BUILTIN_FILLER_PRESETS, anyFillerPresetCreateSchema, type AnyFillerPreset, type AnyFillerPresetCreate, type FillerKind } from '@moirai/shared';
 import { api } from '../api';
@@ -51,7 +51,7 @@ async function load(): Promise<void> {
 }
 
 /** Capture an independent baseline for a new, existing, or duplicated preset. */
-async function edit(preset?: AnyFillerPreset, duplicate = false): Promise<void> {
+async function openDraft(preset?: AnyFillerPreset, duplicate = false): Promise<void> {
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : preset?.id;
 	readonlyPreset.value = Boolean(preset?.isBuiltin && !duplicate);
@@ -74,7 +74,7 @@ async function duplicateViewed(): Promise<void> {
 	const preset = presets.value.find(entry => entry.id === id.value);
 	if (preset) {
 		const collectionOpener = opener;
-		await edit(preset, true);
+		await editorRoute.navigate(preset, true);
 		opener = collectionOpener;
 	}
 }
@@ -83,6 +83,7 @@ async function duplicateViewed(): Promise<void> {
 function dismiss(): void {
 	open.value = false;
 	opener?.focus();
+	editorRoute.finish();
 }
 
 /** Persist a validated custom draft and reconcile the displayed collection. */
@@ -136,12 +137,18 @@ async function remove(): Promise<void> {
 }
 
 onMounted(load);
-onBeforeRouteLeave(async () => {
-	if (open.value) {
-		await close();
-	}
-	return !open.value;
+const editorRoute = useResourceEditorRoute({
+	basePath: () => `/filler/${props.kind === 'tail' ? 'tail-fillers' : `${props.kind}s`}`, resources: () => presets.value, ready: () => loaded.value,
+	isOpen: () => open.value, open: openDraft, close,
+	onMissing: () => {
+		error.value = 'Resource not found. It may have been deleted.';
+	},
 });
+
+/** Open a resource through its canonical editor path. */
+function edit(preset?: AnyFillerPreset, duplicate = false): void {
+	void editorRoute.navigate(preset, duplicate);
+}
 useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 </script>
 

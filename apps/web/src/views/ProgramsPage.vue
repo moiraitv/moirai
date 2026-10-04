@@ -16,7 +16,6 @@ import { liveEvents } from '../live-events';
 import { countProgramUsages } from '../program-usage';
 import { useLibrariesStore } from '../stores/libraries';
 import { useSchedulingStore } from '../stores/scheduling';
-import { api } from '../api';
 import { errorMessage } from '../error-message';
 
 const props = withDefaults(defineProps<{ embedded?: boolean; programId?: string | null }>(), { embedded: false, programId: null });
@@ -134,18 +133,15 @@ watch(workspace, element => {
 function updateViewport(): void {
 	modal.value = media.matches;
 }
-/** Delete after inline confirmation or request the standard resource confirmation. */
-async function deleteProgram(program: SchedulingProgram, confirmed = false): Promise<void> {
+/** Confirm permanent program deletion from either catalog or inspection. */
+async function deleteProgram(program: SchedulingProgram): Promise<void> {
 	if (deleting.value) {
 		return;
 	}
 	deleting.value = true;
 	error.value = '';
 	try {
-		if (confirmed) {
-			await api.deleteProgram(program.id);
-		}
-		if (confirmed || await confirmProgramDeletion(program)) {
+		if (await confirmProgramDeletion(program)) {
 			await scheduling.load();
 			if (selectedId.value === program.id) {
 				await closeInspector();
@@ -205,7 +201,7 @@ onUnmounted(() => {
 			<Teleport to="body" :disabled="!modal">
 				<Transition name="program-inspection">
 					<div v-if="selected && !editorOpen" :class="modal ? 'program-inspector-backdrop moirai-dialog-backdrop' : 'program-inspector-inline'" @click.self="modal && closeInspector()">
-						<ProgramInspector :program="selected" :programs="programById" :status="statuses.get(selected.id)" :statuses="statuses" :libraries="librariesStore.libraries" :modal="modal" :action-error="error" :deleting="deleting" @close="closeInspector" @select="selectProgram" @delete="deleteProgram($event, true)" @refresh="refreshOverview" />
+						<ProgramInspector :program="selected" :programs="programById" :status="statuses.get(selected.id)" :statuses="statuses" :libraries="librariesStore.libraries" :modal="modal" :action-error="error" :deleting="deleting" @close="closeInspector" @select="selectProgram" @delete="deleteProgram" @refresh="refreshOverview" />
 					</div>
 				</Transition>
 			</Teleport>

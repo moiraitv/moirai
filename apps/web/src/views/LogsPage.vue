@@ -2,6 +2,7 @@
 import { useDisclosureState } from '../disclosure-state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useRoute, useRouter } from 'vue-router';
 import { ChevronDown, ChevronRight, Download, FileText, Pause, Play, RefreshCw, Search } from '@lucide/vue';
 import type { LogLevel } from '@moirai/shared';
 import type { CondensedLogEntry } from '../log-entry-context';
@@ -24,11 +25,11 @@ const {
 	error,
 	nextCursor,
 	scanLimitReached,
-	activeLevel,
-	activeSearch,
 } = storeToRefs(store);
-const level = ref<LogLevel | ''>(activeLevel.value);
-const search = ref(activeSearch.value);
+const route = useRoute();
+const router = useRouter();
+const level = ref<LogLevel | ''>(routeLevel());
+const search = ref(typeof route.query.q === 'string' ? route.query.q.slice(0, 200) : '');
 const autoRefresh = ref(true);
 const selectedEntry = ref<CondensedLogEntry | null>(null);
 const retainedFilesOpen = useDisclosureState('retained-logs', false);
@@ -92,20 +93,36 @@ function closeEntry(): void {
 	});
 }
 
+/** Accept only supported log levels from shared browser state. */
+function routeLevel(): LogLevel | '' {
+	const value = route.query.level;
+	return typeof value === 'string' && ['trace', 'debug', 'info', 'warn', 'error', 'fatal'].includes(value) ? value as LogLevel : '';
+}
+
+/** Persist explicit level changes and replace debounced search edits. */
+function rememberFilters(replace: boolean): void {
+	void router[replace ? 'replace' : 'push']({ query: { ...route.query, level: level.value || undefined, q: search.value.trim() || undefined } });
+}
+
+watch(() => [route.query.level, route.query.q], () => {
+	level.value = routeLevel();
+	search.value = typeof route.query.q === 'string' ? route.query.q.slice(0, 200) : '';
+	refresh();
+});
+
 /** Reload logs with the active level and search filters. */
 function refresh(): void {
 	void store.load(level.value, search.value.trim()).catch(() => undefined);
 }
 
-watch([level, search], () => {
-	if (filterTimer) {
-		clearTimeout(filterTimer);
-	}
-	filterTimer = setTimeout(refresh, 350);
+watch(level, () => rememberFilters(false));
+watch(search, () => {
+	clearTimeout(filterTimer);
+	filterTimer = setTimeout(() => rememberFilters(true), 350);
 });
 
 onMounted(() => {
-	if (!loaded.value) {
+	if (!loaded.value || level.value !== store.activeLevel || search.value.trim() !== store.activeSearch) {
 		refresh();
 	}
 	refreshTimer = setInterval(() => {
@@ -132,7 +149,7 @@ onBeforeUnmount(() => {
 			title="Logs"
 			description="Inspect retained structured server activity and errors."
 		>
-			<template #actions>
+			<template #default>
 				<button class="button secondary" type="button" @click="autoRefresh = !autoRefresh">
 					<Pause v-if="autoRefresh" :size="17" />
 					<Play v-else :size="17" />
@@ -146,7 +163,7 @@ onBeforeUnmount(() => {
 
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<LoadingState v-if="loading && !loaded" label="Loading server logs…" />
-		<div v-else class="async-state-surface">
+		<div v-else-if="loaded" class="async-state-surface">
 			<div class="logs-toolbar panel">
 				<label class="logs-search">
 					<Search :size="18" />

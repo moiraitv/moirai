@@ -356,7 +356,7 @@ onUnmounted(() => {
 				</span>
 			</div>
 			<ApplicationErrorPage v-if="applicationError" />
-			<RouterView v-else :key="route.path.startsWith('/filler/') ? route.path : 'page'" />
+			<RouterView v-else :key="route.meta.fillerKind ? `filler:${String(route.meta.fillerKind)}` : 'page'" />
 		</main>
 	</div>
 	<HelpDrawer v-if="activeHelpTopic" :topic-id="activeHelpTopic" @close="closeHelp" />

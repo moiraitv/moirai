@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useClipboardFeedback } from '../composables/useClipboardFeedback';
+import TransientToast from '../components/TransientToast.vue';
+import { useGuideRouteDate } from '../composables/useGuideRouteDate';
 import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
 	CalendarDays,
@@ -57,22 +60,13 @@ watch(
 
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Public client URL whose copy action owns a transient status notice. */
-type ClientUrlKind = 'playlist' | 'guide';
-const copyNotices = reactive<Record<ClientUrlKind, { message: string; visible: boolean }>>({
-	playlist: { message: '', visible: false },
-	guide: { message: '', visible: false },
-});
-const copyNoticeTimers: Partial<Record<ClientUrlKind, ReturnType<typeof setTimeout>>> = {};
+const { message: copyMessage, error: copyError, copy: copyClientUrl } = useClipboardFeedback();
 
 const epgUrl = computed(() =>
 	publicUrl.value ? `${publicUrl.value.replace(/\/+$/, '')}/epg.xml` : '');
 const m3uUrl = computed(() =>
 	publicUrl.value ? `${publicUrl.value.replace(/\/+$/, '')}/iptv/channels.m3u` : '');
 const displayedDays = computed(() => guide.value?.days ?? 7);
-const requestedWindowDays = computed(() => {
-	return requestedDaysFor(weekStart.value);
-});
 
 /** Bound one guide request to the remaining committed range from its proposed start. */
 function requestedDaysFor(startDate: string): number {
@@ -96,14 +90,20 @@ const canMovePrevious = computed(() =>
 const canMoveNext = computed(() =>
 	channelsStore.guideNavigationTarget('forward') !== null);
 
+const guideRoute = useGuideRouteDate(channelsStore, loadGuide, cause => {
+	error.value = errorMessage(cause);
+});
+
 /** Load the committed seven-day guide beginning at the selected date. */
 async function loadGuide(reusePending = false): Promise<void> {
 	if (!weekStart.value) {
 		return;
 	}
 
-	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value, 'preserve', reusePending);
-	error.value = '';
+	const target = guideRoute.requestedDate();
+	if (await guideRoute.load(() => channelsStore.loadGuide(target, requestedDaysFor(target), 'preserve', reusePending))) {
+		error.value = '';
+	}
 }
 
 useGuideDateRefresh(channelsStore, loadGuide, (cause) => {
@@ -129,6 +129,7 @@ async function loadInitial(): Promise<void> {
 			weekStart.value = today;
 		}
 		await loadGuide(true);
+		guideRoute.activate();
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
@@ -154,6 +155,7 @@ async function moveWindow(direction: -1 | 1): Promise<void> {
 		requestedDaysFor(target),
 		direction < 0 ? 'backward' : 'forward',
 	);
+	await guideRoute.remember();
 }
 
 /** Return to today’s guide window, or center now when it is already selected. */
@@ -166,47 +168,7 @@ async function showToday(): Promise<void> {
 
 	await channelsStore.loadGuide(today, requestedDaysFor(today));
 	channelsStore.clearGuideNavigationHistory();
-}
-
-/** Display copy feedback briefly without adding or removing layout content. */
-function showCopyNotice(kind: ClientUrlKind, message: string): void {
-	const currentTimer = copyNoticeTimers[kind];
-	if (currentTimer) {
-		clearTimeout(currentTimer);
-	}
-
-	copyNotices[kind].message = message;
-	copyNotices[kind].visible = true;
-	copyNoticeTimers[kind] = setTimeout(() => {
-		copyNotices[kind].visible = false;
-		delete copyNoticeTimers[kind];
-	}, 1_800);
-}
-
-/** Copy one public IPTV client URL, with a selection fallback for older browsers. */
-async function copyClientUrl(value: string, label: string, kind: ClientUrlKind): Promise<void> {
-	try {
-		if (navigator.clipboard?.writeText) {
-			await navigator.clipboard.writeText(value);
-		}
-		else {
-			const input = document.createElement('textarea');
-			input.value = value;
-			input.style.position = 'fixed';
-			input.style.opacity = '0';
-			document.body.append(input);
-			input.select();
-			if (!document.execCommand('copy')) {
-				throw new Error('Copy command was rejected');
-			}
-
-			input.remove();
-		}
-		showCopyNotice(kind, `${label} copied`);
-	}
-	catch {
-		showCopyNotice(kind, 'Unable to copy');
-	}
+	await guideRoute.remember();
 }
 
 /** Select a complete client URL when its read-only field receives focus. */
@@ -243,9 +205,7 @@ onBeforeUnmount(() => {
 	if (refreshTimer) {
 		clearTimeout(refreshTimer);
 	}
-	for (const timer of Object.values(copyNoticeTimers)) {
-		clearTimeout(timer);
-	}
+
 });
 </script>
 
@@ -284,16 +244,10 @@ onBeforeUnmount(() => {
 								<button
 									class="button"
 									:disabled="!m3uUrl"
-									@click="copyClientUrl(m3uUrl, 'Playlist URL', 'playlist')"
+									@click="copyClientUrl(m3uUrl, 'Playlist URL')"
 								>
 									<Copy :size="17" />Copy URL
 								</button>
-								<span
-									class="epg-copy-status"
-									:class="{ visible: copyNotices.playlist.visible }"
-									aria-live="polite"
-								>{{ copyNotices.playlist.message }}</span
-								>
 							</span>
 							<a class="button secondary" :href="m3uUrl" target="_blank" rel="noopener">
 								<ExternalLink :size="17" />Open
@@ -313,16 +267,10 @@ onBeforeUnmount(() => {
 								<button
 									class="button"
 									:disabled="!epgUrl"
-									@click="copyClientUrl(epgUrl, 'EPG URL', 'guide')"
+									@click="copyClientUrl(epgUrl, 'EPG URL')"
 								>
 									<Copy :size="17" />Copy URL
 								</button>
-								<span
-									class="epg-copy-status"
-									:class="{ visible: copyNotices.guide.visible }"
-									aria-live="polite"
-								>{{ copyNotices.guide.message }}</span
-								>
 							</span>
 							<a class="button secondary" :href="epgUrl" target="_blank" rel="noopener">
 								<ExternalLink :size="17" />Open
@@ -392,5 +340,7 @@ onBeforeUnmount(() => {
 				<RouterLink class="button" to="/channels?new=1">Create Channel</RouterLink>
 			</ResourceEmptyState>
 		</div>
+		<p v-if="copyError" class="notice error" role="alert">{{ copyError }} <button type="button" class="button secondary" @click="copyError = ''">Dismiss</button></p>
+		<TransientToast v-if="copyMessage" :message="copyMessage" @close="copyMessage = ''" />
 	</section>
 </template>

@@ -87,7 +87,7 @@ async function load(): Promise<void> {
 /** Open the direct owner's editor through ordinary guarded application navigation. */
 function destination(item: ResourceUsage['items'][number]): string {
 	if (item.kind === 'channel') {
-		return `/channels?edit=${item.id}`;
+		return `/channels/${item.id}`;
 	}
 	return `/schedules/${item.kind === 'channel-schedule' ? 'channels' : item.kind + 's'}/${item.id}`;
 }

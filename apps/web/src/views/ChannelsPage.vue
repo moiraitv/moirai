@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGuideRouteDate } from '../composables/useGuideRouteDate';
 import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
 import { channelNumberSuggestions, channelGroupSuggestions } from '../channel-identity-suggestions';
 import { useDraftProtection } from '../draft-protection';
@@ -12,7 +13,7 @@ import AudioPreferencesEditor from '../components/AudioPreferencesEditor.vue';
 import SubtitlePreferencesEditor from '../components/SubtitlePreferencesEditor.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RouterLink, onBeforeRouteUpdate, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { RouterLink, onBeforeRouteUpdate, onBeforeRouteLeave, useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import {
 	CalendarDays,
 	ChevronDown,
@@ -102,6 +103,7 @@ const saveStage = ref('Saving…');
 const showForm = ref(false);
 const encodingProfilesReady = ref(false);
 let leavingPage = false;
+let adoptingSavedId = false;
 const error = ref('');
 const guideRefreshError = ref('');
 const logoInput = ref<HTMLInputElement>();
@@ -322,11 +324,8 @@ function finishCloseForm(): void {
 	fallbackStatus.value = null;
 	fallbackLoading.value = false;
 	showForm.value = false;
-	if (!leavingPage && (route.query.new === '1' || route.query.edit)) {
-		const query = { ...route.query };
-		delete query.new;
-		delete query.edit;
-		void router.replace({ path: '/channels', query });
+	if (!leavingPage && route.params.id) {
+		void router.push({ path: '/channels', query: route.query });
 	}
 }
 
@@ -380,12 +379,15 @@ async function closeForm(): Promise<void> {
 	});
 }
 
-/** Preserve channel drafts when either the destination route or editor query changes. */
-async function leaveEditor(): Promise<boolean> {
+/** Preserve channel drafts when navigation changes the editor identity. */
+async function leaveEditor(): Promise<boolean | RouteLocationRaw> {
 	leavingPage = true;
 	try {
 		if (showForm.value) {
 			await closeForm();
+		}
+		if (showForm.value && editingId.value && route.params.id === 'new') {
+			return { path: `/channels/${editingId.value}`, query: route.query, replace: true };
 		}
 		return !showForm.value;
 	}
@@ -394,9 +396,8 @@ async function leaveEditor(): Promise<boolean> {
 	}
 }
 onBeforeRouteLeave(leaveEditor);
-onBeforeRouteUpdate(async (to, from) => (to.query.edit === from.query.edit && to.query.new === from.query.new) || await leaveEditor());
-
-
+onBeforeRouteUpdate(async (to, from) => adoptingSavedId || to.params.id === from.params.id
+	|| (from.params.id === 'new' && to.params.id === editingId.value) || await leaveEditor());
 
 /** Capture the pointer and starting geometry for a crop move or resize. */
 function startCropInteraction(event: PointerEvent, mode: CropInteraction): void {
@@ -512,9 +513,6 @@ async function renderCroppedLogo(): Promise<Blob | null> {
 }
 
 const displayedDays = computed(() => guide.value?.days ?? 7);
-const requestedWindowDays = computed(() => {
-	return requestedDaysFor(weekStart.value);
-});
 
 /** Bound one guide request to the remaining committed range from its proposed start. */
 function requestedDaysFor(startDate: string): number {
@@ -542,14 +540,20 @@ async function loadChannels(): Promise<void> {
 	await channelsStore.loadChannels();
 }
 
+const guideRoute = useGuideRouteDate(channelsStore, loadGuide, cause => {
+	guideRefreshError.value = errorMessage(cause);
+});
+
 /** Load the committed seven-day guide beginning at the selected date. */
 async function loadGuide(reusePending = false): Promise<void> {
 	if (!weekStart.value) {
 		return;
 	}
 
-	await channelsStore.loadGuide(weekStart.value, requestedWindowDays.value, 'preserve', reusePending);
-	guideRefreshError.value = '';
+	const target = guideRoute.requestedDate();
+	if (await guideRoute.load(() => channelsStore.loadGuide(target, requestedDaysFor(target), 'preserve', reusePending))) {
+		guideRefreshError.value = '';
+	}
 }
 
 useGuideDateRefresh(channelsStore, loadGuide, (cause) => {
@@ -569,12 +573,15 @@ async function loadInitial(): Promise<void> {
 	}
 	error.value = '';
 	try {
-		await Promise.all([loadChannels(), channelsStore.loadCapabilities(), scheduling.load()]);
-		editorLinksReady.value = true;
+		const metadata = Promise.all([loadChannels(), channelsStore.loadCapabilities()]).then(() => {
+			editorLinksReady.value = true;
+		});
+		await Promise.all([metadata, scheduling.load()]);
 		if (!weekStart.value) {
 			weekStart.value = dateKey(new Date(), timeZone.value);
 		}
 		await loadGuide(true);
+		guideRoute.activate();
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
@@ -600,6 +607,7 @@ async function moveWindow(direction: -1 | 1): Promise<void> {
 		requestedDaysFor(target),
 		direction < 0 ? 'backward' : 'forward',
 	);
+	await guideRoute.remember();
 }
 
 /** Return to today’s guide window, or center now when it is already selected. */
@@ -612,6 +620,7 @@ async function showToday(): Promise<void> {
 
 	await channelsStore.loadGuide(today, requestedDaysFor(today));
 	channelsStore.clearGuideNavigationHistory();
+	await guideRoute.remember();
 }
 /** Build the validated request body from the current editor form. */
 function payload(): ChannelCreate {
@@ -653,7 +662,7 @@ function encodingProfilesLoaded(ready: boolean): void {
 }
 
 /** Open a blank channel form. */
-function add() {
+function openNewDraft() {
 	editorMode.value = 'create';
 	encodingProfilesReady.value = false;
 	Object.assign(form, defaults());
@@ -668,7 +677,7 @@ function add() {
 }
 
 /** Open an existing channel in the editor. */
-function edit(channel: Channel) {
+function openChannelDraft(channel: Channel) {
 	editorMode.value = 'edit';
 	const { id, createdAt, updatedAt, ...config } = channel;
 	void id;
@@ -683,6 +692,16 @@ function edit(channel: Channel) {
 	formBaseline.value = cloneContractValue(config) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
+}
+/** Retain persisted identity without rebuilding a partially saved channel draft. */
+async function adoptSavedChannelRoute(id: string): Promise<void> {
+	adoptingSavedId = true;
+	try {
+		await router.replace({ path: `/channels/${id}`, query: route.query });
+	}
+	finally {
+		adoptingSavedId = false;
+	}
 }
 /** Save the channel form and any managed logo change. */
 async function save() {
@@ -704,6 +723,9 @@ async function save() {
 		else {
 			saved = await api.createChannel(payload());
 			editingId.value = saved.id;
+			if (!leavingPage) {
+				await adoptSavedChannelRoute(saved.id);
+			}
 		}
 		channelsStore.acceptSavedChannel(saved);
 		if (croppedLogo) {
@@ -822,24 +844,34 @@ const unsubscribe = liveEvents.subscribe((event) => {
 		}, 180);
 	}
 });
-/** Resolve editor links after catalog refreshes, including reads that supersede page startup. */
-watch(() => [route.query.edit, route.query.new, editorLinksReady.value, channels.value], () => {
-	if (showForm.value) {
+/** Resolve the route only after channel metadata has completed its initial refresh. */
+watch(() => [route.params.id, editorLinksReady.value, channels.value], () => {
+	if (showForm.value || adoptingSavedId) {
 		return;
 	}
-	if (route.query.new === '1') {
-		add();
+	if (route.params.id === 'new') {
+		openNewDraft();
 	}
-	else if (typeof route.query.edit === 'string' && editorLinksReady.value && channelsLoaded.value) {
-		const channel = channels.value.find(candidate => candidate.id === route.query.edit);
+	else if (typeof route.params.id === 'string' && editorLinksReady.value && channelsLoaded.value) {
+		const channel = channels.value.find(candidate => candidate.id === route.params.id);
 		if (channel) {
-			edit(channel);
+			openChannelDraft(channel);
 		}
 		else {
 			error.value = 'Channel not found. It may have been deleted.';
 		}
 	}
 }, { immediate: true });
+
+/** Navigate to a blank channel editor while retaining the visible guide window. */
+function add(): void {
+	void router.push({ path: '/channels/new', query: route.query });
+}
+
+/** Navigate to a saved channel through its canonical path. */
+function edit(channel: Channel): void {
+	void router.push({ path: `/channels/${channel.id}`, query: route.query });
+}
 
 onMounted(() => {
 	void loadInitial();
@@ -860,7 +892,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 			description="Review each channel against a seven-day broadcast timeline and manage its normalization profile."
 		><button class="button" @click="add"><Plus :size="18" />New Channel</button></PageHeader
 		>
-		<p v-if="error && !showForm" class="notice error">{{ error }}</p>
+		<p v-if="error && !showForm" class="notice error">{{ error }} <button class="button secondary" type="button" @click="loadInitial">Retry</button></p>
 		<p v-if="guideRefreshError && !showForm" class="notice error">{{ guideRefreshError }} <button class="button secondary" type="button" @click="loadGuide()">Retry guide</button></p>
 		<LoadingState v-if="initialLoading" label="Loading channels and guide…" />
 		<div v-else class="async-state-surface">

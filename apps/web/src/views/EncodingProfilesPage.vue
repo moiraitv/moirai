@@ -5,7 +5,7 @@ import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Copy, Eye, Info, Monitor, Pencil, Plus, Settings } from '@lucide/vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { useResourceEditorRoute } from '../composables/useResourceEditorRoute';
 import { encodingProfileCreateSchema, audioNormalizationSchema, videoNormalizationSchema, type EncodingProfile } from '@moirai/shared';
 import { api } from '../api';
 import { errorMessage } from '../error-message';
@@ -68,7 +68,7 @@ async function load(): Promise<void> {
 }
 
 /** Open a saved profile or a new editable copy of the default encoding settings. */
-async function edit(profile?: EncodingProfile, duplicate = false): Promise<void> {
+async function openDraft(profile?: EncodingProfile, duplicate = false): Promise<void> {
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : profile?.id;
 	readonlyPreset.value = Boolean(profile?.isBuiltin && !duplicate);
@@ -95,7 +95,7 @@ async function duplicateViewedProfile(): Promise<void> {
 		return;
 	}
 	const collectionOpener = opener;
-	await edit(profile, true);
+	await editorRoute.navigate(profile, true);
 	opener = collectionOpener;
 }
 
@@ -103,6 +103,7 @@ async function duplicateViewedProfile(): Promise<void> {
 function dismiss(): void {
 	open.value = false;
 	opener?.focus();
+	editorRoute.finish();
 }
 
 /** Save the full validated draft and return to the updated collection. */
@@ -187,12 +188,18 @@ async function setDefault(event: Event): Promise<void> {
 onMounted(() => {
 	void load();
 });
-onBeforeRouteLeave(async () => {
-	if (open.value) {
-		await close(); 
-	}
-	return !open.value; 
+const editorRoute = useResourceEditorRoute({
+	basePath: () => '/playback/encoding-profiles', resources: () => profiles.value, ready: () => loaded.value,
+	isOpen: () => open.value, open: openDraft, close,
+	onMissing: () => {
+		error.value = 'Resource not found. It may have been deleted.';
+	},
 });
+
+/** Open a resource through its canonical editor path. */
+function edit(profile?: EncodingProfile, duplicate = false): void {
+	void editorRoute.navigate(profile, duplicate);
+}
 useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 </script>
 
