@@ -39,6 +39,8 @@ Use the eye button in the upper-left corner of a media card for a quick preview.
 
 Open an item to inspect its artwork, plot, credits, source paths, subtitles, and technical playback details. Missing information usually means it was absent from the NFO file or media probe.
 
+The subtitle inventory shows each track once, with its recorded title (or **Untitled track**), language badge, source, format, physical part for videos split across multiple files, stream number when known, and default, forced, hearing-impaired, or commentary flags. Use these details when choosing a [Channel](/scheduling/channels) or [Program](/scheduling/programs) subtitle title preference. A title and a forced flag are separate facts; Moirai does not infer the flag from the name.
+
 ![Indexed media details](/screenshots/media-item.png)
 
 Open **Used by** at the right edge of the item page to see programs that select it directly or currently match it through a library query. **Playing at** lists current and upcoming showings on channel schedules, with channel names and start/end times. Content with pre-roll, mid-roll, or post-roll filler appears once for its full airing, including the breaks. Filler items have their own individual showings.

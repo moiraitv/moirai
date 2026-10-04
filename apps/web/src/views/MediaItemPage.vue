@@ -55,6 +55,10 @@ const programAdditionResult = ref<ProgramItemAdditionResult | ProgramGroupAdditi
 const usageRevision = ref(0);
 const id = computed(() => String(route.params.id));
 const previewUrl = computed(() => `/api/v1/media/${encodeURIComponent(id.value)}/preview`);
+const subtitleTracks = computed(() => [...new Map([
+	...(item.value?.subtitleTracks ?? []),
+	...(item.value?.parts.flatMap(part => part.subtitleTracks) ?? []),
+].map(track => [track.id, track])).values()]);
 const actingCredits = computed(() => item.value?.actors.filter(actor => !isNonActingRole(actor.role) && !isCrewRole(actor.role)) ?? []);
 const otherAppearances = computed(() => item.value?.actors.filter(actor => isNonActingRole(actor.role)) ?? []);
 const visibleActors = computed(() => actingCredits.value.slice(0, 5));
@@ -390,19 +394,18 @@ onUnmounted(closePlayer);
 
 				<article class="panel detail-panel">
 					<h2><File :size="22" />Subtitles</h2>
-					<dl v-if="item.subtitleTracks.length || item.parts.some((part) => part.subtitleTracks.length)">
+					<dl v-if="subtitleTracks.length">
 						<template
-							v-for="track in [
-								...item.subtitleTracks,
-								...item.parts.flatMap((part) => part.subtitleTracks),
-							]"
+							v-for="track in subtitleTracks"
 							:key="track.id"
 						>
-							<dt>{{ track.language?.toUpperCase() || 'Unknown language' }}</dt>
+							<dt class="subtitle-track-title"><span>{{ track.title || 'Untitled track' }}</span> <span class="subtitle-language-badge">{{ track.language?.toUpperCase() || 'Unknown language' }}</span></dt>
 							<dd>
-								{{ kindLabel(track.sourceType) }}{{ track.partNumber ? ` · Part ${track.partNumber}` : ''
+								{{ kindLabel(track.sourceType) }}{{ item.parts.length > 1 ? ` · ${track.partNumber === null ? 'All parts' : `Part ${track.partNumber}`}` : ''
 								}}{{ track.codec || track.format ? ` · ${track.codec ?? track.format}` : ''
-								}}{{ track.isForced ? ' · Forced' : '' }}{{ track.isDefault ? ' · Default' : '' }}
+								}}{{ track.streamIndex !== null ? ` · Stream ${track.streamIndex}` : ''
+								}}{{ track.isForced ? ' · Forced' : '' }}{{ track.isDefault ? ' · Default' : ''
+								}}{{ track.isHearingImpaired ? ' · Hearing impaired' : '' }}{{ track.isCommentary ? ' · Commentary' : '' }}
 							</dd>
 						</template>
 					</dl>

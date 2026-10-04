@@ -260,6 +260,43 @@ playout is published and resume after synchronization. Failed restarts remain pe
 reconciliation to retry, including when a forcibly stopped worker has not yet exited;
 HLS rendition metadata follows the active worker mode. No per-item worker contract change is needed.
 
+Shared subtitle editors present mutually exclusive policy radio cards, explicit per-field
+Inherit/Any/Specific choices with inline selection help,
+and a music-video credits disclosure-style panel (channel switch; program Inherit/Off/On).
+Channel Presentation precedes the media selection preview. Credits reuse the shared disclosure
+motion for expansion, collapse, rapid changes, focus recovery, and reduced-motion preferences.
+Selection rules hide for Off without clearing completed preferences; the credits template picker
+appears only for On and requires a selection before saving. Specific
+languages lazily load the existing ISO inventory, search names and aliases with bounded rendered
+results, and preserve saved codes. Explicit editor resets restore the language input’s local search
+and validation state even when the stored code is unchanged. Edited languages block saving until
+the inventory finishes loading; unchanged saved codes remain valid. Load failure permits code-only
+entry, and completion after the language control is removed cannot restore a cleared rule.
+Incomplete rules block channel and program saves, including
+nested editors; Off retains completed rules while hiding their controls. Channel-only Presentation owns
+Burn/Convert and fonts. These controls retain the existing preference payloads and selection rules.
+
+The on-demand subtitle selection preview evaluates one chosen indexed video across its physical
+parts with explicit channel and outer-to-inner program preference snapshots (up to 64 ancestors
+plus the current draft). Eligibility reasons, ranking, deduplication, and inheritance share playback
+helpers. The authenticated read-only endpoint retrieves only the chosen media metadata, returns
+path-free track details, and never probes files, prepares assets, materializes schedules, or changes
+playback issues. UI context follows saved sequence references, prevents repeated IDs, and qualifies
+VobSub streams resolved during preparation; changed drafts invalidate prior results. A shared
+disclosure searches indexed metadata with a bounded 12-video poster carousel and the catalog’s
+non-title match explanations; selecting a card checks the
+current draft without a separate submission. While expanded, preference and inheritance edits
+coalesce before automatically rechecking the selected video; invalid drafts and collapsed previews
+pause checks, and superseded responses cannot replace newer results.
+
+Optional channel/program subtitle titles use case-insensitive literal substring matching against
+recorded track titles, alongside strict language, policy, and physical-part constraints. Omitted
+titles inherit independently; null clears an inherited title. No matching eligible track omits
+subtitles with a contextual preparation issue; preparation retries retain the title constraint.
+Existing ranking and attempt limits remain unchanged. Media details deduplicate subtitle records
+and display titles, language badges, stream indexes, source/format, multipart-only part labels,
+and disposition flags without inferring content from names or probing packets during playback.
+
 Playback preparation batches catalog retrieval, writes content-addressed assets before publishing
 playout, and records contextual per-item failures while allowing video to continue. Selected sidecars
 are opened against the configured library playback root (falling back to its scan root), rejecting

@@ -7,7 +7,7 @@ import type { Repository } from '../repository/index.js';
 import { probeSidecarStreams } from './sidecar-streams.js';
 import { creditContext } from './credit-context.js';
 import { renderCreditTemplate } from './credit-renderer.js';
-import { isImageSubtitle, subtitleCandidates, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from './subtitle-selection.js';
+import { isImageSubtitle, resolveSubtitlePreferences, subtitleCandidates, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from './subtitle-selection.js';
 
 import { SubtitleSnapshotStore } from './subtitle-snapshots.js';
 
@@ -35,11 +35,8 @@ export class SubtitleAssets {
 
 	/** Resolve inherited preferences against the program path captured by materialization. */
 	preferences(channel: Channel, segment: TimelineSegment, programs: Map<string, SubtitlePreferences>): SubtitlePreferences {
-		let result = { ...channel.subtitlePreferences };
-		for (const id of segment.programAncestry?.length ? segment.programAncestry : segment.programId ? [segment.programId] : []) {
-			result = { ...result, ...programs.get(id) };
-		}
-		return result;
+		const ancestry = segment.programAncestry?.length ? segment.programAncestry : segment.programId ? [segment.programId] : [];
+		return resolveSubtitlePreferences(channel.subtitlePreferences, ancestry.map(id => programs.get(id)));
 	}
 
 	/** Prepare all referenced selections in bounded metadata batches, isolating per-item failures. */
@@ -139,6 +136,10 @@ export class SubtitleAssets {
 							}
 						}
 						const candidates = subtitleCandidates(tracks, preferences, physicalPart?.number ?? 1);
+						if (preferences.title && preferences.policy && preferences.policy !== 'off' && !candidates.length) {
+							issues.add(`${item.title} (part ${physicalPart?.number ?? 1}): no eligible subtitle matches the requested title; check the title, language, and selection settings`);
+						}
+
 						let choice: EtvSubtitleSelection | null = null;
 						for (const track of candidates.slice(0, MAX_SUBTITLE_PREPARATION_ATTEMPTS)) {
 							const key = JSON.stringify([track.sourceType, track.streamIndex, track.playbackPaths, part.playbackPath, channel.subtitleMode, roots.get(item.libraryId)]);

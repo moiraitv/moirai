@@ -9,6 +9,7 @@ export * from './encoding.js';
 import { z } from 'zod';
 import { subtitlePreferencesSchema } from './subtitles.js';
 export * from './subtitles.js';
+export * from './subtitle-preview.js';
 export * from './credit-template-starter.js';
 export * from './guide-templates.js';
 import type {

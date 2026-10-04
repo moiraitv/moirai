@@ -2,6 +2,7 @@ import { registerFillerPresetRoutes } from './filler-presets.js';
 import { registerMidRollPresetRoutes } from './mid-roll-presets.js';
 import { registerResourceUsageRoutes } from './resource-usage.js';
 import { registerEncodingProfileRoutes } from './encoding-profiles.js';
+import { registerSubtitlePreviewRoutes } from './subtitle-preview.js';
 import { registerCreditTemplateRoutes } from './credit-templates.js';
 import { registerGuideTemplateRoutes } from './guide-templates.js';
 import type { PlayoutSynchronizer } from '../playback/playout-synchronizer.js';
@@ -64,6 +65,7 @@ export function registerHttpRoutes(
 	registerSystemRoutes(app, dependencies);
 	registerResourceUsageRoutes(app, dependencies);
 	registerCreditTemplateRoutes(app, dependencies);
+	registerSubtitlePreviewRoutes(app, dependencies);
 	registerGuideTemplateRoutes(app, dependencies);
 	registerEncodingProfileRoutes(app, dependencies);
 	registerFillerPresetRoutes(app, dependencies);

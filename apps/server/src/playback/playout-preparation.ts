@@ -2,6 +2,7 @@ import { timeAsyncPhase, timePhase } from '../scheduling/job-timing.js';
 import type { Channel, ScheduleGuide, SchedulingProgram } from '@moirai/shared';
 import type { Repository } from '../repository/index.js';
 import { readCommittedChannelScheduleGuide } from '../guide/schedule-guide.js';
+import { resolveSubtitlePreferences } from './subtitle-selection.js';
 import { prepareMediaStreams } from './audio-selection.js';
 import { buildEtvPlayoutFiles, type PlayoutFallback } from './playout-output.js';
 import type { PreparedSubtitles, SubtitleProgram } from './subtitle-assets.js';
@@ -73,10 +74,8 @@ export class PlayoutPreparationReader {
 		const preferences = new Map(programs.map(program => [program.id, program.config.subtitlePreferences ?? {}]));
 		const compact = { ...guide, channels: guide.channels.map(entry => ({ ...entry,
 			preview: { ...entry.preview, segments: entry.preview.segments.filter(segment => {
-				let resolved = { ...channel.subtitlePreferences };
-				for (const id of segment.programAncestry?.length ? segment.programAncestry : segment.programId ? [segment.programId] : []) {
-					resolved = { ...resolved, ...preferences.get(id) };
-				}
+				const ancestry = segment.programAncestry?.length ? segment.programAncestry : segment.programId ? [segment.programId] : [];
+				const resolved = resolveSubtitlePreferences(channel.subtitlePreferences, ancestry.map(id => preferences.get(id)));
 				return segment.mediaItemId && (resolved.creditsTemplateId || (resolved.policy && resolved.policy !== 'off'));
 			}) }, entries: [],
 		})) };

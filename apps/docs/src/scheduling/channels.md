@@ -114,7 +114,7 @@ Channel counts are collected during library scans. Missing or unusable stream me
 
 ## Subtitles
 
-![Subtitle selection and additional subtitle settings](/screenshots/channel-editor-subtitles.png)
+![Subtitle behavior cards, selection rules, credits, and presentation](/screenshots/channel-editor-subtitles.png)
 
 Subtitles and music video credits are optional and start Off. They're for different purposes but share settings and presentation.
 
@@ -122,30 +122,53 @@ Subtitles come from embedded or sidecar subtitle data. Moirai uses subtitle trac
 
 Music video credits use metadata about the content itself to generate and render opening and closing classic music video style credits. They're intended for content like music videos where movie/show-style subtitles are not used.
 
-### Subtitle selection
+### Subtitle behavior
 
-Choose how Moirai selects an ordinary subtitle track for each video:
+Choose a **Subtitle behavior** mode, then set the language and title rules below it. You can use **Check against media** to see how a specific video will select its subtitle track based on your settings.
 
 - **Off:** do not select ordinary subtitles. Music video credits can still be enabled separately.
 - **Forced only:** select a matching track marked **forced**. These tracks commonly translate foreign-language dialogue or signs rather than every spoken line. The track must carry the forced flag; Moirai does not infer it from the dialogue. If no matching forced track exists, the video plays without ordinary subtitles.
 - **Prefer default:** prefer a matching track marked **default**. If none is marked default, select another matching track. This is useful when your files already identify the subtitle track you normally want.
-- **Any matching track:** select an available track that matches the language setting, without preferring default or forced flags. This selects one track; it does not send every available language to the viewer.
+- **Any matching track:** select an available track that matches the language and title settings. This selects one track only and does not send every available language to the viewer.
 
 If several tracks qualify, Moirai prefers a track associated with the current physical part of a multipart video, then an embedded track over a sidecar. Prefer default checks the default flag before these tie-breakers. Selection is consistent between runs; it does not combine tracks or offer a track picker here. Hearing-impaired and commentary flags are recorded during scanning but are not separate selection filters.
 
-### Preferred language code
+### Subtitle language
 
-Enter a two- or three-letter language code, such as `en` or `eng` for English, or `fr` or `fra` for French. Equivalent codes match the same language. Leave the field blank to allow any language, including tracks with no language tag.
+Under **Selection rules**, choose **Any language** to allow tracks with any language, including untagged tracks. Choose **Specific language** to search a language name or enter a two- or three-letter code, such as `en` or `eng`. If a name also matches a different language’s code, choose the intended language from the list before saving.
 
 A specified language is a strict filter. For example, **Forced only** with `en` selects an English forced track; an English non-forced track or a French forced track does not qualify. If no track matches, Moirai omits ordinary subtitles instead of falling back to another language. Tracks with an unknown language do not satisfy an explicit language choice.
 
-These are Channel defaults. A [Program](/scheduling/programs) can override subtitle selection, language, and music video credits independently. In nested sequences, more-specific Program choices override inherited values; fields left at **Inherit** retain the enclosing Program or Channel setting. Subtitle mode and the fonts folder remain Channel settings.
+These are Channel defaults. A [Program](/scheduling/programs) can override subtitle selection, language, title, and music video credits independently. In nested sequences, more-specific Program choices override inherited values; fields left at **Inherit** retain the enclosing Program or Channel setting. Subtitle mode and the fonts folder remain Channel settings.
 
-### Additional subtitle settings
+### Subtitle title contains
 
-Expand **Additional subtitle settings** to configure credits, presentation, and fonts.
+Choose **Specific title** under **Subtitle title rule**, then use part of a recorded track title, such as `Signs` or `Forced`, to distinguish tracks in the same language. Matching ignores case and treats the text literally; it is not a regular expression. Check the media details for the recorded titles. Untitled tracks cannot match a requested title, and sidecar filenames are not used as titles.
 
-- **Music video credits:** leave **Off** to use ordinary subtitle selection, or choose a reusable [credit template](/playback/credit-templates) to display music video metadata such as the artist and song title. Credits replace ordinary subtitles on music videos; they are not added on top of lyrics or another subtitle track. Other media continues to use ordinary subtitle selection. Credits work even when **Subtitle selection** is Off, and the preferred subtitle language does not filter generated credits. Use **Manage credit templates** to view, duplicate, or customize a template.
+The title, language, and selection policy must all match. **Forced only** requires the file’s forced flag, even when a track is titled `Forced`. Choose **Any matching track** to select a track by title without requiring that flag. If no eligible track matches the requested title, the video plays without ordinary subtitles and the Channel editor reports a preparation issue. If preparation fails, retries stay within the title match.
+
+Choose **Any title** to remove the title constraint. A Program can override this preference.
+
+### Check against media
+
+Expand **Check against media** to test the rules against one video before saving. Choose a library and search for the item you'd like to test -- the poster carousel shows the first 12 matching videos. Select a video card to check its subtitles automatically. The check uses the Channel’s current draft settings.
+
+![Subtitle selection preview for one scanned video](/screenshots/channel-subtitle-preview.png)
+
+The result shows the resolved rules and selected track, followed by ranked eligible alternatives and excluded tracks. Exclusions explain mismatched language or title, another physical part, a missing forced flag, or subtitles being Off. Music video credits take priority when configured for the chosen music video.
+
+This checks scanned metadata only. It does not inspect subtitle contents, check timing, or prove that preparation or rendering will succeed. An empty subtitle track can still be selected. VobSub sidecar streams are resolved during preparation, so the preview warns when their indexed selection may differ.
+
+### Music video credits
+
+Leave it off to use ordinary subtitle selection, or turn it on and choose a reusable [credit template](/playback/credit-templates) to display music video metadata such as the artist and song title. Credits replace ordinary subtitles on music videos; they are not added on top of lyrics or another subtitle track. Other media continues to use ordinary subtitle selection. 
+
+Credits work independently of ordinary subtitles and can display even when **Subtitle behavior** is Off, and the preferred subtitle language and title do not apply to generated credits. Use **Playback → Credit Templates** to view, duplicate, or customize templates.
+
+### Presentation
+
+Expand **Presentation** to configure how subtitles appear and which fonts are available.
+
 - **Subtitle mode — Burn:** render the selected subtitles into the video picture. Viewers cannot switch these subtitles off in their player. Use this when subtitles should always be visible or when the client cannot display a separate subtitle track.
 - **Subtitle mode — Convert:** provide selected text subtitles as a selectable WebVTT track. Viewers need a compatible player to display or hide it. Image-based subtitles, such as PGS or VobSub, are still burned into the picture. Choosing Convert does not enable subtitle selection by itself.
 - **Subtitle fonts folder:** optionally supply a folder containing fonts for subtitles in ASS format, including generated credits. Leave it blank to use installed system fonts. The path must be readable by the playback process; in Docker, use the path inside the container and mount the font files there. The folder supplies fonts, while the subtitle file or credit template determines which font to request.
@@ -160,7 +183,7 @@ Expand **Guide template override** to use a specific XMLTV layout for this ![](/
 
 ### Check the result
 
-Save the Channel and test a video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. If preparing a subtitle fails, Moirai tries up to two further eligible tracks while retaining your language and forced-only requirements. Failed attempts remain visible in preparation issues. If no candidate succeeds, or credit preparation fails, Moirai publishes the video without that content; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.
+Save the Channel and test a video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. If preparing a subtitle fails, Moirai tries up to two further eligible tracks while retaining your language, title, and forced-only requirements. Failed attempts remain visible in preparation issues. If no candidate succeeds, or credit preparation fails, Moirai publishes the video without that content; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.
 
 ## Save and verify
 

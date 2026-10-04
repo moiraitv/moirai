@@ -1,3 +1,5 @@
+import './documentation/subtitle-preview';
+import './documentation/subtitle-language';
 import './documentation/mid-roll';
 import './documentation/filler-settings';
 import './documentation/sequence-preview';
@@ -155,8 +157,11 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await capture(page, 'program-content-create.png');
 	const subtitles = page.locator('.program-subtitle-disclosure');
 	await subtitles.getByRole('button', { name: /Audio and subtitles/ }).click();
-	await expect(subtitles.getByRole('combobox', { name: 'Music video credits', exact: true })).toBeEnabled();
+	await expect(subtitles.getByLabel('Music video credits', { exact: true })).toBeEnabled();
+	const subtitleViewport = page.viewportSize()!;
+	await page.setViewportSize({ ...subtitleViewport, height: 1400 });
 	await captureSection(page, subtitles, 'program-subtitles.png');
+	await page.setViewportSize(subtitleViewport);
 	await subtitles.getByRole('button', { name: /Audio and subtitles/ }).click();
 
 	await page.getByRole('radio', { name: /^Sequence/u }).check();
@@ -534,7 +539,7 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 	await captureSection(page, channelEditor.locator('.layer-boundary-grid'), 'channel-schedule-boundaries.png');
 
 });
-test('starts each new channel with encoding and additional subtitles collapsed', async ({ page }) => {
+test('starts each new channel with encoding and presentation collapsed', async ({ page }) => {
 	await page.addInitScript(() => {
 		localStorage.setItem('moirai.ui.disclosure.channel-encoding.v1', 'true');
 		localStorage.setItem('moirai.ui.disclosure.channel-subtitles.v1', 'true');
@@ -546,7 +551,7 @@ test('starts each new channel with encoding and additional subtitles collapsed',
 		const editor = page.getByRole('dialog', { name: 'Create Channel', exact: true });
 		await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
 		const encoding = editor.getByRole('button', { name: /Video & audio settings/u });
-		const subtitles = editor.getByRole('button', { name: /Additional subtitle settings/u });
+		const subtitles = editor.getByRole('button', { name: /Presentation/u });
 		await expect(encoding).toHaveAttribute('aria-expanded', 'false');
 		await expect(subtitles).toHaveAttribute('aria-expanded', 'false');
 		await encoding.click();
@@ -1003,14 +1008,14 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 	await expect(channel.getByRole('combobox', { name: 'Audio and video settings', exact: true }).locator('option:checked')).toHaveText('My preset (default)');
 });
 
-test('protects program drafts when navigating to credit templates', async ({ page, documentationServer }) => {
+test('protects program drafts when closing the editor', async ({ page, documentationServer }) => {
 	const { program } = await seedSchedule(page, documentationServer.directory);
 	await page.goto(`/schedules/programs/${program.id}`);
 	const editor = page.getByRole('dialog', { name: 'Edit Program', exact: true });
 	const name = editor.getByRole('textbox', { name: /^Name/u });
 	await editor.getByRole('button', { name: /Audio and subtitles.*optional/ }).click();
 	await name.fill('Pending program name');
-	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
+	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
 	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
 	await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(name).toHaveValue('Pending program name');
@@ -1024,23 +1029,23 @@ test('protects program drafts when navigating to credit templates', async ({ pag
 			await route.continue();
 		}
 	});
-	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
+	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
 	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
 	await expect(editor.getByText('Save temporarily unavailable', { exact: true })).toBeVisible();
 	await expect(name).toHaveValue('Pending program name');
 	await page.unroute(`**/api/v1/programs/${program.id}`);
 
-	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
+	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
 	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
-	await expect(page).toHaveURL(/\/playback\/credit-templates$/u);
+	await expect(page).toHaveURL(/\/schedules\/programs$/u);
 	const overview = await (await page.request.get('/api/v1/scheduling/overview')).json();
 	expect(overview.programs.find((entry: { id: string }) => entry.id === program.id).name).toBe('Pending program name');
 
 	await page.goto(`/schedules/programs/${program.id}`);
 	await name.fill('Discarded program name');
-	await editor.getByRole('link', { name: 'Manage Credit Templates' }).click();
+	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
 	await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
-	await expect(page).toHaveURL(/\/playback\/credit-templates$/u);
+	await expect(page).toHaveURL(/\/schedules\/programs$/u);
 	await page.goto(`/schedules/programs/${program.id}`);
 	await expect(name).toHaveValue('Pending program name');
 	await name.fill('Saved with editor button');
@@ -1092,7 +1097,7 @@ test('animates encoding disclosure layout and respects reduced motion', async ({
 });
 
 
-test('preserves subtitle settings across the additional-settings disclosure', async ({ page }) => {
+test('preserves subtitle settings across the Presentation disclosure', async ({ page }) => {
 	await authenticateAdministrator(page);
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'New Channel', exact: true }).click();
@@ -1100,18 +1105,26 @@ test('preserves subtitle settings across the additional-settings disclosure', as
 	await editor.getByLabel('Number', { exact: true }).fill('12');
 	await editor.getByLabel('Name', { exact: true }).fill('Subtitle layout');
 	const subtitles = editor.getByRole('group', { name: 'Subtitles', exact: true });
-	const trigger = subtitles.getByRole('button', { name: /Additional subtitle settings/ });
+	const trigger = subtitles.getByRole('button', { name: /Presentation/ });
 	if (await trigger.getAttribute('aria-expanded') === 'false') {
 		await trigger.click();
 	}
-	await subtitles.getByRole('combobox', { name: 'Subtitle selection', exact: true }).selectOption('any');
-	await subtitles.getByRole('textbox', { name: /^Preferred language code/ }).fill('eng');
-	await subtitles.getByRole('combobox', { name: 'Music video credits', exact: true }).selectOption({ label: 'Music video credits' });
+	await subtitles.getByRole('radio', { name: 'Any matching track', exact: true }).check();
+	await subtitles.getByRole('combobox', { name: 'Subtitle language', exact: true }).selectOption('specific');
+	await subtitles.getByRole('combobox', { name: 'Specific subtitle language', exact: true }).fill('eng');
+	await page.keyboard.press('Escape');
+	await subtitles.getByRole('switch', { name: 'Music video credits', exact: true }).check();
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await subtitles.getByRole('combobox', { name: 'Credit template', exact: true }).selectOption({ label: 'Music video credits' });
+	await subtitles.getByRole('switch', { name: 'Music video credits', exact: true }).uncheck();
+	await expect(subtitles.getByRole('combobox', { name: 'Credit template', exact: true })).toBeHidden();
+	await subtitles.getByRole('switch', { name: 'Music video credits', exact: true }).check();
+	await expect(subtitles.getByRole('combobox', { name: 'Credit template', exact: true })).not.toHaveValue('');
 	await subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true }).selectOption('convert');
 	await subtitles.getByLabel('Subtitle fonts folder', { exact: true }).fill('/fonts');
 	await trigger.click();
 	await expect(subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true })).toBeHidden();
-	await expect(subtitles.getByRole('combobox', { name: 'Subtitle selection', exact: true })).toBeVisible();
+	await expect(subtitles.getByRole('radio', { name: 'Any matching track', exact: true })).toBeChecked();
 	await expect(subtitles.getByText('Burn mode is used while credits are enabled. Your Convert setting is retained.')).toBeVisible();
 	await trigger.press('Enter');
 	await expect(subtitles.getByRole('combobox', { name: 'Subtitle mode', exact: true })).toHaveValue('convert');
@@ -1123,6 +1136,52 @@ test('preserves subtitle settings across the additional-settings disclosure', as
 	expect(saved.subtitlePreferences.creditsTemplateId).toBeTruthy();
 });
 
+test('music video credits animate disclosure changes and respect reduced motion', async ({ page, documentationServer }) => {
+	await seedSchedule(page, documentationServer.directory);
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Edit Channel', exact: true });
+	const credits = editor.locator('.subtitle-credits-option');
+	const toggle = credits.getByRole('switch', { name: 'Music video credits', exact: true });
+	const content = credits.locator('.form-disclosure-content');
+	const template = credits.getByRole('combobox', { name: 'Credit template', exact: true });
+	for (const reduced of [false, true]) {
+		await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+		await page.setViewportSize(reduced ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+		const opening = await toggle.evaluate(async element => {
+			(element as HTMLElement).click();
+			await new Promise(requestAnimationFrame);
+			return element.closest('.form-disclosure')!.querySelector('.form-disclosure-content')!.getAnimations().length;
+		});
+		expect(opening > 0).toBe(!reduced);
+		await expect(template).toBeEnabled();
+		await template.selectOption({ label: 'Music video credits' });
+		const selected = await template.inputValue();
+		await expect.poll(() => content.evaluate(element => element.getAnimations().length)).toBe(0);
+		await template.focus();
+		const closing = await toggle.evaluate(async element => {
+			(element as HTMLElement).click();
+			await new Promise(requestAnimationFrame);
+			return element.closest('.form-disclosure')!.querySelector('.form-disclosure-content')!.getAnimations().length;
+		});
+		expect(closing > 0).toBe(!reduced);
+		await expect(toggle).toBeFocused();
+		await expect(content).toBeHidden();
+		await toggle.evaluate(async element => {
+			for (let index = 0; index < 3; index++) {
+				(element as HTMLElement).click();
+				await new Promise(requestAnimationFrame);
+			}
+		});
+		await expect(template).toHaveValue(selected);
+		await expect.poll(() => content.evaluate(element => element.getAnimations().length)).toBe(0);
+		await expect.poll(() => content.evaluate(element => (element as HTMLElement).style.position)).toBe('');
+		expect(await editor.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+		await toggle.uncheck();
+		await expect(content).toBeHidden();
+	}
+});
+
 test('remembers channel disclosures after reopening and refreshing', async ({ page }) => {
 	await authenticateAdministrator(page);
 	await page.goto('/channels');
@@ -1131,7 +1190,7 @@ test('remembers channel disclosures after reopening and refreshing', async ({ pa
 	await expect(editor.getByRole('combobox', { name: 'Audio and video settings', exact: true })).toBeEnabled();
 	const states = [
 		{ name: /Video & audio settings/, open: false },
-		{ name: /Additional subtitle settings/, open: false },
+		{ name: /Presentation/, open: false },
 		{ name: /Channel fallback override/, open: true },
 	];
 	for (const state of states) {
@@ -1277,7 +1336,7 @@ test('renders an empty comparison queue without image controls', async ({ page }
 	await expect(page.locator('.review-text-diff')).toHaveCount(0);
 });
 
-test('saves channel and inherited program audio preferences', async ({ page, documentationServer }) => {
+test('saves channel and inherited program audio and subtitle preferences', async ({ page, documentationServer }) => {
 	const { channel, program, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	const sequenceResponse = await page.request.post('/api/v1/programs', { headers: requestHeaders, data: {
 		name: 'Audio sequence', config: { type: 'sequence', repeat: true, entries: [{ id: randomUUID(), programId: program.id, count: 1 }] },
@@ -1289,12 +1348,17 @@ test('saves channel and inherited program audio preferences', async ({ page, doc
 	let audio = page.getByRole('group', { name: 'Audio selection', exact: true });
 	await audio.getByRole('textbox', { name: /^Preferred language code/ }).fill('EN');
 	await audio.getByRole('textbox', { name: /^Preferred audio title/ }).pressSequentially('Original Surround');
+	await page.getByRole('radio', { name: 'Any matching track', exact: true }).check();
+	await page.getByRole('combobox', { name: 'Subtitle title rule', exact: true }).selectOption('specific');
+	await page.getByRole('textbox', { name: /^Subtitle title contains/ }).pressSequentially('Songs & Signs');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ })).toBeHidden();
 	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).audioPreferences).toEqual({ language: 'en', title: 'Original Surround' });
+	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).subtitlePreferences).toMatchObject({ title: 'Songs & Signs' });
 	await page.reload();
 	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
 	await expect(audio.getByRole('textbox', { name: /^Preferred audio title/ })).toHaveValue('Original Surround');
+	await expect(page.getByRole('textbox', { name: /^Subtitle title contains/ })).toHaveValue('Songs & Signs');
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
 
 	for (const id of [program.id, sequence.id]) {
@@ -1311,19 +1375,75 @@ test('saves channel and inherited program audio preferences', async ({ page, doc
 		expect(await language.evaluate((input) => (input as HTMLInputElement).checkValidity())).toBe(false);
 		await language.fill('*');
 		await audio.getByRole('textbox', { name: /^Preferred audio title/ }).fill('Commentary');
+		const subtitleRule = disclosure.getByRole('combobox', { name: 'Subtitle title rule', exact: true });
+		await expect(subtitleRule).toHaveValue('inherit');
+		const titleOverride = id === program.id ? 'Forced' : null;
+		await subtitleRule.selectOption(titleOverride ? 'specific' : 'any');
+		if (titleOverride) {
+			await disclosure.getByRole('textbox', { name: /^Subtitle title contains/ }).fill(titleOverride);
+		}
 		const save = page.getByRole('button', { name: 'Save', exact: true });
 		await save.click();
 		await expect(save).toBeHidden();
 		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.audioPreferences).toEqual({ language: null, title: 'Commentary' });
+		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.subtitlePreferences).toEqual({ title: titleOverride });
 		await page.goto(`/schedules/programs/${id}`);
 		await expect(audio).toBeVisible();
 		await expect(language).toHaveValue('*');
+		await expect(subtitleRule).toHaveValue(titleOverride ? 'specific' : 'any');
+		if (titleOverride) {
+			await expect(disclosure.getByRole('textbox', { name: /^Subtitle title contains/ })).toHaveValue(titleOverride);
+		}
+		await subtitleRule.selectOption('inherit');
 		await language.fill('');
 		await audio.getByRole('textbox', { name: /^Preferred audio title/ }).fill('');
 		await save.click();
 		await expect(save).toBeHidden();
 		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.audioPreferences).toEqual({});
+		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${id}`)).json()).config.subtitlePreferences).toEqual({});
 	}
+});
+
+test('shows distinct subtitle titles, stream details, and flags once per track', async ({ page, documentationServer }) => {
+	const { libraryId } = await seedSchedule(page, documentationServer.directory);
+	let multipart = false;
+	await page.route(/\/api\/v1\/media\/[^/?]+$/, async route => {
+		const response = await route.fetch();
+		const detail = await response.json();
+		const signs = { id: 'signs', sourceType: 'embedded', partNumber: 1, streamIndex: 4, codec: 'ass', format: null,
+			language: 'eng', title: 'Forced', isDefault: false, isForced: false, isHearingImpaired: false, isCommentary: false,
+			relativePaths: [], playbackPaths: [] };
+		const full = { ...signs, id: 'full', streamIndex: 3, title: null, isDefault: true, isForced: true, isHearingImpaired: true, isCommentary: true };
+		const longTitle = { ...signs, id: 'long-title', streamIndex: 6, language: null, title: 'x'.repeat(200) };
+		await route.fulfill({ response, json: { ...detail, subtitleTracks: [full, signs, longTitle], parts: [{ number: 1, kind: null,
+			relativePath: detail.relativePath, playbackPath: detail.playbackPath, durationSeconds: detail.durationSeconds, subtitleTracks: [signs] }, ...(multipart ? [{ number: 2, kind: null, relativePath: 'part-2.mkv', playbackPath: '/media/part-2.mkv', durationSeconds: detail.durationSeconds, subtitleTracks: [{ ...signs, id: 'signs-second', partNumber: 2 }] }] : [])] } });
+	});
+	await page.goto(`/libraries/${libraryId}`);
+	await page.getByRole('link', { name: /Moonrise Theater/u }).first().click();
+	const inventory = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Subtitles', exact: true }) });
+	await expect(inventory.locator('dt')).toHaveCount(3);
+	await expect(inventory).not.toContainText('Part 1');
+	await expect(inventory.locator('dt').first()).toContainText('Untitled track');
+	await expect(inventory.locator('dt').nth(1)).toContainText('Forced');
+	await expect(inventory.locator('dt').last()).toContainText('Unknown language');
+	await expect(inventory.locator('dd').first()).toContainText('Stream 3');
+	await expect(inventory.locator('dd').first()).toContainText('Forced');
+	await expect(inventory.locator('dd').first()).toContainText('Default');
+	await expect(inventory.locator('dd').first()).toContainText('Hearing impaired');
+	await expect(inventory.locator('dd').first()).toContainText('Commentary');
+	await expect(inventory.locator('dd').nth(1)).toContainText('Stream 4');
+	await expect(inventory.locator('dd').nth(1)).not.toContainText('Forced');
+	for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(viewport);
+		await inventory.scrollIntoViewIfNeeded();
+		expect(await inventory.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+	}
+
+	multipart = true;
+	await page.reload();
+	await expect(inventory.locator('dt')).toHaveCount(4);
+	await expect(inventory.locator('dd').first()).toContainText('Part 1');
+	await expect(inventory.locator('dd').last()).toContainText('Part 2');
 });
 
 for (const nested of [false, true]) {
@@ -1578,4 +1698,212 @@ test('shows media usage on demand, including library queries, refreshes addition
 	await usage.getByRole('link', { name: 'Drama Library Query', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`/schedules/programs/${queryProgram.id}$`));
 	await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue('Drama Library Query');
+});
+
+for (const context of ['channel', 'standalone', 'nested'] as const) {
+	test(`subtitle language reset restores saved aliases in ${context} editors`, async ({ page, documentationServer }) => {
+		const { channel, program, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+		const preferences = { policy: 'any', language: 'ga' };
+		const sourceProgram = await (await page.request.get(`/api/v1/programs/${program.id}`)).json();
+		const patched = await page.request.patch(context === 'channel' ? `/api/v1/channels/${channel.id}` : `/api/v1/programs/${program.id}`, {
+			headers: requestHeaders,
+			data: context === 'channel' ? { subtitlePreferences: preferences } : { name: sourceProgram.name, config: { ...sourceProgram.config, subtitlePreferences: preferences } },
+		});
+		expect(patched.ok()).toBe(true);
+		if (context === 'channel') {
+			await page.goto('/channels');
+			await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+		}
+		else if (context === 'nested') {
+			await page.goto(`/schedules/templates/${template.id}`);
+			await page.locator('.template-slot-fields').getByRole('button', { name: /^Edit / }).first().click();
+		}
+		else {
+			await page.goto(`/schedules/programs/${program.id}`);
+		}
+		const editor = page.getByRole('dialog', { name: context === 'channel' ? 'Edit Channel' : 'Edit Program', exact: true });
+		if (context !== 'channel') {
+			const trigger = editor.locator('.program-subtitle-disclosure').getByRole('button', { name: /Audio and subtitles/ });
+			if (await trigger.getAttribute('aria-expanded') !== 'true') {
+				await trigger.click();
+			}
+		}
+		const language = editor.getByRole('combobox', { name: 'Specific subtitle language', exact: true });
+		const name = editor.getByRole('textbox', { name: /^Name/u });
+		const originalName = await name.inputValue();
+		await expect(language).toHaveValue('ga');
+		await language.fill('Ga');
+		await language.press('Escape');
+		await expect(language).toHaveAttribute('aria-invalid', 'true');
+		await name.fill('Dirty subtitle reset');
+		await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await editor.getByRole('button', { name: 'Reset', exact: true }).click();
+		await editor.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+		await expect(name).toHaveValue(originalName);
+		await expect(language).toHaveValue('ga');
+		await expect(language).toHaveAttribute('aria-invalid', 'false');
+		await name.fill('After subtitle reset');
+		await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+		await editor.getByRole('button', { name: 'Save', exact: true }).click();
+		const saved = await (await page.request.get(context === 'channel' ? '/api/v1/channels' : `/api/v1/programs/${program.id}`)).json();
+		expect(context === 'channel' ? saved.find((entry: { id: string }) => entry.id === channel.id).subtitlePreferences : saved.config.subtitlePreferences).toEqual(preferences);
+	});
+}
+
+test('subtitle policy cards preserve saved aliases and validate named language choices', async ({ page, documentationServer }) => {
+	const { channel, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const original = { policy: 'default', language: 'ga', title: 'Signs' };
+	const patched = await page.request.patch(`/api/v1/channels/${channel.id}`, { headers: requestHeaders, data: { subtitlePreferences: original } });
+	expect(patched.ok()).toBe(true);
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Edit Channel', exact: true });
+	const subtitles = editor.getByRole('group', { name: 'Subtitles', exact: true });
+	const language = subtitles.getByRole('combobox', { name: 'Specific subtitle language', exact: true });
+	await expect(language).toHaveValue('ga');
+	await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('Subtitle round trip');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toBeHidden();
+	expect((await (await page.request.get('/api/v1/channels')).json()).find((entry: { id: string }) => entry.id === channel.id).subtitlePreferences).toEqual(original);
+	await page.getByRole('button', { name: 'Edit Subtitle round trip', exact: true }).click();
+	const preferDefault = subtitles.getByRole('radio', { name: 'Prefer default', exact: true });
+	await preferDefault.focus();
+	await preferDefault.press('ArrowRight');
+	await expect(subtitles.getByRole('radio', { name: 'Any matching track', exact: true })).toBeChecked();
+	await page.keyboard.press('ArrowRight');
+	await expect(subtitles.getByRole('radio', { name: 'Forced only', exact: true })).toBeChecked();
+	await subtitles.getByRole('radio', { name: 'Off', exact: true }).check();
+	await expect(language).toBeHidden();
+	await expect(subtitles.getByRole('textbox', { name: 'Subtitle title contains', exact: true })).toBeHidden();
+	await expect(subtitles.getByLabel('Music video credits', { exact: true })).toBeEnabled();
+	await subtitles.getByRole('radio', { name: 'Any matching track', exact: true }).check();
+	await expect(subtitles.getByRole('textbox', { name: 'Subtitle title contains', exact: true })).toHaveValue('Signs');
+	await language.fill('Ga');
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await subtitles.getByRole('option', { name: 'Irish (ga)', exact: true }).click();
+	await expect(language).toHaveValue('Irish (ga)');
+	await language.fill('Ga');
+	await subtitles.getByRole('option', { name: 'Ga (gaa)', exact: true }).click();
+	await expect(language).toHaveValue('Ga (gaa)');
+	await language.fill('English');
+	await expect(subtitles.getByRole('option', { name: 'English (en)', exact: true })).toBeVisible();
+	await language.press('ArrowDown');
+	await language.press('Enter');
+	await expect(language).toHaveValue('English (en)');
+	await language.fill('qzz');
+	await language.press('Escape');
+	await expect(editor).toBeVisible();
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await language.fill('not a language');
+	await language.press('Escape');
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await language.fill('eng');
+	await language.press('Escape');
+	await subtitles.getByRole('combobox', { name: 'Subtitle title rule', exact: true }).selectOption('any');
+	await subtitles.getByRole('combobox', { name: 'Subtitle title rule', exact: true }).selectOption('specific');
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await subtitles.getByRole('radio', { name: 'Off', exact: true }).check();
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await subtitles.getByRole('radio', { name: 'Any matching track', exact: true }).check();
+	await expect(subtitles.getByRole('combobox', { name: 'Subtitle title rule', exact: true })).toHaveValue('any');
+	await subtitles.getByRole('combobox', { name: 'Subtitle title rule', exact: true }).selectOption('specific');
+	await subtitles.getByRole('textbox', { name: 'Subtitle title contains', exact: true }).pressSequentially('Songs & Signs');
+	for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(viewport);
+		expect(await editor.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+	}
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toBeHidden();
+	expect((await (await page.request.get('/api/v1/channels')).json()).find((entry: { id: string }) => entry.id === channel.id).subtitlePreferences).toEqual({ policy: 'any', language: 'eng', title: 'Songs & Signs' });
+});
+
+for (const nested of [false, true]) {
+	test(`subtitle rules validate and save in ${nested ? 'nested' : 'standalone'} program editors`, async ({ page, documentationServer }) => {
+		const { program, template } = await seedSchedule(page, documentationServer.directory);
+		if (nested) {
+			await page.goto(`/schedules/templates/${template.id}`);
+			await page.locator('.template-slot-fields').getByRole('button', { name: /^Edit / }).first().click();
+		}
+		else {
+			await page.goto(`/schedules/programs/${program.id}`);
+		}
+		const editor = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Close program editor', exact: true }) });
+		const disclosure = editor.locator('.program-subtitle-disclosure');
+		const trigger = disclosure.getByRole('button', { name: /Audio and subtitles/ });
+		if (await trigger.getAttribute('aria-expanded') !== 'true') {
+			await trigger.click();
+		}
+		await expect(disclosure.getByRole('radio', { name: 'Inherit selection', exact: true })).toBeChecked();
+		await disclosure.getByRole('combobox', { name: 'Subtitle title rule', exact: true }).selectOption('specific');
+		await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await disclosure.getByRole('textbox', { name: 'Subtitle title contains', exact: true }).fill('Forced');
+		await expect(disclosure.getByRole('combobox', { name: 'Subtitle language', exact: true })).toHaveValue('inherit');
+		await disclosure.getByRole('combobox', { name: 'Subtitle language', exact: true }).selectOption('any');
+		const credits = disclosure.getByRole('combobox', { name: 'Music video credits', exact: true });
+		const creditTemplate = disclosure.getByRole('combobox', { name: 'Credit template', exact: true });
+		await expect(credits).toHaveValue('inherit');
+		await expect(creditTemplate).toBeHidden();
+		await credits.selectOption('on');
+		await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await creditTemplate.selectOption({ label: 'Music video credits' });
+		await page.setViewportSize({ width: 390, height: 844 });
+		expect(await editor.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+		await credits.selectOption('off');
+		await expect(creditTemplate).toBeHidden();
+		await credits.selectOption('on');
+		await expect(creditTemplate).not.toHaveValue('');
+		await credits.selectOption('inherit');
+		await expect(creditTemplate).toBeHidden();
+		await editor.getByRole('button', { name: 'Save', exact: true }).click();
+		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${program.id}`)).json()).config.subtitlePreferences).toEqual({ title: 'Forced', language: null });
+	});
+}
+
+test('subtitle rules remain usable when language names or credit templates fail to load', async ({ page, documentationServer }) => {
+	const { channel } = await seedSchedule(page, documentationServer.directory);
+	let release!: () => void;
+	const pending = new Promise<void>(resolve => {
+		release = resolve;
+	});
+	await page.route('**/api/v1/credit-templates', async route => {
+		await pending;
+		await route.fulfill({ status: 503, json: { message: 'Credit templates unavailable' } });
+	});
+	await page.goto('/channels');
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	const editor = page.getByRole('dialog', { name: 'Edit Channel', exact: true });
+	const subtitles = editor.getByRole('group', { name: 'Subtitles', exact: true });
+	await subtitles.getByRole('switch', { name: 'Music video credits', exact: true }).check();
+	await expect(subtitles.getByText('Loading credit templates…', { exact: true })).toBeVisible();
+	await expect(subtitles.getByRole('combobox', { name: 'Credit template', exact: true })).toBeDisabled();
+	release();
+	await expect(subtitles.locator('.notice.error')).toBeVisible();
+	await subtitles.getByRole('switch', { name: 'Music video credits', exact: true }).uncheck();
+	await subtitles.getByRole('radio', { name: 'Any matching track', exact: true }).check();
+	// The application is already loaded; only the lazy language inventory now needs JavaScript.
+	let releaseLanguage!: () => void;
+	const pendingLanguage = new Promise<void>(resolve => {
+		releaseLanguage = resolve;
+	});
+	await page.route('**/assets/*.js', async route => {
+		await pendingLanguage;
+		await route.abort();
+	});
+	await subtitles.getByRole('combobox', { name: 'Subtitle language', exact: true }).selectOption('specific');
+	const language = subtitles.getByRole('combobox', { name: 'Specific subtitle language', exact: true });
+	await expect(subtitles.getByText('Loading language names…', { exact: true })).toBeVisible();
+	await language.fill('en');
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	releaseLanguage();
+	await expect(subtitles.getByText(/Language names could not load:/)).toBeVisible();
+	await language.press('Escape');
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await expect(language).toHaveAttribute('aria-invalid', 'false');
+	await language.fill('English');
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await language.fill('fre');
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(editor).toBeHidden();
+	const channels = await (await page.request.get('/api/v1/channels')).json();
+	expect(channels.find((entry: { id: string }) => entry.id === channel.id).subtitlePreferences.language).toBe('fre');
 });

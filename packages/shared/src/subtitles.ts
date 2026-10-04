@@ -4,9 +4,10 @@ import { z } from 'zod';
 export const MAX_CREDIT_TEMPLATE_LENGTH = 65_536;
 /** Subtitle selection independent of text rendering mode. */
 export const subtitlePolicySchema = z.enum(['off', 'forced', 'default', 'any']);
-/** Absent properties inherit; null language means any, and null template disables credits. */
+/** Absent fields inherit; null clears language/title preferences or disables credits. */
 export const subtitlePreferencesSchema = z.object({
 	language: z.string().trim().toLowerCase().regex(/^[a-z]{2,3}$/).nullable().optional(),
+	title: z.string().trim().min(1).max(200).nullable().optional(),
 	policy: subtitlePolicySchema.optional(),
 	creditsTemplateId: z.uuid().nullable().optional(),
 }).strict();

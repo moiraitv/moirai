@@ -9,12 +9,10 @@ import ResourceUsage from '../ResourceUsage.vue';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
-import FormDisclosure from '../FormDisclosure.vue';
-import AudioPreferencesEditor from '../AudioPreferencesEditor.vue';
-import SubtitlePreferencesEditor from '../SubtitlePreferencesEditor.vue';
+import ProgramPlaybackPreferences from './ProgramPlaybackPreferences.vue';
 import type { AudioPreferences, SubtitlePreferences } from '@moirai/shared';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Asterisk, ChevronDown } from '@lucide/vue';
+import { Asterisk } from '@lucide/vue';
 import {
 	catalogProgramItemFilterSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
@@ -841,8 +839,9 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	onError: (cause) => error.value = errorMessage(cause),
 });
 
+const subtitlesInvalid = ref(false);
 const programSaveDisabled = computed(() =>
-	saving.value || deleting.value || Boolean(aiGeneration.value) || !isProgramDraftValid(payload)
+	saving.value || deleting.value || Boolean(aiGeneration.value) || subtitlesInvalid.value || !isProgramDraftValid(payload)
 	|| (Boolean(editingId.value) && !isDirty.value));
 
 /** Validate and save the program draft. */
@@ -1281,26 +1280,14 @@ watch(() => [form.type, form.sourceType], () => {
 							/>
 							<SequenceOrderingEditor v-if="form.type === 'sequence'" v-model="form.sequenceOrdering" v-model:seed="form.seed" />
 							<SequenceGuidePreview v-if="form.type === 'sequence'" :config="payload().config" :program-id="editingId ?? undefined" :program-names="previewProgramNames" />
-							<FormDisclosure v-model:open="subtitlesOpen" class="program-subtitle-disclosure">
-								<template #summary>
-									<div class="program-section-heading">
-										<span>{{ form.type === 'content' || form.type === 'sequence' ? 3 : 2 }}</span>
-										<div class="program-section-heading-copy">
-											<strong>Audio and subtitles — optional</strong>
-											<p class="program-section-description">Override inherited audio and subtitle settings for this program.</p>
-										</div>
-									</div>
-									<ChevronDown class="form-disclosure-chevron" :size="22" aria-hidden="true" />
-								</template>
-								<AudioPreferencesEditor v-model="form.audioPreferences" inherit unframed />
-								<SubtitlePreferencesEditor v-model="form.subtitlePreferences" inherit unframed />
-							</FormDisclosure>
+							<ProgramPlaybackPreferences v-model:open="subtitlesOpen" v-model:audio="form.audioPreferences" v-model:subtitles="form.subtitlePreferences" :program-id="editingId" :reset-revision="draftRevision" :step="form.type === 'content' || form.type === 'sequence' ? 3 : 2" @validation-change="subtitlesInvalid = $event" />
 						</div>
 					</div></ResourceUsage>
 				</div>
 				<ResourceEditorActionBar
 					v-if="!initialLoading"
 					resource-type="Program"
+					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : ''"
 					:show-delete="!embedded && Boolean(editingId)" :busy="saving || deleting"
 					:deleting="deleting" :reset-disabled="!isDirty && !aiGeneration"
 					:save-disabled="programSaveDisabled" :saving="saving"

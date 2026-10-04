@@ -305,11 +305,13 @@ function channelFormSnapshot(): string {
 const channelFormDirty = computed(() =>
 	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
 const encodingInvalid = ref(false);
+const subtitlesInvalid = ref(false);
+const subtitleResetRevision = ref(0);
 const numberSuggestions = computed(() => channelNumberSuggestions(channels.value, form.number, editingId.value));
 const groupSuggestions = computed(() => channelGroupSuggestions(channels.value));
 const channelFormValid = computed(() => !numberSuggestions.value.duplicate && channelCreateSchema.safeParse(payload()).success);
 const channelSaveDisabled = computed(() =>
-	saving.value || (!editingId.value && !encodingProfilesReady.value) || !channelFormValid.value || (Boolean(editingId.value) && !channelFormDirty.value));
+	saving.value || (!editingId.value && !encodingProfilesReady.value) || !channelFormValid.value || subtitlesInvalid.value || (Boolean(editingId.value) && !channelFormDirty.value));
 
 /** Close the channel form after releasing any temporary crop image. */
 function finishCloseForm(): void {
@@ -752,6 +754,7 @@ function resetChannel(): void {
 
 	const baseline = cloneContractValue(formBaseline.value) as ChannelCreate;
 	Object.assign(form, defaults(), baseline);
+	subtitleResetRevision.value += 1;
 	resetLogoEditor();
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
@@ -1072,7 +1075,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 
 					</div>
 
-					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :channel-id="editingId" :mode="form.subtitleMode">
+					<SubtitlePreferencesEditor v-model="form.subtitlePreferences" channel-layout :reset-revision="subtitleResetRevision" :channel-id="editingId" :mode="form.subtitleMode" @validation-change="subtitlesInvalid = $event">
 						<label><span>Subtitle mode</span><select v-model="form.subtitleMode"><option value="burn">Burn</option><option value="convert">Convert</option></select></label>
 						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>
 					</SubtitlePreferencesEditor>
@@ -1108,7 +1111,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<p v-if="error" class="notice error">{{ error }}</p>
 				</div>
 				<ResourceEditorActionBar
-					:validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''"
+					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''"
 					resource-type="Channel"
 					:show-delete="editorMode === 'edit'"
 					:busy="saving || deleting"

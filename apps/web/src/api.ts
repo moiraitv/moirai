@@ -9,6 +9,7 @@ import type { ProgramConfig, SchedulingProgramStatus } from '@moirai/shared';
 import type { ProgramGroupAddition, ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MediaAirings, ResourceUsage, ResourceUsageKind } from '@moirai/shared';
 import type { EncodingProfile, EncodingProfileCreate } from '@moirai/shared';
+import type { SubtitleSelectionPreview, SubtitleSelectionPreviewResult } from '@moirai/shared';
 import type { CreditTemplate, CreditTemplateCreate, CreditPreview, CreditPreviewResult } from '@moirai/shared';
 import type { GuideTemplate, GuideTemplateCreate, GuideTemplatePreview, GuideTemplatePreviewResult } from '@moirai/shared';
 import type {
@@ -293,6 +294,8 @@ export const api = {
 	updateGuideTemplate: (id: string, body: GuideTemplateCreate) => request<GuideTemplate>(`/api/v1/guide-templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 	deleteGuideTemplate: (id: string) => request<void>(`/api/v1/guide-templates/${id}`, { method: 'DELETE' }),
 	previewGuideTemplate: (body: GuideTemplatePreview) => request<GuideTemplatePreviewResult>('/api/v1/guide-templates/preview', { method: 'POST', body: JSON.stringify(body) }),
+	previewSubtitleSelection: (body: SubtitleSelectionPreview, signal?: AbortSignal) =>
+		request<SubtitleSelectionPreviewResult>('/api/v1/subtitles/selection-preview', { method: 'POST', body: JSON.stringify(body), ...(signal ? { signal } : {}) }),
 	subtitleIssues: (id: string) => request<string[]>(`/api/v1/channels/${id}/subtitle-issues`),
 	authenticationState: (signal?: AbortSignal) => request<AuthenticationState>(
 		'/api/v1/auth/session',

@@ -180,7 +180,7 @@ For complete setup recipes, see [Example schedules](/scheduling/example-schedule
 
 The editor preview is safe to explore. Save only when the draft is valid and matches the intended audience. Deleting a program is permanent and can make template slots invalid, so inspect its usage before confirming deletion.
 
-Leaving an edited program, including through **Manage credit templates**, asks whether to save or discard your changes. Choose **Cancel** to keep editing. If saving fails, the draft stays open so you can retry.
+Leaving an edited program asks whether to save or discard your changes. Choose **Cancel** to keep editing. If saving fails, the draft stays open so you can retry.
 
 ## Audio and subtitles
 
@@ -204,50 +204,72 @@ Scheduled filler follows its own captured program ancestry, and multipart videos
 
 The subtitle controls follow Audio selection in the same optional section.
 
-Subtitles and music video credits serve different purposes. Ordinary subtitles come from embedded tracks or sidecar files discovered during library scanning; see [subtitle sidecar naming](/libraries/media-file-naming) if matching files are not appearing in the media details. Music video credits use catalog metadata, such as the artist and song title, to generate a credit overlay. The chosen template controls its appearance and timing.
+Subtitles and music video credits are optional. They're for different purposes but share settings and presentation.
+
+Subtitles come from embedded or sidecar subtitle data. Moirai uses subtitle tracks discovered during library scanning; see [subtitle sidecar naming](/libraries/media-file-naming) if matching files are not appearing in the media details.
+
+Music video credits use metadata about the content itself to generate and render opening and closing classic music video style credits. They're intended for content like music videos where movie/show-style subtitles are not used.
 
 ### Inherit or override
 
-Programs start with subtitle selection, language, and music video credits set to **Inherit**. Each field inherits independently from the containing Sequence Program, or from the [Channel](/scheduling/channels) when no containing Program supplies a value. A more-specific Program overrides its containing sequence.
+Programs start with subtitle selection, language, title, and music video credits set to **Inherit**. Each field inherits independently from the containing Sequence Program, or from the [Channel](/scheduling/channels) when no containing Program supplies a value. A more-specific Program overrides its containing sequence.
 
 For example, a Channel can prefer English subtitles, a Sequence can enable music video credits, and a Content Program within it can turn credits Off while retaining the inherited subtitle policy and language. A reusable Program with inherited settings can therefore behave differently on different Channels.
 
 Changing only subtitle or credit preferences preserves playback progress, including a sequence's current position and completion state.
 
-### Subtitle selection
+### Subtitle behavior
 
-Choose how Moirai selects an ordinary subtitle track for each video:
+Choose a **Subtitle behavior** mode, then set the language and title rules below it. You can use **Check against media** to see how a specific video will select its subtitle track based on your settings. Inherited rules depend on the enclosing Program or Channel where this Program plays.
 
-- **Inherit:** use the selection policy from the containing Program or Channel.
+- **Inherit selection:** use the selection policy from the containing Program or Channel.
 - **Off:** disable ordinary subtitles for this Program even if they are enabled in the inherited settings. Music video credits can still be enabled separately.
 - **Forced only:** select a matching track marked **forced**. These tracks commonly translate foreign-language dialogue or signs rather than every spoken line. The track must carry the forced flag; Moirai does not infer it from the dialogue. If no matching forced track exists, the video plays without ordinary subtitles.
 - **Prefer default:** prefer a matching track marked **default**. If none is marked default, select another matching track. Use this when your files already identify the subtitle track you normally want.
-- **Any matching track:** select an available track that matches the language setting, without preferring default or forced flags. This selects one track; it does not send every available language to the viewer.
+- **Any matching track:** select an available track that matches the language and title settings. This selects one track only and does not send every available language to the viewer.
 
 If several tracks qualify, Moirai prefers a track associated with the current physical part of a multipart video, then an embedded track over a sidecar. Prefer default checks the default flag before these tie-breakers. Selection is consistent between runs; it does not combine tracks or offer a track picker here. Hearing-impaired and commentary flags are recorded during scanning but are not separate selection filters.
 
-### Preferred language code
+### Subtitle language
 
-Leave this field blank to **inherit** the language setting. Enter `*` to explicitly allow any language, including tracks with no language tag. Unlike a blank language field on a Channel, a blank field on a Program does not clear an inherited language restriction.
+Under **Selection rules**, choose **Inherit language** to follow the enclosing Program or Channel, or **Any language** to remove the inherited language constraint and allow tracks with any language, including untagged tracks. Choose **Specific language** to search a language name or enter a two- or three-letter code, such as `en` or `eng`. If a name also matches a different language’s code, choose the intended language from the list before saving.
 
-To select a specific language, enter a two- or three-letter code, such as `en` or `eng` for English, or `fr` or `fra` for French. Equivalent codes match the same language. The language setting is independent of the selection policy, so **Any matching track** still respects an inherited or explicit language restriction.
+A specified language is a strict filter. For example, **Forced only** with `en` selects an English forced track; an English non-forced track or a French forced track does not qualify. If no track matches, Moirai omits ordinary subtitles instead of falling back to another language. Tracks with an unknown language do not satisfy an explicit language choice.
 
-A specified language is a strict filter. For example, **Forced only** with `en` selects an English forced track; an English non-forced track or a French forced track does not qualify. If no track matches, Moirai omits ordinary subtitles instead of falling back to another language. If preparing a matching track fails, Moirai tries up to two further eligible tracks without changing the language or forced-only policy; preparation issues remain visible. Tracks with an unknown language do not satisfy an explicit language choice.
+### Subtitle title contains
+
+Choose **Specific title** under **Subtitle title rule**, then use part of a recorded track title, such as `Signs` or `Forced`, to distinguish tracks in the same language. Matching ignores case and treats the text literally; it is not a regular expression. Check the media details for the recorded titles. Untitled tracks cannot match a requested title, and sidecar filenames are not used as titles.
+
+The title, language, and selection policy must all match. **Forced only** requires the file’s forced flag, even when a track is titled `Forced`. Choose **Any matching track** to select a track by title without requiring that flag. If no eligible track matches the requested title, the video plays without ordinary subtitles and the Channel editor reports a preparation issue. If preparation fails, retries stay within the title match.
+
+Choose **Inherit title rule** to follow the enclosing Program or Channel, or **Any title** to remove an inherited title constraint. Each field inherits independently: choosing Inherit selection does not clear a specific language or title rule.
+
+### Check against media
+
+Expand **Check against media** to test the rules against one video before saving. Choose a library and search for the item you'd like to test -- the poster carousel shows the first 12 matching videos. Select a video card to check its subtitles automatically. The check uses the Program’s current draft settings and your chosen inheritance context.
+
+Choose a **Preview channel** to supply inherited defaults. Leave the context directly on the Channel, or add containing Sequence Programs from the inside out. The breadcrumb shows the final outer-to-inner order.
+
+![Subtitle preview disclosure with inheritance context and video search](/screenshots/program-subtitle-preview.png)
+
+The result highlights the selected track, followed by ranked eligible alternatives and excluded tracks. Exclusions explain mismatched language or title, another physical part, a missing forced flag, or subtitles being Off. Music video credits take priority when configured for the chosen music video.
+
+This checks scanned metadata only. It does not inspect subtitle contents, check timing, or prove that preparation or rendering will succeed. An empty subtitle track can still be selected. VobSub sidecar streams are resolved during preparation, so the preview warns when their indexed selection may differ.
 
 ### Music video credits
 
 - **Inherit:** use the credit-template setting from the containing Program or Channel.
 - **Off:** disable credits for this Program even if inherited settings enable them. Ordinary subtitles can still appear according to the selection policy and language.
-- **A named template:** use that [credit template](/playback/credit-templates) for music videos selected by this Program. Use **Manage credit templates** to view, duplicate, or customize a template; leaving an edited Program asks whether to save or discard its draft.
+- **On:** choose a reusable [credit template](/playback/credit-templates) to display music video metadata such as the artist and song title for music videos selected by this Program.
 
-Credits replace ordinary subtitles on music videos; they are not added on top of lyrics or another subtitle track. Other media continues to use ordinary subtitle selection. Credits work even when **Subtitle selection** is Off, and the preferred subtitle language does not filter generated credits.
+Credits work independently of ordinary subtitles and can display even when **Subtitle behavior** is Off, and the preferred subtitle language and title do not apply to generated credits. Use **Playback → Credit Templates** to view, duplicate, or customize templates.
 
 ### Presentation follows the Channel
 
-**Subtitle mode** and **Subtitle fonts folder** are configured in the [Channel editor](/scheduling/channels), not on individual Programs. **Burn** renders subtitles into the picture, so viewers cannot switch them off. **Convert** provides selected text subtitles as a selectable WebVTT track for compatible players; image-based subtitles such as PGS or VobSub are still burned. The Channel's optional fonts folder supplements installed system fonts for subtitles in ASS format, including generated credits.
+**Subtitle mode** and **Subtitle fonts folder** are configured in the [Channel editor’s Presentation section](/scheduling/channels), not on individual Programs. **Burn** renders subtitles into the picture, so viewers cannot switch them off. **Convert** provides selected text subtitles as a selectable WebVTT track for compatible players; image-based subtitles such as PGS or VobSub are still burned. The Channel's optional fonts folder supplements installed system fonts for subtitles in ASS format, including generated credits.
 
 Music video credits enabled on a Program in the prepared schedule automatically force **Burn** for the whole Channel, including ordinary subtitles on other videos. The Channel's saved Convert preference is retained and restored when credits are no longer enabled in that schedule. Turning credits Off on one Program does not restore Convert if other effective settings still enable credits. A running stream restarts when the effective mode changes, so enabling or disabling credits can briefly interrupt viewing.
 
 ### Check the result
 
-Save the Program and test a scheduled video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. Missing tracks, unreadable sidecars, and credit-preparation failures are omitted so Moirai can publish the video without them; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.
+Save the Program and test a scheduled video with a known matching subtitle track. Check the Channel editor for preparation issues if subtitles or credits are missing. If preparing a subtitle fails, Moirai tries up to two further eligible tracks while retaining your language, title, and forced-only requirements. Failed attempts remain visible in preparation issues. If no candidate succeeds, or credit preparation fails, Moirai publishes the video without that content; a busy credit renderer retries during a later update. A subtitle that passes preparation can still encounter a decoding or rendering failure in the playback engine, so verify the result with your actual files and IPTV client.

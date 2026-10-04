@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { channelCreateSchema, MUSIC_VIDEO_CREDIT_TEMPLATE, type Channel, type MediaItem, type MediaSubtitleTrack, type ScheduleGuide, type TimelineSegment } from '@moirai/shared';
+import { channelCreateSchema, subtitlePreferencesSchema, MUSIC_VIDEO_CREDIT_TEMPLATE, type Channel, type MediaItem, type MediaSubtitleTrack, type ScheduleGuide, type TimelineSegment } from '@moirai/shared';
 import { selectSubtitle, subtitleLanguageKey, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from '@server/playback/subtitle-selection.js';
 import { assTimestamp, escapeAssText, renderCredits } from '@server/playback/credit-render.js';
 import { renderCreditTemplate } from '@server/playback/credit-renderer.js';
@@ -51,6 +51,38 @@ function guide(configured: Channel, entry: TimelineSegment): ScheduleGuide {
 }
 
 describe('subtitle selection', () => {
+	it('validates optional title preferences and explicit inheritance clearing', () => {
+		expect(subtitlePreferencesSchema.parse({ title: ' Signs ' })).toEqual({ title: 'Signs' });
+		expect(subtitlePreferencesSchema.parse({ title: null })).toEqual({ title: null });
+		expect(subtitlePreferencesSchema.parse({})).toEqual({});
+		expect(subtitlePreferencesSchema.safeParse({ title: ' ' }).success).toBe(false);
+		expect(subtitlePreferencesSchema.safeParse({ title: 'x'.repeat(201) }).success).toBe(false);
+	});
+	it('matches literal title substrings while retaining language, flags, and part constraints', () => {
+		const dialog = track({ streamIndex: 5, title: 'Dialog' });
+		const signs = track({ streamIndex: 6, title: 'Songs & Signs', isForced: true, isDefault: true });
+		expect(selectSubtitle([dialog, signs], { policy: 'any', language: 'en', title: 'sIgNs' }, 1)).toBe(signs);
+		expect(selectSubtitle([signs], { policy: 'any', title: 'Songs.*' }, 1)).toBeNull();
+		expect(selectSubtitle([signs], { policy: 'any', language: 'fra', title: 'Signs' }, 1)).toBeNull();
+		expect(selectSubtitle([signs], { policy: 'any', title: 'Signs' }, 2)).toBeNull();
+		expect(selectSubtitle([dialog, signs], { policy: 'any' }, 1)).toBe(dialog);
+		expect(selectSubtitle([signs], { policy: 'off', title: 'Signs' }, 1)).toBeNull();
+	});
+	it('distinguishes a recorded Forced title from a forced disposition', () => {
+		const full = track({ streamIndex: 3, isDefault: true, isForced: true });
+		const signs = track({ streamIndex: 4, title: 'Forced' });
+		expect(selectSubtitle([full, signs], { policy: 'forced', language: 'eng' }, 1)).toBe(full);
+		expect(selectSubtitle([full, signs], { policy: 'any', language: 'en', title: 'forced' }, 1)).toBe(signs);
+		expect(selectSubtitle([full, signs], { policy: 'forced', title: 'Forced' }, 1)).toBeNull();
+		expect(selectSubtitle([full], { policy: 'any', title: 'Forced' }, 1)).toBeNull();
+	});
+	it('ranks duplicate matching titles and treats null as any title', () => {
+		const first = track({ streamIndex: 3, title: 'Signs' });
+		const preferred = track({ streamIndex: 4, title: 'Signs', isDefault: true });
+		expect(selectSubtitle([first, preferred], { policy: 'default', title: 'Signs' }, 1)).toBe(preferred);
+		expect(selectSubtitle([preferred, first], { policy: 'any', title: 'Signs' }, 1)).toBe(first);
+		expect(selectSubtitle([first, preferred], { policy: 'any', title: null }, 1)).toBe(first);
+	});
 	it('matches two-letter, bibliographic, and terminological language aliases', () => {
 		expect(subtitleLanguageKey('EN')).toBe(subtitleLanguageKey('eng'));
 		expect(subtitleLanguageKey('fre')).toBe(subtitleLanguageKey('fra'));
@@ -78,6 +110,9 @@ describe('subtitle selection', () => {
 		const assets = new SubtitleAssets('/unused', {} as Repository);
 		expect(assets.preferences(configured, entry, new Map([['outer', { policy: 'any' }], ['inner', { language: null, creditsTemplateId: null }]])))
 			.toEqual({ policy: 'any', language: null, creditsTemplateId: null });
+		configured.subtitlePreferences.title = 'Signs';
+		expect(assets.preferences(configured, entry, new Map([['outer', { title: 'Forced' }]]))).toMatchObject({ title: 'Forced' });
+		expect(assets.preferences(configured, entry, new Map([['outer', { title: 'Forced' }], ['inner', { title: null }]]))).toMatchObject({ title: null });
 	});
 });
 
@@ -592,11 +627,45 @@ it.each(['sup', 'sub'])('preserves binary %s snapshots instead of trying to deco
 });
 
 
-it.each(['recover', 'forced', 'language', 'part', 'limit'])('keeps subtitle fallback bounded and eligible: %s', async scenario => {
+it.each(['match', 'missing', 'forced', 'off'])('publishes title-constrained subtitle selections and actionable omissions: %s', async scenario => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-subtitle-title-'));
+	roots.push(root);
+	const configured = channel();
+	configured.subtitleMode = 'convert';
+	configured.subtitlePreferences = { policy: scenario === 'off' ? 'off' : scenario === 'forced' ? 'forced' : 'any', language: 'en', title: scenario === 'missing' ? 'Missing' : 'Forced' };
+	const media = item();
+	media.subtitleTracks = [track({ streamIndex: 3, isForced: true, isDefault: true }), track({ streamIndex: 4, title: 'Forced' })];
+	const repository = { listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const assets = new SubtitleAssets(root, repository);
+	const entry = segment(configured, media);
+	const schedule = guide(configured, entry);
+	const prepared = await assets.prepare(configured, schedule);
+	const documents = [...buildEtvPlayoutFiles([configured], schedule, new Map(), prepared).values()].map(value => JSON.parse(value));
+	if (scenario === 'match') {
+		expect(prepared.get(entry.id)).toEqual([{ streamIndex: 4 }]);
+		expect(documents[0].items[0].tracks.subtitle.stream_index).toBe(4);
+		expect(assets.issues.get(configured.id)).toEqual([]);
+	}
+	else {
+		expect(documents[0].items[0].tracks?.subtitle).toBeUndefined();
+		if (scenario === 'off') {
+			expect(assets.issues.get(configured.id)).toEqual([]);
+		}
+		else {
+			expect(prepared.get(entry.id)).toEqual([null]);
+			expect(assets.issues.get(configured.id)).toEqual([expect.stringContaining('no eligible subtitle matches')]);
+		}
+	}
+});
+
+it.each(['recover', 'forced', 'language', 'part', 'limit', 'title'])('keeps subtitle fallback bounded and eligible: %s', async scenario => {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-subtitle-fallback-'));
 	roots.push(root);
 	const configured = channel();
 	configured.subtitlePreferences = { policy: scenario === 'forced' ? 'forced' : 'default', language: 'en' };
+	if (scenario === 'title') {
+		configured.subtitlePreferences.title = 'Signs';
+	}
 	const media = item();
 	const valid = path.join(root, 'valid.srt');
 	await writeFile(valid, '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
@@ -604,7 +673,7 @@ it.each(['recover', 'forced', 'language', 'part', 'limit'])('keeps subtitle fall
 	for (let i = 0; i < (scenario === 'limit' ? MAX_SUBTITLE_PREPARATION_ATTEMPTS : 1); i++) {
 		const file = path.join(root, `broken-${i}.srt`);
 		await writeFile(file, Buffer.from('Caf\xe9', 'latin1'));
-		broken.push(track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file], relativePaths: [`broken-${i}.srt`], isDefault: true, isForced: true }));
+		broken.push(track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file], relativePaths: [`broken-${i}.srt`], title: 'Signs', isDefault: true, isForced: true }));
 	}
 	media.subtitleTracks = [...broken, { ...broken[0]!, id: randomUUID() }, track({
 		sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [valid], relativePaths: ['valid.srt'],

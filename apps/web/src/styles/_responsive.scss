@@ -76,6 +76,13 @@
 }
 
 @media (max-width: 620px) {
+	.subtitle-preview-track-metadata,
+	.subtitle-preview-track-flags {
+		flex-basis: 100%;
+		margin-left: 0;
+		text-align: left;
+	}
+
 	.catalog-selection-toolbar {
 		align-items: stretch;
 		flex-direction: column;
@@ -1090,7 +1097,8 @@
 }
 
 @media (max-width: 640px) {
-	.channel-subtitles .subtitle-selection-fields {
+	.subtitle-policy-grid,
+	.subtitle-selection-rules .form-grid {
 		grid-template-columns: 1fr;
 	}
 }

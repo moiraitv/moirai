@@ -38,7 +38,8 @@ async function setExpanded(value: boolean): Promise<void> {
 	}
 	animations = [];
 	if (!value && content.value.contains(document.activeElement)) {
-		trigger.value?.focus({ preventScroll: true });
+		const control = trigger.value ?? root.value.querySelector<HTMLElement>('.form-disclosure-trigger button, .form-disclosure-trigger select');
+		control?.focus({ preventScroll: true });
 	}
 
 	// Remove collapsed content from flow immediately while its outgoing layer fades away.
@@ -94,9 +95,11 @@ onBeforeUnmount(() => {
 <template>
 	<div ref="root" class="form-disclosure" :class="{ 'is-open': expanded }">
 		<div ref="surface" class="form-disclosure-surface" aria-hidden="true" />
-		<button ref="trigger" class="form-disclosure-trigger" type="button" :aria-expanded="expanded" :aria-controls="contentId" @click="emit('update:open', !expanded)">
-			<slot name="summary" />
-		</button>
+		<slot name="header" :expanded="expanded" :content-id="contentId">
+			<button ref="trigger" class="form-disclosure-trigger" type="button" :aria-expanded="expanded" :aria-controls="contentId" @click="emit('update:open', !expanded)">
+				<slot name="summary" />
+			</button>
+		</slot>
 		<div v-show="visible" :id="contentId" ref="content" class="form-disclosure-content" :inert="!expanded" :aria-hidden="!expanded">
 			<slot />
 		</div>
