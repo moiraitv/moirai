@@ -206,6 +206,7 @@ export const useChannelsStore = defineStore('channels', () => {
 			const endDate = shiftDateKey(today, guideHorizonDays.value);
 			if (startDate >= endDate) {
 				startDate = today;
+				days = 7;
 				navigation = 'preserve';
 			}
 			days = Math.max(1, Math.min(days, calendarDateSpan(startDate, endDate)));

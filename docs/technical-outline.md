@@ -1444,8 +1444,9 @@ channel when needed. Immutable guide snapshots use shallow reactivity; weakly ow
 interval indexes reuse parsed timestamps across route remounts without retaining replaced snapshots.
 Calendar geometry is independent of zoom, and listing presentation is derived only for mounted entries.
 Guide and Channels request one committed day first, then the remainder of an up-to-seven-day window within the configured horizon,
-so the visible range paints before the rest of the week arrives. Concurrent route bootstrap reads share
-an in-flight guide request; explicit refreshes and live changes can supersede it. Combined guide reads select
+so the visible range paints before the rest of the week arrives. URL dates outside the configured
+horizon fall back to Today with the normal window length, capped by that horizon. Concurrent route
+bootstrap reads share an in-flight guide request; explicit refreshes and live changes can supersede it. Combined guide reads select
 timeline-segment columns without snapshot, cursor, or playback JSON, omit duplicate `entries` when
 the timeline is item-mode, use one time-ordered `starts_at`/`channel_id` limit query, and cache the
 assembled guide in-process until timeline, channel, or scheduling events invalidate it.

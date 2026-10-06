@@ -289,3 +289,28 @@ it('refreshes stale capabilities before guide reads and retries a failed capabil
 	await store.loadGuide('2026-08-01', 7);
 	expect(capabilities).toHaveBeenCalledTimes(3);
 });
+
+
+it.each([
+	{ horizon: 14, date: '2026-08-15' },
+	{ horizon: 14, date: '2026-08-20' },
+	{ horizon: 3, date: '2026-08-04' },
+	{ horizon: 3, date: '2026-08-20' },
+])('restores the Today window for an out-of-range one-day request ($date, horizon $horizon)', async ({ horizon, date }) => {
+	const store = useChannelsStore();
+	store.guideHorizonDays = horizon;
+	const reads = vi.spyOn(api, 'scheduleGuide').mockImplementation(async (start, days = 7) => guide(start, days, days));
+	await store.loadGuide('2026-08-01', Math.min(7, horizon));
+	reads.mockClear();
+
+	// A cached view derives one day from the raw URL date before the store normalizes it.
+	await store.loadGuide(date, 1);
+	expect(store.guideWeekStart).toBe('2026-08-01');
+	expect(store.guideDays).toBe(Math.min(7, horizon));
+	expect(reads).toHaveBeenLastCalledWith('2026-08-01', Math.min(7, horizon));
+
+	reads.mockClear();
+	await store.loadGuide('2026-08-02', 1);
+	expect(reads).toHaveBeenLastCalledWith('2026-08-02', 1);
+	expect(store.guideDays).toBe(1);
+});
