@@ -169,7 +169,8 @@ async function renderChannelListings(
 				truncated: timedSegment?.truncated ?? entry.truncated,
 			},
 			block: kind === 'block'
-				? { title: entry.title, description: entry.description }
+				? { title: entry.title, description: entry.description,
+					artwork_url: entry.posterUrl ? new URL(entry.posterUrl, `${publicUrl}/`).href : null }
 				: null,
 		});
 		const xml = await renderProgrammeFragment(compiled, kind, context, renderOptions);
@@ -278,7 +279,7 @@ function presentedEntry(entry: GuideEntry, xml: string, media?: SchedulableMedia
 		title: xmlChildText(xml, 'title') || entry.title,
 		subtitle: xmlChildText(xml, 'sub-title'),
 		description: xmlChildText(xml, 'desc') || entry.description,
-		...listingArtwork(media),
+		...(entry.kind === 'block' ? {} : listingArtwork(media)),
 	};
 }
 

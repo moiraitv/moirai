@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { MAX_XMLTV_DESCRIPTION_LENGTH, type ScheduleSlot } from '@moirai/shared';
+import { GUIDE_ARTWORK_CONTENT_TYPES, GUIDE_ARTWORK_MAX_BYTES, GUIDE_ARTWORK_MAX_DIMENSION, MAX_XMLTV_DESCRIPTION_LENGTH, type ScheduleSlot } from '@moirai/shared';
+import { ref } from 'vue';
+import TwoStepActionButton from '../TwoStepActionButton.vue';
 
-defineProps<{ programName: string }>();
+defineProps<{ programName: string; artworkUrl?: string | undefined; disabled?: boolean }>();
+const imageError = ref('');
+const artworkInput = ref<HTMLInputElement>();
 
 const slot = defineModel<ScheduleSlot>({ required: true });
-const emit = defineEmits<{ change: [] }>();
+const emit = defineEmits<{ change: []; artwork: [file: File | null] }>();
 
 /** Enable a custom listing with scheduled boundaries, or restore individual listings. */
 function changeMode(event: Event): void {
@@ -13,10 +17,35 @@ function changeMode(event: Event): void {
 		: { mode: 'items' };
 	emit('change');
 }
+
+/** Validate the local file before retaining it as an unsaved artwork selection. */
+function chooseArtwork(event: Event): void {
+	const input = event.target as HTMLInputElement;
+	const file = input.files?.[0];
+	input.value = '';
+	if (!file) {
+		return;
+	}
+
+	imageError.value = '';
+	if (!GUIDE_ARTWORK_CONTENT_TYPES.some(type => type === file.type) || file.size > GUIDE_ARTWORK_MAX_BYTES) {
+		imageError.value = `Choose PNG, JPEG, or WebP artwork up to ${GUIDE_ARTWORK_MAX_BYTES / 1024 / 1024} MiB.`;
+		return;
+	}
+	emit('artwork', file);
+	emit('change');
+}
+
+/** Remove only the draft reference, leaving the persisted image intact until Save. */
+function removeArtwork(): void {
+	imageError.value = '';
+	emit('artwork', null);
+	emit('change');
+}
 </script>
 
 <template>
-	<fieldset class="slot-guide-fields">
+	<fieldset class="slot-guide-fields" :disabled="disabled">
 		<legend>Guide output</legend>
 		<div class="form-grid">
 			<label><span>Show in guide</span>
@@ -39,6 +68,17 @@ function changeMode(event: Event): void {
 					<input v-model="slot.guide.description" type="text" :maxlength="MAX_XMLTV_DESCRIPTION_LENGTH" @input="emit('change')" />
 				</label>
 			</template>
+		</div>
+		<div v-if="slot.guide?.mode === 'block'" class="slot-guide-artwork">
+			<strong>Guide artwork (optional)</strong>
+			<img v-if="artworkUrl" :src="artworkUrl" alt="Guide artwork preview" />
+			<input ref="artworkInput" class="visually-hidden" type="file" tabindex="-1" :accept="GUIDE_ARTWORK_CONTENT_TYPES.join(',')" aria-label="Guide artwork" @change="chooseArtwork" />
+			<button class="button secondary" type="button" :disabled="disabled" @click="artworkInput?.click()">
+				{{ artworkUrl ? 'Replace image' : 'Choose image' }}
+			</button>
+			<TwoStepActionButton v-if="artworkUrl" class="button secondary" confirm-text="Remove" label="Remove artwork" confirm-label="Confirm remove artwork" :disabled="disabled" @confirm="removeArtwork">Remove</TwoStepActionButton>
+			<p class="field-hint">PNG, JPEG, or WebP, up to {{ GUIDE_ARTWORK_MAX_BYTES / 1024 / 1024 }} MiB and {{ GUIDE_ARTWORK_MAX_DIMENSION }} pixels per dimension. Applied when you save the template.</p>
+			<p v-if="imageError" role="alert" class="error">{{ imageError }}</p>
 		</div>
 		<p class="field-hint">Changes the Guide page and XMLTV listings only. Playback is unchanged.</p>
 		<p v-if="slot.guide?.mode === 'block'" class="field-hint">

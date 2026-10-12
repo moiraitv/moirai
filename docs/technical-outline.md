@@ -1490,6 +1490,16 @@ filler and dead air. Layer overrides split effective occurrences. Displaced sche
 visible; displaced drift blocks are omitted. Guide hover, focus, and tap expose actual intersecting
 items with their original airtimes, mounting only items that intersect the magnified time window.
 
+Single-block slots optionally reference immutable custom artwork stored outside the media catalog.
+Authenticated uploads accept still PNG, JPEG, or WebP up to 10 MiB and 4096 pixels per dimension;
+full decoding strips metadata and normalizes to PNG under the same byte limit. Public UUID-addressed
+image URLs serve Guide thumbnails and washes and the XMLTV `block.artwork_url` variable. Standard
+XMLTV emits the block icon; authored sources remain unchanged. Image selection and removal remain
+local to the editor until Save, and successful uploads survive failed-save retries. Shared references
+support copied slots and templates. Startup and template-write reconciliation remove unreferenced
+images after a 24-hour grace period; serialization with template writes protects committed references.
+Existing guide JSON needs no migration, and guide reads add no artwork database queries.
+
 Occurrence metadata shares the committed timeline's atomic persistence and rolling retention.
 Legacy windows recover associations without replaying selection; ambiguous or structurally pending
 legacy occurrences retain individual listings until normal materialization provides metadata.

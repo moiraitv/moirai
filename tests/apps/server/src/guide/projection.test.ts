@@ -247,3 +247,17 @@ it('clips fractional-second media using chronological rather than textual orderi
 		['block', occurrence.start, occurrence.finish],
 	]);
 });
+
+it.each(['scheduled', 'drift'] as const)('projects immutable block artwork with %s timing without changing playback', (boundary) => {
+	const { template, occurrence, segments } = fixture();
+	const artworkId = randomUUID();
+	template.slots[0]!.guide = { mode: 'block', title: '', description: '', boundary, artworkId };
+	const before = structuredClone(segments);
+	const entry = projectGuideEntries(channelId, segments, [occurrence], [template], start, finish).find(entry => entry.kind === 'block');
+	expect(entry).toMatchObject({
+		posterUrl: `/api/v1/guide-artwork/${artworkId}`, landscapeUrl: `/api/v1/guide-artwork/${artworkId}`,
+		fanartUrl: `/api/v1/guide-artwork/${artworkId}`,
+		start: boundary === 'scheduled' ? occurrence.start : occurrence.actualStart,
+	});
+	expect(segments).toEqual(before);
+});

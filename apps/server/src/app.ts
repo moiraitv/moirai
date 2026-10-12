@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { GuideArtworkStore } from './artwork/guide-artwork-store.js';
+import { reconcileGuideArtwork } from './routes/guide-artwork.js';
 import { ResponsivenessMonitor } from './operations/responsiveness.js';
 import { fileURLToPath } from 'node:url';
 import { EmbeddingService } from './semantic/service.js';
@@ -11,7 +14,7 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { validatorCompiler } from 'fastify-type-provider-zod';
-import { CHANNEL_LOGO_MAX_BYTES, FALLBACK_FILLER_MAX_BYTES } from '@moirai/shared';
+import { CHANNEL_LOGO_MAX_BYTES, GUIDE_ARTWORK_CONTENT_TYPES, GUIDE_ARTWORK_MAX_BYTES, FALLBACK_FILLER_MAX_BYTES } from '@moirai/shared';
 import { ArtworkCache } from './artwork/artwork-cache.js';
 import { AiSettingsService } from './ai/settings.js';
 import { registerAuthenticationGuard } from './auth/http.js';
@@ -121,6 +124,8 @@ export async function buildApp(
 		config.artworkTransformConcurrency,
 	);
 	const channelLogos = new ChannelLogoStore(config.channelLogoDir);
+	const guideArtwork = new GuideArtworkStore(path.join(config.dataDir, 'guide-artwork'));
+	await guideArtwork.mutate(() => reconcileGuideArtwork(app, guideArtwork, repository));
 
 	const mediaProbe = new MediaProbe(
 		config.ffprobePath,
@@ -289,8 +294,8 @@ export async function buildApp(
 	app.setValidatorCompiler(validatorCompiler);
 	app.setSerializerCompiler(responseSerializerCompiler);
 	app.addContentTypeParser(
-		'image/png',
-		{ parseAs: 'buffer', bodyLimit: CHANNEL_LOGO_MAX_BYTES },
+		[...GUIDE_ARTWORK_CONTENT_TYPES],
+		{ parseAs: 'buffer', bodyLimit: Math.max(CHANNEL_LOGO_MAX_BYTES, GUIDE_ARTWORK_MAX_BYTES) },
 		(_request, body, done) => done(null, body),
 	);
 
@@ -366,6 +371,7 @@ export async function buildApp(
 		events,
 		artworkCache,
 		channelLogos,
+		guideArtwork,
 		fallbackFillers,
 		epg,
 		timelineMaterializer,

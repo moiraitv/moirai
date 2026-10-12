@@ -1008,7 +1008,7 @@ it('keeps committed playback and selection state unchanged after a guide-only ed
 	const state = await test.repository.getSelectionState(test.channelId);
 	test.template.schedulingUpdatedAt = test.template.updatedAt;
 	test.template.updatedAt = '2026-08-23T12:01:00Z';
-	test.template.slots[0]!.guide = { mode: 'block', title: 'Rock Music', description: '', boundary: 'scheduled' };
+	test.template.slots[0]!.guide = { mode: 'block', title: 'Rock Music', description: '', boundary: 'scheduled', artworkId: randomUUID() };
 	materializer.handleEvent({ protocolVersion: 1, eventId: randomUUID(), occurredAt: '2026-08-23T12:01:00Z',
 		type: 'scheduling.changed', data: { entity: 'template', change: 'updated', id: test.template.id } });
 	await materializer.runNow();

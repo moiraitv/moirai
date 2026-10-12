@@ -1,8 +1,9 @@
+import { GUIDE_ARTWORK_GRACE_MS } from '@server/artwork/guide-artwork-store.js';
 import { discoverOnDisk } from '@server/scanner/on-disk.js';
 import { orderSelectedMedia } from '@moirai/shared';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { RawData, WebSocket } from 'ws';
@@ -2726,4 +2727,48 @@ it('defaults newly added episode programs and resolves the same hierarchy for re
 	const sortedScheduling = orderSelectedMedia(catalog.media, { type: 'episode', direction: 'asc' });
 	expect(sortedReview.map(item => item.episodeNumber)).toEqual([1, 2, 10]);
 	expect(sortedScheduling.map(item => item.id)).toEqual(sortedReview.map((item: { id: string }) => item.id));
+});
+
+it('authenticates block artwork uploads and persists reusable references with public image retrieval', async () => {
+	const { app, rawApp, root, services } = await fixture();
+	const denied = await rawApp.inject({ method: 'POST', url: '/api/v1/guide-artwork', headers: { 'content-type': 'image/png' }, payload: transparentPng });
+	expect(denied.statusCode).toBe(401);
+	const uploaded = await app.inject({ method: 'POST', url: '/api/v1/guide-artwork', headers: { 'content-type': 'image/png' }, payload: transparentPng });
+	expect(uploaded.statusCode).toBe(201);
+	const { artworkId } = uploaded.json();
+	const image = await rawApp.inject({ url: `/api/v1/guide-artwork/${artworkId}` });
+	expect(image.statusCode).toBe(200);
+	expect((await sharp(image.rawPayload).metadata()).format).toBe('png');
+	expect((await rawApp.inject({ url: `/api/v1/guide-artwork/${randomUUID()}` })).statusCode).toBe(404);
+
+	const slotId = randomUUID();
+	const payload = { name: 'Artwork template', slots: [{ id: slotId, startSeconds: 0, programId: null, filler: { mode: 'disabled' }, guide: { mode: 'block', artworkId } }],
+		boundaries: [{ id: randomUUID(), leftSlotId: slotId, rightSlotId: slotId, targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard' }] };
+	const created = await app.inject({ method: 'POST', url: '/api/v1/schedule-templates', payload });
+	expect(created.statusCode, created.body).toBe(201);
+	const template = created.json();
+	expect(template.slots[0].guide.artworkId).toBe(artworkId);
+	const copySlotId = randomUUID();
+	const copy = await app.inject({ method: 'POST', url: '/api/v1/schedule-templates', payload: {
+		...payload, name: 'Shared artwork template', slots: [{ ...payload.slots[0], id: copySlotId }],
+		boundaries: [{ ...payload.boundaries[0], id: randomUUID(), leftSlotId: copySlotId, rightSlotId: copySlotId }],
+	} });
+	expect(copy.statusCode).toBe(201);
+	expect(copy.json().slots[0].guide.artworkId).toBe(artworkId);
+	const missing = await app.inject({ method: 'PATCH', url: `/api/v1/schedule-templates/${template.id}`,
+		payload: { slots: [{ ...template.slots[0], guide: { ...template.slots[0].guide, artworkId: randomUUID() } }] } });
+	expect(missing.statusCode).toBe(400);
+	const read = await app.inject({ url: `/api/v1/schedule-templates/${template.id}` });
+	expect(read.json().slots[0].guide.artworkId).toBe(artworkId);
+	const before = await services.repository.getScheduleTemplate(template.id);
+	const old = new Date(Date.now() - GUIDE_ARTWORK_GRACE_MS - 1000);
+	await utimes(path.join(root, 'guide-artwork', `${artworkId}.png`), old, old);
+	const removed = await app.inject({ method: 'PATCH', url: `/api/v1/schedule-templates/${template.id}`,
+		payload: { slots: [{ ...template.slots[0], guide: { mode: 'block' } }] } });
+	expect(removed.statusCode).toBe(200);
+	const after = await services.repository.getScheduleTemplate(template.id);
+	expect(after!.schedulingUpdatedAt ?? after!.updatedAt).toBe(before!.schedulingUpdatedAt ?? before!.updatedAt);
+	expect((await rawApp.inject({ url: `/api/v1/guide-artwork/${artworkId}` })).statusCode).toBe(200);
+	await app.inject({ method: 'DELETE', url: `/api/v1/schedule-templates/${copy.json().id}` });
+	expect((await rawApp.inject({ url: `/api/v1/guide-artwork/${artworkId}` })).statusCode).toBe(404);
 });

@@ -58,6 +58,7 @@ import { closeUnsavedEditor } from '../../unsaved-editor';
 import ResolvedSchedulePreview from './ResolvedSchedulePreview.vue';
 import TemplateTimelineEditor from './TemplateTimelineEditor.vue';
 import SlotGuideFields from './SlotGuideFields.vue';
+import { useGuideArtworkDraft } from './guide-artwork-draft';
 
 const PREVIEW_UPDATE_DELAY_MS = 450;
 
@@ -82,6 +83,7 @@ const initialLoading = ref(
 	!(scheduling.loaded && channelsStore.capabilitiesLoaded),
 );
 const draft = ref<(ScheduleTemplateCreate & { id: string }) | null>(null);
+const guideArtwork = useGuideArtworkDraft(computed(() => draft.value?.slots ?? []));
 const selectedSlotId = ref('');
 const originalSnapshot = ref('');
 const saving = ref(false);
@@ -150,7 +152,7 @@ const usedPrograms = computed(() => {
 	});
 });
 const isDirty = computed(() =>
-	draft.value ? JSON.stringify({ template: draft.value }) !== originalSnapshot.value : false);
+	draft.value ? guideArtwork.hasPending.value || JSON.stringify({ template: draft.value }) !== originalSnapshot.value : false);
 const hasPendingSave = computed(() => Boolean(draft.value) && (!editingId.value || isDirty.value));
 const previewDraftFingerprint = computed(() => {
 	if (!draft.value) {
@@ -230,6 +232,7 @@ function snapshot(): string {
 
 /** Clone an existing template or initialize a complete one-slot daily draft. */
 function loadDraft(): void {
+	guideArtwork.reset();
 	addingSlot.value = false;
 	slotPlacement.value = null;
 	finiteBoundaryDrift.clear();
@@ -630,6 +633,7 @@ async function save(): Promise<boolean> {
 	saving.value = true;
 	error.value = '';
 	try {
+		await guideArtwork.upload();
 		const saved = editingId.value
 			? await api.updateScheduleTemplate(editingId.value, body)
 			: await api.createScheduleTemplate(body);
@@ -988,7 +992,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 											</label>
 										</div>
 									</div>
-									<SlotGuideFields :model-value="selectedSlot" :program-name="selectedSlot.programId ? programName(selectedSlot.programId) : 'No programming'" @change="markChanged" />
+									<SlotGuideFields :key="selectedSlot.id" :artwork-url="guideArtwork.preview(selectedSlot)" :disabled="saving || deleting" :model-value="selectedSlot" :program-name="selectedSlot.programId ? programName(selectedSlot.programId) : 'No programming'" @artwork="guideArtwork.select(selectedSlot, $event)" @change="markChanged" />
 									<AnimatedDisclosure
 										v-if="selectedSlot.programId !== null"
 										v-model="advancedOpen"

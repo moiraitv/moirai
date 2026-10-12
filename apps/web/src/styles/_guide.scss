@@ -567,12 +567,23 @@
 
 .guide-programme.guide-block {
 	overflow: clip;
+
+	> .guide-programme-thumb, > .guide-programme-fanart {
+		position: sticky;
+		left: var(--guide-channel-width);
+	}
+
+	> .guide-programme-fanart {
+		flex: none;
+		width: var(--guide-block-artwork-width);
+		margin-right: calc(-1 * var(--guide-block-artwork-width));
+	}
 }
 
 .guide-block-copy {
 	flex: none;
 	position: sticky;
-	left: calc(var(--guide-channel-width) + 9px);
+	left: calc(var(--guide-channel-width) + 9px + var(--guide-block-thumb-width, 0px));
 	display: block;
 	width: max-content;
 	max-width: 100%;

@@ -459,6 +459,10 @@ export const api = {
 		request<Channel>(`/api/v1/channels/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 	deleteChannel: (id: string) => request<void>(`/api/v1/channels/${id}`, { method: 'DELETE' }),
 	uploadChannelLogo,
+	/** Upload draft block artwork before persisting its immutable reference. */
+	uploadGuideArtwork: (image: File) => request<{ artworkId: string }>('/api/v1/guide-artwork', {
+		method: 'POST', headers: { 'Content-Type': image.type }, body: image,
+	}),
 	deleteChannelLogo: (id: string) =>
 		request<Channel>(`/api/v1/channels/${id}/logo`, { method: 'DELETE' }),
 	globalFallbackFiller: () =>

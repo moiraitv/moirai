@@ -208,7 +208,7 @@ function validationContextFor(key: GuideTemplateSourceKey): Record<string, unkno
 			program_id: null,
 			truncated: false,
 		},
-		block: key === 'block' ? { title: 'Block', description: 'Description' } : null,
+		block: key === 'block' ? { title: 'Block', description: 'Description', artwork_url: null } : null,
 	};
 }
 
@@ -366,7 +366,7 @@ export function programmeContext(input: {
 		program_id: string | null;
 		truncated: boolean;
 	};
-	block: { title: string; description: string } | null;
+	block: { title: string; description: string; artwork_url?: string | null } | null;
 }): Record<string, unknown> {
 	return {
 		kind: input.kind,

@@ -388,3 +388,25 @@ it('copies live fanart onto presented listings', async () => {
 	expect(presented.channels[0]!.preview.segments.find((segment) => segment.mediaItemId === source.media[0]!.id)?.fanartUrl)
 		.toBe(source.media[0]!.fanartUrl);
 });
+
+it('preserves custom block artwork in guide presentation and exposes it to standard and authored XMLTV', async () => {
+	const channel = { ...channelCreateSchema.parse({ number: '88', name: 'Art' }),
+		id: randomUUID(), createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' };
+	const source = catalog();
+	const output = guide(channel.id, source.media[0]!.id);
+	const artwork = `/api/v1/guide-artwork/${randomUUID()}`;
+	output.channels[0]!.entries = [{
+		id: 'art-block', kind: 'block', channelId: channel.id, start: '2026-11-01T08:00:00Z', finish: '2026-11-01T09:00:00Z',
+		title: 'Art', description: '', programId: null, segmentId: null, occurrenceId: 'occurrence', role: 'primary', truncated: false,
+		posterUrl: artwork, landscapeUrl: artwork, fanartUrl: artwork,
+	}];
+	const xml = await buildXmltv([channel], output, source, 'https://moirai.example.test', builtinXmltv);
+	expect(new XMLParser({ ignoreAttributes: false }).parse(xml).tv.programme.icon['@_src'])
+		.toBe(`https://moirai.example.test${artwork}`);
+	const presented = await presentGuideListings([channel], output, source, 'https://moirai.example.test', builtinXmltv);
+	expect(presented.channels[0]!.entries![0]).toMatchObject({ posterUrl: artwork, landscapeUrl: artwork, fanartUrl: artwork });
+	const custom = { ...BUILTIN_GUIDE_TEMPLATE.sources, block: '<programme start="{{ start }}" stop="{{ stop }}" channel="{{ channel.id }}"><title>Custom</title><icon src="{{ block.artwork_url }}" /></programme>' };
+	const authored = await buildXmltv([channel], output, source, 'https://moirai.example.test', { sourcesForChannel: () => custom });
+	expect(authored).toContain(`https://moirai.example.test${artwork}`);
+	expect(authored).toContain('<title>Custom</title>');
+});

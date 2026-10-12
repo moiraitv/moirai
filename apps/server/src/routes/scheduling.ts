@@ -1,3 +1,5 @@
+import { saveWithGuideArtwork } from './guide-artwork.js';
+import type { GuideArtworkStore } from '../artwork/guide-artwork-store.js';
 import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
 import { registerSemanticProgramRoutes } from './semantic-programs.js';
 import { registerProgramGroupRoutes } from './program-groups.js';
@@ -50,6 +52,7 @@ function explicitItemCount(config: ProgramConfig | undefined): number | null {
 
 /** Services required by program, template, preview, and assignment routes. */
 interface SchedulingRouteDependencies {
+	guideArtwork: GuideArtworkStore;
 	config: AppConfig;
 	repository: Repository;
 	events: LiveEventHub;
@@ -60,7 +63,7 @@ interface SchedulingRouteDependencies {
 /** Register reusable scheduling configuration and preview endpoints. */
 export function registerSchedulingRoutes(
 	app: FastifyInstance,
-	{ config, repository, events, schedulingWorkers, requestEmbeddingWork }: SchedulingRouteDependencies,
+	{ config, repository, events, schedulingWorkers, requestEmbeddingWork, guideArtwork }: SchedulingRouteDependencies,
 ): void {
 	registerProgramGroupRoutes(app, repository, events);
 	registerSemanticProgramRoutes(app, repository, requestEmbeddingWork, schedulingWorkers);
@@ -355,8 +358,13 @@ export function registerSchedulingRoutes(
 			errors: [400, 409, 422, 500, 503],
 		}),
 	}, async (request, reply) => {
-		const template = await repository.createScheduleTemplate(
-			scheduleTemplateCreateSchema.parse(request.body),
+		const input = scheduleTemplateCreateSchema.parse(request.body);
+		const template = await saveWithGuideArtwork(
+			app,
+			guideArtwork,
+			repository,
+			input.slots,
+			() => repository.createScheduleTemplate(input),
 		);
 		events.publish({
 			type: 'scheduling.changed',
@@ -392,9 +400,13 @@ export function registerSchedulingRoutes(
 			errors: [400, 404, 409, 422, 500, 503],
 		}),
 	}, async (request) => {
-		const template = await repository.updateScheduleTemplate(
-			parseId(request),
-			scheduleTemplateUpdateSchema.parse(request.body),
+		const input = scheduleTemplateUpdateSchema.parse(request.body);
+		const template = await saveWithGuideArtwork(
+			app,
+			guideArtwork,
+			repository,
+			input.slots,
+			() => repository.updateScheduleTemplate(parseId(request), input),
 		);
 		if (!template) {
 			throw app.httpErrors.notFound('Schedule template not found');
@@ -417,7 +429,13 @@ export function registerSchedulingRoutes(
 		}),
 	}, async (request, reply) => {
 		const id = parseId(request);
-		if (!(await repository.deleteScheduleTemplate(id))) {
+		if (!(await saveWithGuideArtwork(
+			app,
+			guideArtwork,
+			repository,
+			undefined,
+			() => repository.deleteScheduleTemplate(id),
+		))) {
 			throw app.httpErrors.notFound('Schedule template not found');
 		}
 

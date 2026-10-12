@@ -156,7 +156,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -200,7 +200,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -246,7 +246,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -287,7 +287,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -328,7 +328,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -370,7 +370,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -392,7 +392,7 @@ Available values:
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
-  - block.title, block.description (block listings only)
+  - block.title, block.description, block.artwork_url (block listings only)
 
 Interpolated text is escaped for XML. Blank tabs fall back to this built-in source.
 {% endcomment %}
@@ -400,6 +400,9 @@ Interpolated text is escaped for XML. Blank tabs fall back to this built-in sour
     <title>{{ title }}</title>
 {%- if block and block.description %}
     <desc>{{ block.description }}</desc>
+{%- endif %}
+{%- if block and block.artwork_url %}
+    <icon src="{{ block.artwork_url }}" />
 {%- endif %}
   </programme>`;
 

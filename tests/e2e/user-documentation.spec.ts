@@ -342,6 +342,8 @@ test('captures Templates', { tag: '@docs-screenshot' }, async ({ page, documenta
 	await templateEditor.getByRole('combobox', { name: 'Show in guide' }).selectOption('block');
 	await templateEditor.getByRole('textbox', { name: 'Guide title', exact: true }).fill('Evening Cinema');
 	await templateEditor.getByRole('textbox', { name: 'Guide description (optional)' }).fill('A selection of films for the evening.');
+	await templateEditor.getByLabel('Guide artwork', { exact: true }).setInputFiles(path.resolve('tests/e2e/fixtures/user-documentation/moonrise-theater-poster.png'));
+	await expect(templateEditor.getByAltText('Guide artwork preview')).toBeVisible();
 	await captureSection(page, templateEditor.getByRole('group', { name: 'Guide output', exact: true }), 'template-slot-guide.png');
 	await templateEditor.getByRole('combobox', { name: 'Show in guide' }).selectOption('items');
 	await assertProgramColors(page, sequenceProgramIds);
@@ -468,15 +470,23 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 	await capture(page, 'guide.png');
 	// Show a grouped listing with real committed media and the matching hover-range markers.
 	const originalTemplate = await (await page.request.get(`/api/v1/schedule-templates/${template.id}`)).json() as ScheduleTemplate;
+	const artworkUpload = await page.request.post('/api/v1/guide-artwork', {
+		headers: { ...requestHeaders, 'content-type': 'image/png' },
+		data: await readFile(path.resolve('tests/e2e/fixtures/user-documentation/moonrise-theater-poster.png')),
+	});
+	expect(artworkUpload.ok(), await artworkUpload.text()).toBe(true);
+	const { artworkId } = await artworkUpload.json();
 	const grouped = await page.request.patch(`/api/v1/schedule-templates/${template.id}`, {
 		headers: requestHeaders,
 		data: { ...originalTemplate, slots: originalTemplate.slots.map(slot => ({
-			...slot, guide: { mode: 'block', title: 'Evening Cinema', description: 'Classic films and new discoveries, all day.', boundary: 'scheduled' },
+			...slot, guide: { mode: 'block', title: 'Evening Cinema', description: 'Classic films and new discoveries, all day.', boundary: 'scheduled', artworkId },
 		})) },
 	});
 	expect(grouped.ok(), await grouped.text()).toBe(true);
 	const guideBlock = page.locator('.guide-block').first();
 	await expect(guideBlock).toBeVisible({ timeout: 30_000 });
+	await expect(guideBlock.locator('.guide-programme-thumb')).toBeVisible();
+	await expect.poll(() => guideBlock.locator('.guide-programme-thumb').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
 	await guideBlock.locator('.guide-block-copy').scrollIntoViewIfNeeded();
 	const trackBounds = (await page.locator('.guide-scroll').boundingBox())!;
 	const blockBounds = (await guideBlock.boundingBox())!;
@@ -492,8 +502,15 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 	await expect(page.getByRole('tooltip')).toHaveCount(0);
 	await expect(guideHover.locator('.guide-programme').first()).toBeVisible();
 	await expect(page.locator('.guide-range-marker')).toHaveCount(2);
+	await expect(guideBlock.locator('.guide-programme-thumb')).toBeInViewport();
 	await capture(page, 'guide-single-block.png');
 	await page.keyboard.press('Escape');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await guideBlock.locator('.guide-block-copy').scrollIntoViewIfNeeded();
+	await expect(guideBlock.locator('.guide-programme-fanart')).toBeInViewport();
+	await expect(guideBlock.locator('.guide-block-copy')).toBeInViewport();
+	await page.screenshot({ path: 'test-results/guide-block-artwork-narrow.png' });
+	await page.setViewportSize({ width: 1440, height: 900 });
 	const restored = await page.request.patch(`/api/v1/schedule-templates/${template.id}`, { headers: requestHeaders, data: originalTemplate });
 	expect(restored.ok(), await restored.text()).toBe(true);
 

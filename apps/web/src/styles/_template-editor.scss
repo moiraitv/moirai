@@ -1110,3 +1110,22 @@
 	display: inline-block;
 	flex: 0 0 auto;
 }
+
+.slot-guide-artwork {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+	margin-block: 1rem;
+
+	> strong, > p {
+		flex-basis: 100%;
+	}
+
+	> img {
+		width: 8rem;
+		height: 6rem;
+		object-fit: contain;
+	}
+
+}

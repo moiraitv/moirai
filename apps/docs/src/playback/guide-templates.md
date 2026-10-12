@@ -25,7 +25,7 @@ The built-in layout identifies movies with a `Movie` category and episodes with 
 
 Give the template a distinct name and an optional single-line description. Each tab is a [Liquid](https://liquidjs.com/tutorials/intro-to-liquid.html) source that emits one XMLTV `<channel>` or `<programme>` fragment. If you leave any type's tab completely empty, it will use the built-in layout for that type.
 
-Templates can use the listing `kind`, XMLTV `start` and `stop` times, channel identity, item metadata (including the media type), the slot interval, and block title and description. Interpolated text is escaped automatically.
+Templates can use the listing `kind`, XMLTV `start` and `stop` times, channel identity, item metadata (including the media type), the slot interval, and block title, description, and artwork. Interpolated text is escaped automatically.
 
 **Save** stores the template. **Reset**, once confirmed, restores the opening draft. Deleting a template requires confirmation and is blocked while any channel assigns it or while it is set as the default.
 
@@ -40,3 +40,11 @@ If there are no channels, you'll need to create one before previewing. A failed 
 ## Assign a template to a channel
 
 Edit a [Channel](/scheduling/channels), expand **Guide template override**, and choose a template. Leave it on **Default** to follow **Default for XMLTV**.
+
+Single-block listings can use an image chosen in the schedule template’s **Guide output** settings. Standard XMLTV includes it automatically. Saved custom sources are not changed automatically. To include the image in a custom Block source, add:
+
+```liquid
+{% if block.artwork_url %}
+  <icon src="{{ block.artwork_url }}" />
+{% endif %}
+```

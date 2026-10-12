@@ -1,3 +1,4 @@
+import { guideArtworkUrl } from '@moirai/shared';
 import type { GuideEntry, GuideOccurrence, ScheduleTemplate, TimelineSegment } from '@moirai/shared';
 
 /** Convert a concrete item into a presentation entry with a stable detail target. */
@@ -77,6 +78,11 @@ export function projectGuideEntries(
 			start: Date.parse(start) < Date.parse(rangeStart) ? rangeStart : start, finish: Date.parse(finish) > Date.parse(rangeEnd) ? rangeEnd : finish,
 			title: guide.title.trim() || (occurrence.programId ? programNames.get(occurrence.programId) ?? 'Missing program' : 'No programming'), description: guide.description, programId: occurrence.programId,
 			segmentId: null, occurrenceId: occurrence.id, role: 'primary', truncated: false,
+			...(guide.artworkId ? {
+				posterUrl: guideArtworkUrl(guide.artworkId),
+				landscapeUrl: guideArtworkUrl(guide.artworkId),
+				fanartUrl: guideArtworkUrl(guide.artworkId),
+			} : {}),
 		});
 	}
 	scheduled.sort((left, right) => Date.parse(left.start) - Date.parse(right.start));

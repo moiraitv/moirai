@@ -1,3 +1,5 @@
+import { registerGuideArtworkRoutes } from './guide-artwork.js';
+import type { GuideArtworkStore } from '../artwork/guide-artwork-store.js';
 import { registerFillerPresetRoutes } from './filler-presets.js';
 import { registerMidRollPresetRoutes } from './mid-roll-presets.js';
 import { registerResourceUsageRoutes } from './resource-usage.js';
@@ -47,6 +49,7 @@ export interface HttpRouteDependencies {
 	events: LiveEventHub;
 	artworkCache: ArtworkCache;
 	channelLogos: ChannelLogoStore;
+	guideArtwork: GuideArtworkStore;
 	fallbackFillers: FallbackFillerStore;
 	epg: EpgService;
 	timelineMaterializer: TimelineMaterializer;
@@ -67,6 +70,7 @@ export function registerHttpRoutes(
 	registerCreditTemplateRoutes(app, dependencies);
 	registerSubtitlePreviewRoutes(app, dependencies);
 	registerGuideTemplateRoutes(app, dependencies);
+	registerGuideArtworkRoutes(app, dependencies);
 	registerEncodingProfileRoutes(app, dependencies);
 	registerFillerPresetRoutes(app, dependencies);
 	registerMidRollPresetRoutes(app, dependencies);

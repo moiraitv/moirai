@@ -3,11 +3,26 @@ import { z } from 'zod';
 /** Bound XMLTV descriptions and authored slot descriptions. */
 export const MAX_XMLTV_DESCRIPTION_LENGTH = 4 * 1024;
 
+/** Maximum encoded and normalized guide artwork size. */
+export const GUIDE_ARTWORK_MAX_BYTES = 10 * 1024 * 1024;
+/** Maximum width or height of a guide artwork upload. */
+export const GUIDE_ARTWORK_MAX_DIMENSION = 4096;
+/** Accepted raster formats for custom block artwork. */
+export const GUIDE_ARTWORK_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+/** Immutable managed image returned after a successful upload. */
+export const guideArtworkUploadSchema = z.object({ artworkId: z.uuid() });
+
+/** Resolve an immutable managed block image without exposing storage paths. */
+export function guideArtworkUrl(artworkId: string): string {
+	return `/api/v1/guide-artwork/${encodeURIComponent(artworkId)}`;
+}
+
 /** Optional slot presentation; absence preserves individual listings; blank block titles use the program name. */
 export const slotGuideSchema = z.discriminatedUnion('mode', [
 	z.object({ mode: z.literal('items') }),
 	z.object({
 		mode: z.literal('block'),
+		artworkId: z.uuid().optional(),
 		title: z.string().trim().max(120).default(''),
 		description: z.string().trim().max(MAX_XMLTV_DESCRIPTION_LENGTH).default(''),
 		boundary: z.enum(['scheduled', 'drift']).default('scheduled'),

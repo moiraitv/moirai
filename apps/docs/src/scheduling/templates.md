@@ -66,6 +66,8 @@ To remove a slot, select it and activate **Delete selected slot** twice to confi
 
 ![Slot guide title, description, and timing controls](/screenshots/template-slot-guide.png)
 
+Use **Guide artwork (optional)** under **Single block** to choose an image from your computer. PNG, JPEG, and WebP images can be up to 10 MiB and 4096 pixels per dimension. The preview keeps the image’s proportions; the Guide fits it to each listing. Choose **Replace image** to change it or confirm **Remove** to clear it. Artwork changes take effect when you save the template; Reset or discarding the draft restores the saved artwork. The same image is included in Standard XMLTV for external guide clients.
+
 In the selected slot, use **Guide output → Single block** to show one listing such as “Rock Music” instead of each video. Leave **Guide title** empty to use the slot’s program name, or enter a custom title such as “Rock Music”. Optionally add a description, and choose **Guide timing**:
 
 - **Scheduled boundaries** uses the slot’s scheduled start and end. A slot scheduled for 8–9 stays at 8–9 in the guide even if its content runs 8:02–9:04, or none of its content plays.

@@ -19,6 +19,7 @@ import { guideSourceLabel } from '../guide-source';
 import { programColorStyle } from '../program-colors';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import {
+	GUIDE_PROGRAMME_INNER_HEIGHT_PX,
 	guideListingThumb,
 	guideListingTimespan,
 	guideListingVisualWidth,
@@ -305,14 +306,15 @@ function listingSubtitle(segment: TimelineSegment | GuideEntry): string {
 	return 'subtitle' in segment && typeof segment.subtitle === 'string' ? segment.subtitle : '';
 }
 
-/** Choose a left thumbnail that leaves enough room for listing text. */
+/** Reserve readable text beside thumbnails, bounding long blocks by the visible track width. */
 function listingThumb(segment: TimelineSegment | GuideEntry): ReturnType<typeof guideListingThumb> {
-	if (props.listingPresentation !== 'guide' || ('kind' in segment && segment.kind === 'block')) {
+	if (props.listingPresentation !== 'guide') {
 		return null;
 	}
 
+	const width = guideListingVisualWidth(guideSegmentWidth(segment.start, segment.finish, hourWidth.value));
 	return guideListingThumb(
-		guideListingVisualWidth(guideSegmentWidth(segment.start, segment.finish, hourWidth.value)),
+		'kind' in segment && segment.kind === 'block' ? Math.min(width, trackWidth.value) : width,
 		segment.landscapeUrl,
 		segment.posterUrl,
 	);
@@ -320,7 +322,7 @@ function listingThumb(segment: TimelineSegment | GuideEntry): ReturnType<typeof 
 
 /** Choose right-side wash art, using landscape when the item has no fanart file. */
 function listingWash(segment: TimelineSegment | GuideEntry): string | null {
-	if (props.listingPresentation !== 'guide' || ('kind' in segment && segment.kind === 'block')) {
+	if (props.listingPresentation !== 'guide') {
 		return null;
 	}
 
@@ -337,8 +339,14 @@ const listingViews = computed(() => {
 	}>();
 	for (const programmes of visibleByChannel.value.values()) {
 		for (const programme of programmes) {
+			const thumb = listingThumb(programme);
+			const style = segmentStyle(programme);
+			if ('kind' in programme && programme.kind === 'block') {
+				style['--guide-block-thumb-width'] = `${thumb ? GUIDE_PROGRAMME_INNER_HEIGHT_PX * (thumb.kind === 'poster' ? 2 / 3 : 1) : 0}px`;
+				style['--guide-block-artwork-width'] = `${Math.min(Number.parseFloat(style.width!), trackWidth.value)}px`;
+			}
 			views.set(programme, {
-				style: segmentStyle(programme), thumb: listingThumb(programme), wash: listingWash(programme),
+				style, thumb, wash: listingWash(programme),
 				timespan: props.listingPresentation === 'guide'
 					? guideListingTimespan(programme.start, programme.finish, props.timeZone) : '',
 			});
