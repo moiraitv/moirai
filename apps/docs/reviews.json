@@ -326,20 +326,20 @@
       }
     },
     "operations.configuration": {
-      "digest": "0e7b59de6ba5a55327c94128b12568c464aa04225b50014d0773468b961202f8",
-      "reviewedAt": "2026-10-02T22:50:45.056Z",
+      "digest": "d21ccb19ad2a0798597b060a785c05bacbe51b427a2247b0fa69f00a3654bdd7",
+      "reviewedAt": "2026-10-12T19:43:02.053Z",
       "components": {
         "text": {
-          "digest": "0e7b59de6ba5a55327c94128b12568c464aa04225b50014d0773468b961202f8",
-          "reviewedAt": "2026-10-02T22:50:45.056Z"
+          "digest": "d21ccb19ad2a0798597b060a785c05bacbe51b427a2247b0fa69f00a3654bdd7",
+          "reviewedAt": "2026-10-12T19:43:02.053Z"
         },
         "screenshots": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-10-02T22:50:45.056Z"
+          "reviewedAt": "2026-10-12T19:43:02.053Z"
         },
         "icons": {
           "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "reviewedAt": "2026-10-02T22:50:45.056Z"
+          "reviewedAt": "2026-10-12T19:43:02.053Z"
         }
       }
     },

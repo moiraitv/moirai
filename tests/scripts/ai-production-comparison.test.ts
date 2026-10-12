@@ -13,9 +13,9 @@ it('uses explicit comparison tuning without changing production configuration', 
 	expect(reportRequestOptions('deepseek/deepseek-v4-pro-0813', 'https://openrouter.ai/api/v1')).toMatchObject({
 		provider: { sort: 'latency', allow_fallbacks: true },
 	});
-	expect(reportRequestOptions('gpt-6-sol', 'https://api.openai.com/v1').reasoningEffort).toBe('low');
+	expect(reportRequestOptions('gpt-6.1-sol', 'https://api.openai.com/v1').reasoningEffort).toBe('low');
 	expect(reportRequestOptions('grok-4.7', 'https://api.x.ai/v1').reasoningEffort).toBe('low');
-	expect(reportRequestOptions('claude-sonnet-5', 'https://api.anthropic.com/v1')).toMatchObject({
+	expect(reportRequestOptions('claude-sonnet-5-5', 'https://api.anthropic.com/v1')).toMatchObject({
 		protocol: 'anthropic-messages', disableThinking: true,
 	});
 });

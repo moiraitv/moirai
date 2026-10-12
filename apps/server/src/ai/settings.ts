@@ -30,8 +30,8 @@ type StoredProfile = z.infer<typeof storedProfileSchema>;
 
 /** Maintained provider endpoints and recommended models. */
 const recommendations: Record<Exclude<AiProvider, 'custom'>, { baseUrl: string; model: string }> = {
-	openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-sol' },
-	anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5' },
+	openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6.1-sol' },
+	anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5-5' },
 	xai: { baseUrl: 'https://api.x.ai/v1', model: 'grok-4.7' },
 	openrouter: { baseUrl: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4-pro-0813' },
 };

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, stat, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -33,7 +33,7 @@ it('stores keys in an owner-only file and redacts them from status', async () =>
 	expect(await readFile(filename, 'utf8')).toContain('secret-one');
 	expect(JSON.stringify(service.status())).not.toContain('secret-one');
 	expect(service.status().profiles.find(profile => profile.provider === 'openai')?.keyPlaceholder).toBe('••••••');
-	expect(service.active()?.model).toBe('gpt-6-sol');
+	expect(service.active()?.model).toBe('gpt-6.1-sol');
 	expect(fetchImpl).toHaveBeenCalledTimes(1);
 	const reloaded = new AiSettingsService(directory, fetchImpl);
 	await reloaded.load();
@@ -210,4 +210,67 @@ it('checks native and strict-schema protocols and tunes only known provider prof
 	await service.save({ activeProvider: 'custom', profile: { provider: 'custom', modelOverride: 'gpt-6-sol', webSearch: false,
 		baseUrl: 'https://local.example.test/v1', protocol: 'chat-completions' } });
 	expect(productionAiRequestOptions(service.active()!).reasoningEffort).toBeUndefined();
+});
+
+
+it('reports current defaults before any provider is configured', async () => {
+	const fetchImpl = vi.fn<typeof fetch>();
+	const { service } = await settings(fetchImpl);
+	expect(service.active()).toBeNull();
+	expect(service.status().profiles.map(({ provider, effectiveModel }) => [provider, effectiveModel])).toEqual([
+		['openai', 'gpt-6.1-sol'], ['anthropic', 'claude-sonnet-5-5'], ['xai', 'grok-4.7'],
+		['openrouter', 'deepseek/deepseek-v4-pro-0813'], ['custom', ''],
+	]);
+	expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+it.each([
+	['openai', null, 'gpt-6.1-sol'], ['openai', 'gpt-6-sol', 'gpt-6-sol'],
+	['anthropic', null, 'claude-sonnet-5-5'], ['anthropic', 'claude-sonnet-5', 'claude-sonnet-5'],
+] as const)('loads version-1 %s settings with override %s without rewriting preferences', async (provider, modelOverride, effectiveModel) => {
+	const fetchImpl = vi.fn<typeof fetch>();
+	const { service, directory } = await settings(fetchImpl);
+	const prior = JSON.stringify({ version: 1, activeProvider: provider, profiles: {
+		[provider]: { apiKey: 'saved-key', modelOverride, webSearch: true,
+			webSearchTimeLimitMinutes: 10, verification: 'verified' },
+	} });
+	const filename = path.join(directory, 'ai-settings.json');
+	await writeFile(filename, prior);
+	await service.load();
+
+	expect(service.active()).toMatchObject({ model: effectiveModel, apiKey: 'saved-key',
+		webSearch: true, webSearchTimeLimitMinutes: 10 });
+	expect(service.status().profiles.find(profile => profile.provider === provider)).toMatchObject({
+		modelOverride, effectiveModel, webSearch: true, webSearchTimeLimitMinutes: 10,
+	});
+	expect(await readFile(filename, 'utf8')).toBe(prior);
+	expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+it.each([
+	['openai', null, 'gpt-6.1-sol'], ['openai', 'gpt-6-sol', 'gpt-6-sol'],
+	['anthropic', null, 'claude-sonnet-5-5'], ['anthropic', 'claude-sonnet-5', 'claude-sonnet-5'],
+] as const)('checks and captures %s with override %s using compatible options', async (provider, modelOverride, model) => {
+	const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+		const body = JSON.parse(String(init?.body));
+		expect(body.model).toBe(model);
+		expect(body).not.toHaveProperty('tools');
+		if (provider === 'openai') {
+			expect(url).toBe('https://api.openai.com/v1/chat/completions');
+			expect(body).toMatchObject({ reasoning_effort: 'low', max_completion_tokens: 64 });
+			return checked();
+		}
+		expect(url).toBe('https://api.anthropic.com/v1/messages');
+		expect(body).toMatchObject({ max_tokens: 64, thinking: {
+			type: model === 'claude-sonnet-5-5' ? 'between_tools' : 'disabled',
+		}, output_config: { format: { type: 'json_schema' } } });
+		return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '{"ok":true}' }] });
+	});
+	const { service } = await settings(fetchImpl);
+	await service.save({ activeProvider: provider, profile: { provider, apiKey: 'test-key', modelOverride, webSearch: true } });
+	const captured = service.active();
+	await service.save({ activeProvider: null });
+	expect(captured).toMatchObject({ model, webSearch: true });
+	expect(service.active()).toBeNull();
+	expect(fetchImpl).toHaveBeenCalledTimes(1);
 });

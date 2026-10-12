@@ -25,7 +25,7 @@ const MAX_RESULTS = 200;
 export function reportRequestOptions(model: string, baseUrl: string): Pick<AiRequestActivity,
 	'maxCompletionTokens' | 'reasoningEffort' | 'disableThinking' | 'provider' | 'protocol' | 'chatJsonMode'> {
 	const tuned = evaluationOptions(model, baseUrl);
-	return model === 'claude-sonnet-5' ? { maxCompletionTokens: 4_096,
+	return ['claude-sonnet-5', 'claude-sonnet-5-5'].includes(model) ? { maxCompletionTokens: 4_096,
 		protocol: 'anthropic-messages', disableThinking: true } : tuned;
 }
 
@@ -66,7 +66,7 @@ export async function createProductionComparison(configPath: string): Promise<st
 	const resolved = config.models.flatMap(value => {
 		const name = value.name ?? value.model;
 		const settings = { ...reportRequestOptions(value.model, value.baseUrl),
-			...(value.chatJsonMode && value.model !== 'claude-sonnet-5' ? { chatJsonMode: value.chatJsonMode } : {}) };
+			...(value.chatJsonMode && !['claude-sonnet-5', 'claude-sonnet-5-5'].includes(value.model) ? { chatJsonMode: value.chatJsonMode } : {}) };
 		try {
 			return [{ value, ai: configuredModel(value), name, settings }];
 		}

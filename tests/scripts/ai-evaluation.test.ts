@@ -66,3 +66,15 @@ it('keeps one private aggregate cap across invocations and prices native output 
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+
+it.each(['gpt-6.1-sol', 'claude-sonnet-5-5'])('reserves current token rates and enforces the budget for %s', async model => {
+	const init = { method: 'POST', body: JSON.stringify({ model, max_tokens: 4096, messages: [] }) };
+	const expected = 2 * (Buffer.byteLength(init.body, 'utf8') * 2 + 4096 * 10) / 1_000_000;
+	const upstream = vi.fn<typeof fetch>(async () => Response.json({}));
+	const budget = new EvaluationBudget(expected);
+	await budget.fetch(upstream)('https://provider.example.test', init);
+	expect(budget.usedUsd).toBeCloseTo(expected);
+	await expect(budget.fetch(upstream)('https://provider.example.test', init)).rejects.toThrow('spending limit');
+	expect(upstream).toHaveBeenCalledTimes(1);
+});

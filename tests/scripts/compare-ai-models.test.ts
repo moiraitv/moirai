@@ -1,6 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { comparisonRequestOptions, comparisonSchema, configuredModel, overlap, preflightProviders, promptOnlyFetch, type ComparisonRow } from '@scripts/compare-ai-models.js';
 import { requestAiSelectionText } from '@server/ai/provider.js';
+import { evaluationOptions } from '@scripts/ai-evaluation.js';
+import { reportRequestOptions } from '@scripts/ai-production-comparison.js';
 
 const model = { apiKey: 'env:TEST_OPENROUTER_KEY', baseUrl: 'https://openrouter.ai/api/v1/',
 	model: 'qwen/qwen3.5-397b-a17b', webSearch: false };
@@ -144,4 +146,33 @@ it('preflights native Messages even when research is configured for full runs', 
 	});
 	expect(await preflightProviders([{ name: 'Claude', ai,
 		requestOptions: { protocol: 'anthropic-messages' } }], fetchImpl)).toEqual([{ name: 'Claude', status: 'ready' }]);
+});
+
+
+it.each(['claude-sonnet-5', 'claude-sonnet-5-5'])('uses compatible thinking for %s comparison preflight and full requests', async model => {
+	for (const requestOptions of [evaluationOptions(model, 'https://api.anthropic.com/v1'),
+		reportRequestOptions(model, 'https://api.anthropic.com/v1')]) {
+		const ai = { apiKey: 'test-key', baseUrl: 'https://api.anthropic.com/v1', model, webSearch: false };
+		const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+			expect(url).toBe('https://api.anthropic.com/v1/messages');
+			expect(JSON.parse(String(init?.body))).toMatchObject({ model,
+				thinking: { type: model === 'claude-sonnet-5-5' ? 'between_tools' : 'disabled' },
+			});
+			return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '{"ok":true}' }] });
+		});
+		expect(await preflightProviders([{ name: model, ai, requestOptions }], fetchImpl))
+			.toEqual([{ name: model, status: 'ready' }]);
+		expect(await requestAiSelectionText(ai, [{ role: 'user', content: 'Check.' }], fetchImpl, requestOptions)).toBe('{"ok":true}');
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+	}
+});
+
+it.each(['gpt-6-sol', 'gpt-6.1-sol'])('preflights %s with bounded low-effort comparison options', async model => {
+	const ai = { apiKey: 'test-key', baseUrl: 'https://api.openai.com/v1', model, webSearch: false };
+	const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+		expect(JSON.parse(String(init?.body))).toMatchObject({ model, reasoning_effort: 'low', max_completion_tokens: 256 });
+		return Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }] });
+	});
+	expect(await preflightProviders([{ name: model, ai, requestOptions: reportRequestOptions(model, ai.baseUrl) }], fetchImpl))
+		.toEqual([{ name: model, status: 'ready' }]);
 });

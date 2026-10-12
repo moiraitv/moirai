@@ -37,12 +37,17 @@ export function productionAiRequestOptions(ai: NonNullable<AppConfig['ai']>): Pi
 		...(ai.protocol ? { protocol: ai.protocol } : {}),
 		...(ai.protocol === 'anthropic-messages' ? { disableThinking: true } : {}),
 		...(ai.chatJsonMode ? { chatJsonMode: ai.chatJsonMode } : {}),
-		...((ai.providerId === 'openai' && ai.model === 'gpt-6-sol')
+		...((ai.providerId === 'openai' && ['gpt-6-sol', 'gpt-6.1-sol'].includes(ai.model))
 			|| (ai.providerId === 'xai' && ai.model === 'grok-4.7') ? { reasoningEffort: 'low' as const } : {}),
 		...(openRouter ? { provider: { sort: 'latency' as const, allow_fallbacks: true,
 			...(tunedOpenRouter ? { require_parameters: true } : {}),
 			...(ai.model === 'qwen/qwen3.5-397b-a17b' ? { ignore: ['Venice'] } : {}) } } : {}),
 		...(tunedOpenRouter ? { reasoningEffort: 'none' as const } : {}) };
+}
+
+/** Select the supported setting that avoids up-front thinking in native Claude requests. */
+export function aiDisabledThinkingType(model: string): 'disabled' | 'between_tools' {
+	return model === 'claude-sonnet-5-5' ? 'between_tools' : 'disabled';
 }
 
 /** Aggregate provider accounting without retaining prompts or returned content. */
@@ -156,7 +161,7 @@ export async function requestAiSelectionText(
 			system: messages.filter(message => message.role === 'system').map(message => message.content).join('\n'),
 			messages: messages.filter(message => message.role === 'user'),
 			...(search && toolsRemaining > 0 ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: toolsRemaining }] } : {}),
-			...(activity.disableThinking ? { thinking: { type: 'disabled' } } : {}),
+			...(activity.disableThinking ? { thinking: { type: aiDisabledThinkingType(ai.model) } } : {}),
 			...(activity.jsonSchema ? { output_config: { format: { type: 'json_schema', schema: activity.jsonSchema } } } : {}),
 		}
 		: search

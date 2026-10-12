@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { authenticateAdministrator } from './authentication';
 
 const profiles = ['openai', 'anthropic', 'xai', 'openrouter', 'custom'].map(provider => ({
-	provider, hasKey: false, keyPlaceholder: null, modelOverride: null, effectiveModel: provider === 'openai' ? 'gpt-6-sol' : 'recommended',
+	provider, hasKey: false, keyPlaceholder: null, modelOverride: null, effectiveModel: provider === 'openai' ? 'gpt-6.1-sol' : 'recommended',
 	webSearch: false, researchAvailable: true,
 	...(provider === 'custom' ? { baseUrl: '', protocol: 'chat-completions', chatJsonMode: 'json_object' } : {}),
 }));

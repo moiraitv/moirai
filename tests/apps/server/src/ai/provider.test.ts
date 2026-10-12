@@ -265,3 +265,54 @@ it('rejects reported calls beyond the request allowance plus tolerance', async (
 		completed.output.at(-1),
 	] }), { maxToolCalls: 0 })).rejects.toThrow('allowed search overage');
 });
+
+
+it.each(['gpt-6-sol', 'gpt-6.1-sol'])('uses low effort for %s chat and preserves its research adapter', async model => {
+	for (const webSearch of [false, true]) {
+		const configured = { ...ai, baseUrl: 'https://api.openai.com/v1', providerId: 'openai' as const, model, webSearch };
+		const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+			const body = JSON.parse(String(init?.body));
+			expect(body.model).toBe(model);
+			if (webSearch) {
+				expect(url).toBe('https://api.openai.com/v1/responses');
+				expect(body).toMatchObject({ store: false, max_tool_calls: AI_WEB_SEARCH_MAX_TOOL_CALLS,
+					tools: [{ type: 'web_search' }] });
+				return Response.json(completed);
+			}
+			expect(url).toBe('https://api.openai.com/v1/chat/completions');
+			expect(body).toMatchObject({ reasoning_effort: 'low', max_completion_tokens: 4096,
+				response_format: { type: 'json_object' } });
+			return Response.json({ choices: [{ message: { content: selection }, finish_reason: 'stop' }] });
+		});
+		expect(await requestAiSelectionText(configured, [], fetchImpl, productionAiRequestOptions(configured))).toBe(selection);
+	}
+	expect(productionAiRequestOptions({ ...ai, providerId: 'custom', model }).reasoningEffort).toBeUndefined();
+});
+
+it.each(['claude-sonnet-5', 'claude-sonnet-5-5'])('uses compatible native thinking for %s selection and research', async model => {
+	for (const webSearch of [false, true]) {
+		const configured = { ...ai, baseUrl: 'https://api.anthropic.com/v1', model, webSearch,
+			protocol: 'anthropic-messages' as const };
+		const jsonSchema = { type: 'object', properties: { matches: { type: 'array' } } };
+		const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+			expect(url).toBe('https://api.anthropic.com/v1/messages');
+			const body = JSON.parse(String(init?.body));
+			expect(body).toMatchObject({ model, max_tokens: 4096,
+				thinking: { type: model === 'claude-sonnet-5-5' ? 'between_tools' : 'disabled' },
+				output_config: { format: { type: 'json_schema', schema: jsonSchema } },
+			});
+			if (webSearch) {
+				expect(body.tools).toEqual([{ type: 'web_search_20250305', name: 'web_search', max_uses: AI_WEB_SEARCH_MAX_TOOL_CALLS }]);
+			}
+			else {
+				expect(body).not.toHaveProperty('tools');
+			}
+			return Response.json({ stop_reason: 'end_turn', content: [
+				{ type: 'thinking', thinking: 'Tool progress', signature: 'test-signature' },
+				{ type: 'text', text: selection },
+			] });
+		});
+		const result = await requestAiSelectionText(configured, [], fetchImpl, { ...productionAiRequestOptions(configured), jsonSchema });
+		expect(result).toBe(selection);
+	}
+});

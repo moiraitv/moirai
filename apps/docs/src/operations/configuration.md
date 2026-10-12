@@ -106,7 +106,7 @@ In **Settings**, open **AI provider**, choose one of the common providers or Cus
 
 Each provider keeps its own key and preferences. Switching providers changes new generations immediately; a generation already running keeps the settings it started with. Choose **Disable AI** to hide it from new Programs while retaining saved keys, or use **Forget key** to erase one provider’s key. Keys are stored in an owner-readable-only file under `MOIRAI_DATA_DIR` and are never shown again in Settings.
 
-Moirai currently recommends `gpt-6-sol` for OpenAI, `claude-sonnet-5` for Anthropic, `grok-4.7` for xAI, and `deepseek/deepseek-v4-pro-0813` for OpenRouter, which will all change over time as new models are released. In **Advanced**, you can enter a custom model ID to use that instead.
+Moirai currently recommends `gpt-6.1-sol` for OpenAI, `claude-sonnet-5-5` for Anthropic, `grok-4.7` for xAI, and `deepseek/deepseek-v4-pro-0813` for OpenRouter, which will all change over time as new models are released. Leave the custom model field empty to follow the current recommendation. In **Advanced**, you can enter a custom model ID to keep using an older model instead.
 
 **Advanced** offers web research for OpenAI, Anthropic, xAI, OpenRouter, and Custom, off by default. Basic matching uses library details and the model’s existing knowledge while web research lets the model check promising titles when those details do not show whether they fit (e.g., whether an episode is set on Halloween). This often finds more good matches but can take longer and cost more. The selected model and account must support the search tool for that endpoint.
 
@@ -120,16 +120,16 @@ Prior to requesting any full model calls, Moirai uses local matching and model-a
 
 ### Choose a model and manage costs
 
-Start with a lower-cost model that supports your chosen endpoint and search settings. For OpenAI, `gpt-6-sol` is a reasonable starting point: it supports Responses and web search at lower token rates than `gpt-6-astra`. Compare selections on several familiar prompts, especially requirements that depend on details missing from plot summaries. A more expensive model is worth using only when its results justify the extra cost for your library. Other compatible providers can be used with the same approach; model names, capabilities, and prices are provider-specific.
+Start with a lower-cost model that supports your chosen endpoint and search settings. For OpenAI, `gpt-6.1-sol` is a reasonable starting point: it supports Responses and web search at lower token rates than `gpt-6-astra`. Compare selections on several familiar prompts, especially requirements that depend on details missing from plot summaries. A more expensive model is worth using only when its results justify the extra cost for your library. Other compatible providers can be used with the same approach; model names, capabilities, and prices are provider-specific.
 
-For reference, these are OpenAI's standard short-context rates as of September 26, 2026, per million tokens:
+For reference, these are OpenAI's standard short-context rates as of October 12, 2026, per million tokens:
 
 | Model | Uncached input | Output |
 | --- | ---: | ---: |
-| `gpt-6-sol` | $2 | $10 |
+| `gpt-6.1-sol` | $2 | $10 |
 | `gpt-6-astra` | $10 | $50 |
 
-Check current pricing and model capabilities before choosing.
+Check [current OpenAI pricing](https://developers.openai.com/api/docs/pricing) and [model capabilities](https://developers.openai.com/api/docs/models/gpt-6.1-sol) before choosing.
 
 OpenAI web search adds $0.01 per billable call plus search-content tokens charged at the model's rates. For example, 100,000 uncached input tokens, 9,000 output tokens, and ten billable searches would cost about **$0.39 with Sol** or **$1.55 with Astra** at those rates. These are estimates, not spending caps; cache writes, service tiers, long-context pricing, and provider billing details can change the total.
 

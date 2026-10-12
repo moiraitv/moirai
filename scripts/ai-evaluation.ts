@@ -1,20 +1,22 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { AiRequestActivity } from '../apps/server/src/ai/provider.js';
 
-/** Conservative standard USD rates per million tokens for the five evaluation models. */
+/** Conservative standard USD rates per million tokens for supported evaluation models. */
 const RATES: Record<string, { input: number; output: number }> = {
 	'qwen/qwen3.5-397b-a17b': { input: 0.75, output: 4.5 },
 	'deepseek/deepseek-v4-pro-0813': { input: 1.32, output: 3.96 },
 	'gpt-6-sol': { input: 2, output: 10 },
+	'gpt-6.1-sol': { input: 2, output: 10 },
 	'grok-4.7': { input: 2, output: 6 },
 	'claude-sonnet-5': { input: 3, output: 15 },
+	'claude-sonnet-5-5': { input: 2, output: 10 },
 };
 
-/** Proven tuning candidates for the diagnostic comparison, never inferred for production. */
+/** Explicit tuning candidates for diagnostic comparisons, separate from production defaults. */
 export function evaluationOptions(model: string, baseUrl: string): Pick<AiRequestActivity, 'maxCompletionTokens' | 'reasoningEffort' | 'disableThinking' | 'provider' | 'protocol'> {
 	return {
 		maxCompletionTokens: 4_096,
-		...(model === 'claude-sonnet-5' ? { disableThinking: true,
+		...(['claude-sonnet-5', 'claude-sonnet-5-5'].includes(model) ? { disableThinking: true,
 			...(new URL(baseUrl).hostname === 'api.anthropic.com' ? { protocol: 'anthropic-messages' as const } : {}) }
 			: { reasoningEffort: ['qwen/qwen3.5-397b-a17b', 'deepseek/deepseek-v4-pro-0813'].includes(model)
 				? 'none' as const : 'low' as const }),

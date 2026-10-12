@@ -13,7 +13,7 @@ import { readAiCatalog } from '../apps/server/src/repository/ai-catalog.js';
 import { SemanticRepository } from '../apps/server/src/repository/semantic.js';
 import { loadConfig, type AppConfig } from '../apps/server/src/config.js';
 import { AiSelectionError } from '../apps/server/src/ai/errors.js';
-import type { AiRequestActivity } from '../apps/server/src/ai/provider.js';
+import { aiDisabledThinkingType, type AiRequestActivity } from '../apps/server/src/ai/provider.js';
 import * as schema from '../apps/server/src/db/schema.js';
 import * as semanticSchema from '../apps/server/src/db/semantic-schema.js';
 import { createDiagnosticDirectory, diagnosticFetch, diagnosticPhases, writeDiagnosticJson, type DiagnosticPhase } from './ai-comparison-diagnostics.js';
@@ -152,7 +152,7 @@ async function probeModel(
 	const anthropic = requestOptions?.protocol === 'anthropic-messages';
 	const body = anthropic
 		? { model: ai.model, system: 'Reply with JSON.', messages: [{ role: 'user', content: 'Return {"ok":true}.' }],
-			max_tokens: 256, thinking: { type: 'disabled' },
+			max_tokens: 256, thinking: { type: aiDisabledThinkingType(ai.model) },
 			output_config: { format: { type: 'json_schema', schema: { type: 'object',
 				properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false } } } }
 		: search

@@ -831,8 +831,10 @@ a fully masked placeholder. Disabling AI
 retains profiles, and forgetting a key requires confirmation before removing that secret. Provider
 checks and settings writes run in order so overlapping actions cannot restore a forgotten key.
 Known provider profiles resolve a current recommended model unless a saved override pins an explicit
-ID. Anthropic profiles use native Messages for recommended and overridden models. A bounded no-search
-connection check
+ID. OpenAI recommends GPT-6.1 Sol with low reasoning effort for non-search requests; pinned GPT-6 Sol
+profiles retain the same effort. Anthropic recommends Claude Sonnet 5.5 and uses native Messages for
+recommended and overridden models. Native Sonnet 5.5 requests use between-tools thinking to avoid
+up-front reasoning; older models retain disabled thinking. A bounded no-search connection check
 blocks confirmed authorization and request incompatibility while allowing temporary failures with a
 persistent unverified warning. New generations capture the active profile; running jobs retain theirs.
 Optional protocol selection supports native Claude Messages structured output, and optional
