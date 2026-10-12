@@ -65,11 +65,17 @@ For larger differences, Moirai checks short silent endings during library scans 
 
 ### Missing NFO metadata
 
-`nfo_missing` means no matching NFO sidecar was found. Moirai uses the filename for metadata instead. Add a Kodi-compatible NFO if you want richer or more accurate details, using the layouts in [Media file naming](/libraries/media-file-naming), then synchronize the library.
+`nfo_missing` means no matching NFO sidecar was found. Moirai uses the filename and available media tags for metadata instead. This needs attention only when the fallback cannot supply a usable title or, for shows, both season and episode numbers. Missing sidecars still leave metadata marked incomplete. Add a Kodi-compatible NFO if you want richer or more accurate details, using the layouts in [Media file naming](/libraries/media-file-naming), then synchronize the library.
 
 ### Invalid NFO metadata
 
 `nfo_invalid` means the media item's NFO could not be read or parsed. Check the reported file's permissions and XML contents, or regenerate it with your media manager, then synchronize the library.
+
+### Ignored or shortened metadata values
+
+Moirai keeps detecting invalid values and metadata that exceeds its limits. Harmless findings stay out of library warnings and scan-history issue lists: unused episode numbers in show-level metadata, NFO playback measurements, values recovered through a valid fallback, and safely shortened descriptive text or lists. Invalid values that leave useful catalog information unresolved still need attention, as do shortened identifiers and unreadable or malformed files.
+
+Existing warnings are updated after the next library sync. Older scan history keeps the findings recorded at the time.
 
 ### Invalid show metadata
 

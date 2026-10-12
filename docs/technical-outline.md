@@ -164,6 +164,17 @@ with confidence at least 80 and a lead of at least 20 over candidates producing 
 Only encodings supported by Node's TextDecoder qualify; UTF-32 is explicitly rejected.
 Detection remains heuristic and can reject legitimate short or low-confidence legacy text.
 
+Scan issues optionally carry `informational: true` when rejected fields are unused or an existing
+fallback supplies their catalog values. Group-level season, episode, disc, and track values and NFO
+runtime/resolution findings are informational. Safe presentation truncation is informational;
+truncated stable identifiers remain actionable. Missing item NFOs are informational when fallback
+provides a usable title and, for shows, both episode coordinates. Metadata completeness is unchanged.
+Mixed field findings are separated by attention level without discarding diagnostics. Stored scan
+records and API responses retain informational findings, but warning counts, scan-completion events,
+and current issue views exclude them independently of manual or automatic suppression. Ignore and
+restore cannot turn an informational finding into a warning. Existing history remains unchanged;
+current warning counts refresh on the next sync without a migration or additional request queries.
+
 NFO data is never trusted for playback-critical facts. Moirai measures the media file directly with
 `ffprobe` to determine:
 

@@ -1,3 +1,4 @@
+import { classifyMissingNfo, metadataDiagnostics } from './metadata-diagnostics.js';
 import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { readNfo, readGroupNfo } from './on-disk-nfo.js';
 import { attachMediaIssueIdentities, recordMediaIssueInputs, type MediaIssueInputs } from './media-issue-identity.js';
@@ -462,25 +463,6 @@ export async function discoverOnDisk(
 
 		// Parse bounded descriptive metadata without trusting it for playback properties.
 		const nfo = await readNfo(file, scanRoot, logicalStem, library.typeKey, healthInputs, signal);
-		if (nfo.issue) {
-			issues.push({ ...nfo.issue, path: normalizeRelative(scanRoot, nfo.issue.path ?? file) });
-		}
-		if (nfo.parsed?.truncatedFields.length) {
-			issues.push({
-				path: normalizeRelative(scanRoot, nfo.path ?? file),
-				code: 'metadata_truncated',
-				message: `Metadata exceeded documented limits: ${nfo.parsed.truncatedFields.join(', ')}.`,
-				severity: 'warning',
-			});
-		}
-		if (nfo.parsed?.invalidFields.length) {
-			issues.push({
-				path: normalizeRelative(scanRoot, nfo.path ?? file),
-				code: 'metadata_invalid',
-				message: `Invalid metadata values were ignored: ${nfo.parsed.invalidFields.join(', ')}.`,
-				severity: 'warning',
-			});
-		}
 		const probeTags = probeResult?.tags ?? {};
 		const musicVideoTitle = library.typeKey === 'music-videos' ? probeTags.title : undefined;
 		const title = nfo.parsed?.title ?? musicVideoTitle ?? filename.title;
@@ -519,14 +501,14 @@ export async function discoverOnDisk(
 			const parts = relativePath.split('/');
 			const showFolder = parts.length > 1 ? parts[0]! : path.basename(path.dirname(file));
 			const showDirectory = path.join(scanRoot, showFolder);
+			const showFilename = parseCollectionFolder(showFolder);
 			if (!groupNfoCache.has(showDirectory)) {
 				groupNfoCache.set(
 					showDirectory,
-					await readGroupNfo(path.join(showDirectory, 'tvshow.nfo'), scanRoot, issues, healthInputs, signal),
+					await readGroupNfo(path.join(showDirectory, 'tvshow.nfo'), scanRoot, issues, healthInputs, signal, showFilename.year),
 				);
 			}
 			const showNfo = groupNfoCache.get(showDirectory) ?? null;
-			const showFilename = parseCollectionFolder(showFolder);
 			const showKey = `show:${showFolder}`;
 			const showId = deterministicId(library.id, showKey);
 			if (!groupsByKey.has(showKey)) {
@@ -686,7 +668,7 @@ export async function discoverOnDisk(
 				if (!groupNfoCache.has(albumNfoPath)) {
 					groupNfoCache.set(
 						albumNfoPath,
-						await readGroupNfo(albumNfoPath, scanRoot, issues, healthInputs, signal),
+						await readGroupNfo(albumNfoPath, scanRoot, issues, healthInputs, signal, taggedYear),
 					);
 				}
 				const albumNfo = groupNfoCache.get(albumNfoPath) ?? null;
@@ -786,6 +768,17 @@ export async function discoverOnDisk(
 		const trackNumber = typeof nfo.parsed?.metadata.track === 'number'
 			? nfo.parsed.metadata.track
 			: taggedNumber(probeTags.track) ?? filename.trackNumber;
+
+		// Retain metadata findings after existing fallback values have been resolved.
+		const diagnosticContext = { typeKey: library.typeKey, year, seasonNumber, episodeNumber, discNumber, trackNumber };
+		if (nfo.issue) {
+			const issue = { ...nfo.issue, path: normalizeRelative(scanRoot, nfo.issue.path ?? file) };
+			issues.push(classifyMissingNfo(issue, title, diagnosticContext));
+		}
+		if (nfo.parsed) {
+			issues.push(...metadataDiagnostics(nfo.parsed, normalizeRelative(scanRoot, nfo.path ?? file), diagnosticContext));
+		}
+
 		const externalIds = mergedExternalIds(nfo.parsed?.externalIds ?? [], filename.externalIds);
 		const sortTitle = catalogSortTitle(title, nfo.parsed?.sortTitle);
 		const itemPart: MediaPart = {

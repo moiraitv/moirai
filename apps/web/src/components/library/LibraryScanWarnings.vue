@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { AlertTriangle } from '@lucide/vue';
-import { isSuppressedScanIssue, type ScanIssue } from '@moirai/shared';
+import { isInformationalScanIssue, isSuppressedScanIssue, type ScanIssue } from '@moirai/shared';
 import { useDisclosureState } from '../../disclosure-state';
 import LibraryScanIssuesModal from './LibraryScanIssuesModal.vue';
 import { scanIssuesRequireSourceApproval } from '../../library-scan-issues';
@@ -13,7 +13,7 @@ const INLINE_ISSUE_LIMIT = 10;
 const showIssues = useDisclosureState('library-scan-issues', false);
 const dialogOpen = ref(false);
 const suppressedOpen = ref(false);
-const suppressedIssues = computed(() => props.scanIssues.filter(isSuppressedScanIssue));
+const suppressedIssues = computed(() => props.scanIssues.filter(issue => !isInformationalScanIssue(issue) && isSuppressedScanIssue(issue)));
 const inlineIssues = computed(() => props.issues.slice(0, INLINE_ISSUE_LIMIT));
 const sourceApprovalRequired = computed(() => scanIssuesRequireSourceApproval(props.scanIssues));
 </script>

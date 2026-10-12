@@ -601,13 +601,14 @@ describe('ScannerManager', () => {
 });
 
 
-it('publishes only active warnings while retaining suppressed findings in scan results', async () => {
+it('publishes only active warnings while retaining suppressed and informational findings in scan results', async () => {
 	const completed = {
 		...running, status: 'complete' as const, removedItemIds: [],
 		issues: [
 			{ code: 'media_audio_video_duration_mismatch', path: 'film.mp4', message: 'tail', severity: 'warning' as const,
 				tailAssessment: { fingerprint: 'file', result: 'mostly-black' as const, accepted: false } },
 			{ code: 'nfo_missing', path: 'other.mp4', message: 'missing', severity: 'warning' as const },
+			{ code: 'metadata_invalid', path: 'tvshow.nfo', message: 'unused season', severity: 'warning' as const, informational: true },
 		],
 	};
 	const repository = {
@@ -623,7 +624,7 @@ it('publishes only active warnings while retaining suppressed findings in scan r
 	const publish = vi.fn();
 	const manager = new ScannerManager(repository, { publish }, sourceRegistry());
 	const result = await manager.scan(library.id, 'manual');
-	expect(result.issues).toHaveLength(2);
+	expect(result.issues).toHaveLength(3);
 	expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
 		data: expect.objectContaining({ status: 'complete', issueCount: 1 }),
 	}));

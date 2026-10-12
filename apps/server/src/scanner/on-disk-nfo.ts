@@ -1,3 +1,4 @@
+import { metadataDiagnostics } from './metadata-diagnostics.js';
 import { decodeMediaText } from '../media/media-text.js';
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
@@ -113,33 +114,19 @@ export async function readNfo(
 	}
 }
 
-/** Retrieve group-level NFO metadata for the library scan. */
+/** Read optional group metadata and retain field diagnostics classified against its year fallback. */
 export async function readGroupNfo(
 	file: string,
 	scanRoot: string,
 	issues: ScanIssue[],
 	inputs: MediaIssueInputs,
 	signal?: AbortSignal,
+	fallbackYear: number | null = null,
 ): Promise<ParsedNfo | null> {
 	try {
 		const source = await readObservedNfo(scanRoot, file, inputs, signal);
 		const parsed = parseKodiNfo(decodeMediaText(source.content, true));
-		if (parsed.truncatedFields.length > 0) {
-			issues.push({
-				path: normalizeRelative(scanRoot, file),
-				code: 'metadata_truncated',
-				message: `Metadata exceeded documented limits: ${parsed.truncatedFields.join(', ')}.`,
-				severity: 'warning',
-			});
-		}
-		if (parsed.invalidFields.length > 0) {
-			issues.push({
-				path: normalizeRelative(scanRoot, file),
-				code: 'metadata_invalid',
-				message: `Invalid metadata values were ignored: ${parsed.invalidFields.join(', ')}.`,
-				severity: 'warning',
-			});
-		}
+		issues.push(...metadataDiagnostics(parsed, normalizeRelative(scanRoot, file), { group: true, year: fallbackYear }));
 		return parsed;
 	}
 	catch (error) {

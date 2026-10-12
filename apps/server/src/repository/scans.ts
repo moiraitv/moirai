@@ -13,7 +13,7 @@ import type {
 import {
 	countLabel,
 	isRemovalScanIssue,
-	isSuppressedScanIssue,
+	scanIssueRequiresAttention,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 } from '@moirai/shared';
@@ -269,7 +269,7 @@ export abstract class ScanRepository {
 						sourceAvailability: 'degraded',
 						sourceAvailabilityUpdatedAt: completedAt,
 						lastScanCompletedAt: completedAt,
-						warningCount: candidateIssues.filter(issue => !isSuppressedScanIssue(issue)).length,
+						warningCount: candidateIssues.filter(scanIssueRequiresAttention).length,
 						updatedAt: completedAt,
 					})
 					.where(eq(libraries.id, run.libraryId))
@@ -328,7 +328,7 @@ export abstract class ScanRepository {
 						sourceAvailability: 'degraded',
 						sourceAvailabilityUpdatedAt: completedAt,
 						lastScanCompletedAt: completedAt,
-						warningCount: candidateIssues.filter(issue => !isSuppressedScanIssue(issue)).length,
+						warningCount: candidateIssues.filter(scanIssueRequiresAttention).length,
 						updatedAt: completedAt,
 					})
 					.where(eq(libraries.id, run.libraryId))
@@ -658,7 +658,7 @@ export abstract class ScanRepository {
 						lastIndexedChangeAt: changedCount > 0 || removedCount > 0 || missingItems.length > 0
 							? completedAt
 							: undefined,
-						warningCount: reconciledIssues.filter(issue => !isSuppressedScanIssue(issue)).length,
+						warningCount: reconciledIssues.filter(scanIssueRequiresAttention).length,
 						sourceAvailability,
 						sourceAvailabilityUpdatedAt: completedAt,
 						reconciliationStatus: pendingRemovalCount === 0

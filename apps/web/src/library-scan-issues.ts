@@ -1,4 +1,4 @@
-import { isRemovalScanIssue, isSuppressedScanIssue, type Library, type ScanIssue, type ScanRun } from '@moirai/shared';
+import { isRemovalScanIssue, scanIssueRequiresAttention, type Library, type ScanIssue, type ScanRun } from '@moirai/shared';
 
 /** Candidate-source findings cannot change media-issue decisions until the source is accepted. */
 export function scanIssuesRequireSourceApproval(issues: readonly ScanIssue[]): boolean {
@@ -21,7 +21,7 @@ export function libraryScanAttention(
 		return { count: library.warningCount, issues: [] };
 	}
 
-	const issues = latest.issues.filter(issue => !isSuppressedScanIssue(issue)
+	const issues = latest.issues.filter(issue => scanIssueRequiresAttention(issue)
 		&& (library.pendingRemovalCount > 0 || !isRemovalScanIssue(issue)));
 	return { count: Math.min(library.warningCount, issues.length), issues };
 }

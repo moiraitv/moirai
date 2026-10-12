@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { isAutomaticallySuppressedScanIssue, isIgnorableMediaIssue, isSuppressedScanIssue, type ScanIssue } from '@moirai/shared';
+import { isAutomaticallySuppressedScanIssue, isIgnorableMediaIssue, scanIssueRequiresAttention, type ScanIssue } from '@moirai/shared';
 import type { DiscoveredItem } from './contracts.js';
 import type { MoiraiDatabase } from '../db/index.js';
 import { ignoredMediaIssues, libraries, mediaTailAssessments, scanRuns } from '../db/schema.js';
@@ -106,7 +106,7 @@ export function setMediaIssueIgnored(db: MoiraiDatabase, libraryId: string, rela
 		}
 		let delta = 0;
 		for (const issue of matching) {
-			const wasSuppressed = isSuppressedScanIssue(issue);
+			const requiredAttention = scanIssueRequiresAttention(issue);
 			issue.ignoreState = { fingerprint, ignored };
 			if (issue.tailAssessment) {
 				issue.tailAssessment.accepted = ignored;
@@ -115,7 +115,7 @@ export function setMediaIssueIgnored(db: MoiraiDatabase, libraryId: string, rela
 					issue.tailAssessment.result = 'uncertain';
 				}
 			}
-			delta += Number(wasSuppressed) - Number(isSuppressedScanIssue(issue));
+			delta += Number(scanIssueRequiresAttention(issue)) - Number(requiredAttention);
 		}
 		if (code === 'media_audio_video_duration_mismatch') {
 			tx.update(mediaTailAssessments).set({ accepted: ignored }).where(and(

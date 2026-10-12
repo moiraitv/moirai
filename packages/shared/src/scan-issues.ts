@@ -38,3 +38,13 @@ export function mediaIssueIgnoreState(issue: ScanIssue): ScanIssue['ignoreState'
 	return issue.ignoreState ?? (issue.code === 'media_audio_video_duration_mismatch' && issue.tailAssessment
 		? { fingerprint: issue.tailAssessment.fingerprint, ignored: issue.tailAssessment.accepted } : undefined);
 }
+
+/** Identify retained diagnostics that have no actionable effect in their scan context. */
+export function isInformationalScanIssue(issue: Pick<ScanIssue, 'informational'>): boolean {
+	return issue.informational === true;
+}
+
+/** Count only actionable diagnostics that have not been manually or automatically suppressed. */
+export function scanIssueRequiresAttention(issue: ScanIssue): boolean {
+	return !isInformationalScanIssue(issue) && !isSuppressedScanIssue(issue);
+}

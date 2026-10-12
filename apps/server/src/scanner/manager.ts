@@ -1,7 +1,7 @@
 import type { ResponsivenessMonitor } from '../operations/responsiveness.js';
 import type { Logger } from 'pino';
 import {
-	isSuppressedScanIssue,
+	scanIssueRequiresAttention,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	WATCHER_INTEGRITY_SCAN_INTERVAL_MINUTES,
 	type Library,
@@ -817,7 +817,7 @@ export class ScannerManager {
 				discoveredCount: scan.discoveredCount,
 				changedCount: scan.changedCount,
 				removedCount: scan.removedCount,
-				issueCount: scan.issues.filter(issue => !isSuppressedScanIssue(issue)).length,
+				issueCount: scan.issues.filter(scanIssueRequiresAttention).length,
 				affectsProgramming,
 				...(progress ? { progress } : {}),
 			},

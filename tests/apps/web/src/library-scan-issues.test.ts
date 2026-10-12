@@ -55,3 +55,14 @@ it('excludes ignored metadata findings without hiding operational failures', () 
 	expect(libraryScanAttention({ warningCount: 1, pendingRemovalCount: 0 }, [{ status: 'complete', issues: [ignored, unrelated] }]))
 		.toEqual({ count: 1, issues: [unrelated] });
 });
+
+
+it('keeps informational findings out of attention while preserving retained diagnostics', () => {
+	const quiet: ScanIssue = { code: 'metadata_invalid', path: 'tvshow.nfo', severity: 'warning', message: 'Unused fields', informational: true };
+	const scans = [{ status: 'complete' as const, issues: [quiet, unrelated] }];
+	expect(libraryScanAttention({ warningCount: 1, pendingRemovalCount: 0 }, scans))
+		.toEqual({ count: 1, issues: [unrelated] });
+	expect(scans[0]!.issues).toEqual([quiet, unrelated]);
+	expect(libraryScanAttention({ warningCount: 0, pendingRemovalCount: 0 }, [{ status: 'complete', issues: [quiet] }]))
+		.toEqual({ count: 0, issues: [] });
+});

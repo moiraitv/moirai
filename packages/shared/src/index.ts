@@ -219,6 +219,7 @@ export const scanIssueSchema = z.object({
 	code: z.string(),
 	message: z.string(),
 	severity: z.enum(['warning', 'error']),
+	informational: z.boolean().optional().describe('Retained diagnostic that does not require attention or appear in issue lists'),
 	ignoreState: z.object({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/), ignored: z.boolean() }).optional(),
 	tailAssessment: z.object({
 		fingerprint: z.string(),
@@ -289,7 +290,7 @@ export const scanEventDataSchema = z.object({
 	discoveredCount: z.number().int().nonnegative(),
 	changedCount: z.number().int().nonnegative(),
 	removedCount: z.number().int().nonnegative(),
-	issueCount: z.number().int().nonnegative().describe('Active scan issues, excluding suppressed silent-ending findings'),
+	issueCount: z.number().int().nonnegative().describe('Actionable scan issues, excluding informational and suppressed findings'),
 	affectsProgramming: z.boolean().default(false),
 	progress: scanProgressSchema.optional(),
 });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { isSuppressedScanIssue, type ScanRun } from '@moirai/shared';
+import { isInformationalScanIssue, isSuppressedScanIssue, type ScanRun } from '@moirai/shared';
 import { scanIssuesRequireSourceApproval } from '../../library-scan-issues';
 import LibraryScanIssuesModal from './LibraryScanIssuesModal.vue';
 import { useAnimatedDismissal } from '../../motion';
@@ -12,7 +12,7 @@ const emit = defineEmits<{ close: []; refresh: [] }>();
 const { visible, requestClose, finishClose } = useAnimatedDismissal(() => emit('close'));
 const suppressedOpen = ref(false);
 const currentIssues = computed(() => props.scans.find(scan => scan.status !== 'running')?.issues ?? []);
-const suppressedIssues = computed(() => currentIssues.value.filter(isSuppressedScanIssue));
+const suppressedIssues = computed(() => currentIssues.value.filter(issue => !isInformationalScanIssue(issue) && isSuppressedScanIssue(issue)));
 const sourceApprovalRequired = computed(() => scanIssuesRequireSourceApproval(currentIssues.value));
 </script>
 
@@ -30,8 +30,8 @@ const sourceApprovalRequired = computed(() => scanIssuesRequireSourceApproval(cu
 							<StatusPill :value="run.status" />
 							<span>{{ new Date(run.startedAt).toLocaleString() }}</span>
 							<span>{{ run.discoveredCount }} found · {{ run.changedCount }} changed · {{ run.removedCount }} removed</span>
-							<ul v-if="run.issues.length">
-								<li v-for="issue in run.issues" :key="`${issue.code}:${issue.path}`">
+							<ul v-if="run.issues.some(issue => !isInformationalScanIssue(issue))">
+								<li v-for="(issue, index) in run.issues.filter(issue => !isInformationalScanIssue(issue))" :key="`${issue.code}:${issue.path}:${index}`">
 									<span>{{ issue.code }}<template v-if="issue.path"> — {{ issue.path }}</template></span>
 									<div>{{ issue.message }}</div>
 									<small v-if="issue.ignoreState?.ignored || issue.tailAssessment?.accepted">Suppressed: manually ignored until relevant files change.</small>

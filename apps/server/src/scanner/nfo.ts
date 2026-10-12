@@ -26,6 +26,8 @@ export interface ParsedNfo {
 	metadata: Record<string, unknown>;
 	truncatedFields: string[];
 	invalidFields: string[];
+	/** Distinguish rejected billing values recovered by an alternate tag from lost ordering. */
+	hasUnresolvedActorOrder: boolean;
 }
 
 /** Strict XML parser configured for the object shapes expected from Kodi NFO files. */
@@ -123,11 +125,7 @@ function strings(value: unknown): string[] {
 /** Normalize NFO actor entries while preserving names, roles, and compatible billing order tags. */
 function actors(
 	value: unknown,
-	parseOrder: (value: unknown) => number | null = (entry) => numberValue(entry, {
-		minimum: 0,
-		maximum: 999_999,
-		integer: true,
-	}),
+	parseOrder: (value: unknown, fallback: unknown) => number | null,
 ): ParsedNfo['actors'] {
 	const values
 		= value === undefined || value === null ? [] : Array.isArray(value) ? value : [value];
@@ -145,7 +143,7 @@ function actors(
 		return [{
 			name,
 			role: boundedText(actor.role),
-			sortOrder: parseOrder(actor.order) ?? parseOrder(actor.sortorder),
+			sortOrder: parseOrder(actor.order, actor.sortorder),
 		}];
 	});
 }
@@ -331,11 +329,16 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 		return values.slice(0, MAX_METADATA_PEOPLE_ITEMS);
 	};
 	const directors = limitedPeople('directors', uniqueStrings(root.director));
-	const allCast = actors(root.actor, (value) => checkedNumber('actorOrder', value, {
-		minimum: 0,
-		maximum: 999_999,
-		integer: true,
-	}));
+	let hasUnresolvedActorOrder = false;
+	const allCast = actors(root.actor, (value, fallback) => {
+		const priorInvalidCount = invalidFields.length;
+		const bounds = { minimum: 0, maximum: 999_999, integer: true };
+		const order = checkedNumber('actorOrder', value, bounds) ?? checkedNumber('actorOrder', fallback, bounds);
+		if (order === null && invalidFields.length > priorInvalidCount) {
+			hasUnresolvedActorOrder = true;
+		}
+		return order;
+	});
 	const cast = allCast.slice(0, MAX_METADATA_PEOPLE_ITEMS);
 	if (allCast.length > MAX_METADATA_PEOPLE_ITEMS) {
 		truncatedFields.push('actors');
@@ -404,5 +407,6 @@ export function parseKodiNfo(xml: string): ParsedNfo {
 		},
 		truncatedFields,
 		invalidFields,
+		hasUnresolvedActorOrder,
 	};
 }
