@@ -10,7 +10,7 @@ export const aiProgramDraftFieldsSchema = z.object({
 	aiSelectionPrompt: z.string().max(2000).nullable().default(null),
 	aiResultLimit: aiResultCountSchema.default(AI_DEFAULT_RESULT_COUNT),
 	selectedItemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS),
-	selectedItemSort: z.enum(['date-added', 'name', 'release-date', 'manual']),
+	selectedItemSort: z.enum(['date-added', 'name', 'release-date', 'episode', 'manual']),
 	selectedItemSortDirection: z.enum(['asc', 'desc']), manualItemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS),
 	strategy: z.enum(['sequential', 'shuffle', 'random', 'weighted-random']),
 	seed: z.string().max(200), audioPreferences: audioPreferencesSchema, subtitlePreferences: subtitlePreferencesSchema,

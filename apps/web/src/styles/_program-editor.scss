@@ -392,6 +392,10 @@
 	gap: 10px;
 }
 
+.strategy-card-grid + .program-section-description {
+	padding-top: 14px;
+}
+
 .strategy-card-grid button {
 	position: relative;
 	min-height: 170px;
@@ -740,7 +744,7 @@
 	max-height: var(--overlay-available-height);
 	min-height: 0;
 	display: grid;
-	grid-template-rows: auto auto minmax(0, 1fr) auto;
+	grid-template-rows: auto minmax(0, 1fr) auto;
 	overflow: hidden;
 	border-left: 1px solid #376078;
 	outline: 0;
@@ -1288,4 +1292,52 @@
 	.ai-selection-progress .loading-spinner {
 		animation: none;
 	}
+}
+
+.media-selection-review {
+	min-height: 0;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+
+.program-playback-order .form-disclosure-trigger {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+}
+
+.program-playback-order .form-disclosure-trigger span {
+	color: var(--muted);
+}
+
+.program-order-explanation {
+	margin: 0;
+	padding: 14px 18px;
+	color: var(--muted);
+	font-size: 0.82rem;
+}
+
+.program-playback-order .selection-drawer-toolbar {
+	padding: 14px 18px;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+
+.program-playback-order .selection-drawer-content {
+	max-height: 460px;
+}
+
+.program-playback-order .selected-item-grid {
+	max-height: none;
+	padding-right: 0;
+	grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+	overflow: visible;
+}
+
+.selected-item-copy .selected-item-position {
+	color: var(--accent);
+	font-variant-numeric: tabular-nums;
+}
+
+.program-playback-order .form-disclosure-chevron {
+	margin-left: auto;
 }

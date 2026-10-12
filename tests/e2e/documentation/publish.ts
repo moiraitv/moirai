@@ -51,6 +51,7 @@ export const screenshotNames = [
 	'media-item.png',
 	'media-item-usage.png',
 	'program-content-create.png',
+	'program-playback-order.png',
 	'program-sequence-create.png',
 	'program-sequence-ordering.png',
 	'program-sequence-guide.png',

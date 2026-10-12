@@ -3,6 +3,8 @@ import { normalizedReleaseDate } from '../media/release-date.js';
 
 /** Joined media-item row before JSON columns are decoded. */
 export interface RawItemRow {
+	showId?: string | null;
+	showSortTitle?: string | null;
 	id: string;
 	libraryId: string;
 	groupId: string | null;
@@ -240,10 +242,11 @@ export function inheritedGroupArtworkUrl(
 	return null;
 }
 
-/** Build an API media item from a stored catalog row. */
+/** Build an API media item, retaining show hierarchy when the query resolved it. */
 export function mappedItem(row: RawItemRow): MediaItem {
 	const metadata = decodedMetadata(row.metadata);
 	return {
+		...(row.showId === undefined ? {} : { showId: row.showId, showSortTitle: row.showSortTitle ?? null }),
 		id: row.id,
 		libraryId: row.libraryId,
 		groupId: row.groupId,

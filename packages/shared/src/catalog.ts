@@ -60,6 +60,9 @@ export interface MediaGroup {
 
 /** Shared wire contract for media item. */
 export interface MediaItem {
+	/** Show hierarchy resolved for selected-media episode ordering. */
+	showId?: string | null;
+	showSortTitle?: string | null;
 	id: string;
 	libraryId: string;
 	groupId: string | null;

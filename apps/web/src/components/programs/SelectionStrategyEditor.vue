@@ -31,10 +31,11 @@ function updateSeed(event: Event): void {
 			</div>
 		</div>
 		<div class="strategy-card-grid">
-			<button v-for="strategy in [{ id: 'sequential', label: 'Sequential', detail: 'Play in order, continuing where you left off', icon: ListOrdered }, { id: 'shuffle', label: 'Shuffle (no repeats)', detail: 'Random order with no repeats until all have played', icon: Shuffle }, { id: 'random', label: 'Random', detail: 'Choose a random item each time', icon: Dices }, { id: 'weighted-random', label: 'Weighted random', detail: 'Prefer content your viewers have chosen while retaining variety', icon: Sparkles }] as const" :key="strategy.id" type="button" :class="{ active: modelValue === strategy.id }" :aria-pressed="modelValue === strategy.id" @click="emit('update:modelValue', strategy.id)">
+			<button v-for="strategy in [{ id: 'sequential', label: 'Sequential', detail: 'Follow the configured playback order, continuing where you left off', icon: ListOrdered }, { id: 'shuffle', label: 'Shuffle (no repeats)', detail: 'Random order with no repeats until all have played', icon: Shuffle }, { id: 'random', label: 'Random', detail: 'Choose a random item each time', icon: Dices }, { id: 'weighted-random', label: 'Weighted random', detail: 'Prefer content your viewers have chosen while retaining variety', icon: Sparkles }] as const" :key="strategy.id" type="button" :class="{ active: modelValue === strategy.id }" :aria-pressed="modelValue === strategy.id" @click="emit('update:modelValue', strategy.id)">
 				<component :is="strategy.icon" :size="29" /><strong>{{ strategy.label }}</strong><span>{{ strategy.detail }}</span>
 			</button>
 		</div>
+		<slot />
 		<label v-if="showSeed && modelValue !== 'sequential'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="updateSeed" /></label>
 		<div v-if="showPlaybackState" class="program-playback-state">
 			<div class="program-playback-state-summary">

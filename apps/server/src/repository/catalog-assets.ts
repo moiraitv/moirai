@@ -1,6 +1,7 @@
 import { normalizeGenre } from '../scanner/catalog-metadata.js';
 import { listGenreFacets } from './genre-facets.js';
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import type {
 	LibraryContentPreview,
 	MediaGenreFacet,
@@ -147,11 +148,21 @@ export class CatalogAssetsRepository {
 			.where(inArray(mediaItemAliases.aliasId, itemIds));
 		const aliasMap = new Map(aliases.map((alias) => [alias.aliasId, alias.itemId]));
 		const canonicalIds = itemIds.map((id) => aliasMap.get(id) ?? id);
+		const parent = alias(mediaGroups, 'selection_parent');
 		const rows = await this.db
-			.select()
+			.select({ item: mediaItems, group: mediaGroups, parent })
 			.from(mediaItems)
+			.leftJoin(mediaGroups, and(eq(mediaGroups.id, mediaItems.groupId), eq(mediaGroups.libraryId, mediaItems.libraryId)))
+			.leftJoin(parent, and(eq(parent.id, mediaGroups.parentId), eq(parent.libraryId, mediaItems.libraryId)))
 			.where(and(eq(mediaItems.libraryId, libraryId), inArray(mediaItems.id, canonicalIds)));
-		const byId = new Map(rows.map((row) => [row.id, mappedItem(row as unknown as RawItemRow)]));
+		const byId = new Map(rows.map(({ item, group, parent: ancestor }) => {
+			const show = group?.kind === 'show' ? group : ancestor?.kind === 'show' ? ancestor : null;
+			return [item.id, {
+				...mappedItem(item as unknown as RawItemRow),
+				showId: show?.id ?? null,
+				showSortTitle: show?.sortTitle ?? null,
+			}];
+		}));
 		return canonicalIds.flatMap((canonicalId, index) => {
 			const item = byId.get(canonicalId);
 			return item

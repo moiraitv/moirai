@@ -12,7 +12,6 @@ import { useDisclosureState } from '../../disclosure-state';
 import ProgramPlaybackPreferences from './ProgramPlaybackPreferences.vue';
 import type { AudioPreferences, SubtitlePreferences } from '@moirai/shared';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Asterisk } from '@lucide/vue';
 import {
 	catalogProgramItemFilterSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
@@ -35,10 +34,11 @@ import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 import { useLibrariesStore } from '../../stores/libraries';
 import { useChannelsStore } from '../../stores/channels';
 import { useSchedulingStore } from '../../stores/scheduling';
-import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
-import { hideBrokenImage } from '../../image-error';
 import { randomUuid } from '../../random-uuid';
 import { closeUnsavedEditor } from '../../unsaved-editor';
+import ProgramSelectionSummary from './ProgramSelectionSummary.vue';
+import ProgramPlaybackOrder from './ProgramPlaybackOrder.vue';
+import type { MediaSelectionProps } from './media-selection';
 import MediaSelectionDrawer from './MediaSelectionDrawer.vue';
 import ProgramTypeRail from './ProgramTypeRail.vue';
 import ProgramSourceBrowser from './ProgramSourceBrowser.vue';
@@ -96,7 +96,9 @@ const selectedGroupsLoading = ref(false);
 const selectedGroupsLoaded = ref(false);
 const selectionDrawerOpen = ref(false);
 const selectedItemSearch = ref('');
+const selectedOrderChosen = ref(false);
 const selectionReviewButton = ref<HTMLButtonElement>();
+const selectionSummary = ref<InstanceType<typeof ProgramSelectionSummary>>();
 let selectedItemsLoadSequence = 0;
 let selectedGroupsLoadSequence = 0;
 let unsubscribeLiveEvents: (() => void) | undefined;
@@ -158,6 +160,18 @@ const filteredSelectedGroups = computed(() => {
 		return `${group.title} ${subtitle}`.toLocaleLowerCase().includes(query);
 	});
 });
+const selectionReviewProps = computed<MediaSelectionProps>(() => ({
+	selectingGroups: selectingGroups.value, aiSelection: form.sourceType === 'ai',
+	selectionCount: selectionCount.value, selectionLimit: selectionLimit.value,
+	loading: selectingGroups.value ? selectedGroupsLoading.value : selectedItemsLoading.value,
+	loaded: selectingGroups.value ? selectedGroupsLoaded.value : selectedItemsLoaded.value,
+	missingItemCount: missingSelectedCount.value, missingGroupCount: missingSelectedGroupCount.value,
+	items: filteredSelectedItems.value, groups: filteredSelectedGroups.value,
+	selectedItemCount: selectedItems.value.length, selectedGroupCount: selectedGroups.value.length,
+	itemReferenceCount: form.selectedItemIds.length, groupReferenceCount: form.selectedGroupIds.length,
+	libraryType: selectedLibraryType.value, search: selectedItemSearch.value, sort: selectedItemSort.value,
+}));
+
 const sourceLibraries = computed(() =>
 	form.sourceType === 'group' || form.sourceType === 'group-collection'
 		? librariesStore.libraries.filter((library) => library.typeKey === 'shows')
@@ -228,7 +242,7 @@ const form = reactive({
 	},
 	queryItemLimit: null as number | null,
 	selectedItemIds: [] as string[],
-	selectedItemSort: 'date-added' as 'date-added' | 'name' | 'release-date' | 'manual',
+	selectedItemSort: 'date-added' as 'date-added' | 'name' | 'release-date' | 'episode' | 'manual',
 	selectedItemSortDirection: 'asc' as 'asc' | 'desc',
 	manualItemIds: [] as string[],
 	selectedGroupIds: [] as string[],
@@ -249,6 +263,7 @@ function resetForm(program?: SchedulingProgram): void {
 	draftRevision.value += 1;
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
+	selectedOrderChosen.value = false;
 	form.name = program?.name ?? '';
 	form.audioPreferences = cloneContractValue(program?.config.audioPreferences ?? {});
 	form.subtitlePreferences = cloneContractValue(program?.config.subtitlePreferences ?? {});
@@ -552,7 +567,9 @@ function removeSelectedItem(id: string): void {
 }
 
 /** Change selected-media ordering and freeze the current display when entering Manual. */
-function changeSelectedItemSort(value: 'date-added' | 'name' | 'release-date' | 'manual'): void {
+function changeSelectedItemSort(value: 'date-added' | 'name' | 'release-date' | 'episode' | 'manual'): void {
+	selectedOrderChosen.value = true;
+
 	if (value === 'manual') {
 		form.manualItemIds = manualOrderFromDisplay(
 			form.selectedItemIds,
@@ -566,6 +583,12 @@ function changeSelectedItemSort(value: 'date-added' | 'name' | 'release-date' | 
 	}
 
 	form.selectedItemSort = value;
+}
+
+/** Retain a deliberate direction choice when applying defaults for a new source. */
+function changeSelectedItemSortDirection(value: 'asc' | 'desc'): void {
+	selectedOrderChosen.value = true;
+	form.selectedItemSortDirection = value;
 }
 
 /** Persist a complete visible Manual ordering while retaining missing references at the end. */
@@ -619,6 +642,7 @@ async function closeSelectionDrawer(): Promise<void> {
 	selectedItemSearch.value = '';
 	await nextTick();
 	selectionReviewButton.value?.focus();
+	selectionSummary.value?.focus();
 }
 
 /** Confirm and clear every explicit item or group from the current source. */
@@ -639,8 +663,17 @@ function clearSelectedItems(): void {
 }
 
 
+/** Default new episode selections without replacing a saved or deliberately chosen order. */
+function defaultSelectedItemSort(): void {
+	if (!editingId.value && !selectedOrderChosen.value && form.sourceType === 'collection') {
+		form.selectedItemSort = selectedLibraryType.value === 'shows' ? 'episode' : 'date-added';
+		form.selectedItemSortDirection = 'asc';
+	}
+}
+
 /** Clear selections and filters that cannot carry across a source-library change. */
 function changeSourceLibrary(): void {
+	defaultSelectedItemSort();
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.sourceId = '';
@@ -705,6 +738,7 @@ async function changeSourceType(): Promise<void> {
 		form.querySort = { type: 'name', direction: 'asc' };
 		form.queryItemLimit = null;
 	}
+	defaultSelectedItemSort();
 	if (previousLibraryId === form.libraryId) {
 		void loadSourceOptions();
 	}
@@ -1118,7 +1152,7 @@ watch(() => [form.type, form.sourceType], () => {
 											v-model:selection-prompt="form.aiSelectionPrompt" v-model:max-results="form.aiResultLimit"
 											v-model:generation="aiGeneration" v-model:item-ids="form.selectedItemIds"
 											v-model:sort-type="form.selectedItemSort" v-model:sort-direction="form.selectedItemSortDirection"
-											:library-id="form.libraryId" :draft-revision="draftRevision" :sequential="form.strategy === 'sequential'"
+											:library-id="form.libraryId" :library-type="selectedLibraryType" :draft-revision="draftRevision" :sequential="form.strategy === 'sequential'"
 										>
 											<template #results="{ generating }">
 												<button
@@ -1150,103 +1184,7 @@ watch(() => [form.type, form.sourceType], () => {
 											>
 												Selected: {{ selectedSourceLabel || 'None' }}
 											</p>
-											<div v-else class="selected-collection-summary">
-												<div class="selected-collection-copy">
-													<strong
-													>{{
-														form.sourceType === 'group-collection'
-															? form.selectedGroupIds.length
-															: form.selectedItemIds.length
-													}}
-														selected</strong
-													>
-													<small
-														v-if="
-															form.sourceType === 'group-collection'
-																? selectedGroupsLoading && !selectedGroupsLoaded
-																: selectedItemsLoading && !selectedItemsLoaded
-														"
-													>Loading selection…</small
-													>
-													<small
-														v-else-if="
-															form.sourceType === 'group-collection'
-																? missingSelectedGroupCount > 0
-																: missingSelectedCount > 0
-														"
-														class="availability-warning"
-													>
-														{{
-															form.sourceType === 'group-collection'
-																? missingSelectedGroupCount
-																: missingSelectedCount
-														}}
-														no longer indexed · references preserved
-													</small>
-													<small v-else
-													>Maximum
-														{{
-															form.sourceType === 'group-collection'
-																? MAX_EXPLICIT_MEDIA_GROUPS
-																: channelsStore.maxExplicitMediaItems
-														}}</small
-													>
-												</div>
-												<div class="selected-collection-actions">
-													<div
-														v-if="
-															form.sourceType === 'group-collection'
-																? selectedGroups.length
-																: selectedItems.length
-														"
-														class="selected-poster-stack"
-														aria-hidden="true"
-													>
-														<span
-															v-for="selection in form.sourceType === 'group-collection'
-																? selectedGroups.slice(0, 4)
-																: selectedItems.slice(0, 4)"
-															:key="selection.id"
-														>
-															<span class="source-artwork-placeholder"><Asterisk :size="14" /></span>
-															<img
-																v-if="selection.artworkUrl"
-																:src="artworkVariantUrl(selection.artworkUrl, 'thumb')"
-																:srcset="artworkSrcset(selection.artworkUrl, 'thumb')"
-																alt=""
-																loading="eager"
-																decoding="async"
-																@error="hideBrokenImage"
-															/>
-														</span>
-														<b
-															v-if="
-																(form.sourceType === 'group-collection'
-																	? form.selectedGroupIds.length
-																	: form.selectedItemIds.length) > 4
-															"
-														>+{{
-															(form.sourceType === 'group-collection'
-																? form.selectedGroupIds.length
-																: form.selectedItemIds.length) - 4
-														}}</b
-														>
-													</div>
-													<button
-														ref="selectionReviewButton"
-														type="button"
-														class="toolbar-button selected-review-button"
-														:disabled="
-															form.sourceType === 'group-collection'
-																? form.selectedGroupIds.length === 0
-																: form.selectedItemIds.length === 0
-														"
-														@click="openSelectionDrawer"
-													>
-														Review Selection
-													</button>
-												</div>
-											</div>
+											<ProgramSelectionSummary v-else ref="selectionSummary" v-bind="selectionReviewProps" @review="openSelectionDrawer" />
 											<label v-if="form.sourceType === 'group'" class="check-row"
 											><input v-model="form.includeDescendants" type="checkbox" />Include
 												descendants</label
@@ -1264,7 +1202,16 @@ watch(() => [form.type, form.sourceType], () => {
 										</template>
 									</div>
 								</section>
-								<SelectionStrategyEditor v-model="form.strategy" v-model:seed="form.seed" />
+								<SelectionStrategyEditor v-model="form.strategy" v-model:seed="form.seed">
+									<ProgramPlaybackOrder
+										v-if="form.strategy === 'sequential'" v-bind="selectionReviewProps"
+										:source-type="form.sourceType" :query-sort="form.querySort" :source-label="selectedSourceLabel" :reset-revision="draftRevision"
+										@update:search="selectedItemSearch = $event" @update:sort-type="changeSelectedItemSort"
+										@update:sort-direction="changeSelectedItemSortDirection"
+										@reorder-items="reorderSelectedItems" @move-item="moveSelectedItem"
+										@retry="loadSelectedItems" @remove-item="removeSelectedItem" @remove-group="removeSelectedGroup"
+									/>
+								</SelectionStrategyEditor>
 							</template>
 
 							<SimilarityProgramEditor v-else-if="form.type === 'similarity' || form.type === 'theme'" v-model:filter="form.filter" v-model:theme="form.theme" v-model:library-id="form.libraryId" v-model:source-program-id="form.sourceProgramId" v-model:variety="form.variety" v-model:quantity="form.quantity" v-model:soft-preferences="form.softPreferences" v-model:exclusion-text="form.exclusionText" v-model:exclusion-strictness="form.exclusionStrictness" :genres="genres" :filters-loading="sourceLoading" :filters-loaded="sourceLoaded" :type="form.type" :libraries="librariesStore.libraries" :read-only-source="Boolean(editingId)" :programs="programs" :status="statuses.get(editingId ?? '')" />
@@ -1298,26 +1245,10 @@ watch(() => [form.type, form.sourceType], () => {
 		</div>
 		<MediaSelectionDrawer
 			v-if="selectionDrawerOpen"
-			:selecting-groups="selectingGroups"
-			:ai-selection="form.sourceType === 'ai'"
-			:selection-count="selectionCount"
-			:selection-limit="selectionLimit"
-			:loading="selectingGroups ? selectedGroupsLoading : selectedItemsLoading"
-			:loaded="selectingGroups ? selectedGroupsLoaded : selectedItemsLoaded"
-			:missing-item-count="missingSelectedCount"
-			:missing-group-count="missingSelectedGroupCount"
-			:items="filteredSelectedItems"
-			:groups="filteredSelectedGroups"
-			:selected-item-count="selectedItems.length"
-			:selected-group-count="selectedGroups.length"
-			:item-reference-count="form.selectedItemIds.length"
-			:group-reference-count="form.selectedGroupIds.length"
-			:library-type="selectedLibraryType"
-			:search="selectedItemSearch"
-			:sort="selectedItemSort"
+			v-bind="selectionReviewProps"
 			@update:search="selectedItemSearch = $event"
 			@update:sort-type="changeSelectedItemSort"
-			@update:sort-direction="form.selectedItemSortDirection = $event"
+			@update:sort-direction="changeSelectedItemSortDirection"
 			@reorder-items="reorderSelectedItems"
 			@move-item="moveSelectedItem"
 			@close="closeSelectionDrawer"

@@ -128,7 +128,8 @@ export function registerSchedulingRoutes(
 	}, async (request, reply) => {
 		const libraryId = parseId(request);
 		const input = programItemAdditionSchema.parse(request.body);
-		if (!(await repository.getLibrary(libraryId))) {
+		const library = await repository.getLibrary(libraryId);
+		if (!library) {
 			throw app.httpErrors.notFound('Library not found');
 		}
 
@@ -174,7 +175,7 @@ export function registerSchedulingRoutes(
 						type: 'collection',
 						libraryId,
 						itemIds,
-						sort: { type: 'date-added', direction: 'asc' },
+						sort: { type: library.typeKey === 'shows' ? 'episode' : 'date-added', direction: 'asc' },
 					},
 					strategy: input.destination.strategy,
 				},

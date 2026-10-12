@@ -1,3 +1,4 @@
+import { schedulingProgramStatuses } from '@server/scheduling/status.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -387,4 +388,14 @@ it('preserves a stored legacy preference-bearing cursor after saving explicit Or
 		database.close();
 		await rm(directory, { recursive: true, force: true });
 	}
+});
+
+it.each(['direct', 'ordered', 'shuffled-blocks'] as const)('uses a child program’s episode order in %s playback and status previews', mode => {
+	const items = [10, 2, 1].map((episode, index) => media(800 + index, 60, { kind: 'episode', seasonNumber: 1, episodeNumber: episode, showId: uuid(950), showSortTitle: 'Show' }));
+	const child = program(80, { type: 'content', source: { type: 'collection', libraryId: uuid(900), itemIds: items.map(item => item.id), sort: { type: 'episode', direction: 'asc' } }, strategy: { type: 'sequential' } });
+	const sequence = program(81, { type: 'sequence', entries: [{ id: uuid(82), programId: child.id, count: 3 }], repeat: true, ordering: mode === 'shuffled-blocks' ? { type: mode, seed: 'fixture' } : { type: 'ordered' } });
+	const fixture = input([child, sequence], items, template([{ programId: mode === 'direct' ? child.id : sequence.id, startSeconds: 0 }]));
+	const result = generateTimeline(fixture);
+	expect(result.segments.filter(segment => segment.role === 'primary').slice(0, 3).map(segment => segment.mediaItemId)).toEqual([items[2]!.id, items[1]!.id, items[0]!.id]);
+	expect(schedulingProgramStatuses([child], fixture.catalog)[0]!.previewItems.map(item => item.id)).toEqual([items[2]!.id, items[1]!.id, items[0]!.id]);
 });

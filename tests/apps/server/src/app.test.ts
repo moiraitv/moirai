@@ -1,3 +1,5 @@
+import { discoverOnDisk } from '@server/scanner/on-disk.js';
+import { orderSelectedMedia } from '@moirai/shared';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -2696,4 +2698,32 @@ it('validates duration query bounds and forwards unrestricted and inclusive valu
 	for (const query of ['minimumDurationSeconds=-1', 'maximumDurationSeconds=1.5', 'minimumDurationSeconds=abc', 'minimumDurationSeconds=9007199254740992', 'minimumDurationSeconds=61&maximumDurationSeconds=60']) {
 		expect((await app.inject(`/api/v1/libraries/${libraryId}/media?${query}`)).statusCode).toBe(400);
 	}
+});
+
+it('defaults newly added episode programs and resolves the same hierarchy for review and scheduling', async () => {
+	const { app, services, root } = await fixture();
+	const library = await services.repository.createLibrary(libraryCreateSchema.parse({ name: 'Episode order', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: root }, watcherEnabled: false }));
+	const directory = path.join(root, 'Space Station', 'Season 01');
+	await mkdir(directory, { recursive: true });
+	for (const episode of [10, 2, 1]) {
+		await writeFile(path.join(directory, `Space Station S01E${String(episode).padStart(2, '0')}.mp4`), 'fixture');
+	}
+	const discovery = await discoverOnDisk(library, { probeMedia: async () => ({ durationMilliseconds: 60_000, fileSizeBytes: 7, container: 'mp4', streams: [], resolution: null, tags: {} }) });
+	await services.repository.reconcileScan(await services.repository.beginScan(library.id, 'initial'), discovery.groups, discovery.items, [], true);
+	const itemIds = [...discovery.items].sort((a, b) => b.episodeNumber! - a.episodeNumber!).map(item => item.id);
+	const created = await app.inject({ method: 'POST', url: `/api/v1/libraries/${library.id}/program-items`, payload: { destination: { type: 'new', name: 'Episodes', strategy: { type: 'sequential' } }, selection: { type: 'items', itemIds } } });
+	expect(created.statusCode).toBe(201);
+	const program = created.json().program;
+	expect(program.config.source.sort).toEqual({ type: 'episode', direction: 'asc' });
+	const reopened = await services.repository.getProgram(program.id);
+	expect(reopened?.config).toEqual(program.config);
+	const selection = await app.inject({ method: 'POST', url: `/api/v1/libraries/${library.id}/media-selection`, payload: { itemIds } });
+	expect(selection.statusCode).toBe(200);
+	const selected = selection.json();
+	expect(selected.every((item: { showId: string; showSortTitle: string }) => item.showId === discovery.groups.find(group => group.kind === 'show')!.id && Boolean(item.showSortTitle))).toBe(true);
+	const catalog = await services.repository.getSchedulingCatalog([reopened!]);
+	const sortedReview = orderSelectedMedia(selected, { type: 'episode', direction: 'asc' });
+	const sortedScheduling = orderSelectedMedia(catalog.media, { type: 'episode', direction: 'asc' });
+	expect(sortedReview.map(item => item.episodeNumber)).toEqual([1, 2, 10]);
+	expect(sortedScheduling.map(item => item.id)).toEqual(sortedReview.map((item: { id: string }) => item.id));
 });

@@ -203,7 +203,8 @@ test('filters Content definitions and summarizes query and group selections', as
 	await expect(page.locator('.program-management-row')).toHaveCount(1);
 	await page.getByRole('button', { name: 'Program 005', exact: true }).click();
 	await expect(page.locator('.program-inspector')).toContainText('Specific Groups');
-	await expect(page.locator('.program-inspector dd').last()).toHaveText('2');
+	await expect(page.locator('.program-inspector dt').filter({ hasText: 'Selected groups' }).locator('xpath=following-sibling::dd[1]')).toHaveText('2');
+	await expect(page.locator('.program-inspector dt').filter({ hasText: 'Playback order' }).locator('xpath=following-sibling::dd[1]')).toHaveText('Season / episode · First to last');
 });
 
 test('keeps the desktop inspector beside the list throughout dismissal', async ({ page }) => {

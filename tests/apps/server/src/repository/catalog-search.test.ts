@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { catalogProgramItemQuerySchema } from '@moirai/shared';
+import { catalogProgramItemQuerySchema, orderSelectedMedia, type SelectedMediaSortable } from '@moirai/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
 import { Repository, type DiscoveredGroup, type DiscoveredItem } from '@server/repository/index.js';
@@ -272,5 +272,34 @@ it('filters exact playback durations consistently in catalog counts and recursiv
 		const selection = repository.resolveProgramItemSelection(library.id, { ...query, parentId: group.id });
 		expect(selection.itemIds).toEqual(expected);
 		expect(selection.matchedItemCount).toBe(expected.length);
+	}
+});
+
+it('resolves show hierarchy in browsed and searched picker items before episode ordering', async () => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	databases.push(database);
+	const repository = new Repository(database.db);
+	const library = await repository.createLibrary({ name: 'Shows', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' }, scanIntervalMinutes: 15, watcherEnabled: false, enabled: true });
+	const alpha = show(crypto.randomUUID(), 'Alpha');
+	const alphaSeason = season(crypto.randomUUID(), alpha.id);
+	const zulu = show(crypto.randomUUID(), 'Zulu');
+	const items = [
+		{ ...episode(alphaSeason.id, 'Alpha Episode 2'), seasonNumber: 1, episodeNumber: 2 },
+		{ ...episode(zulu.id, 'Zulu Episode 1'), seasonNumber: 1, episodeNumber: 1 },
+		{ ...episode(alphaSeason.id, 'Alpha Episode 1'), seasonNumber: 1, episodeNumber: 1 },
+	];
+	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [alpha, alphaSeason, zulu], items, [], true);
+	const query = { target: 'items' as const, parentId: null, page: 1, pageSize: 50, search: 'Episode' };
+	const searched = (await repository.browseMediaSourceOptions(library.id, query)).entries.flatMap(entry => entry.item ? [entry.item] : []);
+	const browsed = (await Promise.all([alphaSeason.id, zulu.id].map(parentId => repository.browseMediaSourceOptions(library.id, { ...query, parentId, search: '' }))))
+		.flatMap(result => result.entries.flatMap(entry => entry.item ? [entry.item] : []));
+	const resolved = await repository.listMediaItemsByIds(library.id, items.map(item => item.id));
+	const catalog = await repository.getSchedulingCatalogForItems(items.map(item => item.id));
+	const expected = [items[2]!.id, items[0]!.id, items[1]!.id];
+	for (const selection of [searched, browsed, resolved, catalog.media]) {
+		expect(selection).toHaveLength(3);
+		expect(selection.find(item => item.id === items[0]!.id)).toMatchObject({ showId: alpha.id, showSortTitle: alpha.sortTitle });
+		expect(selection.find(item => item.id === items[1]!.id)).toMatchObject({ showId: zulu.id, showSortTitle: zulu.sortTitle });
+		expect(orderSelectedMedia<SelectedMediaSortable>(selection, { type: 'episode', direction: 'asc' }).map(item => item.id)).toEqual(expected);
 	}
 });

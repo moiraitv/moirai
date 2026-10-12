@@ -140,6 +140,8 @@ export const mediaPartSchema = z.object({
 
 /** Indexed playable media item and its source-relative metadata. */
 export const mediaItemSchema = z.object({
+	showId: idSchema.nullable().optional(),
+	showSortTitle: z.string().nullable().optional(),
 	id: idSchema,
 	libraryId: idSchema,
 	groupId: idSchema.nullable(),

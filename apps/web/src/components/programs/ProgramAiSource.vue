@@ -13,9 +13,9 @@ const resultLabels = ['Few', 'Some', 'Moderate', 'Many', 'Most'] as const;
 const resultLabel = computed(() => resultLabels[AI_RESULT_COUNTS.indexOf(maxResults.value)] ?? 'Some');
 const itemIds = defineModel<string[]>('itemIds', { required: true });
 const generation = defineModel<string | null>('generation', { required: true });
-const sortType = defineModel<'date-added' | 'name' | 'release-date' | 'manual'>('sortType', { required: true });
+const sortType = defineModel<'date-added' | 'name' | 'release-date' | 'episode' | 'manual'>('sortType', { required: true });
 const sortDirection = defineModel<'asc' | 'desc'>('sortDirection', { required: true });
-const props = defineProps<{ libraryId: string; draftRevision: number; sequential: boolean }>();
+const props = defineProps<{ libraryId: string; libraryType: string; draftRevision: number; sequential: boolean }>();
 const generating = ref(false);
 const activity = ref<AiProgress>('preparing');
 const elapsed = ref(0);
@@ -248,6 +248,7 @@ onScopeDispose(() => {
 			<select v-model="sortType" aria-label="AI selection order">
 				<option value="date-added">Indexed date</option>
 				<option value="name">Title</option>
+				<option v-if="libraryType === 'shows'" value="episode">Season / episode</option>
 				<option value="release-date">Release date</option>
 			</select>
 		</label>

@@ -1,3 +1,4 @@
+import { compareEpisodeOrder } from './episode-order.js';
 import type { SelectionStateRecord } from './selection-state.js';
 export type { FillerCycle, SelectionStateRecord, SelectionStateValue } from './selection-state.js';
 import { fillerAssignmentSchema, slotFillerAssignmentSchema, type FillerSettings } from './filler-presets.js';
@@ -85,6 +86,7 @@ export type SelectionStrategy = z.infer<typeof selectionStrategySchema>;
 export const selectedMediaSortSchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('date-added'), direction: sortDirectionSchema }),
 	z.object({ type: z.literal('name'), direction: sortDirectionSchema }),
+	z.object({ type: z.literal('episode'), direction: sortDirectionSchema }),
 	z.object({ type: z.literal('release-date'), direction: sortDirectionSchema }),
 	z.object({
 		type: z.literal('manual'),
@@ -110,6 +112,10 @@ const selectedMediaAdditionBatchesSchema = z.array(
 
 /** Minimum metadata needed to derive one selected-media program order. */
 export interface SelectedMediaSortable {
+	showId?: string | null;
+	showSortTitle?: string | null;
+	seasonNumber?: number | null;
+	episodeNumber?: number | null;
 	id: string;
 	sortTitle: string;
 	year: number | null;
@@ -149,6 +155,10 @@ export function orderSelectedMedia<T extends SelectedMediaSortable>(
 	return [...items].sort((left, right) => {
 		let compared = 0;
 		let missing = false;
+		if (sort.type === 'episode') {
+			return compareEpisodeOrder(left, right, sort.direction)
+				|| additionOrder.get(left.id)! - additionOrder.get(right.id)!;
+		}
 		if (sort.type === 'name') {
 			compared = left.sortTitle.localeCompare(right.sortTitle, 'en-US', {
 				sensitivity: 'base',
@@ -943,6 +953,8 @@ export interface SchedulableMedia {
 	libraryId: string;
 	groupId: string | null;
 	groupSortKey?: string;
+	showId?: string | null;
+	showSortTitle?: string | null;
 	kind: string;
 	title: string;
 	sortTitle: string;

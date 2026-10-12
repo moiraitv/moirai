@@ -837,11 +837,23 @@ both paths. Saving a provider calls the model once for connection verification; 
 playback never call the model.
 
 Selected-items programs retain chronological insertion batches separately from their effective order.
-They default to oldest-added first and may instead order by normalized title, exact release date with
-year fallback, descending variants of those automatic fields, or a manually dragged order. Descending
+New selected-items programs in show libraries default to season/episode order; other libraries
+default to oldest-added first. Existing saved programs and omitted-sort API configurations retain
+their prior ordering. Programs may order by normalized title, exact release date with year fallback,
+season/episode, descending variants of automatic fields, or a manually dragged order. Descending
 date-added order reverses batches while preserving request order inside each batch. Automatic title and
 release ordering is derived from current indexed metadata for both review and sequential playback.
-Missing release dates sort last, and stable ties retain insertion order.
+Missing release dates sort last, and stable ties retain insertion order. Season/episode ordering groups
+shows by normalized title and stable show identity, then compares numeric season and episode within
+each show; descending reverses only those numeric comparisons. Missing hierarchy or numeric metadata
+sorts last, season zero remains valid, and ties retain insertion order. Selected-media resolution and
+scheduling catalog queries resolve the same show metadata through joins without additional queries.
+Source-picker browsing and search expose that hierarchy before items enter the editor, keeping new
+selections in the same order as saved previews and playback.
+Sequential selection reveals an initially expanded Playback order disclosure with an active-order
+summary and numbered selected items. Its automatic and manual controls share the review drawer's
+component and draft state. Other source types explain their existing order. Sequence ordering
+explains how child selection differs from placement of selections within the cycle.
 The bounded program-overview carousel applies that same effective order before selecting its preview
 items, so a refreshed overview immediately reflects saved automatic or manual ordering changes.
 
@@ -1697,8 +1709,11 @@ An explicit `--skip-build-checks` sets the build-stage-only `MOIRAI_SKIP_BUILD_C
 running the ordinary build without audit or approval checks. Dependency installation and compilation
 remain required; approval records and dependencies are unchanged. Release workflows retain the gated
 default.
-The Transformers.js 3.8.1 dependency uses a scoped Sharp 0.35.4 override to remove vulnerable
+The Transformers.js 3.8.1 dependency uses a scoped Sharp 0.35.5 override to remove vulnerable
 image libraries while retaining ONNX runtime support for Intel macOS development.
+ONNX Runtime 1.21.0 uses global-agent 4.1.3 for its installer, and js-yaml 3.15.2 uses
+argparse 2.0.1, whose legacy API supports the YAML CLI. These scoped overrides remove the
+unpatched sprintf-js dependency without changing the model runtime or gray-matter's YAML API.
 
 ## API and web application
 

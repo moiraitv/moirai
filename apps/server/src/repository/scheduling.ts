@@ -1,6 +1,7 @@
 import { FillerPresetRepository } from './filler-presets.js';
 import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { createHash } from 'node:crypto';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { refinementTexts } from '../semantic/refinement.js';
 import { SemanticPreferenceRepository } from './semantic-preferences.js';
 import { SemanticRepository, StaleSemanticDecisionError } from './semantic.js';
@@ -416,10 +417,14 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				sql`${mediaItems.groupId} IN (SELECT value FROM json_each(${JSON.stringify(relatedGroupIds)}))`,
 			);
 		}
+		const episodeGroup = alias(mediaGroups, 'episode_group');
+		const episodeParent = alias(mediaGroups, 'episode_parent');
 		const items
 			= mediaConditions.length > 0
 				? await this.db
 					.select({
+						showId: sql<string | null>`CASE WHEN ${episodeGroup.kind} = 'show' THEN ${episodeGroup.id} WHEN ${episodeParent.kind} = 'show' THEN ${episodeParent.id} ELSE NULL END`,
+						showSortTitle: sql<string | null>`CASE WHEN ${episodeGroup.kind} = 'show' THEN ${episodeGroup.sortTitle} WHEN ${episodeParent.kind} = 'show' THEN ${episodeParent.sortTitle} ELSE NULL END`,
 						id: mediaItems.id,
 						libraryId: mediaItems.libraryId,
 						groupId: mediaItems.groupId,
@@ -450,6 +455,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						dateAddedAt: mediaItems.dateAddedAt,
 					})
 					.from(mediaItems)
+					.leftJoin(episodeGroup, and(eq(episodeGroup.id, mediaItems.groupId), eq(episodeGroup.libraryId, mediaItems.libraryId)))
+					.leftJoin(episodeParent, and(eq(episodeParent.id, episodeGroup.parentId), eq(episodeParent.libraryId, mediaItems.libraryId)))
 					.where(or(...mediaConditions))
 				: [];
 		const itemIds = items.map((item) => item.id);
@@ -566,6 +573,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				const metadata = decodedMetadata(item.metadata);
 				const technical = item.technicalMetadata ?? {};
 				return {
+					showId: item.showId,
+					showSortTitle: item.showSortTitle,
 					id: item.id,
 					chapters: normalizeMediaChapters(technical.chapters, (item.durationMilliseconds ?? 0) / 1_000),
 					chapterLimitExceeded: technical.chapterLimitExceeded === true || chapterInputExceedsLimit(technical.chapters),

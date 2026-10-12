@@ -456,6 +456,7 @@ export class MediaCatalogRepository {
         g.stable_key AS stableKey, g.kind, g.title, g.sort_title AS sortTitle,
         NULL AS relativePath, NULL AS playbackPath, g.plot, g.year,
         NULL AS durationSeconds, NULL AS seasonNumber, NULL AS episodeNumber,
+        NULL AS showId, NULL AS showSortTitle,
 		NULL AS episodeEndNumber, NULL AS edition, '[]' AS externalIds,
 		NULL AS trackNumber, NULL AS discNumber, '[]' AS artists,
 		'none' AS multipartStatus, '[]' AS parts, '[]' AS subtitleTracks,
@@ -474,6 +475,8 @@ export class MediaCatalogRepository {
         i.relative_path AS relativePath, i.playback_path AS playbackPath, i.plot, i.year,
         i.duration_milliseconds / 1000.0 AS durationSeconds, i.season_number AS seasonNumber,
 		i.episode_number AS episodeNumber,
+        CASE WHEN g.kind = 'show' THEN g.id WHEN parent.kind = 'show' THEN parent.id ELSE NULL END AS showId,
+        CASE WHEN g.kind = 'show' THEN g.sort_title WHEN parent.kind = 'show' THEN parent.sort_title ELSE NULL END AS showSortTitle,
 		i.episode_end_number AS episodeEndNumber, i.edition, i.external_ids AS externalIds,
 		i.track_number AS trackNumber, i.disc_number AS discNumber, i.artists,
 		i.multipart_status AS multipartStatus, i.parts, i.subtitle_tracks AS subtitleTracks,
@@ -483,7 +486,10 @@ export class MediaCatalogRepository {
         i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
         i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt,
         0 AS childCount
-      FROM media_items i WHERE i.library_id = ? AND ${itemParent}${itemSearch}
+      FROM media_items i
+      LEFT JOIN media_groups g ON g.id = i.group_id AND g.library_id = i.library_id
+      LEFT JOIN media_groups parent ON parent.id = g.parent_id AND parent.library_id = i.library_id
+      WHERE i.library_id = ? AND ${itemParent}${itemSearch}
     )`;
 		const rows = this.db.$client
 			.prepare(
@@ -564,7 +570,10 @@ export class MediaCatalogRepository {
 		};
 	}
 
-	/** Browse selectable scheduling sources without leaking non-selectable catalog rows. */
+	/**
+	 * Browse selectable scheduling sources with show hierarchy for draft episode ordering.
+	 * Exclude catalog rows that cannot be selected by the requested source type.
+	 */
 	async browseMediaSourceOptions(
 		libraryId: string,
 		query: MediaSourcePickerQuery,
@@ -605,7 +614,7 @@ export class MediaCatalogRepository {
 		return this.searchItemSourceOptions(libraryId, query);
 	}
 
-	/** Search playable items and include the metadata field that matched. */
+	/** Search playable items with show ordering metadata and explain matched fields. */
 	private searchItemSourceOptions(
 		libraryId: string,
 		query: MediaSourcePickerQuery,
@@ -672,7 +681,9 @@ export class MediaCatalogRepository {
           i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
           i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt,
           g.title AS groupTitle, g.kind AS groupKind,
-          parent.title AS parentTitle, parent.kind AS parentKind
+          parent.title AS parentTitle, parent.kind AS parentKind,
+          CASE WHEN g.kind = 'show' THEN g.id WHEN parent.kind = 'show' THEN parent.id ELSE NULL END AS showId,
+          CASE WHEN g.kind = 'show' THEN g.sort_title WHEN parent.kind = 'show' THEN parent.sort_title ELSE NULL END AS showSortTitle
         FROM media_items i ${joins} WHERE ${where}
         ORDER BY i.sort_title COLLATE NOCASE ASC, i.id ASC LIMIT ? OFFSET ?`,
 			)

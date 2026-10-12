@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="720" viewBox="0 0 480 720">
+  <rect width="480" height="720" fill="#f4dfb6"/>
+  <path d="M0 470Q240 390 480 470V720H0Z" fill="#234f4c"/>
+  <circle cx="390" cy="235" r="100" fill="#e5a855"/>
+  <text x="240" y="67" text-anchor="middle" fill="#234f4c" font-family="sans-serif" font-size="17" letter-spacing="5">A NEIGHBORHOOD COMEDY</text>
+  <text x="240" y="142" text-anchor="middle" fill="#234f4c" font-family="sans-serif" font-size="65" font-weight="bold">CORNER</text>
+  <text x="240" y="211" text-anchor="middle" fill="#234f4c" font-family="sans-serif" font-size="65" font-weight="bold">CAFÉ</text>
+  <rect x="70" y="318" width="340" height="260" rx="4" fill="#bb6950"/>
+  <rect x="92" y="360" width="170" height="154" fill="#163e3d"/>
+  <rect x="282" y="360" width="104" height="218" fill="#163e3d"/>
+  <rect x="295" y="374" width="78" height="125" fill="#e9bc73"/>
+  <path d="M177 361V514M92 434H262" stroke="#e5a855" stroke-width="8"/>
+  <path d="M54 320L80 265H400L426 320Z" fill="#f6eee0"/>
+  <path d="M100 320L119 265H157L146 320ZM193 320L195 265H234L240 320ZM286 320L272 265H311L333 320ZM380 320L349 265H388L426 320Z" fill="#234f4c"/>
+  <path d="M54 320H426" stroke="#163e3d" stroke-width="9"/>
+  <rect x="113" y="453" width="53" height="30" rx="10" fill="#f4dfb6"/>
+  <path d="M165 459C189 452 187 482 163 476" fill="none" stroke="#f4dfb6" stroke-width="6"/>
+  <path d="M128 442Q114 429 130 415M149 442Q135 429 151 415" fill="none" stroke="#e9bc73" stroke-width="4"/>
+  <circle cx="366" cy="523" r="5" fill="#f4dfb6"/>
+  <text x="240" y="635" text-anchor="middle" fill="#f4dfb6" font-family="sans-serif" font-size="21">Good coffee. Great company.</text>
+  <text x="240" y="676" text-anchor="middle" fill="#d8b877" font-family="sans-serif" font-size="16" letter-spacing="4">SEASON ONE</text>
+</svg>

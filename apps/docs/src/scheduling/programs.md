@@ -59,7 +59,7 @@ Choose **Content** when the ![](/icons/list-video.svg) Program should select med
 
 ### Choose specific media
 
-Use an explicit selection when you want to control which items are eligible. Review the selected media and arrange its order before choosing how playback moves through it. A hand-picked list of media is still a Content ![](/icons/list-video.svg) Program; a Sequence ![](/icons/list-video.svg) Program combines other ![](/icons/list-video.svg) Programs instead.
+Use an explicit selection when you want to control which items are eligible. Choose **Sequential** to use an automatic **Playback order**, or choose **Manual** to rearrange items yourself. A hand-picked list of media is still a Content ![](/icons/list-video.svg) Program; a Sequence ![](/icons/list-video.svg) Program combines other ![](/icons/list-video.svg) Programs instead.
 
 You can also select shows, seasons, artists, or albums directly in the library browser and choose **Add Selected**. Create a new program or add to a selected-groups program from the same library. For example, select seasons 1–8 of a show and use **Sequential** to play their episodes in order, excluding later seasons. Group selections include newly indexed content within those groups; individual-item selections retain specific items.
 
@@ -93,10 +93,18 @@ Saving and playback do not perform lookups. With no web search, failed model pla
 
 The **Selection** controls determine how eligible items are consumed:
 
-- **Sequential** follows the configured order.
+- **Sequential** follows the configured playback order, continuing from its position according to the schedule slot’s playback-state setting.
 - **Shuffle (no repeats)** uses a shuffled order without repeating an item until the pool has been played.
 - **Random** chooses an item each time, so repeats are possible.
 - **Weighted random** favors content your viewers have chosen while retaining variety.
+
+For a new **Specific media items** program in a show library, **Season / episode** is the default: shows stay together alphabetically, and episodes play in numeric season and episode order within each show. **Last to first** reverses the episode order within each show. Specials in season zero come before season one in **First to last** order; missing show or episode information comes last. Existing programs keep their saved order.
+
+![Sequential playback order for selected episodes](/screenshots/program-playback-order.png)
+
+**Date Added to Program** follows the order in which items were added within Moirai. **Name** and **Release Date** offer other automatic orders. **Manual** captures the current displayed order so you can rearrange it. The numbered list shows the configured order.
+
+Programs that select whole shows or seasons use their built-in season and episode order. Library queries follow their source’s query order, and AI selections follow their source’s Order and Direction controls; AI selections in show libraries also offer **Season / episode**.
 
 The optional **Stable seed** makes randomized choices repeatable. Whether playback continues from its previous position or restarts each day is configured in the ![](/icons/calendar-range.svg) Template slot, under **Advanced scheduling behavior**.
 
@@ -142,6 +150,8 @@ Use **Quantity**, **Cohesion / Variety**, **Preferences**, and **Exclusions** ju
 Each schedule use keeps its own set and finishes it before selecting another. Changes to the theme, target library, library filters, quantity, or refinements apply to the next set. The same preparation status, retry controls, and rotation behavior described below apply to Theme Programs. If a scan corrects a media runtime, the schedule refreshes its future timings at the next daily boundary.
 
 ## Sequence Programs
+
+Each child program’s **Selection** and **Playback order** determine which items it contributes. Sequence ordering arranges those selections: **Ordered** and **Shuffled blocks** keep each step’s selections together, while **Shuffled allocations** and **Balanced rotation** may change where they appear within the cycle.
 
 Choose **Sequence** when you want to combine existing ![](/icons/list-video.svg) Programs in a custom order. For example, you could play two items from an episode-selection ![](/icons/list-video.svg) Program, then one item from a movie-selection ![](/icons/list-video.svg) Program.
 

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import sharp from 'sharp';
 import { expect, type Page } from '@playwright/test';
 import type { ProgramConfig, MediaSourcePickerResult } from '@moirai/shared';
 import { test } from './fixture';
 import { seedLibrary } from './seed';
-import { captureThrough } from './capture';
+import { captureThrough, captureSection } from './capture';
 import { waitForLibraryScan } from '../library-scan';
 
 /** Save a real Program for an example-schedule editor capture. */
@@ -54,8 +55,15 @@ test('captures movie and sitcom schedule recipes', { tag: '@docs-screenshot' }, 
 	for (const name of shows) {
 		const directory = path.join(root, name, 'Season 01');
 		await mkdir(directory, { recursive: true });
+		if (name === 'Corner Café') {
+			await sharp(path.resolve('tests/e2e/fixtures/user-documentation/shows/corner-cafe.svg'))
+				.png().toFile(path.join(root, name, 'poster.png'));
+		}
 		for (const episode of ['01', '02', '03']) {
 			await writeFile(path.join(directory, `${name} S01E${episode}.mp4`), 'documentation fixture');
+			if (name === 'Corner Café') {
+				await copyFile(path.join(root, name, 'poster.png'), path.join(directory, `${name} S01E${episode}-poster.png`));
+			}
 		}
 	}
 	const libraryResponse = await page.request.post('/api/v1/libraries', { headers: requestHeaders, data: {
@@ -67,6 +75,17 @@ test('captures movie and sitcom schedule recipes', { tag: '@docs-screenshot' }, 
 	const sourcesResponse = await page.request.get(`/api/v1/libraries/${showLibraryId}/media-source-options?target=groups`);
 	expect(sourcesResponse.ok()).toBe(true);
 	const sources = await sourcesResponse.json() as MediaSourcePickerResult;
+	const episodeResponse = await page.request.get(`/api/v1/libraries/${showLibraryId}/media-source-options?target=items&search=Corner`);
+	expect(episodeResponse.ok()).toBe(true);
+	const episodes = (await episodeResponse.json() as MediaSourcePickerResult).entries.flatMap(entry => entry.item ? [entry.item.id] : []);
+	const orderedEpisodes = await createProgram(page, requestHeaders, 'Corner Café Episodes', {
+		type: 'content', source: { type: 'collection', libraryId: showLibraryId, itemIds: episodes, sort: { type: 'episode', direction: 'asc' } }, strategy: { type: 'sequential' },
+	});
+	await page.goto(`/schedules/programs/${orderedEpisodes}`);
+	await expect(page.locator('.program-playback-order .selected-item-preview')).toHaveCount(3);
+	await expect(page.locator('.program-playback-order .selected-item-preview img')).toHaveCount(3);
+	await captureSection(page, page.locator('.program-playback-order'), 'program-playback-order.png');
+
 	const sitcomPrograms: string[] = [];
 	for (const name of shows) {
 		const group = sources.entries.find(entry => entry.group?.title === name)?.group;
