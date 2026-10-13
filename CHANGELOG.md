@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.1 - 2026-10-12
+
+### New
+
+- **Subtitle selection** rules select tracks by a title match and language + subtitle behavior. Channels and Programs can preview their draft rules against scanned media, with selected tracks, eligible alternatives, and exclusion reasons.
+- **Single-block guide listings** support custom artwork. Artwork appears in the Guide and Standard XMLTV output; `block.artwork_url` is exposed in the guide template editor for custom XMLTV templates to use.
+
+### Improvements
+
+- Content Programs now expose a **Playback order** section with sorting and manual arrangement. Show selections support **Season / episode** sorting. Existing Programs retain their saved ordering settings.
+- Normalized resource editors URLs and they now preserve unsaved drafts during browser navigation. Guide dates and Logs filters stay in the URL, with more consistent deletion confirmations, copy feedback, and retries.
+- Harmless scan diagnostics no longer inflate library warning counts or appear in scan-history issue lists. Actionable warnings remain visible; existing library warning counts refresh on the next synchronization, while older scan history retains its recorded findings.
+
+### Changes
+
+- Default AI models are now **GPT-6.1 Sol** for OpenAI and **Claude Sonnet 5.5** for Anthropic. Explicitly configured custom model IDs remain unchanged.
+
+### Fixes
+
+- Opening a Guide date outside the available horizon falls back to Today and restores the full default window, capped by the configured horizon. Stale Guide requests no longer override browser Back/Forward navigation.
+
 ## 0.6.0 - 2026-10-03
 
 ### New
