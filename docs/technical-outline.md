@@ -1682,7 +1682,8 @@ language aliases and case-insensitive substrings across display titles and alter
 title matches may select commentary or audio description. Without a matching title, selection prefers
 tracks not marked with either disposition when available, then default disposition, descending channel
 count, and stream index. Language filtering retains candidates when there are no language matches. Indexed technical metadata
-is fetched in bounded batches only for relevant media; multipart files select independently.
+is fetched in bounded batches only for relevant media. Single-file items use top-level stream facts,
+including items stored with one playback part; multipart files select independently from per-part facts.
 The playout adapter supplies `tracks.audio.stream_index` alongside existing subtitle selections,
 without changing the worker or overriding generated silence. Missing metadata falls back to worker
 selection. Channel fallback override files retain their existing behavior. Selection cursor identity

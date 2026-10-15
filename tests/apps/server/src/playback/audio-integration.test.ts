@@ -53,3 +53,43 @@ it('probes multiple audio tracks and publishes the selected physical-part indice
 		await rm(root, { recursive: true, force: true });
 	}
 }, 30_000);
+
+it.each(['single', 'legacy', 'missing-multipart'] as const)('uses top-level audio metadata only for single-file media (%s)', async (shape) => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	try {
+		const repository = new Repository(database.db);
+		const channel = await repository.createChannel(channelCreateSchema.parse({ number: '1', name: 'Audio' }));
+		const libraryId = randomUUID();
+		const mediaId = randomUUID();
+		const playbackPath = '/fixture/movie.mkv';
+		const metadata = { streams: [
+			{ type: 'audio', index: 1, language: 'ita', title: 'ITA 5.1 AC3', isDefault: true, channels: 6 },
+			{ type: 'audio', index: 2, language: 'eng', title: 'ENG 5.1 AC3', isDefault: false, channels: 6 },
+		] };
+		const part = { number: 1, relativePath: 'movie.mkv', playbackPath, durationSeconds: 1, subtitleTracks: [] };
+		const parts = shape === 'legacy' ? [] : shape === 'single' ? [part] : [part, { ...part, number: 2, playbackPath: '/fixture/two.mkv' }];
+		database.sqlite.prepare("INSERT INTO libraries (id, name, type_key, source_type, source_config) VALUES (?, 'Library', 'movies', 'on-disk', '{}')").run(libraryId);
+		database.sqlite.prepare(`INSERT INTO media_items (id, library_id, stable_key, kind, title, sort_title, relative_path, playback_path, metadata_status, metadata, fingerprint, duration_milliseconds, parts, technical_metadata)
+			VALUES (?, ?, 'video', 'movie', 'Video', 'Video', 'movie.mkv', ?, 'complete', '{}', 'fixture', 1000, ?, ?)`)
+			.run(mediaId, libraryId, playbackPath, JSON.stringify(parts), JSON.stringify(metadata));
+		const segment = { id: randomUUID(), channelId: channel.id, mediaItemId: mediaId, programId: null, role: 'primary', title: 'Video',
+			playbackPath, playbackParts: (parts.length ? parts : [part]).map((value) => ({ playbackPath: value.playbackPath, durationSeconds: 1 })),
+			start: '2026-01-01T00:00:00Z', finish: '2026-01-01T00:00:02Z', sourceStartSeconds: 0, sourceFinishSeconds: 2,
+		} as TimelineSegment;
+		const guide = { startDate: '2026-01-01', days: 1, timeZone: 'UTC', channels: [{ channelId: channel.id, preview: { segments: [segment] } }] } as ScheduleGuide;
+
+		for (const preference of [{ language: 'eng', title: 'English' }, { language: 'en', title: 'eng' }, { title: 'ENG' }]) {
+			const selectedChannel = { ...channel, audioPreferences: preference };
+			const selected = await prepareAudio(repository, selectedChannel, guide, []);
+			const expected = shape === 'missing-multipart' ? [null, null] : [2];
+			expect(selected.get(segment.id)).toEqual(expected);
+
+			const document = JSON.parse([...buildEtvPlayoutFiles([selectedChannel], guide, new Map(), undefined, selected).values()][0]!);
+			const videos = document.items.filter((item: { source?: { path?: string } }) => item.source?.path);
+			expect(videos.map((item: { tracks?: { audio?: { stream_index?: number } } }) => item.tracks?.audio?.stream_index ?? null)).toEqual(expected);
+		}
+	}
+	finally {
+		database.close();
+	}
+});

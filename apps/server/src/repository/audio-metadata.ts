@@ -2,7 +2,7 @@ import { inArray } from 'drizzle-orm';
 import type { MoiraiDatabase } from '../db/index.js';
 import { mediaItems } from '../db/schema.js';
 
-/** Load stream metadata by physical playback path only for referenced media. */
+/** Load per-file stream facts, using top-level metadata for ordinary single-file media. */
 export async function audioMetadata(database: MoiraiDatabase, ids: string[]): Promise<Map<string, unknown>> {
 	const result = new Map<string, unknown>();
 	const unique = [...new Set(ids)];
@@ -16,7 +16,7 @@ export async function audioMetadata(database: MoiraiDatabase, ids: string[]): Pr
 					result.set(part.playbackPath, metadata.parts[index]);
 				}
 			}
-			else if (!row.parts.length) {
+			else if (row.parts.length <= 1) {
 				result.set(row.path, metadata);
 			}
 		}
