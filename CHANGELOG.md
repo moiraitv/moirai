@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.2 - 2026-10-15
+
+### Improvements
+
+- Channel schedules now provide the option **Avoid simultaneous duplicates on other channels** under **Advanced scheduling**. Turn it off to let randomized selections choose items even if already playing on other channels.
+- **Playback progress** controls and help now clarify when Programs continue from their saved position or restart each day, including sequence and child Program progress.
+
+### Fixes
+
+- Preferred audio selection now uses scanned track metadata for single-file media, restoring title, language, and channel preferences during playback.
+- Sequential Programs now retain their configured playback order when the same item is scheduled on another channel, including sequential children within shuffled sequences.
+
 ## 0.6.1 - 2026-10-12
 
 ### New
