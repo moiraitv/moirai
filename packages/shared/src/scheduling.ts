@@ -917,6 +917,7 @@ export interface ChannelScheduleLayer extends Omit<
 
 /** Validate the channel schedule config contract at runtime. */
 export const channelScheduleConfigSchema = z.object({
+	avoidCrossChannelDuplicates: z.boolean().optional().describe('Prefer non-overlapping items on other channels for non-sequential selections. Enabled when omitted.'),
 	generationSeed: z.uuid().optional().describe('Server-managed randomness for unseeded programs; preserved on schedule saves.'),
 	defaultTemplateId: z.uuid().nullable().default(null),
 	defaultProgramId: z.uuid().nullable().default(null),

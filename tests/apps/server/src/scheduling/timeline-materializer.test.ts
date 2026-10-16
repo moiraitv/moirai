@@ -1189,3 +1189,25 @@ it('loads warning tolerance once per pass, forwards it to generation, and retain
 		await workers.close();
 	}
 });
+
+
+it('stages duplicate-avoidance changes at midnight without resetting selection progress', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	const before = structuredClone(test.segments());
+	const fingerprint = test.materialization()!.inputFingerprint;
+	test.schedule.avoidCrossChannelDuplicates = false;
+	await materializer.runNow(true);
+	expect(test.materialization()).toMatchObject({ health: 'pending', applyAfter: '2026-08-23T00:00:00Z' });
+	expect(test.segments()).toEqual(before);
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	await materializer.runNow();
+	expect(test.materialization()!.inputFingerprint).not.toBe(fingerprint);
+	expect(test.materialization()!.health).toBe('ready');
+	expect(test.repository.resetChannelScheduleState).not.toHaveBeenCalled();
+	const expected = before.filter(entry => entry.segment.start === '2026-08-23T00:00:00Z')[0]!.segment;
+	expect(test.segments().find(entry => entry.segment.start === expected.start)!.segment.mediaItemId).toBe(expected.mediaItemId);
+});

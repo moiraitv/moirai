@@ -75,7 +75,7 @@ In the selected slot, use **Guide output → Single block** to show one listing 
 
 The resolved schedule preview shows the same guide blocks and timing as the Guide page, including unsaved changes. Hover, focus, or tap a block to see the actual items within it.
 
-Saving these settings immediately updates the Guide page and XMLTV output without changing playback or content selection. **Individual items** restores the usual listings. Higher-priority schedule layers split the lower slot’s listing; fall-through slots use the lower layer’s settings. Scheduled boundaries take priority over overlapping listings, which are shortened in the guide only.
+Saving these settings immediately updates the Guide page and XMLTV output without changing playback or content selection. **Individual items** is the default and shows each episode or video in the Guide and connected TV apps. **Single block** shows one listing for the whole slot. This choice does not affect playback. Higher-priority schedule layers split the lower slot’s listing; fall-through slots use the lower layer’s settings. Scheduled boundaries take priority over overlapping listings, which are shortened in the guide only.
 
 Hover over a guide block to see a 30-minute zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. The crop keeps the Guide’s item colors and clips items at the displayed time boundaries. Item labels show the source program name, or **Filler** or **Gap** when appropriate.
 
@@ -85,13 +85,13 @@ The **Program** choice supplies the content-selection rules for the slot. The ad
 
 Choose **No program — fall through** when this part of a layered schedule should leave room for a lower-priority layer (used by ![](/icons/tv-minimal-play.svg) Channel Schedules). This does not provide media by itself; check the resolved preview to see what actually fills the time.
 
-Open **Advanced scheduling behavior** on a slot with a ![](/icons/list-video.svg) Program to configure playback state, item starts, its outgoing boundary, and filler.
+Open **Advanced scheduling behavior** on a slot with a ![](/icons/list-video.svg) Program to configure playback progress, item starts, its outgoing boundary, and filler.
 
-### Playback state and item starts
+### Playback progress and item starts
 
-![Selected-slot playback state and item start rule controls](/screenshots/template-slot-playback.png)
+![Selected-slot playback progress and item start rule controls](/screenshots/template-slot-playback.png)
 
-**Playback state** determines whether selection continues from its saved position (**Continue persistently**) or starts over for each day's occurrence (**Restart each day**).
+**Playback progress** determines whether selection continues from its saved position (**Continue from saved position**) or starts over for each day's occurrence (**Restart each day**). Continuing resumes where the slot left off, including across days; it does not restart each block at its first episode. A program assigned directly to a channel continues from its saved position automatically.
 
 **Item start rule** determines whether another item may begin near the end of the slot:
 

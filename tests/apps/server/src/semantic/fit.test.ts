@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { indexOccupiedMedia, selectProgram } from '@server/scheduling/selection.js';
 import { fixture } from './fixtures.js';
 
-it.each([false, true])('avoids expanded mid-roll collisions with indexed occupancy: %s', async (indexed) => {
+it.each([false, true])('avoids expanded mid-roll collisions unless the channel opts out, indexed: %s', async (indexed) => {
 	const f = await fixture();
 	try {
 		await f.embeddings();
@@ -22,6 +22,12 @@ it.each([false, true])('avoids expanded mid-roll collisions with indexed occupan
 
 		expect(selectProgram(f.program.id, f.key, first.state, context, 180, 'first-fit-arbitrary')?.media.id).toBe(alternative);
 		expect(value.consumedItemIds).toEqual([]);
+		context.avoidCrossChannelDuplicates = false;
+		expect(selectProgram(f.program.id, f.key, first.state, context, 180, 'first-fit-arbitrary')?.media.id).toBe(colliding);
+		context.fillerSelection = { fullBudgetSeconds: 180, allowTruncation: false };
+		expect(selectProgram(f.program.id, f.key, first.state, context, 180)?.media.id).toBe(colliding);
+		context.avoidCrossChannelDuplicates = true;
+		expect(selectProgram(f.program.id, f.key, first.state, context, 180)?.media.id).toBe(alternative);
 	}
 	finally {
 		await f.close();

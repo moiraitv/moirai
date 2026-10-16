@@ -44,6 +44,24 @@ it('prepares themes, scopes candidates, applies exclusions, and preserves commit
 		const first = selectProgram(program.id, f.key, new Map(), context)!;
 		const record = first.state.get(f.key)!;
 		expect(selectionStateRecordSchema.parse(record)).toMatchObject({ value: { seed: { config: { type: 'theme' }, sourceItemIds: [] } } });
+		// Channel collision preferences affect primary and filler picks without replacing the set.
+		const pending = structuredClone(first.state);
+		const pendingValue = pending.get(f.key)!.value;
+		if (pendingValue.type !== 'similarity') {
+			throw new Error('Expected theme set');
+		}
+		pendingValue.consumedItemIds = [];
+		context.occupiedMedia = [{ mediaItemId: first.media.id, start: context.selectionStart, finish: '2026-09-20T00:00:00Z' }];
+		for (const filler of [false, true]) {
+			context.fillerSelection = filler ? { fullBudgetSeconds: 3600, allowTruncation: false } : undefined;
+			context.avoidCrossChannelDuplicates = true;
+			expect(selectProgram(program.id, f.key, pending, context)?.media.id).not.toBe(first.media.id);
+			context.avoidCrossChannelDuplicates = false;
+			expect(selectProgram(program.id, f.key, pending, context)?.media.id).toBe(first.media.id);
+		}
+		delete context.fillerSelection;
+		delete context.avoidCrossChannelDuplicates;
+		context.occupiedMedia = [];
 		f.commit([...first.state.values()]);
 		await f.repository.updateProgram(program.id, { config: { ...config, theme: 'Ocean voyages', quantity: 1 } });
 		f.reopen();

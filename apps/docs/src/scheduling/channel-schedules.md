@@ -48,6 +48,20 @@ To choose a Program manually, select the base and use the switch icon beside the
 
 ![Channel Schedule editor with a base Template and a resolved preview](/screenshots/channel-schedules.png)
 
+Directly-assigned Programs default to a playback progress setting of **Continue from saved position**. Progress continues automatically for both the base and conditional program layers. Template slots can instead choose to either continue from their saved position or restart each day, as explained in [Templates](/scheduling/templates#playback-progress-and-item-starts).
+
+![Direct Program assignment showing automatic playback progress](/screenshots/channel-schedule-direct-program.png)
+
+## Simultaneous duplicates
+
+By default, channels will avoid selecting simultaneous duplicates when content appears on multiple channels. Shuffle, Random, Weighted random, Similar Items, and Theme programs prefer another item when the same episode or movie is already scheduled on another channel at an overlapping time. 
+
+Change this behavior by selecting the base in the schedule edit or and opening **Advanced scheduling**. **Avoid simultaneous duplicates on other channels** controls it. Turn the setting off to let this channel select items without considering simultaneous playback on other channels. This setting does not change a program's shuffle cycle or its rules for immediate repeats.
+
+![Advanced scheduling with simultaneous duplicate avoidance enabled](/screenshots/channel-schedule-advanced.png)
+
+Sequential programs retain their configured playback order and are not affected by the setting.
+
 ## Add a conditional Template
 
 A conditional ![](/icons/calendar-range.svg) Template is a reusable day structure with a rule controlling when it applies here. For example, a weekend evening layer can replace ordinary programming on Saturday and Sunday from 18:00 to 23:00 without changing the rest of the week.

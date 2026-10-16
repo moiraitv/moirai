@@ -243,6 +243,7 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 			? currentSchedule
 			: {
 				channelId,
+				avoidCrossChannelDuplicates: currentSchedule?.avoidCrossChannelDuplicates,
 				defaultTemplateId: input.template.id,
 				defaultProgramId: null,
 				layers: [],

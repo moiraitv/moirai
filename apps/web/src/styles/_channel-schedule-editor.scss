@@ -162,6 +162,7 @@
 
 .base-inspector-description {
 	max-width: 720px;
+	margin: 16px 0 0;
 	color: var(--muted);
 	line-height: 1.55;
 }
@@ -810,5 +811,47 @@
 
 	.schedule-preview-ruler span:nth-child(even) {
 		display: none;
+	}
+}
+
+.channel-scheduling-settings {
+	.form-disclosure-content {
+		padding: 16px;
+	}
+
+	.channel-duplicate-toggle {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 10px;
+		font-size: 0.82rem;
+		line-height: 1.5;
+	}
+
+	.channel-duplicate-toggle input {
+		flex: 0 0 auto;
+		width: auto;
+		margin-top: 3px;
+	}
+
+	.field-hint {
+		margin: 10px 0 0;
+		color: var(--muted);
+		font-size: 0.8rem;
+		line-height: 1.5;
+	}
+}
+
+.schedule-playback-progress {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	margin: 12px 0;
+	color: var(--muted);
+	font-size: 0.8rem;
+	line-height: 1.5;
+
+	strong {
+		color: var(--text);
 	}
 }

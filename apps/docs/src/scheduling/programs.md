@@ -93,7 +93,7 @@ Saving and playback do not perform lookups. With no web search, failed model pla
 
 The **Selection** controls determine how eligible items are consumed:
 
-- **Sequential** follows the configured playback order, continuing from its position according to the schedule slot’s playback-state setting.
+- **Sequential** follows the configured playback order, continuing from its position according to its playback progress settings.
 - **Shuffle (no repeats)** uses a shuffled order without repeating an item until the pool has been played.
 - **Random** chooses an item each time, so repeats are possible.
 - **Weighted random** favors content your viewers have chosen while retaining variety.
@@ -106,7 +106,7 @@ For a new **Specific media items** program in a show library, **Season / episode
 
 Programs that select whole shows or seasons use their built-in season and episode order. Library queries follow their source’s query order, and AI selections follow their source’s Order and Direction controls; AI selections in show libraries also offer **Season / episode**.
 
-The optional **Stable seed** makes randomized choices repeatable. Whether playback continues from its previous position or restarts each day is configured in the ![](/icons/calendar-range.svg) Template slot, under **Advanced scheduling behavior**.
+The optional **Stable seed** makes randomized choices repeatable. When assigned directly to a channel, a program continues from its saved position automatically. In a ![](/icons/calendar-range.svg) Template slot, choose **Continue from saved position** or **Restart each day** under **Advanced scheduling behavior → Playback progress**. Continuing progress carries both a sequence and its child programs forward; it does not restart each block at its first episode.
 
 ## Similar Items Programs
 

@@ -103,11 +103,13 @@ it('reconciles catalog removals and additions without replaying consumed members
 });
 
 it('preserves collision preference without spending the colliding queue position', () => {
-	const f = fixture([30, 30, 200]);
-	f.context.occupiedMedia = [{ mediaItemId: 'item-0', start: f.context.selectionStart, finish: '2026-01-01T01:00:00Z' }];
+	const f = fixture([30, 30, 200], 'shuffle');
+	const colliding = f.break(30).spans[0]!.media.id;
+	f.state = new Map();
+	f.context.occupiedMedia = [{ mediaItemId: colliding, start: f.context.selectionStart, finish: '2026-01-01T01:00:00Z' }];
 	f.context.occupiedMediaIndex = indexOccupiedMedia(f.context.occupiedMedia);
-	expect(f.break(30).spans[0]!.media.id).toBe('item-1');
-	expect(f.state.get('mid-roll')!.value.fillerCycle!.remainingItemIds).toContain('item-0');
+	expect(f.break(30).spans[0]!.media.id).not.toBe(colliding);
+	expect(f.state.get('mid-roll')!.value.fillerCycle!.remainingItemIds).toContain(colliding);
 });
 
 it.each(['count', 'random-count', 'pad', 'remaining'] as const)('supports %s budgets without replacement', type => {
@@ -231,4 +233,23 @@ it('returns independent initial and final progress for partial stage commitment'
 	expect(result.progress.remaining).toBe(0);
 	result.progress.remaining = 42;
 	expect(result.initialProgress.remaining).toBe(120);
+});
+
+
+it.each(['sequential', 'shuffle', 'random', 'weighted-random'] as const)('applies the leaf %s collision policy to filler and preserves fit behavior', strategy => {
+	const f = fixture([90, 30, 30], strategy);
+	const baseline = f.break(30);
+	const selectedId = baseline.spans[0]!.media.id;
+	f.state = new Map();
+	f.context.occupiedMedia = [{ mediaItemId: selectedId, start: f.context.selectionStart, finish: '2026-01-01T01:00:00Z' }];
+	const avoided = f.break(30);
+	if (strategy === 'sequential') {
+		expect(avoided.spans[0]!.media.id).toBe(selectedId);
+	}
+	else {
+		expect(avoided.spans[0]!.media.id).not.toBe(selectedId);
+	}
+	f.state = new Map();
+	f.context.avoidCrossChannelDuplicates = false;
+	expect(f.break(30).spans.map(span => span.media.id)).toEqual(baseline.spans.map(span => span.media.id));
 });

@@ -1004,6 +1004,7 @@ export class SchedulingConfigurationRepository {
 				const current = currentByChannel.get(channelId);
 				const config: ChannelScheduleConfig = {
 					generationSeed: current?.generationSeed,
+					avoidCrossChannelDuplicates: current?.avoidCrossChannelDuplicates,
 					defaultTemplateId: templateId,
 					defaultProgramId: null,
 					layers: current?.layers ?? [],

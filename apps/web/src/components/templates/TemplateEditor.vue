@@ -9,7 +9,7 @@ import { setSlotProgram } from '../../template-slot-program';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import {
@@ -74,6 +74,7 @@ const emit = defineEmits<{
 	saved: [templateId: string];
 }>();
 
+const playbackProgressHelpId = useId();
 const route = useRoute();
 const router = useRouter();
 const scheduling = useSchedulingStore();
@@ -1003,14 +1004,18 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 											<ChevronDown :size="17" aria-hidden="true" />
 										</template>
 										<div class="form-grid" data-testid="slot-playback-fields">
-											<label
-											><span>Playback state</span
-											><select v-model="selectedSlot.stateScope" @change="markChanged">
-												<option value="persistent">Continue persistently</option>
-												<option value="occurrence">Restart each day</option>
-											</select></label
-											><label
-											><span>Item start rule</span
+											<div class="slot-playback-progress">
+												<label><span>Playback progress</span>
+													<select v-model="selectedSlot.stateScope" :aria-describedby="playbackProgressHelpId" @change="markChanged">
+														<option value="persistent">Continue from saved position</option>
+														<option value="occurrence">Restart each day</option>
+													</select>
+												</label>
+												<p :id="playbackProgressHelpId" class="field-hint">{{ selectedSlot.stateScope === 'persistent'
+													? 'Resume selection where this slot left off, including across days. This does not restart each block at its first episode.'
+													: 'Start selection again for each day’s occurrence, including sequence and child program progress.' }}</p>
+											</div>
+											<label><span>Item start rule</span
 											><select
 												:value="selectedSlot.startEligibility.type"
 												@change="

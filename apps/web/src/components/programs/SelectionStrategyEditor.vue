@@ -39,10 +39,9 @@ function updateSeed(event: Event): void {
 		<label v-if="showSeed && modelValue !== 'sequential'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="updateSeed" /></label>
 		<div v-if="showPlaybackState" class="program-playback-state">
 			<div class="program-playback-state-summary">
-				<strong>Playback state</strong>
-				<span>Configured in template schedule slots</span>
+				<strong>Playback progress</strong>
 			</div>
-			<p>Choose “Continue persistently” or “Restart each day” under Advanced scheduling behavior for each slot that uses this program.</p>
+			<p>When assigned directly to a channel, this program continues from its saved position automatically. In a template, each slot can continue from its saved position or restart each day.</p>
 		</div>
 	</section>
 </template>

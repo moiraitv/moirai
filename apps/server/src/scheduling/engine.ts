@@ -249,6 +249,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				selectionStart: cursor.toString(),
 				occupiedMedia: input.occupiedMedia ?? [],
 				occupiedMediaIndex,
+				avoidCrossChannelDuplicates: input.schedule.avoidCrossChannelDuplicates ?? true,
 			};
 			let primaryCount = resume?.hadPrimary ? 1 : 0;
 			let boundaryRejection: BoundaryRejection | null = resume?.boundaryRejection ?? null;

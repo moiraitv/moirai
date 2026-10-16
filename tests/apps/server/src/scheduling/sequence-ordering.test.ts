@@ -399,3 +399,46 @@ it.each(['direct', 'ordered', 'shuffled-blocks'] as const)('uses a child program
 	expect(result.segments.filter(segment => segment.role === 'primary').slice(0, 3).map(segment => segment.mediaItemId)).toEqual([items[2]!.id, items[1]!.id, items[0]!.id]);
 	expect(schedulingProgramStatuses([child], fixture.catalog)[0]!.previewItems.map(item => item.id)).toEqual([items[2]!.id, items[1]!.id, items[0]!.id]);
 });
+
+
+it('retains manual child order inside shuffled blocks across serialized generation boundaries and collisions', () => {
+	const episodes = Array.from({ length: 6 }, (_, index) => media(800 + index, 3600));
+	const ids = episodes.map(item => item.id);
+	const child = program(80, { type: 'content', source: { type: 'collection', libraryId: uuid(900), itemIds: [...ids].reverse(), sort: { type: 'manual', itemIds: ids } }, strategy: { type: 'sequential' } });
+	const other = contentProgram(81, 1);
+	const parent = program(82, { type: 'sequence', entries: [{ id: uuid(83), programId: child.id, count: 6 }, { id: uuid(84), programId: other.id, count: 1 }], repeat: true, ordering: { type: 'shuffled-blocks', seed: 'fixture' } });
+	const initial = input([child, other, parent], [...episodes, media(1, 3600)], template([{ programId: parent.id, startSeconds: 0 }]), {
+		days: 3,
+		occupiedMedia: episodes.map(item => ({ mediaItemId: item.id, start: '2026-01-05T00:00:00Z', finish: '2026-01-11T00:00:00Z' })),
+	});
+	// Leave one collision-free episode so the old avoidance policy would skip others.
+	initial.occupiedMedia = initial.occupiedMedia!.slice(0, 5);
+	const first = generateTimelineDetailed(initial);
+	const parentState = first.proposedState.find(record => record.value.type === 'sequence')!;
+	if (parentState.value.type !== 'sequence') {
+		throw new Error('Expected sequence state');
+	}
+	expect(parentState.value.rotation!.remaining[0]).toBeGreaterThan(0);
+	expect(parentState.value.rotation!.remaining[0]).toBeLessThan(6);
+	const resumed = generateTimelineDetailed({ ...initial, startDate: '2026-01-08', state: JSON.parse(JSON.stringify(first.proposedState)) });
+	const full = generateTimelineDetailed({ ...initial, days: 6 });
+	expect([...first.segments, ...resumed.segments]).toEqual(full.segments);
+	const played = full.segments.filter(segment => ids.includes(segment.mediaItemId ?? '')).map(segment => segment.mediaItemId);
+	expect(played.length).toBeGreaterThan(12);
+	expect(played).toEqual(Array.from({ length: played.length }, (_, index) => ids[index % ids.length]));
+});
+
+it.each(['shuffle', 'random', 'weighted-random'] as const)('keeps %s avoidance optional without changing its normal rotation', strategy => {
+	const child = contentProgram(80, [1, 2, 3], strategy);
+	const initial = input([child], [media(1, 3600), media(2, 3600), media(3, 3600)], template([{ programId: child.id, startSeconds: 0 }]));
+	const baseline = generateTimelineDetailed(initial);
+	const firstId = baseline.segments.find(segment => segment.role === 'primary')!.mediaItemId!;
+	const occupiedMedia = [{ mediaItemId: firstId, start: '2026-01-05T00:00:00Z', finish: '2026-01-06T00:00:00Z' }];
+	const avoided = generateTimelineDetailed({ ...initial, occupiedMedia });
+	expect(avoided.segments.find(segment => segment.role === 'primary')!.mediaItemId).not.toBe(firstId);
+	const disabled = generateTimelineDetailed({ ...initial, occupiedMedia, schedule: { ...initial.schedule, avoidCrossChannelDuplicates: false } });
+	expect(disabled.segments).toEqual(baseline.segments);
+	expect(disabled.proposedState).toEqual(baseline.proposedState);
+	const allOccupied = initial.catalog.media.map(item => ({ ...occupiedMedia[0]!, mediaItemId: item.id }));
+	expect(generateTimelineDetailed({ ...initial, occupiedMedia: allOccupied }).segments).toEqual(baseline.segments);
+});

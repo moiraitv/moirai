@@ -27,8 +27,8 @@ const modes = [
 		<p class="program-section-description">Each child program’s Selection and Playback order determine which items it contributes. Sequence ordering arranges those selections; Shuffled allocations and Balanced rotation may change their placement within the cycle.</p>
 		<label v-if="modelValue === 'shuffled-blocks' || modelValue === 'shuffled-allocations'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="emit('update:seed', ($event.target as HTMLInputElement).value)" /></label>
 		<div class="program-playback-state">
-			<div class="program-playback-state-summary"><strong>Playback state</strong><span>Configured in template schedule slots</span></div>
-			<p>Choose “Continue persistently” or “Restart each day” under Advanced scheduling behavior for each slot that uses this program.</p>
+			<div class="program-playback-state-summary"><strong>Playback progress</strong></div>
+			<p>When assigned directly to a channel, this program continues from its saved position automatically. In a template, each slot can continue from its saved position or restart each day.</p>
 		</div>
 	</section>
 </template>

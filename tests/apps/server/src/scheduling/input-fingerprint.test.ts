@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { InputFingerprintContext } from '@server/scheduling/input-fingerprint.js';
+import { inputFingerprint, InputFingerprintContext } from '@server/scheduling/input-fingerprint.js';
 import { stableJsonFingerprint } from '@server/stable-json.js';
 
 it('retains canonical fingerprint bytes with shared objects, array order and optional values', () => {
@@ -34,4 +34,13 @@ it('reuses identical catalog scopes across channels without inspecting media aga
 	expect(reads).toBe(inspected);
 	expect(context.scope({ ...catalog }, new Set(['library']), new Set(), new Set())).not.toBe(first);
 	expect(reads).toBeGreaterThan(inspected);
+});
+
+
+it('normalizes the enabled duplicate policy while distinguishing channel opt-out', () => {
+	const schedule = { channelId: 'channel', defaultTemplateId: 'template', layers: [], defaultFiller: null, createdAt: '', updatedAt: '' };
+	const catalog = { media: [], groupParents: {}, groupTitles: {}, libraryNames: {}, libraryAvailability: {} };
+	const enabled = inputFingerprint(schedule, [], [], catalog);
+	expect(inputFingerprint({ ...schedule, avoidCrossChannelDuplicates: true }, [], [], catalog)).toBe(enabled);
+	expect(inputFingerprint({ ...schedule, avoidCrossChannelDuplicates: false }, [], [], catalog)).not.toBe(enabled);
 });

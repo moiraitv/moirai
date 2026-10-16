@@ -20,6 +20,8 @@ export const screenshotNames = [
 	'channel-editor-encoding.png',
 	'channel-editor-subtitles.png',
 	'channel-editor.png',
+	'channel-schedule-direct-program.png',
+	'channel-schedule-advanced.png',
 	'channel-schedule-boundaries.png',
 	'channel-schedule-conditional.png',
 	'channel-schedule-predicates.png',

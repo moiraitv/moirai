@@ -47,6 +47,7 @@ import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import TwoStepActionButton from '../components/TwoStepActionButton.vue';
 import ProgramEditor from '../components/programs/ProgramEditor.vue';
+import ChannelSchedulingSettings from '../components/schedules/ChannelSchedulingSettings.vue';
 import ChannelFillerEditor from '../components/schedules/ChannelFillerEditor.vue';
 import ChannelScheduleCatalog from '../components/schedules/ChannelScheduleCatalog.vue';
 import LayeredSchedulingGuide from '../components/schedules/LayeredSchedulingGuide.vue';
@@ -991,6 +992,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												<Pencil :size="16" />Edit {{ selectedLayer.programId ? 'Program' : 'Template' }}
 											</button>
 										</div>
+										<p v-if="selectedLayer.programId" class="schedule-playback-progress">Playback progress: <strong>Continue from saved position</strong></p>
 										<h3>Show this layer when</h3>
 										<SchedulePredicateEditor
 											v-model="selectedLayer.predicate"
@@ -1147,9 +1149,9 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 												<Pencil :size="16" />Edit {{ draft.defaultProgramId ? 'Program' : 'Template' }}
 											</button>
 										</div>
+										<p v-if="draft.defaultProgramId" class="schedule-playback-progress">Playback progress: <strong>Continue from saved position</strong></p>
 										<p class="base-inspector-description">
-											The base supplies programming whenever no higher-priority conditional layer
-											applies or when a conditional template explicitly falls through.
+											Plays when no other layer provides content.
 										</p>
 										<div
 											class="base-inspector-track"
@@ -1177,6 +1179,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 											<template #post-roll><FillerAssignmentEditor v-model="draft.defaultPostRoll" kind="post-roll" :programs="programs" heading="Channel default post-roll" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
 											<template #tail><TailFillerEditor v-model="draft.defaultTailFiller" :programs="programs" heading="Channel default tail filler" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
 										</FillerAssignmentsEditor>
+										<ChannelSchedulingSettings v-model="draft.avoidCrossChannelDuplicates" :disabled="saving || deleting" />
 										<ChannelFillerEditor v-model="draft.defaultFiller" :programs="programs" @edit-program="quickEditingProgramId = $event" />
 									</section>
 								</div>

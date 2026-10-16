@@ -6,9 +6,9 @@ import { captureSection } from './capture';
 
 test('previews sequence drafts and saved guides without refreshing for a rename', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const entries = sequenceProgramIds.map(programId => ({ id: randomUUID(), programId, count: 1 }));
 	const response = await page.request.post('/api/v1/programs', { headers: requestHeaders, data: {
-		name: 'Sequence Guide', config: { type: 'sequence', repeat: true, ordering: { type: 'balanced-rotation' },
-			entries: sequenceProgramIds.map((programId, index) => ({ id: randomUUID(), programId, count: 3 - index })) },
+		name: 'Sequence Guide', config: { type: 'sequence', repeat: true, ordering: { type: 'ordered' }, entries },
 	} });
 	expect(response.ok()).toBe(true);
 	const { id } = await response.json() as { id: string };
@@ -30,6 +30,10 @@ test('previews sequence drafts and saved guides without refreshing for a rename'
 	const day = preview.locator('.sequence-guide-day');
 	const viewportWidth = (await scroll.boundingBox())!.width - 2;
 	expect((await day.boundingBox())!.width / viewportWidth).toBeCloseTo(6, 1);
+	// Show one selection from each authored step before exercising shuffled ordering.
+	await expect.poll(() => preview.locator('.sequence-guide-segment[data-entry-id]').evaluateAll(elements =>
+		elements.slice(0, 3).map(element => element.getAttribute('data-entry-id')))).toEqual(entries.map(entry => entry.id));
+	await captureSection(page, preview, 'program-sequence-guide.png');
 	await scroll.evaluate(element => {
 		element.scrollLeft = 250; 
 	});
@@ -48,7 +52,6 @@ test('previews sequence drafts and saved guides without refreshing for a rename'
 	await scroll.evaluate(element => {
 		element.scrollLeft = 0; 
 	});
-	await captureSection(page, preview, 'program-sequence-guide.png');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs(?:\?.*)?$/);
 	await page.goto(`/schedules/programs?selected=${id}`);

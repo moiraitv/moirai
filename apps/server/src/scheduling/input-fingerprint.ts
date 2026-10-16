@@ -5,6 +5,9 @@ import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates } from './direct-program-templates.js';
 
+/** Stage the order-preserving collision policy for timelines committed by earlier versions. */
+const DUPLICATE_AVOIDANCE_POLICY_VERSION = 2;
+
 /** Immutable catalog projection shared by channels with identical source scopes. */
 interface FingerprintCatalogScope {
 	media: SchedulableMedia[];
@@ -228,7 +231,8 @@ export function inputFingerprint(
 
 	// Hash stable authored inputs and catalog eligibility data together.
 	return context.fingerprint({
-		schedule,
+		duplicateAvoidancePolicy: DUPLICATE_AVOIDANCE_POLICY_VERSION,
+		schedule: { ...schedule, avoidCrossChannelDuplicates: schedule.avoidCrossChannelDuplicates ?? true },
 		templates: selectedTemplates.map(template => context.playback(template)),
 		programs: selectedPrograms,
 		catalog: {

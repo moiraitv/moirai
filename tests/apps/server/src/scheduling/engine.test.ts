@@ -540,7 +540,7 @@ describe('schedule timeline engine', () => {
 		expect(titles.some((title, index) => index > 0 && title === titles[index - 1])).toBe(false);
 	});
 
-	it('avoids an exact-media cross-channel overlap when another candidate is available', () => {
+	it('preserves sequential order despite an exact-media cross-channel overlap', () => {
 		const items = [media(1, 3_600), media(2, 3_600)];
 		const sequential = contentProgram(10, [1, 2]);
 		const daily = template([{ programId: sequential.id, startSeconds: 0 }]);
@@ -551,7 +551,7 @@ describe('schedule timeline engine', () => {
 				finish: '2026-01-06T00:00:00Z',
 			}],
 		}));
-		expect(new Set(primaryTitles(result))).toEqual(new Set(['Item 2']));
+		expect(primaryTitles(result).slice(0, 4)).toEqual(['Item 1', 'Item 2', 'Item 1', 'Item 2']);
 	});
 
 	it('continues sequential state from a temporarily colliding last item', () => {

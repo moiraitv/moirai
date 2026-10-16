@@ -78,6 +78,8 @@ export interface SelectionContext {
 	now: string;
 	viewingPreferences: ViewingPreferenceScores;
 	selectionStart: string;
+	/** Whether this selection may prefer items not scheduled on another channel. */
+	avoidCrossChannelDuplicates?: boolean;
 	occupiedMedia: Array<{ mediaItemId: string; start: string; finish: string }>;
 	/** Shared per-generation lookup, including speculative filler selection contexts. */
 	occupiedMediaIndex?: ReadonlyMap<string, Array<{ start: number; finish: number }>>;
@@ -100,8 +102,12 @@ export function selectionDuration(media: SchedulableMedia, context: SelectionCon
 	return context.mediaDuration?.(media) ?? media.durationSeconds!;
 }
 
-/** Evaluate expanded duration only when the same item's occupied interval has not ended. */
+/** Respect selection policy before checking other-channel overlap with expanded duration. */
 export function hasSelectionCollision(media: SchedulableMedia, context: SelectionContext): boolean {
+	if (context.avoidCrossChannelDuplicates === false) {
+		return false;
+	}
+
 	if (context.occupiedMediaIndex) {
 		const intervals = context.occupiedMediaIndex.get(media.id);
 		if (!intervals?.length) {
@@ -660,6 +666,11 @@ function chooseContent(
 
 	const strategy = program.config.strategy;
 	const { fingerprint: stateConfig, compatible: legacyStateConfig } = stateFingerprints(program, context);
+
+	// Preserve leaf order even when the containing sequence shuffles blocks.
+	if (strategy.type === 'sequential') {
+		context = { ...context, avoidCrossChannelDuplicates: false };
+	}
 
 	if (context.fillerSelection) {
 		const initial: SelectionStateValue = strategy.type === 'sequential' ? { type: 'sequential', nextIndex: 0, lastItemId: null }

@@ -37,7 +37,7 @@ Use this for a channel that plays two movies from one genre, then two from anoth
 1. Create three **Content** Programs named **Adventure Movies**, **Comedy Movies**, and **Science Fiction Movies**. For each, select your Movies library and choose **Specific media items** to curate its films. Use distinct collections if you want to prevent the same movie from belonging to several blocks.
 2. Set each Program to **Shuffle (no repeats)** and save. This only controls which films are selected within that collection.
 3. Create a **Sequence** named **Double Features**. Add the three Programs with a count of **2** for each one. Choose **Shuffled blocks**, enable **Repeat sequence**, and save.
-4. Create a Template named **Double Feature Day** and assign **Double Features** to its initial all-day slot. Choose **Continue persistently** and retain **Allow overrun**, **Finish left item**, and **No Limit**.
+4. Create a Template named **Double Feature Day** and assign **Double Features** to its initial all-day slot. Choose **Continue from saved position** and retain **Allow overrun**, **Finish left item**, and **No Limit**.
 5. Preview the Template and save it. Assign it as the movie Channel's base Template in **Channel Schedules**, save, and inspect the Guide.
 
 ![Double Features Sequence with two selections per genre and Shuffled blocks ordering](/screenshots/example-double-features.png)
@@ -57,7 +57,7 @@ Use this for a sitcom channel that gives one show twice as many selections as ei
 1. Create a **Content** Program for each show. Select your Shows library, choose **Specific media groups**, and select the corresponding show. Set **Selection** to **Sequential** and save each Program.
 2. Create a **Sequence** named **Sitcom Rotation**. Add **Corner Café × 2**, **Flatmates × 1**, and **Office Hours × 1**, in that order.
 3. Choose **Balanced rotation**, enable **Repeat sequence**, and save. This favors Corner Café by count while spreading the selections through each cycle.
-4. Create a Template named **Sitcom Day**. Assign **Sitcom Rotation** to the initial all-day slot, select **Continue persistently**, and retain **Allow overrun**, **Finish left item**, and **No Limit**.
+4. Create a Template named **Sitcom Day**. Assign **Sitcom Rotation** to the initial all-day slot, select **Continue from saved position**, and retain **Allow overrun**, **Finish left item**, and **No Limit**.
 5. Preview and save the Template, then assign it to a sitcom Channel as the base Template in **Channel Schedules**. Save and check the Guide.
 
 ![Sitcom Rotation Sequence with 2/1/1 counts and Balanced rotation ordering](/screenshots/example-sitcom-rotation.png)
@@ -137,13 +137,13 @@ The previous step is remembered across cycles, so the next cycle can start diffe
 1. Open **Scheduling → Templates** and choose **New Template**. Name it **Cartoon Day**.
 2. Select the initial midnight-to-midnight slot and choose **Cartoon Lineup** as its **Program**.
 3. Keep **Allow overrun** as the item start rule, with **Finish left item** and **No Limit** at the outgoing boundary, so an episode can finish. Actual transitions may occur after the nominal boundary.
-4. Under **Advanced scheduling behavior**, choose **Continue persistently**. This carries both the sequence cycle and child episode progress into the next day. Choose **Restart each day** instead only if you want both to start over daily.
+4. Under **Advanced scheduling behavior**, choose **Continue from saved position**. This carries both the sequence cycle and child episode progress into the next day. Choose **Restart each day** instead only if you want both to start over daily.
 5. Check the resolved Template preview, then save. Confirm that episode selections follow the chosen mode and inspect any unavailable-source or gap warnings.
 6. Create or select your cartoon Channel. In **Channel Schedules**, select that Channel and assign **Cartoon Day** as its base Template. Save and check the Guide.
 
 ![Template slots and resolved programming preview](/screenshots/template-editor.png)
 
-![Playback state controls for continuing progress or restarting each day](/screenshots/template-slot-playback.png)
+![Playback progress controls for continuing progress or restarting each day](/screenshots/template-slot-playback.png)
 
 ## Weekdays with a weekend variation
 
@@ -153,7 +153,7 @@ This recipe uses the mixed cartoon lineup throughout the day, with predictable c
 2. Create another Sequence named **Weekend Cartoon Blocks**. Reference the same three Content Programs with counts 3/2/1, choose **Ordered**, and enable **Repeat sequence**.
 3. Create a Template named **Weekend Morning**. Split its initial slot at **8:00 AM**, then split the later slot at **12:00 PM**.
 4. Set the first and last slots to **No program — fall through**. Assign **Weekend Cartoon Blocks** to the 8:00 AM slot. Leave the item start and boundary settings as **Allow overrun**, **Finish left item**, and **No Limit**.
-5. Set the morning slot to **Continue persistently** and save the Template. Its episode progress is independent of the base lineup's progress.
+5. Set the morning slot to **Continue from saved position** and save the Template. Its episode progress is independent of the base lineup's progress.
 
 ![Weekend Morning Template with an 8 AM–noon cartoon block and fall-through slots before and after it](/screenshots/example-weekend-template.png)
 

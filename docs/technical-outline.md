@@ -982,10 +982,16 @@ Persistent selection state remains separate from configuration, allowing a daily
 tomorrow instead of restarting.
 
 Newly generated timeline material avoids scheduling the same exact media item concurrently on two
-channels when another candidate is eligible. The check covers primary and filler selection, rotates
-channel priority by day, and falls back to normal selection rather than creating dead air when every
-candidate conflicts. Already committed guide entries are never rewritten solely to remove a
-collision.
+channels when another candidate is eligible for Shuffle, Random, Weighted random, Similar Items,
+and Theme selections. Sequential content bypasses collision avoidance, including within shuffled
+sequence blocks and all filler positions; existing filler fit and deferral rules still apply.
+The optional channel schedule setting `avoidCrossChannelDuplicates` defaults to enabled when omitted
+and can disable avoidance for that channel without removing its occupancy from other channels.
+The setting persists in schedule JSON without a database migration. Policy and effective-setting
+fingerprints stage updates at the normal daily boundary without resetting selection state.
+The check covers primary and filler selection, rotates channel priority by day, and falls back to
+normal selection rather than creating dead air when every candidate conflicts. Already committed
+guide entries are never rewritten solely to remove a collision.
 
 The Programs catalog is searchable and filterable by content, sequence, similarity, or theme type.
 Content definitions distinguish AI selections from explicit items, groups, and library queries.

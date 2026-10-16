@@ -80,7 +80,7 @@ function removeArtwork(): void {
 			<p class="field-hint">PNG, JPEG, or WebP, up to {{ GUIDE_ARTWORK_MAX_BYTES / 1024 / 1024 }} MiB and {{ GUIDE_ARTWORK_MAX_DIMENSION }} pixels per dimension. Applied when you save the template.</p>
 			<p v-if="imageError" role="alert" class="error">{{ imageError }}</p>
 		</div>
-		<p class="field-hint">Changes the Guide page and XMLTV listings only. Playback is unchanged.</p>
+		<p class="field-hint">Individual items shows each episode or video in the Guide and connected TV apps. Single block shows one listing for the whole slot. This setting does not affect playback.</p>
 		<p v-if="slot.guide?.mode === 'block'" class="field-hint">
 			Leave the guide title empty to use the program name.
 			Scheduled boundaries keep the slot’s clock times, even if different content airs.

@@ -1,3 +1,4 @@
+import './documentation/playback-progress';
 import './documentation/subtitle-preview';
 import './documentation/subtitle-language';
 import './documentation/mid-roll';
@@ -11,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { rename, mkdir, writeFile, copyFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect } from '@playwright/test';
-import { SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplate } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type ScheduleTemplate, type TimelinePreview } from '@moirai/shared';
 import { authenticateAdministrator, E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD } from './authentication';
 import { test } from './documentation/fixture';
 import { serveReviewFixture } from './documentation/review-fixture';
@@ -351,7 +352,7 @@ test('captures Templates', { tag: '@docs-screenshot' }, async ({ page, documenta
 
 	await templateEditor.getByRole('button', { name: 'Advanced scheduling behavior' }).click();
 	const advanced = templateEditor.locator('.slot-advanced');
-	await expect(advanced.getByRole('combobox', { name: 'Playback state', exact: true })).toBeVisible();
+	await expect(advanced.getByRole('combobox', { name: 'Playback progress', exact: true })).toBeVisible();
 	await captureSection(page, advanced.getByTestId('slot-playback-fields'), 'template-slot-playback.png');
 	await captureSection(page, advanced.getByRole('group', { name: /^Outgoing boundary/u }), 'template-slot-boundary.png');
 	const slotFiller = advanced.getByRole('group', { name: 'Slot filler', exact: true });
@@ -460,6 +461,21 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 		element.scrollTop = 0;
 	});
 	await capture(page, 'channel-schedules.png');
+	await page.getByRole('button', { name: 'Advanced scheduling', exact: true }).click();
+	const duplicates = page.getByRole('checkbox', { name: 'Avoid simultaneous duplicates on other channels' });
+	await expect(duplicates).toBeChecked();
+	await captureSection(page, page.locator('.channel-scheduling-settings'), 'channel-schedule-advanced.png');
+	await duplicates.uncheck();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect.poll(async () => (await (await page.request.get(`/api/v1/channels/${channel.id}/schedule`)).json()).avoidCrossChannelDuplicates).toBe(false);
+	await page.goto(`/schedules/channels/${channel.id}`);
+	await page.getByRole('button', { name: 'Advanced scheduling', exact: true }).click();
+	await expect(duplicates).not.toBeChecked();
+	await duplicates.check();
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+	await expect(duplicates).not.toBeChecked();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 
 	// Capture the committed Guide only after the channel has real scheduled media.
 	await page.goto('/guide');
@@ -541,9 +557,45 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 	});
 	await newWeekday.getByRole('combobox', { name: 'Predicate type' }).selectOption('time-range');
 	await predicates.getByLabel('Starts', { exact: true }).fill('18:00');
+	const weekdayPreviewResponse = page.waitForResponse(response => {
+		if (!response.url().endsWith('/api/v1/channel-schedule-preview')) {
+			return false;
+		}
+
+		const input = response.request().postDataJSON();
+		return input.startDate === '2026-01-15'
+			&& input.schedule.layers[0]?.predicate.children.some((child: { type: string; endSeconds?: number }) =>
+				child.type === 'time-range' && child.endSeconds === 23 * 3600);
+	});
 	await predicates.getByLabel('Ends', { exact: true }).fill('23:00');
 	await predicates.getByLabel('Ends', { exact: true }).blur();
-	await expect(channelEditor.locator('.resolved-segment').first()).toBeVisible({ timeout: 30_000 });
+	// Thursday must resolve to the base, even while the weekend layer is selected.
+	const weekdayResponse = await weekdayPreviewResponse;
+	expect(weekdayResponse.ok(), await weekdayResponse.text()).toBe(true);
+	const weekdayPreview = await weekdayResponse.json() as TimelinePreview;
+	expect(weekdayPreview.segments.length).toBeGreaterThan(0);
+	expect(weekdayPreview.segments.every(segment => segment.templateId === template.id)).toBe(true);
+	await expect(channelEditor.locator(`.resolved-segment.role-primary[data-program-id="${sequenceProgramIds[0]}"]`).first()).toBeVisible();
+	await expect(channelEditor.locator(`.resolved-segment[data-program-id="${sequenceProgramIds[1]}"]`)).toHaveCount(0);
+
+	// Capture Saturday only after the real preview contains the evening override.
+	const weekendPreviewResponse = page.waitForResponse(response =>
+		response.url().endsWith('/api/v1/channel-schedule-preview')
+		&& response.request().postDataJSON().startDate === '2026-01-17');
+	await channelEditor.getByLabel('Preview date', { exact: true }).fill('2026-01-17');
+	await channelEditor.getByLabel('Preview date', { exact: true }).blur();
+	const weekendResponse = await weekendPreviewResponse;
+	expect(weekendResponse.ok(), await weekendResponse.text()).toBe(true);
+	const weekendPreview = await weekendResponse.json() as TimelinePreview;
+	const overrideSegments = weekendPreview.segments.filter(segment => segment.templateId === conditionalTemplate.id);
+	expect(overrideSegments.length).toBeGreaterThan(0);
+	expect(overrideSegments.every(segment => Date.parse(segment.start) >= Date.parse('2026-01-17T18:00:00Z')
+		&& Date.parse(segment.finish) <= Date.parse('2026-01-17T23:00:00Z'))).toBe(true);
+	expect(weekendPreview.segments.some(segment => segment.templateId === template.id)).toBe(true);
+	for (const programId of sequenceProgramIds.slice(0, 2)) {
+		await expect(channelEditor.locator(`.resolved-segment.role-primary[data-program-id="${programId}"]`).first()).toBeVisible();
+	}
+	await expect(channelEditor.getByRole('button', { name: 'Refresh Now', exact: true })).toBeEnabled();
 	await channelEditor.locator('.scheduling-workspace-scroll').evaluate((element) => {
 		element.scrollTop = 0;
 	});
@@ -585,7 +637,6 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	const { channel, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/channels');
 	await expect(page.getByRole('heading', { name: 'Channels', exact: true })).toBeVisible();
-	await capture(page, 'channels.png');
 	const regenerate = page.getByRole('button', { name: 'Regenerate schedule for Moonrise Classics', exact: true });
 	await expect(regenerate).toBeDisabled();
 	const assigned = await page.request.put(`/api/v1/channels/${channel.id}/schedule`, {
@@ -593,6 +644,13 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	});
 	expect(assigned.ok()).toBe(true);
 	await expect(regenerate).toBeEnabled();
+	// Wait for the channel row and its committed programming, not just the page heading.
+	const channelRow = page.locator('.guide-row').filter({
+		has: page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }),
+	});
+	await expect(channelRow.locator('.guide-channel-copy')).toContainText('Moonrise Classics');
+	await expect(channelRow.locator('.guide-programme.role-primary').first()).toBeVisible({ timeout: 30_000 });
+	await capture(page, 'channels.png');
 	const regenerationPath = `/api/v1/channels/${channel.id}/materialization/regenerate`;
 	let regenerationRequests = 0;
 	page.on('request', request => {
