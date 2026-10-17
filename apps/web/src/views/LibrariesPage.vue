@@ -93,9 +93,9 @@ function schedulePreviewRefresh(): void {
 	window.clearTimeout(previewRefreshTimer);
 	previewRefreshTimer = window.setTimeout(() => void loadContentPreviews(), 100);
 }
-/** Refresh the catalog after the creator has persisted a library. */
-async function created(): Promise<void> {
-	await router.push('/libraries');
+/** Continue in the created Library’s settings editor and refresh the catalog. */
+async function created(library: Library): Promise<void> {
+	await router.replace(`/libraries/${library.id}/settings`);
 	await librariesStore.load();
 	await loadContentPreviews();
 }

@@ -1014,7 +1014,6 @@ function handleKeydown(event: KeyboardEvent): void {
 /** Apply an updated library returned by the settings workflow. */
 async function finishSettings(updated: Library): Promise<void> {
 	library.value = updated;
-	await router.push({ path: `/libraries/${id.value}`, query: route.query });
 	actionError.value = '';
 	message.value = 'Library settings saved. Sync the library to apply source changes to the index.';
 	await librariesStore.load();

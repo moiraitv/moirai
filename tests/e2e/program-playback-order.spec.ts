@@ -49,7 +49,7 @@ for (const width of [1440, 390]) {
 		const disclosure = order.getByRole('button', { name: /Playback order/ });
 		await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
 		await expect(order.getByLabel('Sort selected media')).toHaveValue('date-added');
-		await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 		await expect(order.locator('.selected-item-copy strong')).toHaveText(['Episode 10', 'Episode 2', 'Episode 1']);
 		await disclosure.click();
 		await expect(disclosure).toContainText('Date Added to Program');
@@ -76,10 +76,12 @@ for (const width of [1440, 390]) {
 		await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
 		await expect(order.getByLabel('Sort selected media')).toHaveValue('manual');
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
-		await expect(page).toHaveURL(/\/schedules\/programs$/);
+		await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+		await expect(order.locator('.selected-item-copy strong')).toHaveText(['Episode 1', 'Episode 10', 'Episode 2']);
+		await expect(page).toHaveURL(`/schedules/programs/${programId}`);
 		await page.goto(`/schedules/programs/${programId}`);
 		await expect(order.locator('.selected-item-copy strong')).toHaveText(['Episode 1', 'Episode 10', 'Episode 2']);
-		await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 		await order.scrollIntoViewIfNeeded();
 		expect(await order.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 		await page.screenshot({ path: `test-results/playback-order-${width}.png`, fullPage: true });
@@ -96,7 +98,24 @@ test('defaults new episode selections and resets a changed draft to its saved ba
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
 	await expect(order.getByLabel('Sort selected media')).toHaveValue('date-added');
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+});
+
+test('keeps specific group review cards available after saving the open editor', async ({ page }) => {
+	program.config = { type: 'content', source: { type: 'group-collection', libraryId, groupIds: [showId] }, strategy: { type: 'sequential' } };
+	await page.route('**/api/v1/libraries/*/media-group-selection', route => route.fulfill({ json: [
+		{ id: showId, libraryId, kind: 'show', title: 'Space Station', year: 2026, yearEnd: null, childCount: 1, artworkUrl: null },
+	] }));
+	await page.goto(`/schedules/programs/${programId}`);
+	await expect(page.locator('.selected-collection-summary')).toContainText('Maximum');
+	await page.getByRole('textbox', { name: /^Name/u }).fill('Updated group Program');
+	await expect(page.getByRole('textbox', { name: /^Name/u })).toHaveValue('Updated group Program');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+	await page.getByRole('button', { name: 'Review Selection', exact: true }).click();
+	const drawer = page.getByRole('dialog', { name: 'Review selection' });
+	await expect(drawer.locator('.selected-item-copy strong')).toHaveText(['Space Station']);
+	await expect(drawer.getByRole('alert')).toHaveCount(0);
 });
 
 test('shows loading, a persistent failure, and recovery without claiming the selection is empty', async ({ page }) => {
@@ -140,7 +159,7 @@ test('drags a manual item and preserves missing references when saving', async (
 	await page.mouse.up();
 	await expect(order.locator('.selected-item-copy strong')).toHaveText(['Episode 2', 'Episode 1', 'Episode 10']);
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(page).toHaveURL(/\/schedules\/programs$/);
+	await expect(page).toHaveURL(`/schedules/programs/${programId}`);
 	expect(program.config).toMatchObject({ source: { sort: { type: 'manual', itemIds: [items[1]!.id, items[2]!.id, items[0]!.id, missingId] } } });
 });
 
@@ -151,6 +170,6 @@ test('offers explicit episode order for an AI selection while retaining its exis
 	await page.getByLabel('AI selection order').selectOption('episode');
 	await expect(page.locator('.program-playback-order')).toContainText('Season / episode');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(page).toHaveURL(/\/schedules\/programs$/);
+	await expect(page).toHaveURL(`/schedules/programs/${programId}`);
 	expect(program.config).toMatchObject({ source: { sort: { type: 'episode', direction: 'asc' } } });
 });

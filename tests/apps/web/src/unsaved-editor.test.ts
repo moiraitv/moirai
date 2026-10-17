@@ -39,3 +39,27 @@ describe('unsaved editor closing', () => {
 		expect(discard).toHaveBeenCalledTimes(expected === 'discard' ? 1 : 0);
 	});
 });
+
+it('closes retained work without treating the dismissal as a discard', async () => {
+	const clear = vi.fn();
+	const dismiss = vi.fn();
+	const flush = vi.fn(async () => true);
+	await closeUnsavedEditor({ dirty: true, key: 'retained', message: 'Save?',
+		retainedDraft: { flush, clear }, save: vi.fn(), discard: dismiss });
+	expect(flush).toHaveBeenCalledOnce();
+	expect(clear).not.toHaveBeenCalled();
+	expect(dismiss).toHaveBeenCalledOnce();
+	expect(activeConfirmation.value).toBeNull();
+});
+
+it('keeps save/discard protection when retaining work fails', async () => {
+	const clear = vi.fn();
+	const dismiss = vi.fn();
+	const closing = closeUnsavedEditor({ dirty: true, key: 'failed-retention', message: 'Save?',
+		retainedDraft: { flush: async () => false, clear }, save: vi.fn(), discard: dismiss });
+	await vi.waitFor(() => expect(activeConfirmation.value).not.toBeNull());
+	settleConfirmation('alternate');
+	await closing;
+	expect(clear).toHaveBeenCalledOnce();
+	expect(dismiss).toHaveBeenCalledOnce();
+});

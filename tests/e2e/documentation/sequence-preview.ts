@@ -35,7 +35,7 @@ test('previews sequence drafts and saved guides without refreshing for a rename'
 		elements.slice(0, 3).map(element => element.getAttribute('data-entry-id')))).toEqual(entries.map(entry => entry.id));
 	await captureSection(page, preview, 'program-sequence-guide.png');
 	await scroll.evaluate(element => {
-		element.scrollLeft = 250; 
+		element.scrollLeft = 250;
 	});
 	await page.getByRole('button', { name: /^Shuffled blocks / }).click();
 	await expect.poll(() => requests).toBe(initial + 1);
@@ -50,9 +50,10 @@ test('previews sequence drafts and saved guides without refreshing for a rename'
 	});
 	expect(new Set(colors).size).toBe(3);
 	await scroll.evaluate(element => {
-		element.scrollLeft = 0; 
+		element.scrollLeft = 0;
 	});
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs(?:\?.*)?$/);
 	await page.goto(`/schedules/programs?selected=${id}`);
 	await expect(preview.locator('.sequence-guide-segment').first()).toBeVisible();
@@ -61,7 +62,7 @@ test('previews sequence drafts and saved guides without refreshing for a rename'
 	await preview.scrollIntoViewIfNeeded();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	await scroll.evaluate(element => {
-		element.scrollLeft = element.scrollWidth; 
+		element.scrollLeft = element.scrollWidth;
 	});
 	expect(await scroll.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
 });

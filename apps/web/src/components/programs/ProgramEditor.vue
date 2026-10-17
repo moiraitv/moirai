@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ProgramAiSource from './ProgramAiSource.vue';
-import { useAiProgramDraft } from './ai-program-draft';
+import { useProgramDraft } from './program-draft';
 import { useAuthenticationStore } from '../../stores/authentication';
 import SequenceGuidePreview from './SequenceGuidePreview.vue';
 import { AI_DEFAULT_RESULT_COUNT, type AiResultCount, type SequenceOrdering } from '@moirai/shared';
@@ -35,7 +35,7 @@ import { useLibrariesStore } from '../../stores/libraries';
 import { useChannelsStore } from '../../stores/channels';
 import { useSchedulingStore } from '../../stores/scheduling';
 import { randomUuid } from '../../random-uuid';
-import { closeUnsavedEditor } from '../../unsaved-editor';
+import { closeUnsavedEditor, confirmDraftNavigation } from '../../unsaved-editor';
 import ProgramSelectionSummary from './ProgramSelectionSummary.vue';
 import ProgramPlaybackOrder from './ProgramPlaybackOrder.vue';
 import type { MediaSelectionProps } from './media-selection';
@@ -106,12 +106,13 @@ const genres = ref<MediaGenreFacet[]>([]);
 const queryPreviewRevision = ref(0);
 const editorOpen = computed(() =>
 	props.embedded ? Boolean(props.programId) : route.params.id !== undefined);
-const editingId = computed(() =>
+const savedIdentity = ref<string | null>(null);
+const editingId = computed(() => savedIdentity.value ?? (
 	props.embedded
 		? props.programId
 		: route.params.id === 'new'
 			? null
-			: String(route.params.id ?? ''));
+			: String(route.params.id ?? '')));
 const programs = computed(() => scheduling.overview?.programs ?? []);
 const statuses = computed(
 	() =>
@@ -252,7 +253,7 @@ const form = reactive({
 	repeat: true,
 	entries: [] as Array<{ id: string; programId: string; count: number }>,
 });
-const aiDraft = useAiProgramDraft(form, () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${editingId.value ?? 'new'}`);
+const aiDraft = useProgramDraft(form, () => editingId.value ?? 'new', () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${editingId.value ?? 'new'}`, () => isDirty.value);
 const { generation: aiGeneration, warning: aiDraftWarning } = aiDraft;
 const originalSnapshot = ref(JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT }));
 const previewProgramNames = computed(() => new Map(programs.value.map(program => [program.id, program.name])));
@@ -365,8 +366,8 @@ function resetForm(program?: SchedulingProgram): void {
 }
 
 /** Restore browser-owned AI work after loading the current saved program. */
-function openDraft(program?: SchedulingProgram, restore = true): void {
-	aiDraft.open(program?.updatedAt ?? '', () => resetForm(program), restore);
+async function openDraft(program?: SchedulingProgram, restore = true): Promise<void> {
+	await aiDraft.open(program?.updatedAt ?? '', () => resetForm(program), restore);
 }
 
 /** Load genre facets or paged source choices while discarding superseded responses. */
@@ -859,7 +860,7 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	saving: () => saving.value,
 	resetDraft: (program) => {
 		aiDraft.clear();
-		openDraft(program, false);
+		void openDraft(program, false);
 		error.value = '';
 	},
 	reloadDraft: async () => await Promise.all([
@@ -878,7 +879,7 @@ const programSaveDisabled = computed(() =>
 	saving.value || deleting.value || Boolean(aiGeneration.value) || subtitlesInvalid.value || !isProgramDraftValid(payload)
 	|| (Boolean(editingId.value) && !isDirty.value));
 
-/** Validate and save the program draft. */
+/** Commit the Program, leaving navigation to the active route guard when requested. */
 async function save(stayOnPage = false): Promise<boolean> {
 	if (programSaveDisabled.value) {
 		return false;
@@ -892,17 +893,26 @@ async function save(stayOnPage = false): Promise<boolean> {
 			: api.createProgram(payload());
 		const saved = await operation;
 		aiDraft.clear();
-		await scheduling.load();
+		const requestedCount = form.aiResultLimit;
+		resetForm(saved);
+		form.aiResultLimit = requestedCount;
+		savedIdentity.value = saved.id;
 		originalSnapshot.value = JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT });
-		if (stayOnPage) {
-			return true;
+		if (!props.embedded && !stayOnPage) {
+			allowRouteLeave = true;
+			try {
+				await router.replace({ path: `/schedules/programs/${saved.id}`, query: route.query });
+			}
+			finally {
+				allowRouteLeave = false;
+			}
 		}
-		if (props.embedded) {
-			emit('saved', saved.id);
+		await aiDraft.open(saved.updatedAt, () => {}, false);
+		await scheduling.load();
+		if (!stayOnPage) {
+			await Promise.all([loadSelectedItems(), loadSelectedGroups()]);
 		}
-		else {
-			await leaveEditor();
-		}
+		emit('saved', saved.id);
 		return true;
 	}
 	catch (cause) {
@@ -914,7 +924,7 @@ async function save(stayOnPage = false): Promise<boolean> {
 	return false;
 }
 
-/** Navigate after an explicit save or discard without prompting for the same draft twice. */
+/** Return to the collection after dismissal or deletion without rerunning the route guard. */
 async function leaveEditor(): Promise<void> {
 	allowRouteLeave = true;
 	try {
@@ -925,63 +935,39 @@ async function leaveEditor(): Promise<void> {
 	}
 }
 
-/** Save, discard, or retain an edited program before closing its editor. */
+/** Retain the Program on close, protecting pending work if browser recovery fails. */
 async function closeEditor(): Promise<void> {
-	if (form.type === 'content' && form.sourceType === 'ai' && !aiDraftWarning.value && !saving.value && !deleting.value) {
-		aiDraft.persist();
-		if (!aiDraftWarning.value) {
-			await (props.embedded ? emit('close') : leaveEditor());
-			return;
-		}
-	}
 	await closeUnsavedEditor({
-		blocked: saving.value || deleting.value,
-		dirty: isDirty.value,
-		key: `unsaved-program:${editingId.value ?? 'new'}`,
-		message: 'Save this program before closing?',
-		save: () => save(),
-		discard: () => {
-			aiDraft.clear();
-			return props.embedded ? emit('close') : leaveEditor();
-		},
+		blocked: saving.value || deleting.value, dirty: isDirty.value || Boolean(aiGeneration.value),
+		retainedDraft: aiDraft, isDirty: () => isDirty.value,
+		key: `unsaved-program:${editingId.value ?? 'new'}`, message: 'Save this program before closing?',
+		save, discard: () => props.embedded ? emit('close') : leaveEditor(),
 	});
 }
 
-/** Protect the current draft before navigating to another resource or page. */
+/** Retain the current draft before navigating to another resource or page. */
 async function confirmRouteLeave(): Promise<boolean> {
 	if (allowRouteLeave || !editorOpen.value) {
 		return true;
 	}
-	if (form.type === 'content' && form.sourceType === 'ai' && !aiDraftWarning.value && !saving.value && !deleting.value) {
-		aiDraft.persist();
-		if (!aiDraftWarning.value) {
-			return true;
-		}
-	}
-	let proceed = false;
-	await closeUnsavedEditor({
-		blocked: saving.value || deleting.value,
-		dirty: isDirty.value,
-		key: `unsaved-program:${editingId.value ?? 'new'}`,
-		message: 'Save this program before leaving?',
-		save: async () => {
-			proceed = await save(true);
-		},
-		discard: () => {
-			aiDraft.clear();
-			proceed = true;
-		},
+	return confirmDraftNavigation({
+		blocked: saving.value || deleting.value, dirty: isDirty.value || Boolean(aiGeneration.value),
+		retainedDraft: aiDraft, isDirty: () => isDirty.value,
+		key: `unsaved-program:${editingId.value ?? 'new'}`, message: 'Save this program before leaving?', save: () => save(true),
 	});
-	return proceed;
 }
 onBeforeRouteLeave(confirmRouteLeave);
 onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await confirmRouteLeave());
 
 watch(
 	() => [route.params.id, props.programId],
-	() => {
+	async () => {
+		if (String(route.params.id) === savedIdentity.value) {
+			return;
+		}
+		savedIdentity.value = null;
 		const program = programs.value.find((candidate) => candidate.id === editingId.value);
-		openDraft(program);
+		await openDraft(program);
 		void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	},
 );
@@ -1013,7 +999,7 @@ onMounted(async () => {
 				? Promise.resolve()
 				: channelsStore.loadCapabilities(),
 		]);
-		openDraft(programs.value.find((program) => program.id === editingId.value));
+		await openDraft(programs.value.find((program) => program.id === editingId.value));
 		await Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	}
 	catch (cause) {
@@ -1026,7 +1012,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	unsubscribeLiveEvents?.();
 });
-useDraftProtection(() => editorOpen.value && isDirty.value && (form.sourceType !== 'ai' || Boolean(aiDraftWarning.value)));
+useDraftProtection(() => editorOpen.value && (isDirty.value || Boolean(aiGeneration.value)) && aiDraft.unsafe.value);
 watch(() => [form.type, form.sourceType], () => {
 	if (form.type !== 'content' || form.sourceType !== 'ai') {
 		if (aiGeneration.value) {
@@ -1070,7 +1056,7 @@ watch(() => [form.type, form.sourceType], () => {
 					</p>
 				</ResourceEditorHeader>
 				<LoadingState v-if="initialLoading" label="Loading program editor…" />
-				<div v-if="!initialLoading" class="program-editor-scroll">
+				<div v-if="!initialLoading" :inert="saving || deleting" class="program-editor-scroll">
 					<ResourceUsage kind="program" :resource-id="editingId ?? undefined"><div class="program-editor-layout">
 						<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
 						<div class="program-editor-main">
@@ -1146,7 +1132,7 @@ watch(() => [form.type, form.sourceType], () => {
 											</select></label
 											>
 										</div>
-										<p v-if="aiDraftWarning" class="form-error" role="alert">{{ aiDraftWarning }}</p>
+
 										<ProgramAiSource
 											v-if="form.sourceType === 'ai'" v-model:prompt="form.aiPrompt"
 											v-model:selection-prompt="form.aiSelectionPrompt" v-model:max-results="form.aiResultLimit"
@@ -1232,13 +1218,15 @@ watch(() => [form.type, form.sourceType], () => {
 					</div></ResourceUsage>
 				</div>
 				<ResourceEditorActionBar
-					v-if="!initialLoading"
+					v-if="!initialLoading" :pending="!editingId || isDirty"
+					:draft-warning="aiDraftWarning" :draft-restored="aiDraft.recovered.value" :save-label="editingId ? 'Save' : 'Add'"
 					resource-type="Program"
 					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : ''"
-					:show-delete="!embedded && Boolean(editingId)" :busy="saving || deleting"
-					:deleting="deleting" :reset-disabled="!isDirty && !aiGeneration"
-					:save-disabled="programSaveDisabled" :saving="saving"
-					save-submits
+					:show-delete="!embedded && Boolean(editingId)"
+					:busy="saving || deleting" :deleting="deleting"
+					:reset-disabled="!isDirty && !aiGeneration" :save-disabled="programSaveDisabled"
+					:saving="saving" save-submits
+					@close="closeEditor"
 					@delete="deleteProgram" @reset="resetProgram"
 				/>
 			</form>

@@ -18,6 +18,7 @@ export function useResourceEditorRoute<T extends { id: string }>(options: Resour
 	const router = useRouter();
 	let leaving = false;
 	let initialized = '';
+	let adopting = false;
 
 	/** Request a new, saved, or duplicated resource through ordinary guarded navigation. */
 	function navigate(resource?: T, duplicate = false): Promise<unknown> {
@@ -34,6 +35,9 @@ export function useResourceEditorRoute<T extends { id: string }>(options: Resour
 
 	/** Let the editor resolve its draft before allowing a different route identity. */
 	async function confirmNavigation(): Promise<boolean> {
+		if (adopting) {
+			return true;
+		}
 		leaving = true;
 		try {
 			if (options.isOpen()) {
@@ -79,5 +83,20 @@ export function useResourceEditorRoute<T extends { id: string }>(options: Resour
 		}
 	}, { immediate: true });
 
-	return { navigate, finish };
+	/** Adopt a saved permalink unless a route guard already owns the pending destination. */
+	async function adopt(id: string): Promise<void> {
+		if (leaving) {
+			return;
+		}
+		adopting = true;
+		try {
+			await router.replace({ path: `${options.basePath()}/${id}`, query: { ...route.query, duplicate: undefined } });
+			initialized = `${route.path}:${String(route.query.duplicate ?? '')}`;
+		}
+		finally {
+			adopting = false;
+		}
+	}
+
+	return { navigate, finish, adopt };
 }

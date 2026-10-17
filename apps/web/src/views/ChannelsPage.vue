@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { z } from 'zod';
+import { useResourceDraft } from '../composables/useResourceDraft';
 import { useGuideRouteDate } from '../composables/useGuideRouteDate';
 import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
 import { channelNumberSuggestions, channelGroupSuggestions } from '../channel-identity-suggestions';
@@ -136,6 +138,7 @@ const logoDrag = reactive({
 	cropWidth: 1,
 	cropHeight: 1,
 });
+const cropFile = shallowRef<File | null>(null);
 const cropSource = shallowRef<{
 	url: string;
 	image: HTMLImageElement;
@@ -268,6 +271,7 @@ function existingLogoUrl(): string | null {
 
 /** Revoke the temporary image URL and reset crop selection state. */
 function disposeCropSource(): void {
+	cropFile.value = null;
 	if (cropSource.value) {
 		URL.revokeObjectURL(cropSource.value.url);
 	}
@@ -306,6 +310,37 @@ function channelFormSnapshot(): string {
 
 const channelFormDirty = computed(() =>
 	showForm.value && channelFormSnapshot() !== originalFormSnapshot.value);
+let restoredCrop = { x: 0, y: 0, width: 1, height: 1 };
+const retained = useResourceDraft({
+	kind: 'channel', identity: () => editingId.value ?? 'new',
+	nullableSchema: z.object({ form: channelCreateSchema }),
+	restoreNewBaseline: version => {
+		formBaseline.value = JSON.parse(version) as ChannelCreate;
+		const original = JSON.parse(originalFormSnapshot.value) as { form: ChannelCreate };
+		original.form = formBaseline.value;
+		originalFormSnapshot.value = JSON.stringify(original);
+	},
+	capture: () => ({ form, crop: { ...logoCrop }, removeLogo: removeLogoOnSave.value, removeFallback: removeFallbackOnSave.value }),
+	restore: fields => {
+		Object.assign(form, fields.form);
+		restoredCrop = fields.crop;
+		removeLogoOnSave.value = fields.removeLogo;
+		removeFallbackOnSave.value = fields.removeFallback;
+	},
+	dirty: () => channelFormDirty.value,
+	files: () => ({ ...(cropFile.value ? { logo: cropFile.value } : {}), ...(fallbackFile.value ? { fallback: fallbackFile.value } : {}) }),
+	restoreFiles: async files => {
+		if (files.logo) {
+			const source = await loadChannelLogoImage(files.logo);
+			disposeCropSource();
+			cropSource.value = source;
+			cropFile.value = files.logo;
+			Object.assign(logoCrop, restoredCrop);
+		}
+		fallbackFile.value = files.fallback ?? null;
+	},
+});
+const { warning: draftWarning, restoring: restoringDraft } = retained;
 const encodingInvalid = ref(false);
 const subtitlesInvalid = ref(false);
 const subtitleResetRevision = ref(0);
@@ -317,6 +352,7 @@ const channelSaveDisabled = computed(() =>
 
 /** Close the channel form after releasing any temporary crop image. */
 function finishCloseForm(): void {
+	retained.pause();
 	fallbackLoadSequence += 1;
 	disposeCropSource();
 	fallbackFile.value = null;
@@ -370,7 +406,8 @@ async function loadEditorFallback(channelId?: string): Promise<void> {
 /** Save, discard, or retain a channel draft before closing its editor. */
 async function closeForm(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value || deleting.value,
+		retainedDraft: retained, isDirty: () => channelFormDirty.value,
+		blocked: saving.value || deleting.value || restoringDraft.value,
 		dirty: channelFormDirty.value,
 		key: `unsaved-channel:${editingId.value ?? 'new'}`,
 		message: 'Save this channel before closing?',
@@ -472,6 +509,7 @@ async function selectLogo(event: Event): Promise<void> {
 		const source = await loadChannelLogoImage(file);
 		disposeCropSource();
 		cropSource.value = source;
+		cropFile.value = file;
 		logoCrop.x = 0;
 		logoCrop.y = 0;
 		logoCrop.width = source.width;
@@ -647,22 +685,25 @@ function retainFallbackDraftAfterPartialSave(saved: Channel): void {
 	originalFormSnapshot.value = channelFormSnapshot();
 	fallbackFile.value = pendingFallbackFile;
 	removeFallbackOnSave.value = pendingFallbackRemoval;
+	retained.setBaseline(JSON.stringify(formBaseline.value));
 }
 
 /** Adopt the asynchronously loaded default into the opening baseline without capturing user edits. */
 function encodingProfilesLoaded(ready: boolean): void {
-	if (ready && !encodingProfilesReady.value && !editingId.value && formBaseline.value) {
+	if (ready && !encodingProfilesReady.value && !editingId.value && formBaseline.value && !retained.restored.value) {
 		const encoding = { encodingProfileId: form.encodingProfileId ?? null, audio: cloneContractValue(form.audio), video: cloneContractValue(form.video) };
 		Object.assign(formBaseline.value, encoding);
 		const original = JSON.parse(originalFormSnapshot.value) as { form: ChannelCreate };
 		Object.assign(original.form, encoding);
 		originalFormSnapshot.value = JSON.stringify(original);
+		retained.setBaseline(JSON.stringify(formBaseline.value));
 	}
 	encodingProfilesReady.value = ready;
 }
 
 /** Open a blank channel form. */
-function openNewDraft() {
+async function openNewDraft(): Promise<void> {
+	retained.pause();
 	editorMode.value = 'create';
 	encodingProfilesReady.value = false;
 	Object.assign(form, defaults());
@@ -674,10 +715,12 @@ function openNewDraft() {
 	formBaseline.value = cloneContractValue(form) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
+	await retained.open(JSON.stringify(formBaseline.value));
 }
 
 /** Open an existing channel in the editor. */
-function openChannelDraft(channel: Channel) {
+async function openChannelDraft(channel: Channel, restore = true): Promise<void> {
+	retained.pause();
 	editorMode.value = 'edit';
 	const { id, createdAt, updatedAt, ...config } = channel;
 	void id;
@@ -692,6 +735,7 @@ function openChannelDraft(channel: Channel) {
 	formBaseline.value = cloneContractValue(config) as ChannelCreate;
 	originalFormSnapshot.value = channelFormSnapshot();
 	showForm.value = true;
+	await retained.open(JSON.stringify(formBaseline.value), restore);
 }
 /** Retain persisted identity without rebuilding a partially saved channel draft. */
 async function adoptSavedChannelRoute(id: string): Promise<void> {
@@ -722,7 +766,10 @@ async function save() {
 		}
 		else {
 			saved = await api.createChannel(payload());
+			retained.clear();
 			editingId.value = saved.id;
+			await retained.open(JSON.stringify(formBaseline.value), false);
+			retained.persist();
 			if (!leavingPage) {
 				await adoptSavedChannelRoute(saved.id);
 			}
@@ -754,7 +801,8 @@ async function save() {
 			void loadGuide().catch(() => undefined);
 			return;
 		}
-		finishCloseForm();
+		retained.clear();
+		await openChannelDraft(saved, false);
 		void loadGuide().catch((cause) => {
 			error.value = `Channel saved, but refreshing the lineup failed: ${errorMessage(cause)}`;
 		});
@@ -770,6 +818,7 @@ async function save() {
 }
 /** Restore the editor to the channel values captured when it opened. */
 function resetChannel(): void {
+	retained.clear();
 	if (!formBaseline.value) {
 		return;
 	}
@@ -781,6 +830,7 @@ function resetChannel(): void {
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
 	error.value = '';
+	void retained.open(JSON.stringify(formBaseline.value), false);
 }
 
 /** Confirm and delete the channel being edited. */
@@ -808,6 +858,7 @@ async function deleteChannel(): Promise<void> {
 	try {
 		suppressChannelEventsUntil = Date.now() + 5_000;
 		await api.deleteChannel(id);
+		retained.clear();
 		finishCloseForm();
 		await Promise.all([loadChannels(), scheduling.load()]);
 		await loadGuide();
@@ -850,12 +901,12 @@ watch(() => [route.params.id, editorLinksReady.value, channels.value], () => {
 		return;
 	}
 	if (route.params.id === 'new') {
-		openNewDraft();
+		void openNewDraft();
 	}
 	else if (typeof route.params.id === 'string' && editorLinksReady.value && channelsLoaded.value) {
 		const channel = channels.value.find(candidate => candidate.id === route.params.id);
 		if (channel) {
-			openChannelDraft(channel);
+			void openChannelDraft(channel);
 		}
 		else {
 			error.value = 'Channel not found. It may have been deleted.';
@@ -877,12 +928,14 @@ onMounted(() => {
 	void loadInitial();
 });
 onBeforeUnmount(() => {
+	retained.pause();
+	disposeCropSource();
 	unsubscribe();
 	if (liveRefreshTimer) {
 		clearTimeout(liveRefreshTimer);
 	}
 });
-useDraftProtection(() => showForm.value && channelFormDirty.value);
+useDraftProtection(() => showForm.value && channelFormDirty.value && retained.unsafe.value);
 </script>
 <template>
 	<section>
@@ -983,7 +1036,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<p class="eyebrow">{{ editorMode === 'edit' ? 'Edit' : 'New' }} channel</p>
 					<div class="resource-editor-title-with-help"><h2 id="channel-editor-title">{{ editorMode === 'edit' ? 'Edit Channel' : 'Create Channel' }}</h2><PageHelpButton label="Channels" topic-id="channels.manage" /></div>
 				</ResourceEditorHeader>
-				<div class="resource-editor-scroll">
+				<div :inert="saving || deleting || restoringDraft" class="resource-editor-scroll">
 					<div class="channel-identity-fields">
 						<label
 						><span>Number</span
@@ -1112,7 +1165,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 						<label><span>Subtitle fonts folder</span><input :value="form.subtitleFontsFolder ?? ''" placeholder="Use installed system fonts" @input="form.subtitleFontsFolder = ($event.target as HTMLInputElement).value.trim() || null" /></label>
 					</SubtitlePreferencesEditor>
 					<AudioPreferencesEditor v-model="form.audioPreferences" />
-					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="editorMode === 'create'" @ready="encodingProfilesLoaded">
+					<EncodingProfileSelector v-model="form.encodingProfileId" v-model:audio="form.audio" v-model:video="form.video" :use-default="editorMode === 'create' && !retained.restored.value" @ready="encodingProfilesLoaded">
 						<ChannelEncodingSettings v-model:audio="form.audio" v-model:video="form.video" :creating="editorMode === 'create'" :profile-id="form.encodingProfileId" :acceleration-prediction-text="accelerationPredictionText" :acceleration-detail="accelerationPrediction?.detail" @validation-change="encodingInvalid = $event" />
 					</EncodingProfileSelector>
 					<FormDisclosure v-model:open="guideTemplateExpanded" class="channel-guide-template-disclosure">
@@ -1143,16 +1196,18 @@ useDraftProtection(() => showForm.value && channelFormDirty.value);
 					<p v-if="error" class="notice error">{{ error }}</p>
 				</div>
 				<ResourceEditorActionBar
-					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''"
+					:pending="!editingId || channelFormDirty" :draft-warning="draftWarning" :draft-restored="retained.recovered.value"
+					:save-label="editingId ? 'Save' : 'Add'" :validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''"
 					resource-type="Channel"
 					:show-delete="editorMode === 'edit'"
-					:busy="saving || deleting"
+					:busy="saving || deleting || restoringDraft"
 					:deleting="deleting"
 					:reset-disabled="!channelFormDirty"
 					:save-disabled="channelSaveDisabled"
 					save-submits
 					:saving="saving"
 					:saving-label="saveStage"
+					@close="closeForm"
 					@delete="deleteChannel"
 					@reset="resetChannel"
 				/>

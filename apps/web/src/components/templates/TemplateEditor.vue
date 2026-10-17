@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { z } from 'zod';
+import { useResourceDraft } from '../../composables/useResourceDraft';
 import TailFillerEditor from '../schedules/TailFillerEditor.vue';
 import FillerAssignmentsEditor from '../schedules/FillerAssignmentsEditor.vue';
 import SlotTailFillerEditor from './SlotTailFillerEditor.vue';
@@ -54,7 +56,7 @@ import {
 import { useChannelsStore } from '../../stores/channels';
 import { useSchedulingStore } from '../../stores/scheduling';
 import { scheduleClockLabel, scheduleTwelveHourLabel } from '../../time-format';
-import { closeUnsavedEditor } from '../../unsaved-editor';
+import { closeUnsavedEditor, confirmDraftNavigation } from '../../unsaved-editor';
 import ResolvedSchedulePreview from './ResolvedSchedulePreview.vue';
 import TemplateTimelineEditor from './TemplateTimelineEditor.vue';
 import SlotGuideFields from './SlotGuideFields.vue';
@@ -105,12 +107,13 @@ const advancedOpen = useDisclosureState('template-advanced', false);
 const finiteBoundaryDrift = new Map<string, number>();
 const editing = computed(() =>
 	props.embedded ? Boolean(props.templateId) : route.params.id !== undefined);
-const editingId = computed(() =>
+const savedIdentity = ref<string | null>(null);
+const editingId = computed(() => savedIdentity.value ?? (
 	props.embedded
 		? props.templateId
 		: route.params.id === 'new'
 			? null
-			: String(route.params.id ?? ''));
+			: String(route.params.id ?? '')));
 const programs = computed(() => scheduling.overview?.programs ?? []);
 const templates = computed(() => scheduling.overview?.templates ?? []);
 const selectedSlot = computed(() =>
@@ -155,6 +158,27 @@ const usedPrograms = computed(() => {
 const isDirty = computed(() =>
 	draft.value ? guideArtwork.hasPending.value || JSON.stringify({ template: draft.value }) !== originalSnapshot.value : false);
 const hasPendingSave = computed(() => Boolean(draft.value) && (!editingId.value || isDirty.value));
+let restoredUploads: Record<string, string> = {};
+const retained = useResourceDraft({
+	kind: 'schedule-template', identity: () => editingId.value ?? 'new',
+	nullableSchema: z.object({ template: scheduleTemplateCreateSchema }),
+	restoreNewBaseline: version => {
+		originalSnapshot.value = version;
+	},
+	capture: () => ({ template: draft.value, uploads: guideArtwork.uploaded() }),
+	restore: fields => {
+		if (!fields.template || typeof fields.template.name !== 'string'
+			|| !Array.isArray(fields.template.slots) || !Array.isArray(fields.template.boundaries)) {
+			throw new Error('Incomplete template recovery');
+		}
+		draft.value = fields.template;
+		restoredUploads = fields.uploads;
+		selectedSlotId.value = draft.value?.slots[0]?.id ?? '';
+	},
+	dirty: () => isDirty.value,
+	files: guideArtwork.files, restoreFiles: files => guideArtwork.restore(files, restoredUploads),
+});
+const { warning: draftWarning, restoring: restoringDraft } = retained;
 const previewDraftFingerprint = computed(() => {
 	if (!draft.value) {
 		return '';
@@ -232,7 +256,8 @@ function snapshot(): string {
 }
 
 /** Clone an existing template or initialize a complete one-slot daily draft. */
-function loadDraft(): void {
+async function loadDraft(restore = true): Promise<void> {
+	retained.pause();
 	guideArtwork.reset();
 	addingSlot.value = false;
 	slotPlacement.value = null;
@@ -283,6 +308,7 @@ function loadDraft(): void {
 	preview.value = null;
 	previewStale.value = false;
 	originalSnapshot.value = snapshot();
+	await retained.open(originalSnapshot.value, restore);
 }
 
 /** Mark the materialized preview stale after authored settings change. */
@@ -624,8 +650,8 @@ const templateFormValid = computed(() =>
 const templateSaveDisabled = computed(() =>
 	saving.value || deleting.value || !hasPendingSave.value || !templateFormValid.value);
 
-/** Save the valid template draft and return to its collection or owning editor. */
-async function save(): Promise<boolean> {
+/** Commit the Template without replacing a destination already owned by a route guard. */
+async function save(stayOnPage = false): Promise<boolean> {
 	const body = templatePayload();
 	if (!body || templateSaveDisabled.value) {
 		return false;
@@ -638,13 +664,23 @@ async function save(): Promise<boolean> {
 		const saved = editingId.value
 			? await api.updateScheduleTemplate(editingId.value, body)
 			: await api.createScheduleTemplate(body);
-		await scheduling.load();
-		if (props.embedded) {
-			emit('saved', saved.id);
-			return true;
+		retained.clear();
+		guideArtwork.reset();
+		savedIdentity.value = saved.id;
+		draft.value = cloneContractValue(saved);
+		originalSnapshot.value = snapshot();
+		if (!props.embedded && !stayOnPage) {
+			allowRouteLeave = true;
+			try {
+				await router.replace(`/schedules/templates/${saved.id}`);
+			}
+			finally {
+				allowRouteLeave = false;
+			}
 		}
-
-		await leaveEditor();
+		await retained.open(originalSnapshot.value, false);
+		await scheduling.load();
+		emit('saved', saved.id);
 		return true;
 	}
 	catch (cause) {
@@ -657,8 +693,9 @@ async function save(): Promise<boolean> {
 }
 
 /** Restore the template and preview state to the baseline captured when it opened. */
-function resetTemplate(): void {
-	loadDraft();
+async function resetTemplate(): Promise<void> {
+	retained.clear();
+	await loadDraft(false);
 	error.value = '';
 	refreshPreviewNow();
 }
@@ -681,6 +718,7 @@ async function deleteTemplate(): Promise<void> {
 	error.value = '';
 	try {
 		await api.deleteScheduleTemplate(id);
+		retained.clear();
 		await scheduling.load();
 		await leaveEditor();
 	}
@@ -694,6 +732,7 @@ async function deleteTemplate(): Promise<void> {
 
 /** Leave the current template route or dismiss its embedded editor. */
 async function leaveEditor(): Promise<void> {
+	retained.pause();
 	if (props.embedded) {
 		emit('close');
 		return;
@@ -708,10 +747,11 @@ async function leaveEditor(): Promise<void> {
 	}
 }
 
-/** Save, discard, or retain an edited template before closing its editor. */
+/** Retain the template on close, protecting pending work if browser recovery fails. */
 async function closeEditor(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value || deleting.value,
+		retainedDraft: retained, isDirty: () => isDirty.value,
+		blocked: saving.value || deleting.value || restoringDraft.value,
 		dirty: hasPendingSave.value,
 		key: `unsaved-template:${editingId.value ?? 'new'}`,
 		message: 'Save this template before closing?',
@@ -813,9 +853,8 @@ function editProgram(programId: string | null): void {
 	}
 }
 
-/** Close the quick program editor and immediately refresh the resolved preview. */
+/** Refresh the resolved preview after an embedded Program save. */
 function finishProgramEdit(): void {
-	quickEditingProgramId.value = null;
 	requestPreview(0);
 }
 
@@ -827,24 +866,22 @@ async function confirmRouteLeave(): Promise<boolean> {
 		return true;
 	}
 
-	if (!hasPendingSave.value || await requestConfirmation({
-		key: `discard-template:${editingId.value ?? 'new'}`,
-		title: 'Discard Unsaved Changes?',
-		message: 'Leave this template without saving your changes?',
-		confirmLabel: 'Discard Changes',
-		destructive: true,
-	})) {
-		return true;
-	}
-
-	return false;
+	return confirmDraftNavigation({
+		blocked: saving.value || deleting.value || restoringDraft.value,
+		dirty: isDirty.value, retainedDraft: retained, isDirty: () => isDirty.value,
+		key: `unsaved-template:${editingId.value ?? 'new'}`, message: 'Save this template before leaving?', save: () => save(true),
+	});
 }
 onBeforeRouteLeave(confirmRouteLeave);
 onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await confirmRouteLeave());
-watch([() => route.params.id, () => props.templateId], () => {
+watch([() => route.params.id, () => props.templateId], async () => {
+	if (String(route.params.id) === savedIdentity.value) {
+		return;
+	}
+	savedIdentity.value = null;
 	// Release the previous template's nested editor after navigation is accepted.
 	quickEditingProgramId.value = null;
-	loadDraft();
+	await loadDraft();
 	refreshPreviewNow();
 });
 watch(previewDraftFingerprint, () => requestPreview(), {
@@ -857,7 +894,7 @@ onMounted(async () => {
 			scheduling.load(),
 			capabilitiesLoaded.value ? Promise.resolve() : channelsStore.loadCapabilities(),
 		]);
-		loadDraft();
+		await loadDraft();
 		refreshPreviewNow();
 	}
 	catch (cause) {
@@ -872,7 +909,7 @@ onBeforeUnmount(() => {
 	previewController?.abort();
 	clearPreviewTimer();
 });
-useDraftProtection(() => editing.value && hasPendingSave.value);
+useDraftProtection(() => editing.value && hasPendingSave.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -885,13 +922,13 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 			@click.self="closeEditor"
 		>
 			<div v-modal-focus="{ escape: closeEditor }" class="moirai-dialog scheduling-workspace-modal template-workspace" role="dialog" aria-modal="true" aria-label="Template editor">
-				<ResourceEditorHeader close-label="Close template editor" :disabled="saving || deleting" @close="closeEditor">
+				<ResourceEditorHeader close-label="Close template editor" :disabled="saving || deleting || restoringDraft" @close="closeEditor">
 					<p class="eyebrow">{{ !draft ? 'Template editor' : editingId ? 'Edit template' : 'New template' }}</p>
 					<div class="resource-editor-title-with-help"><h2>{{ !draft ? 'Loading Template' : editingId ? draft.name : 'Create Template' }}</h2><PageHelpButton label="Templates" topic-id="scheduling.templates" /></div>
 				</ResourceEditorHeader>
 				<LoadingState v-if="!draft" label="Loading template editor…" />
 				<template v-else>
-					<div class="scheduling-workspace-content">
+					<div :inert="saving || deleting || restoringDraft" class="scheduling-workspace-content">
 
 
 						<div class="scheduling-workspace-scroll">
@@ -1181,14 +1218,16 @@ useDraftProtection(() => editing.value && hasPendingSave.value);
 						/>
 					</div>
 					<ResourceEditorActionBar
-						resource-type="Template"
+						:pending="hasPendingSave" :draft-warning="draftWarning" :draft-restored="retained.recovered.value"
+						:save-label="editingId ? 'Save' : 'Add'" resource-type="Template"
 						:validation-message="error"
 						:show-delete="!embedded && Boolean(editingId)"
-						:busy="saving || deleting"
+						:busy="saving || deleting || restoringDraft"
 						:deleting="deleting"
 						:reset-disabled="!isDirty"
 						:save-disabled="templateSaveDisabled"
 						:saving="saving"
+						@close="closeEditor"
 						@delete="deleteTemplate"
 						@reset="resetTemplate"
 						@save="save"

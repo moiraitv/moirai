@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useResourceDraft } from '../composables/useResourceDraft';
+import { useRoute } from 'vue-router';
 import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
@@ -34,6 +36,15 @@ const form = reactive({ name: '', description: '', source: '' });
 const baseline = ref('');
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const valid = computed(() => creditTemplateCreateSchema.safeParse(form).success);
+const route = useRoute();
+const retained = useResourceDraft({
+	kind: 'credit-template', identity: () => id.value ?? `new:${String(route.query.duplicate ?? '')}`,
+	capture: () => form, restore: fields => {
+		Object.assign(form, fields);
+	}, dirty: () => dirty.value,
+});
+const { warning: draftWarning } = retained;
+
 let opener: HTMLElement | null = null;
 
 /** Load templates without displaying an empty state before successful retrieval. */
@@ -50,6 +61,7 @@ async function load(): Promise<void> {
 
 /** Open a saved template or a new editable copy of the converted starter. */
 async function openDraft(template?: CreditTemplate, duplicate = false): Promise<void> {
+	retained.pause();
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : template?.id;
 	readonlyTemplate.value = Boolean(template?.isBuiltin && !duplicate);
@@ -57,6 +69,9 @@ async function openDraft(template?: CreditTemplate, duplicate = false): Promise<
 	form.name = template ? template.name + (duplicate ? ' copy' : '') : 'New credit template';
 	form.source = template?.source ?? MUSIC_VIDEO_CREDIT_TEMPLATE;
 	baseline.value = JSON.stringify(form);
+	if (!readonlyTemplate.value) {
+		await retained.open(baseline.value);
+	}
 	editorError.value = '';
 	open.value = true;
 	await nextTick();
@@ -81,14 +96,15 @@ async function duplicateViewedTemplate(): Promise<void> {
 
 /** Close and restore focus after a completed save or confirmed discard. */
 function dismiss(): void {
+	retained.pause();
 	open.value = false;
 	opener?.focus();
 	editorRoute.finish();
 }
 
-/** Save the full validated draft and return to the updated collection. */
+/** Commit the validated draft and retain the editor at its saved identity. */
 async function save(): Promise<void> {
-	if (busy.value || previewBusy.value || readonlyTemplate.value || !valid.value) {
+	if (busy.value || previewBusy.value || readonlyTemplate.value || !valid.value || (id.value && !dirty.value)) {
 		return;
 	}
 	busy.value = true;
@@ -104,8 +120,12 @@ async function save(): Promise<void> {
 		else {
 			templates.value[index] = saved;
 		}
+		retained.clear();
+		Object.assign(form, { name: saved.name, description: saved.description, source: saved.source });
+		id.value = saved.id;
 		baseline.value = JSON.stringify(form);
-		dismiss();
+		await editorRoute.adopt(saved.id);
+		await retained.open(baseline.value, false);
 		try {
 			templates.value = await readWithRetry(() => api.creditTemplates());
 			loaded.value = true;
@@ -123,10 +143,17 @@ async function save(): Promise<void> {
 	}
 }
 
-/** Route close, backdrop, Escape, and navigation through one draft-discard flow. */
+/** Retain pending work on dismissal, protecting it with a prompt only if retention fails. */
 async function close(): Promise<void> {
-	await closeUnsavedEditor({ blocked: busy.value || previewBusy.value, dirty: dirty.value, key: 'credit-template',
+	await closeUnsavedEditor({ retainedDraft: retained, isDirty: () => dirty.value, blocked: busy.value || previewBusy.value, dirty: dirty.value, key: 'credit-template',
 		message: 'Save changes to this credit template?', save, discard: dismiss });
+}
+
+/** Discard pending changes and retain the latest committed baseline. */
+function resetDraft(): void {
+	retained.clear();
+	Object.assign(form, JSON.parse(baseline.value));
+	void retained.open(baseline.value, false);
 }
 
 /** Confirm permanent removal; referenced templates remain intact on a conflict. */
@@ -137,6 +164,7 @@ async function remove(): Promise<void> {
 	busy.value = true;
 	try {
 		await api.deleteCreditTemplate(id.value);
+		retained.clear();
 		dismiss();
 		await load();
 	}
@@ -163,7 +191,7 @@ const editorRoute = useResourceEditorRoute({
 function edit(template?: CreditTemplate, duplicate = false): void {
 	void editorRoute.navigate(template, duplicate);
 }
-useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
+useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -182,7 +210,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
 			<form v-modal-focus="{ escape: close }" class="moirai-dialog resource-editor-modal credit-template-editor" role="dialog" aria-modal="true" aria-labelledby="credit-editor-title" @submit.prevent="save">
 				<ResourceEditorHeader close-label="Close credit template" :disabled="busy || previewBusy" @close="close"><div class="credit-template-title"><div class="resource-editor-title-with-help"><h2 id="credit-editor-title">{{ readonlyTemplate ? 'View' : id ? 'Edit' : 'New' }} Credit Template</h2><PageHelpButton label="Credit templates" topic-id="playback.credit-templates" /></div><span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span></div></ResourceEditorHeader>
-				<div class="resource-editor-scroll">
+				<div :inert="busy" class="resource-editor-scroll">
 					<ResourceUsage kind="credit-template" :resource-id="id ?? undefined">
 						<div class="credit-template-metadata"><label class="resource-primary-field"><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyTemplate" required maxlength="120" /></label><label><span>Description</span><input v-model="form.description" type="text" :disabled="busy || readonlyTemplate" maxlength="500" placeholder="Describe when to use this template" /></label></div>
 						<p v-if="readonlyTemplate" class="credit-template-info"><Info :size="22" aria-hidden="true" /><span>Built-in templates are read-only. Duplicate this template to customize its credits.</span></p>
@@ -193,7 +221,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 						<p v-if="editorError" class="notice error">{{ editorError }}</p>
 					</ResourceUsage>
 				</div>
-				<ResourceEditorActionBar v-if="!readonlyTemplate" resource-type="Credit Template" :show-delete="Boolean(id)" :busy="busy || previewBusy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @reset="Object.assign(form, JSON.parse(baseline))" @delete="remove" />
+				<ResourceEditorActionBar v-if="!readonlyTemplate" :pending="!id || dirty" :draft-warning="draftWarning" :draft-restored="retained.recovered.value" :save-label="id ? 'Save' : 'Add'" resource-type="Credit Template" :show-delete="Boolean(id)" :busy="busy || previewBusy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @close="close" @reset="resetDraft" @delete="remove" />
 				<footer v-if="readonlyTemplate" class="resource-editor-action-bar credit-template-view-actions"><button class="button secondary" type="button" :disabled="previewBusy" @click="close">Close</button><button class="button secondary" type="button" :disabled="previewBusy" @click="duplicateViewedTemplate"><Copy :size="20" aria-hidden="true" />Duplicate</button></footer>
 			</form>
 		</div>

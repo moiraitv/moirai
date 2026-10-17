@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useResourceDraft } from '../../composables/useResourceDraft';
 import LibraryFields from './LibraryFields.vue';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
@@ -9,7 +10,7 @@ import { requestConfirmation } from '../../confirmation';
 import { errorMessage } from '../../error-message';
 import { useAnimatedDismissal } from '../../motion';
 import { cloneContractValue } from '../../reactive-clone';
-import { closeUnsavedEditor } from '../../unsaved-editor';
+import { closeUnsavedEditor, confirmDraftNavigation } from '../../unsaved-editor';
 import ResourceEditorActionBar from '../ResourceEditorActionBar.vue';
 import ResourceEditorHeader from '../ResourceEditorHeader.vue';
 
@@ -24,7 +25,7 @@ const saving = ref(false);
 const deleting = ref(false);
 const error = ref('');
 let allowRouteLeave = false;
-const baseline: LibraryUpdate = {
+let baseline: LibraryUpdate = {
 	name: props.library.name,
 	typeKey: props.library.typeKey,
 	sourceType: props.library.sourceType,
@@ -34,8 +35,14 @@ const baseline: LibraryUpdate = {
 	enabled: props.library.enabled,
 };
 const form = reactive<LibraryUpdate>(cloneContractValue(baseline));
-const originalSnapshot = JSON.stringify(baseline);
-const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot);
+const originalSnapshot = ref(JSON.stringify(baseline));
+const isDirty = computed(() => JSON.stringify(form) !== originalSnapshot.value);
+const retained = useResourceDraft({
+	kind: 'library', identity: () => props.library.id, capture: () => form,
+	nullableSchema: libraryUpdateSchema,
+	restore: fields => Object.assign(form, fields), dirty: () => isDirty.value,
+});
+const { warning: draftWarning } = retained;
 const formValid = computed(() => libraryUpdateSchema.safeParse({
 	...form,
 	sourceConfig: form.sourceConfig
@@ -59,7 +66,11 @@ async function save(): Promise<void> {
 				? { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null }
 				: undefined,
 		});
-		allowRouteLeave = true;
+		retained.clear();
+		Object.assign(form, { name: library.name, sourceConfig: cloneContractValue(library.sourceConfig) });
+		baseline = cloneContractValue(form);
+		originalSnapshot.value = JSON.stringify(baseline);
+		await retained.open(originalSnapshot.value, false);
 		emit('saved', library);
 	}
 	catch (cause) {
@@ -72,13 +83,16 @@ async function save(): Promise<void> {
 
 /** Restore every editable library setting to the baseline captured on open. */
 function reset(): void {
+	retained.clear();
 	Object.assign(form, cloneContractValue(baseline));
+	void retained.open(originalSnapshot.value, false);
 	error.value = '';
 }
 
 /** Save, discard, or retain library settings before closing the modal. */
 async function closeEditor(): Promise<void> {
 	await closeUnsavedEditor({
+		retainedDraft: retained, isDirty: () => isDirty.value,
 		blocked: saving.value || deleting.value,
 		dirty: isDirty.value,
 		key: `unsaved-library:${props.library.id}`,
@@ -107,6 +121,7 @@ async function remove(): Promise<void> {
 	error.value = '';
 	try {
 		await api.deleteLibrary(props.library.id);
+		retained.clear();
 		allowRouteLeave = true;
 		emit('deleted');
 	}
@@ -118,20 +133,20 @@ async function remove(): Promise<void> {
 	}
 }
 
-onMounted(() => dialog.value?.querySelector('input')?.focus());
+onMounted(async () => {
+	await retained.open(originalSnapshot.value);
+	dialog.value?.querySelector('input')?.focus();
+});
 /** Protect a library draft when its route or resource identity changes. */
 async function confirmNavigation(): Promise<boolean> {
-	return allowRouteLeave || !visible.value || (!saving.value && !deleting.value && (!isDirty.value || await requestConfirmation({
-		key: `discard-library:${props.library.id}`,
-		title: 'Discard Unsaved Changes?',
-		message: 'Leave without saving these library settings?',
-		confirmLabel: 'Discard Changes',
-		cancelLabel: 'Keep Editing',
-		destructive: true,
-	})));
+	return allowRouteLeave || !visible.value || confirmDraftNavigation({
+		blocked: saving.value || deleting.value, dirty: isDirty.value,
+		retainedDraft: retained, isDirty: () => isDirty.value,
+		key: `unsaved-library:${props.library.id}`, message: 'Save these library settings before leaving?', save,
+	});
 }
 defineExpose({ confirmNavigation });
-useDraftProtection(() => visible.value && isDirty.value);
+useDraftProtection(() => visible.value && isDirty.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -151,7 +166,7 @@ useDraftProtection(() => visible.value && isDirty.value);
 						<div class="resource-editor-title-with-help"><h2 id="library-settings-title">Library settings for {{ library.name }}</h2><PageHelpButton label="Libraries" topic-id="libraries.manage" /></div>
 					</ResourceEditorHeader>
 
-					<div class="resource-editor-scroll library-settings-scroll">
+					<div :inert="saving || deleting" class="resource-editor-scroll library-settings-scroll">
 						<LibraryFields :form="form" @update:form="Object.assign(form, $event)" />
 
 						<p class="library-settings-note">Changing the source path or library identity can require index reconciliation. Run a sync after saving to inspect the new source.</p>
@@ -159,7 +174,7 @@ useDraftProtection(() => visible.value && isDirty.value);
 					</div>
 
 					<ResourceEditorActionBar
-						resource-type="Library"
+						:pending="isDirty" :draft-warning="draftWarning" :draft-restored="retained.recovered.value" resource-type="Library"
 						show-delete
 						:busy="saving || deleting"
 						:deleting="deleting"
@@ -167,6 +182,7 @@ useDraftProtection(() => visible.value && isDirty.value);
 						:save-disabled="!isDirty || !formValid"
 						save-submits
 						:saving="saving"
+						@close="closeEditor"
 						@delete="remove"
 						@reset="reset"
 					/>

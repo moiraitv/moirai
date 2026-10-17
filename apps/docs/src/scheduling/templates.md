@@ -60,13 +60,13 @@ Create the ![](/icons/list-video.svg) Programs you want to use first, then open 
 
 This example has three slots and preview warnings where the selected movies leave gaps. Adjust the slot rules or filler before relying on the lineup.
 
-To remove a slot, select it and activate **Delete selected slot** twice to confirm the draft change. You cannot remove the final remaining slot. **Reset** discards pending edits after confirmation; **Save** stores the valid draft and closes the editor. If saving fails, the editor stays open with your changes.
+To remove a slot, select it and activate **Delete selected slot** twice to confirm the draft change. You cannot remove the final remaining slot. Pending edits, including selected guide artwork, are retained automatically in this browser. Close or reload the editor, then reopen the same Template or New Template to continue. **Add** creates a Template and **Save** commits further changes. **Reset** discards pending edits after confirmation and restores the latest saved values.
 
 ## Choose how a slot appears in the guide
 
 ![Slot guide title, description, and timing controls](/screenshots/template-slot-guide.png)
 
-Use **Guide artwork (optional)** under **Single block** to choose an image from your computer. PNG, JPEG, and WebP images can be up to 10 MiB and 4096 pixels per dimension. The preview keeps the image’s proportions; the Guide fits it to each listing. Choose **Replace image** to change it or confirm **Remove** to clear it. Artwork changes take effect when you save the template; Reset or discarding the draft restores the saved artwork. The same image is included in Standard XMLTV for external guide clients.
+Use **Guide artwork (optional)** under **Single block** to choose an image from your computer. PNG, JPEG, and WebP images can be up to 10 MiB and 4096 pixels per dimension. The preview keeps the image’s proportions; the Guide fits it to each listing. Choose **Replace image** to change it or confirm **Remove** to clear it. Artwork changes take effect when you save the template; Reset restores the saved artwork; closing retains pending artwork in this browser. The same image is included in Standard XMLTV for external guide clients.
 
 In the selected slot, use **Guide output → Single block** to show one listing such as “Rock Music” instead of each video. Leave **Guide title** empty to use the slot’s program name, or enter a custom title such as “Rock Music”. Optionally add a description, and choose **Guide timing**:
 

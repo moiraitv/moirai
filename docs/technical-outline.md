@@ -243,8 +243,20 @@ excluding itself, and shows up to three prefix matches. Existing groups supply a
 suggestions without additional queries. Server-confirmed channel saves update the shared list
 immediately and invalidate older catalog requests; lineup and guide refreshes run in the background. Numeric fields request mobile numeric keyboards; compact
 resource-editor footers retain accessible action names and reset confirmation with icon controls.
-Successful template and channel-schedule saves close their editors, including saves requested
-through the unsaved-changes dialog; failed saves preserve the open draft.
+Core resource editors retain incomplete form drafts synchronously in account/resource-scoped browser
+storage, with duplication-source identities kept separate. Programs, schedule templates, channels,
+channel schedules, filler presets, encoding profiles, credit/guide templates, and library creation
+and settings share recovery and Save/Close behavior, including embedded editors. Selected artwork,
+logo sources/crops, and fallback videos retain their files in IndexedDB through `idb`; file writes
+occur only when selections change and complete before in-app dismissal. Browser quotas can prevent
+retention, particularly for large videos. Failed retention keeps persistent warnings and existing
+save/discard protection; retained drafts require no discard prompt on close or navigation.
+Successful recovery shows a dismissible toast after fields and selected files finish restoring.
+Add/Save commits without dismissing the editor; successful creation adopts the saved permalink,
+and clean editors show secondary Close. Reset restores the latest committed baseline after its
+existing two-step confirmation. Save, Reset, and deletion clear recovery data; closing and sign-out
+retain it for the same account. Baseline changes warn before saving restored work. Recovery data is
+versioned independently of server contracts and does not sync across devices or merge across tabs.
 
 Reusable XMLTV guide templates use Liquid to generate `<channel>` and `<programme>` fragments, with
 a tab per listing kind. Interpolated values are XML-escaped and file-loading tags are disabled.
@@ -728,7 +740,7 @@ aborts the job, including a start that has not been accepted yet.
 Server shutdown cancels running work. Results expire one hour after completion; retention is
 bounded to 32 jobs with two running per administrator. Cancellation frees the retained slot while
 briefly blocking the same ID from starting late. GET and DELETE enforce creator ownership.
-Validated browser drafts retain AI fields, the prompt that produced the current selection, and the job ID under account/program-specific keys.
+Program browser drafts retain AI fields, the prompt that produced the current selection, and the job ID under account/program-specific keys; earlier AI-only drafts migrate on first open.
 Closing retains the draft; saving or resetting clears it. Restoration checks the saved program
 revision and warns about conflicting edits. Save remains blocked while a job is pending. Editing the prompt after generation warns that saving retains the previous selection. Errors or incomplete streams preserve the previous selection. AI selections reuse the full
 selection review drawer with search and two-step draft exclusions. Review fetches indexed cards

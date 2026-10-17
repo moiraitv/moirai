@@ -187,6 +187,6 @@ Save the Channel and test a video with a known matching subtitle track. Check th
 
 ## Save and verify
 
-Choose **Save** when the draft is valid, or **Reset** and confirm to discard pending changes. Closing an edited profile prompts you to handle unsaved changes. **Delete Channel** permanently removes the ![](/icons/tv-minimal.svg) Channel after confirmation; it is not a way to discard edits.
+Pending Channel edits, selected logos and crop settings, and selected fallback videos are retained automatically in this browser. Choose **Add** to create a new Channel or **Save** to commit changes. **Reset**, once confirmed, restores the latest saved values. **Delete Channel** permanently removes the ![](/icons/tv-minimal.svg) Channel after confirmation; it is not a way to discard edits.
 
 After saving, check the ![](/icons/calendar-days.svg) Guide and test live playback in the client you intend to use. Profile settings control output; the assigned ![](/icons/tv-minimal-play.svg) Channel Schedule still determines what plays and when.

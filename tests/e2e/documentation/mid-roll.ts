@@ -163,7 +163,7 @@ test('configures all filler types and captures clock and random budgets', { tag:
 			await mode.selectOption('remaining');
 		}
 		const saved = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/v1/filler-presets'));
-		await editor.getByRole('button', { name: 'Save', exact: true }).click();
+		await editor.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
 		const response = await saved;
 		expect(response.ok()).toBe(true);
 		const preset = await response.json();
@@ -176,7 +176,7 @@ test('configures all filler types and captures clock and random budgets', { tag:
 		await panel.getByRole('combobox', { name: 'Preset', exact: true }).selectOption(preset.id);
 		await panel.getByRole('combobox', { name: 'Source Program', exact: true }).selectOption(program.id);
 		const updated = page.waitForResponse(result => result.request().method() === 'PATCH' && result.url().endsWith(`/api/v1/schedule-templates/${template.id}`));
-		await templateEditor.getByRole('button', { name: 'Save', exact: true }).click();
+		await templateEditor.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
 		expect((await updated).ok()).toBe(true);
 		const persisted = await (await page.request.get(`/api/v1/schedule-templates/${template.id}`, { headers: requestHeaders })).json();
 		const field = kind === 'tail' ? 'defaultFiller' : kind === 'pre-roll' ? 'defaultPreRoll' : 'defaultPostRoll';

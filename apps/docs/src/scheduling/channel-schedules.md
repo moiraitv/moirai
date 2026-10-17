@@ -127,7 +127,7 @@ Use **Preview date** and **Refresh Now** to inspect the actual lineup. Test a da
 
 Hover over a guide block to see a zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. Hover, focus, or tap a guide block to inspect the actual items within it; dead-air diagnostics continue to use actual playback times. 
 
-Choose **Save** to store the schedule and return to the channel schedule list. If saving fails, the editor stays open with your changes; **Reset** discards pending changes after confirmation.
+Pending schedule edits are retained automatically in this browser. **Add** creates a new schedule and **Save** commits changes to an existing one. **Reset** discards pending changes after confirmation and restores the latest saved schedule.
 
 Saved changes normally become active at the next local midnight, protecting programming that has already been committed. When offered, **Apply after current item** brings a change forward without cutting the item viewers are currently watching.
 

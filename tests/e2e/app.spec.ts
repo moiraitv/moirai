@@ -63,6 +63,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Path Moirai scans').fill(mediaRoot);
 	await expect(addLibrary).toBeEnabled();
 	await addLibrary.click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+	await page.goto('/libraries');
 
 	const libraryRow = page.locator('.library-row').filter({
 		has: page.getByRole('link', { name: `Open library ${libraryName}`, exact: true }),
@@ -109,7 +111,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
 	const saveLibrarySettings = librarySettings.getByRole('button', { name: 'Save', exact: true });
 	const resetLibrarySettings = librarySettings.getByRole('button', { name: 'Reset', exact: true });
-	await expect(saveLibrarySettings).toBeDisabled();
+	await expect(librarySettings.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(resetLibrarySettings).toBeDisabled();
 	await librarySettings.getByLabel('Name').fill(`${libraryName} Draft`);
 	await expect(saveLibrarySettings).toBeEnabled();
@@ -118,7 +120,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(librarySettings.getByRole('button', { name: 'Confirm Reset' })).toBeVisible();
 	await librarySettings.getByRole('button', { name: 'Confirm Reset' }).click();
 	await expect(librarySettings.getByLabel('Name')).toHaveValue(libraryName);
-	await expect(saveLibrarySettings).toBeDisabled();
+	await expect(librarySettings.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(resetLibrarySettings).toBeDisabled();
 	const deleteLibrary = librarySettings.getByRole('button', { name: 'Delete Library' });
 	await deleteLibrary.click();
@@ -354,12 +356,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.goto('/guide');
 	await expect(page.getByRole('heading', { name: 'No channels configured' })).toBeVisible();
 	await page.getByRole('link', { name: 'Create Channel' }).click();
-	await expect(page).toHaveURL(/\/channels\?new=1$/);
+	await expect(page).toHaveURL(/\/channels\/new$/);
 	await page.addStyleTag({ content: '.modal, .modal-backdrop { display: none !important; }' });
 	await expect(page.getByRole('heading', { name: /(?:Edit|Create) Channel/ })).toBeVisible();
 	await page.locator('.channel-encoding-disclosure > button').click();
 	await expect(page.locator('.acceleration-prediction')).toBeVisible();
-	const saveChannel = page.getByRole('button', { name: 'Save', exact: true });
+	const saveChannel = page.getByRole('button', { name: 'Add', exact: true });
 	const disabledScheduleAction = page.getByRole('button', { name: 'Manage Layered Schedule' });
 	await expect(saveChannel).toBeDisabled();
 	await expect(page.getByRole('button', { name: 'Delete Channel' })).toHaveCount(0);
@@ -374,6 +376,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByLabel('Name').fill(channelName);
 	await expect(saveChannel).toBeEnabled();
 	await saveChannel.click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).toHaveURL(/\/channels$/);
 	await expect(page.getByText(channelName)).toBeVisible();
 	await expect(page.getByLabel('Seven-day channel guide')).toBeVisible();
@@ -382,17 +385,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
 	await expect(page.getByRole('heading', { name: /(?:Edit|Create) Channel/ })).toBeVisible();
 	await expect(page.getByLabel('Name')).toHaveValue(channelName);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
 	await page.getByLabel('Name').fill(`${channelName} Draft`);
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Manage Layered Schedule' })).toBeDisabled();
 	await page.keyboard.press('Escape');
-	const unsavedChannelDialog = page.getByRole('alertdialog', { name: 'Save Changes?' });
-	await expect(unsavedChannelDialog.getByRole('button', { name: 'Save Changes' })).toBeVisible();
-	await expect(unsavedChannelDialog.getByRole('button', { name: 'Discard Changes' })).toBeVisible();
-	await unsavedChannelDialog.getByRole('button', { name: 'Cancel' }).click();
-	await expect(unsavedChannelDialog).toBeHidden();
+	await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	await page.getByRole('button', { name: `Edit ${channelName}` }).click();
 	await expect(page.getByLabel('Name')).toHaveValue(`${channelName} Draft`);
 	await page.getByRole('button', { name: 'Delete Channel' }).click();
 	const deleteChannelDialog = page.getByRole('alertdialog', { name: 'Delete Channel?' });
@@ -401,7 +401,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset' }).click();
 	await expect(page.getByLabel('Name')).toHaveValue(channelName);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(page.getByRole('link', { name: 'Manage Layered Schedule' })).toBeVisible();
 	await page.getByLabel('Name').fill(`${channelName} Edited`);
 	await page.locator('input[type="file"][accept*=".mp4"]').setInputFiles({
@@ -424,7 +424,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.mouse.down();
 	await page.mouse.move(handleBox!.x - 60, handleBox!.y + handleBox!.height / 2);
 	await page.mouse.up();
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByText(`${channelName} Edited`)).toBeVisible({ timeout: 15_000 });
 
 	const savedLogo = page
@@ -442,7 +443,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 
 	await page.getByRole('button', { name: `Edit ${channelName} Edited` }).click();
 	await page.getByLabel('Name').fill(`${channelName} Preserved`);
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	const preservedLogo = page
 		.locator('.guide-channel-cell')
 		.filter({ hasText: `${channelName} Preserved` })
@@ -473,8 +475,9 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(fallbackEditor).toContainText('dead-air.mp4');
 	await expect(fallbackEditor.locator('video')).toBeVisible();
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
-	await page.getByRole('button', { name: 'Discard Changes' }).click();
 	await page.getByRole('button', { name: `Edit ${channelName} Preserved` }).click();
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
 	await expect(page.locator('.fallback-filler-editor')).toContainText('channel-fallback.mp4');
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
 
@@ -561,7 +564,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	const programTypes = page.getByRole('radiogroup', { name: 'Program type' });
 	await expect(programTypes).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Content/ })).toBeChecked();
-	const saveProgram = page.getByRole('button', { name: 'Save', exact: true });
+	const saveProgram = page.getByRole('button', { name: 'Add', exact: true });
 	await expect(saveProgram).toBeDisabled();
 	await expect(
 		page.getByLabel('Source type').getByRole('option', { name: /Exact item/ }),
@@ -724,11 +727,13 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.locator('.source-picker-list img').first()).toBeVisible();
 	const seasonProgramName = `${programName} Selected Seasons`;
 	await page.getByLabel('Name').fill(seasonProgramName);
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs$/);
 	await page.getByRole('link', { name: 'New Program' }).click();
 	await page.getByLabel('Name').fill(`${programName} Follow-up`);
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs$/u);
 	const programCard = page.locator('.program-management-row').filter({
 		has: page.getByRole('button', { name: programName, exact: true }),
@@ -756,12 +761,12 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Close program inspector' }).click();
 	await programCard.locator('.program-management-identity').click();
 	await page.locator('.program-inspector').getByRole('link', { name: 'Edit Program', exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Delete Program' })).toBeVisible();
 	await expect(page.locator('.resource-editor-action-bar').getByRole('button')).toHaveText([
 		'Delete Program',
 		'Reset',
-		'Save',
+		'Close',
 	]);
 	await page.getByLabel('Name').fill(`${programName} Draft`);
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
@@ -772,7 +777,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset' }).click();
 	await expect(page.getByLabel('Name')).toHaveValue(programName);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(page.getByRole('radio', { name: /Content/ })).toHaveCount(0);
 	await expect(page.getByLabel('Source type')).toHaveCount(0);
 	await expect(page.getByLabel('Library')).toHaveCount(0);
@@ -885,7 +890,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'No templates yet' })).toBeVisible();
 	await page.getByRole('link', { name: 'Create Your First Template' }).click();
 	await expect(page.getByRole('dialog', { name: 'Template editor' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Delete Template' })).toHaveCount(0);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByLabel('Template name').fill(templateName);
@@ -966,7 +971,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(nestedProgramEditor).toBeVisible();
 	await expect(nestedProgramEditor.getByRole('button', { name: 'Delete Program' })).toHaveCount(0);
 	await nestedProgramEditor.getByLabel('Name').fill(`${programName} Quick Edit`);
-	await nestedProgramEditor.getByRole('button', { name: 'Save', exact: true }).click();
+	await nestedProgramEditor.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(nestedProgramEditor).toBeHidden();
 	await expect(page.getByLabel('Template name')).toHaveValue(unsavedTemplateName);
 	await expect(page.getByLabel('Program').first()).toContainText(`${programName} Quick Edit`);
@@ -992,21 +998,22 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(templateBoundary.getByLabel('Fallback')).toBeDisabled();
 	await expect(templateBoundary.getByLabel('Maximum early start (minutes)')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Preview resolved schedule' })).toBeVisible();
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/templates$/);
 	await expect(page.getByRole('dialog', { name: 'Template editor', exact: true })).toBeHidden();
 	await expect(page.locator('.notice.error')).toHaveCount(0);
 	await page.getByRole('link', { name: `Edit ${templateName}`, exact: true }).click();
 	await page.reload();
 	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Delete Template' })).toBeVisible();
 	await page.getByLabel('Template name').fill(`${templateName} Draft`);
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset' }).click();
 	await expect(page.getByLabel('Template name')).toHaveValue(templateName);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await page.getByRole('button', { name: 'Delete Template' }).click();
 	const deleteTemplateDialog = page.getByRole('alertdialog', { name: 'Delete Template?' });
 	await expect(deleteTemplateDialog).toBeVisible();
@@ -1034,7 +1041,7 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(channelScheduleCard.locator('.schedule-channel-title a')).toHaveCount(0);
 	await expect(channelScheduleCard.locator('.schedule-channel-open')).toHaveCount(0);
 	await channelScheduleCard.getByRole('link', { name: 'Add template' }).click();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Delete Channel Schedule' })).toHaveCount(0);
 	const applyAfterCurrent = page.getByRole('button', { name: 'Apply After Current Item' });
 	await expect(applyAfterCurrent).toBeDisabled();
@@ -1065,7 +1072,8 @@ test('indexes a library and creates a channel', async ({ page }) => {
 	await expect(nestedTemplateEditor.getByRole('button', { name: 'Delete Template' })).toHaveCount(0);
 	const quickTemplateName = `${templateName} Quick Edit`;
 	await nestedTemplateEditor.getByLabel('Template name').fill(quickTemplateName);
-	await nestedTemplateEditor.getByRole('button', { name: 'Save', exact: true }).click();
+	await nestedTemplateEditor.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(nestedTemplateEditor).toBeHidden();
 	templateName = quickTemplateName;
 	await expect(conditionalLayer).toContainText(templateName);
@@ -1208,13 +1216,14 @@ test('indexes a library and creates a channel', async ({ page }) => {
 		});
 	});
 	const savedScheduleUrl = page.url();
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/channels$/);
 	await expect(page.getByRole('dialog', { name: 'Channel schedule editor', exact: true })).toBeHidden();
 	await page.unroute('**/api/v1/scheduling/overview');
 	await page.goto(savedScheduleUrl);
 	await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
 	await page.getByRole('button', { name: 'Delete Channel Schedule' }).click();
 	const deleteScheduleDialog = page.getByRole('alertdialog', {
@@ -1431,7 +1440,7 @@ test('retains only the fallback draft when a channel fallback upload fails', asy
 		await route.continue();
 	});
 
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
 	await expect(page.getByText(/Channel changes were saved, but the fallback filler was not/))
 		.toBeVisible();
 	await expect(page.getByLabel('Name')).toHaveValue(savedName);
@@ -1442,10 +1451,12 @@ test('retains only the fallback draft when a channel fallback upload fails', asy
 	await page.unroute(`**/api/v1/channels/${created.id}/fallback-filler`);
 
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
-	await page.getByRole('button', { name: 'Discard Changes' }).click();
 	await expect(page.getByText(savedName)).toBeVisible();
 	await page.getByRole('button', { name: `Edit ${savedName}` }).click();
 	await expect(page.getByLabel('Name')).toHaveValue(savedName);
+	await expect(page.locator('.fallback-filler-editor')).toContainText('retry-fallback.mp4');
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
 	await expect(page.locator('.fallback-filler-editor')).not.toContainText('retry-fallback.mp4');
 });
 
@@ -1620,7 +1631,7 @@ test('removes a configured channel fallback whose asset is unavailable', async (
 	await expect(editor).toContainText('configured fallback override is unavailable');
 	await editor.getByRole('button', { name: 'Remove fallback filler override' }).click();
 	await editor.getByRole('button', { name: 'Confirm remove fallback filler override' }).click();
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
 	await expect.poll(() => removed).toBe(true);
 });
 

@@ -5,7 +5,7 @@ import { authenticateAdministrator } from './authentication';
 import { seedSchedule } from './documentation/seed';
 
 for (const collection of ['encoding-profiles', 'credit-templates', 'guide-templates', 'pre-rolls', 'mid-rolls', 'post-rolls', 'tail-fillers']) {
-	test(`restores ${collection} viewing, duplication, and dirty history navigation`, async ({ page }) => {
+	test(`restores ${collection} viewing, duplication, and retained history drafts`, async ({ page }) => {
 		await authenticateAdministrator(page);
 		const base = `${collection.endsWith('templates') || collection === 'encoding-profiles' ? '/playback' : '/filler'}/${collection}`;
 		await page.goto(base);
@@ -25,15 +25,13 @@ for (const collection of ['encoding-profiles', 'credit-templates', 'guide-templa
 		await expect(name).toHaveValue(originalName);
 		await name.fill('Unsaved navigation draft');
 		await page.goBack();
-		await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
-		await expect(name).toHaveValue('Unsaved navigation draft');
-		await expect(page).toHaveURL(new RegExp(`${base}/new\\?duplicate=`));
-		await page.goBack();
-		await page.getByRole('alertdialog').getByRole('button', { name: 'Discard Changes', exact: true }).click();
 		await expect(page).toHaveURL(originalUrl);
 		await expect(name).toBeDisabled();
 		await page.goForward();
-		await expect(name).toHaveValue(originalName);
+		await expect(name).toHaveValue('Unsaved navigation draft');
+		await page.reload();
+		await expect(name).toHaveValue('Unsaved navigation draft');
+		await expect(page.getByRole('alertdialog')).toHaveCount(0);
 		await dialog.locator('.resource-editor-close').click();
 		await expect(page).toHaveURL(base);
 		await expect(dialog).toHaveCount(0);
@@ -53,24 +51,19 @@ test('uses channel paths, preserves dirty drafts, and accepts old bookmarks', as
 	await expect(name).toHaveValue(channel.name);
 	await name.fill('Retained channel draft');
 	await page.goBack();
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
-	await expect(name).toHaveValue('Retained channel draft');
-	await expect(page).toHaveURL(`/channels/${channel.id}`);
-	await page.goBack();
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Discard Changes', exact: true }).click();
 	await expect(page).toHaveURL('/channels');
 	await page.goForward();
-	await expect(name).toHaveValue(channel.name);
+	await expect(name).toHaveValue('Retained channel draft');
 	await dialog.getByRole('button', { name: 'Close channel editor' }).click();
 	await page.goto(`/channels?edit=${channel.id}`);
 	await expect(page).toHaveURL(`/channels/${channel.id}`);
-	await expect(name).toHaveValue(channel.name);
+	await expect(name).toHaveValue('Retained channel draft');
 	await page.goto('/channels?new=1');
 	await expect(page).toHaveURL('/channels/new');
 	await expect(page.getByRole('dialog', { name: 'Create Channel', exact: true })).toBeVisible();
 });
 
-test('restores library settings and guards changes between library routes', async ({ page, documentationServer }) => {
+test('restores library settings and retains changes between library routes', async ({ page, documentationServer }) => {
 	const { libraryId } = await seedSchedule(page, documentationServer.directory);
 	await page.goto(`/libraries/${libraryId}?q=moon`);
 	await page.getByRole('button', { name: 'Library settings', exact: true }).click();
@@ -79,13 +72,10 @@ test('restores library settings and guards changes between library routes', asyn
 	const dialog = page.getByRole('dialog').last();
 	await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Unsaved library settings');
 	await page.goBack();
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Keep Editing', exact: true }).click();
-	await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unsaved library settings');
-	await expect(page).toHaveURL(new RegExp(`/libraries/${libraryId}/settings`));
-	await page.goBack();
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Discard Changes', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`/libraries/${libraryId}\\?q=moon(?:&anchor=[^&]+)?$`));
 	await expect(dialog).toHaveCount(0);
+	await page.goForward();
+	await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unsaved library settings');
 	await page.goto('/libraries/new');
 	await page.reload();
 	await expect(page.getByRole('dialog', { name: 'Add Library', exact: true })).toBeVisible();

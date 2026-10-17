@@ -193,6 +193,8 @@ export async function seedLibrary(page: Page, directory: string, throughUI = fal
 		await page.getByLabel('Name').fill('Evening Cinema');
 		await page.getByLabel('Path Moirai scans').fill(mediaRoot);
 		await page.getByRole('button', { name: 'Add and Scan' }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+		await page.goto('/libraries');
 	}
 	else {
 		const response = await page.request.post('/api/v1/libraries', { headers: requestHeaders, data: {

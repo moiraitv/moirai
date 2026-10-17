@@ -190,7 +190,7 @@ For complete setup recipes, see [Example schedules](/scheduling/example-schedule
 
 The editor preview is safe to explore. Save only when the draft is valid and matches the intended audience. Deleting a program is permanent and can make template slots invalid, so inspect its usage before confirming deletion.
 
-Leaving an edited program asks whether to save or discard your changes. Choose **Cancel** to keep editing. If saving fails, the draft stays open so you can retry.
+All Program types retain pending edits automatically in this browser. Close the editor, navigate elsewhere, or reload, then reopen the same Program or New Program to continue. **Add** creates a new Program; **Save** commits pending changes. **Reset**, once confirmed, discards pending changes and restores the latest saved values.
 
 ## Audio and subtitles
 

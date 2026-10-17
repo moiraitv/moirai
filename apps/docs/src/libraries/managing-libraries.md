@@ -7,7 +7,7 @@ contextual: true
 
 # ![](/icons/library.svg) Libraries and scanning
 
-Choose **Add Library** to open the library editor. Enter the source details, then choose **Add and Scan**. **Reset** discards the draft after confirmation; closing the editor also protects unsaved changes.
+Choose **Add Library** to open the library editor. Enter the source details, then choose **Add and Scan** to create the Library, queue its initial scan, and continue in its settings editor.
 
 ![Add Library editor](/screenshots/library-create.png)
 

@@ -201,7 +201,8 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await expect(page.getByLabel('Exclusion strictness', { exact: true })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Sample matches' }).getByRole('link').first()).toBeVisible();
 	await capture(page, 'program-similarity-create.png');
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();
 	const similarRow = page.locator('.program-management-row').filter({ has: page.getByRole('button', { name: /^Related Cinema/ }) });
 	await expect(similarRow.locator('.program-mini-preview')).toHaveCSS('display', 'flex');
@@ -466,7 +467,7 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 	await expect(duplicates).toBeChecked();
 	await captureSection(page, page.locator('.channel-scheduling-settings'), 'channel-schedule-advanced.png');
 	await duplicates.uncheck();
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
 	await expect.poll(async () => (await (await page.request.get(`/api/v1/channels/${channel.id}/schedule`)).json()).avoidCrossChannelDuplicates).toBe(false);
 	await page.goto(`/schedules/channels/${channel.id}`);
 	await page.getByRole('button', { name: 'Advanced scheduling', exact: true }).click();
@@ -475,7 +476,7 @@ test('captures Channel Schedules and Guide', { tag: '@docs-screenshot' }, async 
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
 	await expect(duplicates).not.toBeChecked();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 
 	// Capture the committed Guide only after the channel has real scheduled media.
 	await page.goto('/guide');
@@ -699,7 +700,7 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	await expect(broadcastEditor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 	await enabledSwitch.press('Space');
 	await expect(enabledSwitch).toBeChecked();
-	await expect(broadcastEditor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(broadcastEditor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await capture(page, 'channel-editor.png');
 	await captureSection(page, broadcastEditor.locator('.channel-logo-editor'), 'channel-editor-logo.png');
 	await broadcastEditor.getByRole('button', { name: /Channel fallback override/ }).click();
@@ -910,11 +911,12 @@ test('captures music-video credit templates and verifies draft actions', { tag: 
 	await expect(editor.getByLabel('Credit template (Liquid)')).toHaveValue(/\[Script Info\]/);
 	await capture(page, 'credit-template-editor.png');
 	await captureSection(page, editor.locator('.credit-preview'), 'credit-template-preview.png');
-	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await editor.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(editor).toBeHidden();
 	await page.getByRole('button', { name: 'Edit', exact: true }).click();
 	const existing = page.getByRole('dialog', { name: 'Edit credit template' });
-	await expect(existing.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(existing.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await existing.getByLabel('Name', { exact: true }).fill('Changed credits');
 	await existing.getByRole('button', { name: 'Reset', exact: true }).click();
 	await existing.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
@@ -958,7 +960,8 @@ test('captures encoding profiles and assigns or detaches channel settings', { ta
 	await expect(editor.locator('.acceleration-prediction')).toHaveText('None');
 	expect(predictionRequests.at(-1)).toMatchObject({ width: 1280, height: 720, ffmpegPath: null });
 	await capture(page, 'encoding-profile-editor.png');
-	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await editor.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(editor).toBeHidden();
 	const profile = (await (await page.request.get('/api/v1/encoding-profiles')).json()).find((entry: { name: string }) => entry.name === 'HD broadcast');
 	await page.goto('/channels');
@@ -975,7 +978,8 @@ test('captures encoding profiles and assigns or detaches channel settings', { ta
 	await expect(channel.getByLabel('Width', { exact: true })).toBeVisible();
 	await expect(channel.getByLabel('Width', { exact: true })).toHaveValue('1280');
 	await expect(channel.getByLabel('Width', { exact: true })).toBeDisabled();
-	await channel.getByRole('button', { name: 'Save', exact: true }).click();
+	await channel.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(channel).toBeHidden();
 	let saved = (await (await page.request.get('/api/v1/channels')).json())[0];
 	expect(saved.encodingProfileId).toBe(profile.id);
@@ -983,7 +987,8 @@ test('captures encoding profiles and assigns or detaches channel settings', { ta
 	await page.getByRole('button', { name: 'Edit', exact: true }).click();
 	const existing = page.getByRole('dialog', { name: 'Edit Encoding Profile', exact: true });
 	await existing.getByLabel('Width', { exact: true }).fill('1920');
-	await existing.getByRole('button', { name: 'Save', exact: true }).click();
+	await existing.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(existing).toBeHidden();
 	await page.route('https://example.test/channel-logo.svg', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="blue"/></svg>' }));
 	const independent = await page.request.post('/api/v1/channels', { headers: { 'x-moirai-csrf': csrf }, data: { number: '2', name: 'Independent', logo: 'https://example.test/channel-logo.svg', video: { width: 800 } } });
@@ -1000,7 +1005,8 @@ test('captures encoding profiles and assigns or detaches channel settings', { ta
 	await expect(channel.getByLabel('Or use an external logo URL')).toHaveCount(0);
 	await channel.getByRole('button', { name: 'Remove logo', exact: true }).click();
 	await channel.getByRole('button', { name: 'Confirm remove logo', exact: true }).click();
-	await channel.getByRole('button', { name: 'Save', exact: true }).click();
+	await channel.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(channel).toBeHidden();
 	expect((await (await page.request.get('/api/v1/channels')).json()).find((entry: { name: string }) => entry.name === 'Independent').logo).toBeNull();
 	await page.getByRole('button', { name: 'Edit Music' }).click();
@@ -1008,16 +1014,15 @@ test('captures encoding profiles and assigns or detaches channel settings', { ta
 	await expect(channel.getByLabel('Width', { exact: true })).toHaveValue('1920');
 	await expect(channel.getByLabel('Width', { exact: true })).toBeEnabled();
 	await channel.getByLabel('Width', { exact: true }).fill('640');
-	await channel.getByRole('button', { name: 'Save', exact: true }).click();
+	await channel.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(channel).toBeHidden();
 	saved = (await (await page.request.get('/api/v1/channels')).json()).find((entry: { name: string }) => entry.name === 'Music');
 	expect(saved).toMatchObject({ encodingProfileId: null, video: { ...profile.video, width: 640 }, audio: profile.audio });
 	await page.getByRole('button', { name: 'Edit Independent' }).click();
 	await channel.getByLabel('Group', { exact: true }).fill('Unsaved group');
 	await channel.getByRole('link', { name: 'Manage Encoding Profiles' }).click();
-	const confirmation = page.getByRole('alertdialog', { name: 'Save Changes?' });
-	await expect(confirmation).toBeVisible();
-	await confirmation.getByRole('button', { name: 'Discard Changes' }).click();
+
 	await expect(page).toHaveURL(/\/playback\/encoding-profiles$/);
 	const independentSaved = (await (await page.request.get('/api/v1/channels')).json()).find((entry: { name: string }) => entry.name === 'Independent');
 	expect(independentSaved.group).toBeNull();
@@ -1064,7 +1069,8 @@ test('chooses built-in defaults and protects presets while allowing custom copie
 	await expect(copy.getByLabel('Description', { exact: true })).not.toHaveValue('');
 	await copy.getByLabel('Name', { exact: true }).fill('My preset');
 	await copy.getByLabel('Description', { exact: true }).fill('Music videos for the living room.');
-	await copy.getByRole('button', { name: 'Save', exact: true }).click();
+	await copy.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
+	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(copy).toBeHidden();
 	await page.reload();
 	await expect(page.locator('article').filter({ has: page.getByRole('heading', { name: 'My preset', exact: true }) })).toContainText('Music videos for the living room.');

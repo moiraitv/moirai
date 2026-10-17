@@ -1,6 +1,8 @@
 import { ref, type Ref } from 'vue';
 import type { SchedulingProgram } from '@moirai/shared';
 import { api } from '../../api';
+import { resourceDraftStorageKey } from '../../composables/useResourceDraft';
+import { useAuthenticationStore } from '../../stores/authentication';
 import { requestConfirmation } from '../../confirmation';
 
 /** Dependencies owned by the program editor while shared resource actions execute. */
@@ -75,5 +77,13 @@ export async function confirmProgramDeletion(program: SchedulingProgram, discard
 		return false;
 	}
 	await api.deleteProgram(program.id);
+	const account = useAuthenticationStore().state?.identity?.id ?? 'anonymous';
+	try {
+		localStorage.removeItem(resourceDraftStorageKey(account, 'program', program.id));
+		localStorage.removeItem(`moirai:ai-draft:${account}:${program.id}`);
+	}
+	catch {
+		// Successful deletion remains authoritative even if browser recovery storage is unavailable.
+	}
 	return true;
 }

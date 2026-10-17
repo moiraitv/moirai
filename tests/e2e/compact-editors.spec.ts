@@ -164,7 +164,7 @@ test('remembers program media browsing and contains selection drawers', async ({
 	await expect(page.getByRole('searchbox', { name: 'Search source media' })).toBeVisible();
 	await page.locator('.source-browser-disclosure summary').click();
 	await page.getByRole('button', { name: 'Close program editor' }).click();
-	await page.getByRole('button', { name: 'Discard Changes' }).click();
+
 	await page.goto(`/schedules/programs/${programId}`);
 	const search = page.getByRole('searchbox', { name: 'Search source media' });
 	await expect(search).toBeHidden();
@@ -267,8 +267,7 @@ test('keeps acceleration and two-step logo draft actions usable in the channel e
 	await expect(remove).toBeHidden();
 	expect((await (await page.request.get(`/api/v1/channels/${channel.id}`)).json()).logo).not.toBeNull();
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
-	await contained(page, page.getByRole('alertdialog'));
-	await page.getByRole('button', { name: 'Discard Changes' }).click();
+	await expect(page.getByRole('dialog', { name: 'Edit Channel', exact: true })).toHaveCount(0);
 
 	await expect(page.getByRole('alertdialog')).toBeHidden();
 	await page.getByRole('button', { name: `Edit ${channel.name}`, exact: true }).click();
@@ -283,7 +282,7 @@ test('keeps acceleration and two-step logo draft actions usable in the channel e
 	await removeSelected.click();
 	await expect(page.locator('.channel-logo-workspace')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
-	await page.getByRole('button', { name: 'Discard Changes' }).click();
+
 });
 
 test('formats compact library timestamps and contains the filter dialog', async ({ page }) => {

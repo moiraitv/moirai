@@ -41,7 +41,7 @@ test('captures direct program progress and follows base and conditional assignme
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
 	await expect(progress).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 });
 
 test('saves playback progress values and changes guide listings without changing playback', async ({ page, documentationServer }) => {

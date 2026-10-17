@@ -17,7 +17,7 @@ Choose **New profile**, give it a distinct name, and configure its video and aud
 
 ![Encoding profile editor showing reusable video and audio settings](/screenshots/encoding-profile-editor.png)
 
-Choose **Save** to store the profile. **Duplicate** starts an independent copy. **Reset** requires a second confirmation before restoring the opening draft. Closing an edited profile asks whether to save or discard your changes.
+Choose **Add** to create a profile or **Save** to commit changes. **Duplicate** starts an independent copy with its own retained draft.
 
 ## Use a profile on a channel
 

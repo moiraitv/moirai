@@ -995,6 +995,12 @@ a.nav-link.router-link-exact-active {
 	box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.18);
 }
 
+.resource-editor-save-notice .transient-toast {
+	position: absolute;
+	bottom: calc(100% + 12px);
+	right: 20px;
+}
+
 .resource-editor-danger-actions,
 .resource-editor-save-actions {
 	display: flex;

@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, shallowReactive, watch, type Ref } from 'vue';
+import { computed, onScopeDispose, shallowReactive, watch, type Ref } from 'vue';
 import { guideArtworkUrl, type ScheduleSlot } from '@moirai/shared';
 import { api } from '../../api';
 
@@ -69,6 +69,30 @@ export function useGuideArtworkDraft(slots: Ref<ScheduleSlot[]>) {
 			}
 		}
 	});
-	onBeforeUnmount(reset);
-	return { hasPending, select, preview, upload, reset };
+	onScopeDispose(reset);
+	/** Capture only file ownership; preview URLs are recreated after recovery. */
+	function files(): Record<string, File> {
+		return Object.fromEntries([...pending].map(([id, selection]) => [id, selection.file]));
+	}
+
+	/** Preserve completed immutable uploads across save retries and browser reloads. */
+	function uploaded(): Record<string, string> {
+		return Object.fromEntries([...pending].flatMap(([id, selection]) => selection.artworkId ? [[id, selection.artworkId]] : []));
+	}
+
+	/** Recreate local previews only for slots still owned by the recovered template. */
+	function restore(files: Record<string, File>, uploads: Record<string, string>): void {
+		for (const slot of slots.value) {
+			const file = files[slot.id];
+			if (file && slot.guide?.mode === 'block') {
+				select(slot, file);
+				const artworkId = uploads[slot.id];
+				if (artworkId) {
+					pending.get(slot.id)!.artworkId = artworkId;
+				}
+			}
+		}
+	}
+
+	return { hasPending, select, preview, upload, reset, files, uploaded, restore };
 }

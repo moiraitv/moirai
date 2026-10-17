@@ -31,7 +31,7 @@ Choose a music video from the preview carousel, set the source time in seconds, 
 
 If a video has no measured duration, check FFprobe in **Status** and rescan its library before previewing. The preview area expands and scrolls into view. Expand **Generated subtitles (.ass)** to inspect the output. Errors are shown when applicable so you can correct the draft before saving.
 
-**Save** stores the template. **Reset** asks for a second confirmation before restoring the opening draft. **Duplicate** creates an independently editable copy. Deleting a template requires confirmation and is blocked while a Channel or Program references it.
+**Add** creates the template and **Save** commits changes. **Duplicate** creates an independently editable copy with its own retained draft. Deleting a template requires confirmation and is blocked while a Channel or Program references it.
 
 ## Metadata and timing
 

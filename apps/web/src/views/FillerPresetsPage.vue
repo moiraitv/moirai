@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useResourceDraft } from '../composables/useResourceDraft';
+import { useRoute } from 'vue-router';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useResourceEditorRoute } from '../composables/useResourceEditorRoute';
 import { Copy, Eye, Pencil, Plus } from '@lucide/vue';
@@ -36,6 +38,15 @@ const dirty = computed(() => JSON.stringify(form.value) !== baseline.value);
 const validation = computed(() => anyFillerPresetCreateSchema.safeParse(form.value));
 const validationError = computed(() => validation.value.success ? '' : validation.value.error.issues[0]?.message ?? 'Review the Mid-Roll settings');
 const nameInput = ref<HTMLInputElement>();
+const route = useRoute();
+const retained = useResourceDraft({
+	kind: () => `filler:${props.kind}`, identity: () => id.value ?? `new:${String(route.query.duplicate ?? '')}`,
+	capture: () => form.value, restore: fields => {
+		form.value = fields;
+	}, dirty: () => dirty.value,
+});
+const { warning: draftWarning } = retained;
+
 let opener: HTMLElement | null = null;
 
 /** Retrieve the collection while keeping loading and failures distinct from empty results. */
@@ -52,12 +63,16 @@ async function load(): Promise<void> {
 
 /** Capture an independent baseline for a new, existing, or duplicated preset. */
 async function openDraft(preset?: AnyFillerPreset, duplicate = false): Promise<void> {
+	retained.pause();
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : preset?.id;
 	readonlyPreset.value = Boolean(preset?.isBuiltin && !duplicate);
 	const source = preset ?? defaultPreset.value;
 	form.value = cloneContractValue({ ...source, name: preset ? preset.name + (duplicate ? ' copy' : '') : `New ${label.value}` });
 	baseline.value = JSON.stringify(form.value);
+	if (!readonlyPreset.value) {
+		await retained.open(baseline.value);
+	}
 	editorError.value = '';
 	open.value = true;
 	await nextTick();
@@ -81,6 +96,7 @@ async function duplicateViewed(): Promise<void> {
 
 /** Dismiss a completed or discarded draft and restore its opener. */
 function dismiss(): void {
+	retained.pause();
 	open.value = false;
 	opener?.focus();
 	editorRoute.finish();
@@ -88,7 +104,7 @@ function dismiss(): void {
 
 /** Persist a validated custom draft and reconcile the displayed collection. */
 async function save(): Promise<void> {
-	if (busy.value || readonlyPreset.value || !validation.value.success || !dirty.value) {
+	if (busy.value || readonlyPreset.value || !validation.value.success || (id.value && !dirty.value)) {
 		return;
 	}
 	busy.value = true;
@@ -98,8 +114,12 @@ async function save(): Promise<void> {
 			: await api.createFillerPreset(validation.value.data);
 		presets.value = [...presets.value.filter(entry => entry.id !== saved.id), saved]
 			.sort((left, right) => Number(right.isBuiltin) - Number(left.isBuiltin) || left.name.localeCompare(right.name));
+		retained.clear();
+		form.value = cloneContractValue(saved);
+		id.value = saved.id;
 		baseline.value = JSON.stringify(form.value);
-		dismiss();
+		await editorRoute.adopt(saved.id);
+		await retained.open(baseline.value, false);
 	}
 	catch (cause) {
 		editorError.value = errorMessage(cause);
@@ -111,8 +131,15 @@ async function save(): Promise<void> {
 
 /** Share draft protection across close, backdrop, Escape, and route navigation. */
 async function close(): Promise<void> {
-	await closeUnsavedEditor({ blocked: busy.value, dirty: !readonlyPreset.value && dirty.value, key: 'mid-roll-preset',
+	await closeUnsavedEditor({ retainedDraft: retained, isDirty: () => dirty.value, blocked: busy.value, dirty: !readonlyPreset.value && dirty.value, key: 'mid-roll-preset',
 		message: `Save changes to this ${label.value}?`, save, discard: dismiss });
+}
+
+/** Discard pending changes and retain the latest committed baseline. */
+function resetDraft(): void {
+	retained.clear();
+	form.value = JSON.parse(baseline.value);
+	void retained.open(baseline.value, false);
 }
 
 /** Confirm permanent custom-preset deletion and retain reference conflicts in context. */
@@ -125,6 +152,7 @@ async function remove(): Promise<void> {
 	editorError.value = '';
 	try {
 		await api.deleteFillerPreset(id.value);
+		retained.clear();
 		presets.value = presets.value.filter(entry => entry.id !== id.value);
 		dismiss();
 	}
@@ -149,7 +177,7 @@ const editorRoute = useResourceEditorRoute({
 function edit(preset?: AnyFillerPreset, duplicate = false): void {
 	void editorRoute.navigate(preset, duplicate);
 }
-useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
+useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -169,7 +197,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
 			<form v-modal-focus="{ escape: close }" class="moirai-dialog resource-editor-modal mid-roll-preset-editor" role="dialog" aria-modal="true" aria-labelledby="mid-roll-preset-title" @submit.prevent="save">
 				<ResourceEditorHeader :close-label="`Close ${label}`" :disabled="busy" @close="close"><div class="resource-editor-title-with-help"><h2 id="mid-roll-preset-title">{{ readonlyPreset ? 'View' : id ? 'Edit' : 'New' }} {{ label }}</h2><PageHelpButton :label="`${label}s`" topic-id="filler.presets" /></div></ResourceEditorHeader>
-				<div class="resource-editor-scroll"><ResourceUsage kind="filler-preset" :resource-id="id ?? undefined">
+				<div :inert="busy" class="resource-editor-scroll"><ResourceUsage kind="filler-preset" :resource-id="id ?? undefined">
 					<p v-if="readonlyPreset">Built-in {{ label }}s are read-only. Duplicate this {{ label }} to customize its settings.</p>
 					<div class="form-grid"><label class="resource-primary-field"><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyPreset" maxlength="120" required /></label><label><span>Description</span><input v-model="form.description" :disabled="busy || readonlyPreset" maxlength="500" /></label></div>
 					<p v-if="id && !readonlyPreset">Changing break settings affects every assignment using this {{ label }}. Existing airings finish before pending settings apply.</p>
@@ -177,7 +205,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 					<fieldset v-if="form.kind !== 'mid-roll'" :disabled="busy || readonlyPreset" class="mid-roll-settings"><legend>Filler Settings</legend><FillerBudgetEditor :model-value="form.budget" :allow-remaining="kind === 'tail'" @update:model-value="form = { ...form, budget: $event }" /></fieldset>
 					<p v-if="validationError" class="notice error" role="alert">{{ validationError }}</p><p v-if="editorError" class="notice error">{{ editorError }}</p>
 				</ResourceUsage></div>
-				<ResourceEditorActionBar v-if="!readonlyPreset" :resource-type="label" :show-delete="Boolean(id)" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!validation.success || !dirty" save-submits @reset="form = JSON.parse(baseline)" @delete="remove" />
+				<ResourceEditorActionBar v-if="!readonlyPreset" :pending="!id || dirty" :draft-warning="draftWarning" :draft-restored="retained.recovered.value" :save-label="id ? 'Save' : 'Add'" :resource-type="label" :show-delete="Boolean(id)" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!validation.success || (Boolean(id) && !dirty)" save-submits @close="close" @reset="resetDraft" @delete="remove" />
 				<footer v-else class="resource-editor-action-bar"><button type="button" class="button secondary" @click="close">Close</button><button type="button" class="button secondary" @click="duplicateViewed"><Copy :size="19" />Duplicate</button></footer>
 			</form>
 		</div>

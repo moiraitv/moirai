@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useResourceDraft } from '../composables/useResourceDraft';
+import { useRoute } from 'vue-router';
 import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
@@ -53,6 +55,16 @@ const { prediction: accelerationPrediction, text: accelerationPredictionText } =
 const baseline = ref('');
 const dirty = computed(() => JSON.stringify(form) !== baseline.value);
 const valid = computed(() => encodingProfileCreateSchema.safeParse(form).success);
+const route = useRoute();
+const retained = useResourceDraft({
+	kind: 'encoding-profile', identity: () => id.value ?? `new:${String(route.query.duplicate ?? '')}`,
+	nullableSchema: encodingProfileCreateSchema,
+	capture: () => form, restore: fields => {
+		Object.assign(form, fields);
+	}, dirty: () => dirty.value,
+});
+const { warning: draftWarning } = retained;
+
 let opener: HTMLElement | null = null;
 
 /** Load profiles without displaying an empty state before successful retrieval. */
@@ -69,6 +81,7 @@ async function load(): Promise<void> {
 
 /** Open a saved profile or a new editable copy of the default encoding settings. */
 async function openDraft(profile?: EncodingProfile, duplicate = false): Promise<void> {
+	retained.pause();
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : profile?.id;
 	readonlyPreset.value = Boolean(profile?.isBuiltin && !duplicate);
@@ -77,6 +90,9 @@ async function openDraft(profile?: EncodingProfile, duplicate = false): Promise<
 	form.audio = profile ? cloneContractValue(profile.audio) : audioNormalizationSchema.parse({});
 	form.video = profile ? cloneContractValue(profile.video) : videoNormalizationSchema.parse({});
 	baseline.value = JSON.stringify(form);
+	if (!readonlyPreset.value) {
+		await retained.open(baseline.value);
+	}
 	editorError.value = '';
 	open.value = true;
 	await nextTick();
@@ -101,14 +117,15 @@ async function duplicateViewedProfile(): Promise<void> {
 
 /** Close and restore focus after a completed save or confirmed discard. */
 function dismiss(): void {
+	retained.pause();
 	open.value = false;
 	opener?.focus();
 	editorRoute.finish();
 }
 
-/** Save the full validated draft and return to the updated collection. */
+/** Commit the validated draft and retain the editor at its saved identity. */
 async function save(): Promise<void> {
-	if (busy.value || readonlyPreset.value || !valid.value) {
+	if (busy.value || readonlyPreset.value || !valid.value || (id.value && !dirty.value)) {
 		return;
 	}
 	busy.value = true;
@@ -124,8 +141,12 @@ async function save(): Promise<void> {
 		else {
 			profiles.value[index] = saved;
 		}
+		retained.clear();
+		Object.assign(form, { name: saved.name, description: saved.description, audio: cloneContractValue(saved.audio), video: cloneContractValue(saved.video) });
+		id.value = saved.id;
 		baseline.value = JSON.stringify(form);
-		dismiss();
+		await editorRoute.adopt(saved.id);
+		await retained.open(baseline.value, false);
 		try {
 			profiles.value = await readWithRetry(() => api.encodingProfiles());
 			loaded.value = true;
@@ -143,10 +164,17 @@ async function save(): Promise<void> {
 	}
 }
 
-/** Route close, backdrop, Escape, and navigation through one draft-discard flow. */
+/** Retain pending work on dismissal, protecting it with a prompt only if retention fails. */
 async function close(): Promise<void> {
-	await closeUnsavedEditor({ blocked: busy.value, dirty: dirty.value, key: 'encoding-profile',
+	await closeUnsavedEditor({ retainedDraft: retained, isDirty: () => dirty.value, blocked: busy.value, dirty: dirty.value, key: 'encoding-profile',
 		message: 'Save changes to this encoding profile?', save, discard: dismiss });
+}
+
+/** Discard pending changes and retain the latest committed baseline. */
+function resetDraft(): void {
+	retained.clear();
+	Object.assign(form, JSON.parse(baseline.value));
+	void retained.open(baseline.value, false);
 }
 
 /** Confirm permanent removal; referenced profiles remain intact on a conflict. */
@@ -157,6 +185,7 @@ async function remove(): Promise<void> {
 	busy.value = true;
 	try {
 		await api.deleteEncodingProfile(id.value);
+		retained.clear();
 		dismiss();
 		await load();
 	}
@@ -200,7 +229,7 @@ const editorRoute = useResourceEditorRoute({
 function edit(profile?: EncodingProfile, duplicate = false): void {
 	void editorRoute.navigate(profile, duplicate);
 }
-useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
+useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -230,7 +259,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 		<div v-if="open" class="moirai-dialog-backdrop" @click.self="close">
 			<form v-modal-focus="{ escape: close }" class="moirai-dialog resource-editor-modal encoding-profile-editor" role="dialog" aria-modal="true" aria-labelledby="encoding-editor-title" @submit.prevent="save">
 				<ResourceEditorHeader close-label="Close encoding profile" :disabled="busy" @close="close"><div class="encoding-editor-title"><div class="resource-editor-title-with-help"><h2 id="encoding-editor-title">{{ readonlyPreset ? 'View' : id ? 'Edit' : 'New' }} Encoding Profile</h2><PageHelpButton label="Encoding profiles" topic-id="playback.encoding-profiles" /></div><span v-if="readonlyPreset" class="encoding-profile-badge builtin-badge">Built-in</span></div></ResourceEditorHeader>
-				<div class="resource-editor-scroll">
+				<div :inert="busy" class="resource-editor-scroll">
 					<ResourceUsage kind="encoding-profile" :resource-id="id ?? undefined">
 						<p v-if="readonlyPreset" class="encoding-profile-info"><Info :size="22" aria-hidden="true" /><span>Built-in presets are read-only. Duplicate this preset to customize its settings.</span></p>
 						<div class="encoding-profile-metadata"><label class="resource-primary-field"><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="readonlyPreset" required maxlength="120" /></label>
@@ -241,7 +270,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value);
 						<p v-if="editorError" class="notice error">{{ editorError }}</p>
 					</ResourceUsage>
 				</div>
-				<ResourceEditorActionBar v-if="!readonlyPreset" :validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''" resource-type="Encoding Profile" :show-delete="Boolean(id) && !isCurrentDefault" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @reset="Object.assign(form, JSON.parse(baseline))" @delete="remove" />
+				<ResourceEditorActionBar v-if="!readonlyPreset" :pending="!id || dirty" :draft-warning="draftWarning" :draft-restored="retained.recovered.value" :save-label="id ? 'Save' : 'Add'" :validation-message="encodingInvalid ? 'Correct the highlighted video or audio settings before saving.' : ''" resource-type="Encoding Profile" :show-delete="Boolean(id) && !isCurrentDefault" :busy="busy" :saving="busy" :reset-disabled="!dirty" :save-disabled="!valid || (Boolean(id) && !dirty)" save-submits @close="close" @reset="resetDraft" @delete="remove" />
 				<footer v-if="readonlyPreset" class="resource-editor-action-bar encoding-profile-view-actions"><button class="button secondary" type="button" @click="close"><span>Close</span></button><button class="button secondary" type="button" @click="duplicateViewedProfile"><Copy :size="20" aria-hidden="true" /><span>Duplicate</span></button></footer>
 			</form>
 		</div>

@@ -27,7 +27,7 @@ Give the template a distinct name and an optional single-line description. Each 
 
 Templates can use the listing `kind`, XMLTV `start` and `stop` times, channel identity, item metadata (including the media type), the slot interval, and block title, description, and artwork. Interpolated text is escaped automatically.
 
-**Save** stores the template. **Reset**, once confirmed, restores the opening draft. Deleting a template requires confirmation and is blocked while any channel assigns it or while it is set as the default.
+**Add** creates the template and **Save** commits changes. Deleting a template requires confirmation and is blocked while any channel assigns it or while it is set as the default.
 
 ## Preview
 

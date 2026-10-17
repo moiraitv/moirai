@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useResourceDraft } from '../composables/useResourceDraft';
+import { useRoute } from 'vue-router';
 import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
@@ -112,6 +114,15 @@ const inspectedLabel = computed(() => {
 
 	return previewEntries.value.find((entry) => entry.id === inspectedId.value)?.title ?? 'Listing';
 });
+const route = useRoute();
+const retained = useResourceDraft({
+	kind: 'guide-template', identity: () => id.value ?? `new:${String(route.query.duplicate ?? '')}`,
+	capture: () => form, restore: fields => {
+		Object.assign(form, fields);
+	}, dirty: () => dirty.value,
+});
+const { warning: draftWarning } = retained;
+
 let opener: HTMLElement | null = null;
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 let previewSequence = 0;
@@ -151,6 +162,7 @@ async function loadChannels(): Promise<void> {
 
 /** Open a saved template or a new editable copy of the built-in layout. */
 async function openDraft(template?: GuideTemplate, duplicate = false): Promise<void> {
+	retained.pause();
 	opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 	id.value = duplicate ? undefined : template?.id;
 	readonlyTemplate.value = Boolean(template?.isBuiltin && !duplicate);
@@ -159,6 +171,9 @@ async function openDraft(template?: GuideTemplate, duplicate = false): Promise<v
 	form.sources = cloneContractValue(template?.sources ?? BUILTIN_GUIDE_TEMPLATE.sources);
 	activeTab.value = 'channel';
 	baseline.value = JSON.stringify(form);
+	if (!readonlyTemplate.value) {
+		await retained.open(baseline.value);
+	}
 	editorError.value = '';
 	previewError.value = '';
 	previewEntries.value = [];
@@ -191,14 +206,15 @@ async function duplicateViewedTemplate(): Promise<void> {
 
 /** Close and restore focus after a completed save or confirmed discard. */
 function dismiss(): void {
+	retained.pause();
 	open.value = false;
 	opener?.focus();
 	editorRoute.finish();
 }
 
-/** Save the full validated draft and return to the updated collection. */
+/** Commit the validated draft and retain the editor at its saved identity. */
 async function save(): Promise<void> {
-	if (busy.value || readonlyTemplate.value || !valid.value) {
+	if (busy.value || readonlyTemplate.value || !valid.value || (id.value && !dirty.value)) {
 		return;
 	}
 	busy.value = true;
@@ -214,8 +230,12 @@ async function save(): Promise<void> {
 		else {
 			templates.value[index] = saved;
 		}
+		retained.clear();
+		Object.assign(form, { name: saved.name, description: saved.description, sources: cloneContractValue(saved.sources) });
+		id.value = saved.id;
 		baseline.value = JSON.stringify(form);
-		dismiss();
+		await editorRoute.adopt(saved.id);
+		await retained.open(baseline.value, false);
 		try {
 			templates.value = await readWithRetry(() => api.guideTemplates());
 			loaded.value = true;
@@ -233,9 +253,10 @@ async function save(): Promise<void> {
 	}
 }
 
-/** Route close, backdrop, Escape, and navigation through one draft-discard flow. */
+/** Retain pending work on dismissal, protecting it with a prompt only if retention fails. */
 async function close(): Promise<void> {
 	await closeUnsavedEditor({
+		retainedDraft: retained, isDirty: () => dirty.value,
 		blocked: busy.value,
 		dirty: dirty.value,
 		key: 'guide-template',
@@ -258,6 +279,7 @@ async function remove(): Promise<void> {
 	busy.value = true;
 	try {
 		await api.deleteGuideTemplate(id.value);
+		retained.clear();
 		dismiss();
 		await load();
 	}
@@ -288,7 +310,9 @@ async function setDefault(event: Event): Promise<void> {
 
 /** Restore the captured opening draft after two-step confirmation. */
 function resetDraft(): void {
+	retained.clear();
 	Object.assign(form, JSON.parse(baseline.value) as { name: string; description: string; sources: GuideTemplateSources });
+	void retained.open(baseline.value, false);
 }
 
 /** Size the preview so four elapsed hours fill the timeline track. */
@@ -422,7 +446,7 @@ const editorRoute = useResourceEditorRoute({
 function edit(template?: GuideTemplate, duplicate = false): void {
 	void editorRoute.navigate(template, duplicate);
 }
-useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
+useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -481,7 +505,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 						<span v-if="readonlyTemplate" class="credit-template-badge">Built-in</span>
 					</div>
 				</ResourceEditorHeader>
-				<div class="resource-editor-scroll">
+				<div :inert="busy" class="resource-editor-scroll">
 					<ResourceUsage kind="guide-template" :resource-id="id ?? undefined">
 						<div class="credit-template-metadata">
 							<label class="resource-primary-field">
@@ -583,7 +607,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 					</ResourceUsage>
 				</div>
 				<ResourceEditorActionBar
-					v-if="!readonlyTemplate"
+					v-if="!readonlyTemplate" :pending="!id || dirty" :draft-warning="draftWarning" :draft-restored="retained.recovered.value" :save-label="id ? 'Save' : 'Add'"
 					resource-type="Guide Template"
 					:show-delete="Boolean(id) && !isCurrentDefault"
 					:busy="busy"
@@ -591,6 +615,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value);
 					:reset-disabled="!dirty"
 					:save-disabled="!valid || (Boolean(id) && !dirty)"
 					save-submits
+					@close="close"
 					@reset="resetDraft"
 					@delete="remove"
 				/>

@@ -16,7 +16,7 @@ export const aiProgramDraftFieldsSchema = z.object({
 	seed: z.string().max(200), audioPreferences: audioPreferencesSchema, subtitlePreferences: subtitlePreferencesSchema,
 });
 /** Version browser drafts independently of server program contracts. */
-const draftSchema = z.object({ version: z.literal(1), baseline: z.string(), generation: z.uuid().nullable(), fields: aiProgramDraftFieldsSchema });
+export const legacyAiProgramDraftSchema = z.object({ version: z.literal(1), baseline: z.string(), generation: z.uuid().nullable(), fields: aiProgramDraftFieldsSchema });
 
 /**
  * Save AI editor fields synchronously before a reload can lose them. Scope storage to the signed-in
@@ -60,7 +60,7 @@ export function useAiProgramDraft(form: object, key: () => string) {
 		try {
 			const raw = restore ? localStorage.getItem(key()) : null;
 			if (raw) {
-				const draft = draftSchema.parse(JSON.parse(raw));
+				const draft = legacyAiProgramDraftSchema.parse(JSON.parse(raw));
 				Object.assign(form, draft.fields);
 				generation.value = draft.generation;
 				if (draft.baseline !== baseline) {

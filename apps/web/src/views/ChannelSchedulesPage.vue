@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { z } from 'zod';
+import { useResourceDraft } from '../composables/useResourceDraft';
 import TailFillerEditor from '../components/schedules/TailFillerEditor.vue';
 import FillerAssignmentsEditor from '../components/schedules/FillerAssignmentsEditor.vue';
 import FillerAssignmentEditor from '../components/schedules/FillerAssignmentEditor.vue';
@@ -68,7 +70,7 @@ import { programColorStyle } from '../program-colors';
 import { useChannelsStore } from '../stores/channels';
 import { useSchedulingStore } from '../stores/scheduling';
 import { liveEvents } from '../live-events';
-import { closeUnsavedEditor } from '../unsaved-editor';
+import { closeUnsavedEditor, confirmDraftNavigation } from '../unsaved-editor';
 import { deadAirAction } from '../schedule-diagnostic-actions';
 import {
 	deadAirDiagnostics,
@@ -136,6 +138,20 @@ const isDirty = computed(
 );
 const scheduleNeedsSave = computed(() =>
 	Boolean(draft.value) && (!hasPersistedSchedule.value || isDirty.value));
+const retained = useResourceDraft({
+	kind: 'channel-schedule', identity: () => channelId.value,
+	nullableSchema: z.object({ schedule: channelScheduleConfigSchema }),
+	capture: () => ({ schedule: draft.value }),
+	restore: fields => {
+		if (!fields.schedule || !Array.isArray(fields.schedule.layers)) {
+			throw new Error('Incomplete schedule recovery');
+		}
+		draft.value = fields.schedule;
+		selectedLayerId.value = draft.value?.layers[0]?.id ?? null;
+	},
+	dirty: () => isDirty.value,
+});
+const { warning: draftWarning, restoring: restoringDraft } = retained;
 const scheduleFormValid = computed(() => channelScheduleConfigSchema.safeParse(draft.value).success);
 const previewLegend = computed(() =>
 	schedulePreviewLegend(
@@ -262,9 +278,8 @@ async function reviewDeadAir(diagnostic: DeadAirDiagnostic): Promise<void> {
 	editTemplate(diagnostic.segment.templateId);
 }
 
-/** Close the guided program editor and refresh scheduling data without changing the channel draft. */
+/** Refresh scheduling data after an embedded Program save, retaining both editors. */
 async function finishProgramEdit(): Promise<void> {
-	quickEditingProgramId.value = null;
 	await scheduling.load();
 	schedulePreview(0);
 }
@@ -287,7 +302,8 @@ function predicateSummary(predicate: SchedulePredicate): string {
 }
 
 /** Clone a saved schedule or suggest a matching template or program for a new base. */
-function loadDraft(): void {
+async function loadDraft(restore = true): Promise<void> {
+	retained.pause();
 	finiteBoundaryDrift.clear();
 	previousAssignments.clear();
 	hasPersistedSchedule.value = false;
@@ -320,6 +336,7 @@ function loadDraft(): void {
 		}
 	}
 	original.value = JSON.stringify(draft.value);
+	await retained.open(original.value, restore);
 	preview.value = null;
 }
 
@@ -465,13 +482,12 @@ function editTemplate(templateId: string): void {
 	quickEditingTemplateId.value = templateId;
 }
 
-/** Close the quick template editor and immediately refresh the layered preview. */
+/** Refresh the layered preview after an embedded Template save. */
 function finishTemplateEdit(): void {
-	quickEditingTemplateId.value = null;
 	schedulePreview(0);
 }
 
-/** Save the selected channel's layered schedule and return to the schedule collection. */
+/** Commit the selected channel's layered schedule and retain the open editor. */
 async function save(): Promise<boolean> {
 	if (!draft.value || !channel.value || saving.value || !scheduleNeedsSave.value) {
 		return false;
@@ -487,6 +503,8 @@ async function save(): Promise<boolean> {
 		hasPersistedSchedule.value = true;
 		draft.value = channelScheduleConfigSchema.parse(saved);
 		original.value = JSON.stringify(draft.value);
+		retained.clear();
+		await retained.open(original.value, false);
 		try {
 			void Promise.all([scheduling.load(), loadMaterializations()]).catch(cause => {
 				error.value = `Schedule saved, but status could not be refreshed. ${errorMessage(cause)}`;
@@ -495,7 +513,6 @@ async function save(): Promise<boolean> {
 		catch (cause) {
 			error.value = `Schedule saved, but timeline status could not be refreshed. ${errorMessage(cause)}`;
 		}
-		await leaveScheduleEditor();
 		return true;
 	}
 	catch (cause) {
@@ -521,7 +538,8 @@ async function leaveScheduleEditor(): Promise<void> {
 /** Save, discard, or retain a channel schedule before closing its editor. */
 async function closeScheduleEditor(): Promise<void> {
 	await closeUnsavedEditor({
-		blocked: saving.value || deleting.value,
+		retainedDraft: retained, isDirty: () => isDirty.value,
+		blocked: saving.value || deleting.value || restoringDraft.value,
 		dirty: scheduleNeedsSave.value,
 		key: `unsaved-channel-schedule:${channel.value?.id ?? 'new'}`,
 		message: 'Save this channel schedule before closing?',
@@ -531,8 +549,9 @@ async function closeScheduleEditor(): Promise<void> {
 }
 
 /** Restore the authored schedule and preview to the baseline captured on open. */
-function resetSchedule(): void {
-	loadDraft();
+async function resetSchedule(): Promise<void> {
+	retained.clear();
+	await loadDraft(false);
 	error.value = '';
 	schedulePreview(0);
 }
@@ -597,6 +616,7 @@ async function removeSchedule(): Promise<void> {
 	error.value = '';
 	try {
 		await api.deleteChannelSchedule(selectedChannel.id);
+		retained.clear();
 		await scheduling.load();
 		await leaveScheduleEditor();
 	}
@@ -662,23 +682,24 @@ function schedulePreview(delay = PREVIEW_DELAY_MS): void {
 
 /** Protect the owning schedule on both page departures and channel-to-channel navigation. */
 async function confirmRouteLeave(): Promise<boolean> {
-	return allowRouteLeave || !scheduleNeedsSave.value || await requestConfirmation({
-		key: `discard-channel-schedule:${channel.value?.id ?? 'new'}`,
-		title: 'Discard Unsaved Changes?',
-		message: 'Leave this channel schedule without saving your changes?',
-		confirmLabel: 'Discard Changes',
-		destructive: true,
+	if (allowRouteLeave) {
+		return true;
+	}
+	return confirmDraftNavigation({
+		blocked: saving.value || deleting.value || restoringDraft.value,
+		dirty: isDirty.value, retainedDraft: retained, isDirty: () => isDirty.value,
+		key: `unsaved-channel-schedule:${channelId.value}`, message: 'Save this channel schedule before leaving?', save,
 	});
 }
 onBeforeRouteLeave(confirmRouteLeave);
 onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await confirmRouteLeave());
 watch(
 	() => route.params.id,
-	() => {
+	async () => {
 		// Dismiss the previous schedule's nested editors only after navigation is accepted.
 		quickEditingTemplateId.value = null;
 		quickEditingProgramId.value = null;
-		loadDraft();
+		await loadDraft();
 		void loadListGuide();
 	},
 );
@@ -705,7 +726,7 @@ onMounted(async () => {
 			&& /^\d{4}-\d{2}-\d{2}$/u.test(route.query.previewDate)
 			? route.query.previewDate
 			: dateKey(new Date(), timeZone.value);
-		loadDraft();
+		await loadDraft();
 		if (editing.value) {
 			schedulePreview(0);
 		}
@@ -736,7 +757,7 @@ onBeforeUnmount(() => {
 		clearTimeout(previewTimer);
 	}
 });
-useDraftProtection(() => editing.value && scheduleNeedsSave.value);
+useDraftProtection(() => editing.value && scheduleNeedsSave.value && retained.unsafe.value);
 </script>
 
 <template>
@@ -786,7 +807,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 					aria-modal="true"
 					aria-label="Channel schedule editor"
 				>
-					<ResourceEditorHeader close-label="Close channel schedule editor" :disabled="saving || deleting" @close="closeScheduleEditor">
+					<ResourceEditorHeader close-label="Close channel schedule editor" :disabled="saving || deleting || restoringDraft" @close="closeScheduleEditor">
 						<p class="eyebrow">Layered channel programming</p>
 						<div class="resource-editor-title-with-help"><h2>{{ channel?.name ?? 'Channel schedule' }}</h2><PageHelpButton label="Channel schedules" topic-id="scheduling.channel-schedules" /></div>
 						<p>Stack conditional templates or programs above an always-available base.</p>
@@ -799,7 +820,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 					</div>
 
 					<template v-else-if="draft && channel">
-						<div class="scheduling-workspace-content">
+						<div :inert="saving || deleting || restoringDraft" class="scheduling-workspace-content">
 							<div class="channel-schedule-toolbar editor-surface">
 								<span class="channel-schedule-save-state" :class="{ dirty: scheduleNeedsSave }">
 									<CircleAlert v-if="scheduleNeedsSave" :size="22" />
@@ -1294,13 +1315,15 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value);
 							</section>
 						</div>
 						<ResourceEditorActionBar
-							resource-type="Channel Schedule"
+							:pending="scheduleNeedsSave" :draft-warning="draftWarning" :draft-restored="retained.recovered.value"
+							:save-label="hasPersistedSchedule ? 'Save' : 'Add'" resource-type="Channel Schedule"
 							:show-delete="hasPersistedSchedule"
-							:busy="saving || deleting"
+							:busy="saving || deleting || restoringDraft"
 							:deleting="deleting"
 							:reset-disabled="!isDirty"
 							:save-disabled="!scheduleNeedsSave || !scheduleFormValid"
 							:saving="saving"
+							@close="closeScheduleEditor"
 							@delete="removeSchedule"
 							@reset="resetSchedule"
 							@save="save"
