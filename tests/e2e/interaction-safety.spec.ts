@@ -126,9 +126,10 @@ test('retains Settings drafts when sign-out is cancelled and warns for fallback 
 	await expect(page.getByLabel('Maximum active channel sessions')).toHaveValue('9');
 	expect((await (await page.request.get('/api/v1/auth/session')).json()).status).toBe('authenticated');
 	await page.getByLabel('Maximum active channel sessions').fill('4');
+	await page.getByRole('button', { name: /^Global fallback filler/ }).click();
 	await page.locator('.fallback-filler-panel input[type="file"]').setInputFiles({ name: 'fallback.mp4', mimeType: 'video/mp4', buffer: Buffer.from('disposable unsaved fixture') });
 	await page.locator('.sidebar').getByRole('link', { name: 'Channels', exact: true }).click();
-	await expect(page.getByRole('alertdialog')).toContainText('fallback filler');
+	await expect(page.getByRole('alertdialog')).toContainText('Playback');
 	await page.getByRole('button', { name: 'Keep Editing', exact: true }).click();
 	await expect(page.locator('.fallback-filler-panel')).toContainText('fallback.mp4');
 });

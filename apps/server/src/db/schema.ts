@@ -639,11 +639,11 @@ export const materializedTimelineSegments = sqliteTable(
 /**
  * Schema for `settings`.
  *
- * Stores application-wide playback settings by key.
+ * Stores application-wide playback and automatic backup policies by key.
  */
 export const settings = sqliteTable('settings', {
 	key: text('key').primaryKey(),
-	value: text('value', { mode: 'json' }).$type<PlaybackSettings>().notNull(),
+	value: text('value', { mode: 'json' }).$type<PlaybackSettings | import('@moirai/shared').BackupSettings>().notNull(),
 	updatedAt: text('updated_at')
 		.notNull()
 		.default(sql`CURRENT_TIMESTAMP`),

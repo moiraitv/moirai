@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import MarkdownIt from 'markdown-it';
+import { contextualSections, withoutHeadingAnchors } from './user-docs-sections.js';
 import { buildReviewChanges, reviewChangesFrontmatter } from './user-docs-review.js';
 import { userDocsIntroductions } from './user-docs-introductions.js';
 import { userDocsTermBadges } from './user-docs-term-badges.js';
@@ -237,7 +238,9 @@ export async function loadUserDocPages(paths = defaultUserDocsPaths): Promise<Us
 		});
 	}
 
-	const contextualIds = new Set(pages.filter((page) => page.contextual).map((page) => page.id));
+	const contextualIds = new Set(pages.filter((page) => page.contextual).flatMap((page) => [
+		page.id, ...contextualSections(page.body).map(section => `${page.id}#${section.anchor}`),
+	]));
 	const missingTopics = paths.requiredContextualTopicIds.filter((id) => !contextualIds.has(id));
 	if (missingTopics.length) {
 		throw new Error(`Contextual help mappings are missing authored topics: ${missingTopics.join(', ')}`);
@@ -290,7 +293,7 @@ function contextualHtml(body: string): string {
 		return renderer.renderToken(tokens, index, options);
 	};
 	const withoutTitle = body.replace(/^\s*#\s+[^\n]+\n+/u, '');
-	return markdown.render(withoutTitle);
+	return markdown.render(withoutHeadingAnchors(withoutTitle));
 }
 
 /** Write the public help manifest and generated review dashboard. */
@@ -304,15 +307,16 @@ export async function writeUserDocsManifest(paths = defaultUserDocsPaths): Promi
 		version: 1,
 		guideVersion: packageJson.version,
 		pages: pages.map(({ id, title, fullPath, reviewStatus, reviewReasons }) => ({ id, title, path: fullPath, reviewStatus, reviewReasons, reviewHighlights: highlights.get(id) })),
-		topics: Object.fromEntries(pages.filter((page) => page.contextual).map((page) => [page.id, {
-			id: page.id,
-			title: page.title,
-			description: page.description,
-			html: contextualHtml(page.body),
-			fullPath: page.fullPath,
-			reviewStatus: page.reviewStatus,
-			reviewReasons: page.reviewReasons,
-		}])),
+		topics: Object.fromEntries(pages.filter((page) => page.contextual).flatMap((page) => {
+			const topic = { id: page.id, title: page.title, description: page.description,
+				html: contextualHtml(page.body), fullPath: page.fullPath,
+				reviewStatus: page.reviewStatus, reviewReasons: page.reviewReasons };
+			return [[page.id, topic] as const, ...contextualSections(page.body).map(section => {
+				const id = `${page.id}#${section.anchor}`;
+				return [id, { ...topic, id, title: section.title, description: page.title,
+					html: contextualHtml(section.body), fullPath: `${page.fullPath}#${section.anchor}` }] as const;
+			})];
+		})),
 	};
 	const reviewLines = outstanding.length
 		? outstanding.map((page) => `- [${page.title}](#review-${page.id}) — \`${page.id}\` — ${helpReviewLabel(page.reviewReasons)}`)

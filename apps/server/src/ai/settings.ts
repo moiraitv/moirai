@@ -244,3 +244,13 @@ export class AiSettingsService {
 		return this.status();
 	}
 }
+
+/** Remove saved credentials and verification before preferences enter a portable archive. */
+export function backupAiPreferences(value: unknown): unknown {
+	const settings = storedSettingsSchema.parse(value);
+	for (const profile of Object.values(settings.profiles)) {
+		profile.apiKey = '';
+		profile.verification = 'unverified';
+	}
+	return settings;
+}

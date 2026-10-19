@@ -586,6 +586,16 @@ export class Repository extends LibraryRepository {
 		return this.settings.getPlaybackSettings();
 	}
 
+	/** Return automatic backup settings without extra queries on ordinary requests. */
+	async getBackupSettings(): Promise<import('@moirai/shared').BackupSettings> {
+		return this.settings.getBackupSettings();
+	}
+
+	/** Save automatic backup settings through the repository writer. */
+	async setBackupSettings(value: import('@moirai/shared').BackupSettings): Promise<import('@moirai/shared').BackupSettings> {
+		return this.settings.setBackupSettings(value);
+	}
+
 	/** Persist validated playback settings. */
 	async setPlaybackSettings(value: PlaybackSettings): Promise<PlaybackSettings> {
 		return this.settings.setPlaybackSettings(value);

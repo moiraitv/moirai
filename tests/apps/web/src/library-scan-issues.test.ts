@@ -66,3 +66,29 @@ it('keeps informational findings out of attention while preserving retained diag
 	expect(libraryScanAttention({ warningCount: 0, pendingRemovalCount: 0 }, [{ status: 'complete', issues: [quiet] }]))
 		.toEqual({ count: 0, issues: [] });
 });
+
+
+describe('dedicated reconciliation notices', () => {
+	it.each([
+		{ code: 'source_change_requires_approval', status: 'source-approval-required' },
+		{ code: 'source_identity_requires_approval', status: 'source-approval-required' },
+		{ code: 'source_change_requires_approval', status: 'source-accepting' },
+		{ code: 'removal_approval_required', status: 'removal-approval-required' },
+		{ code: 'removal_confirmation_pending', status: 'observing-removals' },
+	] as const)('hides $code from scan attention during $status without altering history', ({ code, status }) => {
+		const notice: ScanIssue = { ...removal, code };
+		const scans = [{ status: 'partial' as const, issues: [notice] }];
+		const library = { warningCount: 1, pendingRemovalCount: 13 };
+		expect(libraryScanAttention(library, scans, status)).toEqual({ count: 0, issues: [] });
+		expect(scans[0]!.issues).toEqual([notice]);
+		expect(libraryScanAttention(library, scans, 'idle')).toEqual({ count: 1, issues: [notice] });
+	});
+
+	it('retains other failures when reconciliation is active', () => {
+		const notice: ScanIssue = { ...removal, code: 'source_change_requires_approval' };
+		const incomplete: ScanIssue = { ...unrelated, code: 'source_candidate_incomplete' };
+		expect(libraryScanAttention({ warningCount: 3, pendingRemovalCount: 0 }, [
+			{ status: 'partial', issues: [notice, incomplete, unrelated] },
+		], 'source-approval-required')).toEqual({ count: 2, issues: [incomplete, unrelated] });
+	});
+});

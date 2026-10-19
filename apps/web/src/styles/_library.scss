@@ -270,6 +270,12 @@
 
 .reconciliation-modal {
 	width: min(760px, calc(100vw - 32px));
+
+	.button.danger {
+		color: #fff;
+		border-color: rgba(255, 111, 127, 0.68);
+		background: linear-gradient(180deg, #a94452, #812d39);
+	}
 }
 
 .candidate-summary {

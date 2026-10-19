@@ -21,3 +21,12 @@ describe('error messages', () => {
 		);
 	});
 });
+
+
+it('includes a request ID for categorized backup validation failures', () => {
+	const failure = Object.assign(new Error('The backup has an unsupported migration history.'), {
+		body: { code: 'backup_unsupported_schema', requestId: 'req-restore-17' },
+	});
+	expect(errorMessage(failure)).toContain('req-restore-17');
+	expect(errorMessage(failure)).toContain('unsupported migration history. Check');
+});

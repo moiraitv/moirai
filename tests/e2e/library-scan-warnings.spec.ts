@@ -115,3 +115,58 @@ for (const active of [false, true]) {
 		await expect(history.getByRole('button', { name: /Suppressed issues/ })).toHaveCount(active ? 1 : 0);
 	});
 }
+
+for (const state of [
+	{ status: 'source-approval-required', count: 0, title: 'Library source change needs review', detail: /Review and approve the new source/ },
+	{ status: 'source-accepting', count: 0, title: 'Updating library source', detail: /finish scanning the new source/ },
+	{ status: 'observing-removals', count: 1, title: 'Checking missing library media', detail: /1 indexed item was not found.*checking the source/ },
+	{ status: 'removal-approval-required', count: 2, title: 'Library index needs review', detail: /2 indexed items were not found/ },
+	{ status: 'source-approval-required', count: 0, title: 'Library source change needs review', detail: /Review and approve the new source/, otherIssue: true },
+]) {
+	test(`explains ${state.status} independently of the missing-item count${'otherIssue' in state ? ' with another scan issue' : ''}`, async ({ page }) => {
+		await installGuideFixture(page, 1);
+		const id = '00000000-0000-4000-8000-000000000001';
+		const library = {
+			id, name: 'Movies', typeKey: 'movies', sourceType: 'on-disk',
+			sourceConfig: { scanRoot: '/movies', playbackRoot: null }, enabled: true, watcherEnabled: false,
+			watcherStatus: 'stopped', sourceAvailability: 'available', reconciliationStatus: state.status,
+			pendingRemovalCount: state.count, itemCount: 100, warningCount: 'otherIssue' in state ? 2 : 1,
+			lastScanStartedAt: null, lastScanCompletedAt: null,
+		};
+		await page.route('**/api/v1/libraries', route => route.fulfill({ json: [library] }));
+		await page.route(`**/api/v1/libraries/${id}`, route => route.fulfill({ json: library }));
+		const noticeCode = state.status.startsWith('source') ? 'source_change_requires_approval'
+			: state.status === 'observing-removals' ? 'removal_confirmation_pending' : 'removal_approval_required';
+		await page.route(`**/api/v1/libraries/${id}/scans`, route => route.fulfill({ json: [{
+			id: 'scan', status: 'partial', startedAt: '2026-09-21T10:00:00Z',
+			discoveredCount: 100, changedCount: 0, removedCount: 0,
+			issues: [
+				{ code: noticeCode, path: null, message: 'Review the source or missing items.', severity: 'warning' },
+				...('otherIssue' in state ? [{ code: 'media_probe_failed', path: 'film.mp4', message: 'Media could not be probed.', severity: 'warning' }] : []),
+			],
+		}] }));
+		await page.route(`**/api/v1/libraries/${id}/reconciliation`, route => route.fulfill({ json: {
+			status: state.status, pendingRemovalCount: state.count,
+		} }));
+		await page.route(`**/api/v1/libraries/${id}/media?*`, route => route.fulfill({ json: {
+			entries: [], items: [], groups: [], navigation: [],
+			pagination: { page: 1, pageSize: 100, totalEntries: 0, totalPages: 0 },
+		} }));
+		await page.goto(`/libraries/${id}`);
+		const banner = page.locator('.reconciliation-banner:not(.library-warning-banner)');
+		await expect(banner.locator('strong')).toHaveText(state.title);
+		await expect(banner.locator('p')).toHaveText(state.detail);
+		await expect(banner).not.toContainText('0 indexed items');
+		await expect(banner.getByRole('button', { name: 'Review', exact: true })).toBeVisible();
+		const scanAlert = page.locator('.library-warning-banner');
+		if ('otherIssue' in state) {
+			await expect(scanAlert).toContainText('1 scan issue requires review');
+			await scanAlert.getByRole('button', { name: 'Review Issues', exact: true }).click();
+			await expect(scanAlert).toContainText('media_probe_failed');
+			await expect(scanAlert).not.toContainText(noticeCode);
+		}
+		else {
+			await expect(scanAlert).toHaveCount(0);
+		}
+	});
+}

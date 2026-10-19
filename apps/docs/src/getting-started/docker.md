@@ -102,7 +102,7 @@ docker run -d \
 
 Omit the transcode mount if you want generated output to stay in the data volume. The standalone volume name `moirai-data` is literal; Compose normally prefixes its volume name with the project name. Switching between these examples does not automatically reuse an existing Compose installation's data.
 
-**Hardware access is platform-specific.** `/dev/dri` is not a universal GPU mapping: other hardware may require different device nodes, host drivers, or a vendor-specific container runtime. If using software playback, remove the device and GPU group options. Passing a device through only grants access; select and verify a compatible option in [Playback settings](/playback/settings). Avoid granting unrestricted container privileges just to bypass device permissions.
+**Hardware access is platform-specific.** `/dev/dri` is not a universal GPU mapping: other hardware may require different device nodes, host drivers, or a vendor-specific container runtime. If using software playback, remove the device and GPU group options. Passing a device through only grants access; select and verify a compatible option in [Playback settings](/settings/playback). Avoid granting unrestricted container privileges just to bypass device permissions.
 
 See Docker's [container run reference](https://docs.docker.com/engine/containers/run/) for mount, device, and supplementary-group options.
 
@@ -212,3 +212,35 @@ Open `http://<server-address>:3000`. The first visitor is allowed to create the 
 Set `MOIRAI_PUBLIC_URL` to the address that IPTV clients can reach. A loopback address such as `127.0.0.1` works only when the client runs on the same machine.
 
 Your media paths inside Moirai are the container paths, such as `/media/movies`, not the original host paths. Keep `/data` persistent when replacing or upgrading the container.
+
+## Backup storage
+
+The image stores configuration ZIPs in `/backups`, separately from `/data`. The supplied Compose file maps a dedicated `moirai-backups` volume there. To keep backups in a host directory instead, replace that volume mapping with a writable bind mount:
+
+```yaml
+services:
+  moirai:
+    environment:
+      MOIRAI_BACKUP_DIR: /backups
+    volumes:
+      - moirai-data:/data
+      - /host/moirai-backups:/backups
+```
+
+The user running Moirai needs read, write, and directory search (execute) access to this folder to create temporary files, list and download backups, and delete expired archives. Leave the mount writable; do not add `:ro`.
+
+### Bind-mount permissions on Linux
+
+The supplied image runs as `ersatztv`. Check the actual numeric user and group IDs rather than assuming they match your host account. With the service running, run these commands on the Docker host, replacing `/host/moirai-backups` with the folder in your mount:
+
+```sh
+MOIRAI_BACKUP_UID=$(docker compose exec -T moirai id -u)
+MOIRAI_BACKUP_GID=$(docker compose exec -T moirai id -g)
+sudo mkdir -p /host/moirai-backups
+sudo chown "$MOIRAI_BACKUP_UID:$MOIRAI_BACKUP_GID" /host/moirai-backups
+sudo chmod 0700 /host/moirai-backups
+```
+
+Mode `0700` grants the owning user the access needed without making backups accessible to every host user. If you use a shared group or access-control lists instead, grant that container user equivalent access. Existing ZIPs must also be readable by that user. For a standalone container, replace `docker compose exec -T moirai` with `docker exec moirai`, using your actual container name.
+
+Keep the backup mount separate from media, generated playback output, and managed artwork directories. Use **Settings → Backup & Restore** to create, download, restore, and delete configuration ZIPs. Credentials and library media are excluded from these archives.

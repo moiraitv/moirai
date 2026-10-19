@@ -1,3 +1,5 @@
+import { prepareUpgradeBackup, recordStartedVersion } from './backup/upgrade.js';
+import { resumeRestore } from './backup/restore.js';
 import { mkdir } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import Database from 'better-sqlite3';
@@ -90,6 +92,17 @@ if (developmentWatch) {
 	}
 }
 await mkdir(config.dataDir, { recursive: true });
+try {
+	await resumeRestore(config);
+}
+catch {
+	await startBootstrapServer(config.host, config.port, {
+		status: 'failed', progress: { applied: 0, total: 0, percent: 0 },
+		error: 'Configuration restore could not finish. Check storage permissions and free space, then restart to retry.',
+	});
+	await new Promise(() => {});
+}
+await prepareUpgradeBackup(config);
 const bootstrap = await runStartupMigrations(
 	config.databasePath,
 	config.migrationsDir,
@@ -97,8 +110,32 @@ const bootstrap = await runStartupMigrations(
 	config.port,
 );
 /** SQLite connection owned for the lifetime of this server process. */
-const database = createDatabase(config.databasePath, config.migrationsDir);
-const { app, services } = await buildApp(config, database.db);
+let database = createDatabase(config.databasePath, config.migrationsDir);
+let { app, services } = await buildApp(config, database.db, restartAfterRestore);
+
+/** Stop every consumer before committing configuration, then construct fresh service instances. */
+async function restartAfterRestore(): Promise<void> {
+	services.events.close({ terminate: true });
+	await app.close();
+	database.close();
+	const state: BootstrapMigrationState = { status: 'migrating', progress: { applied: 0, total: 0, percent: 0 } };
+	const maintenance = await startBootstrapServer(config.host, config.port, state);
+	try {
+		await resumeRestore(config);
+		database = createDatabase(config.databasePath, config.migrationsDir);
+		({ app, services } = await buildApp(config, database.db, restartAfterRestore));
+		await app.ready();
+		await stopBootstrapServer(maintenance);
+		await listenWithAddressRetry(() => app.listen({ host: config.host, port: config.port }).then(() => undefined), { attempts: 20, delayMs: 250 });
+		await services.scanner.start();
+		await recordStartedVersion(config);
+	}
+	catch {
+		state.status = 'failed';
+		state.error = 'Restore could not finish. Check storage and restart Moirai to retry startup.';
+		throw new Error('Configuration restore restart failed');
+	}
+}
 if (publicUrlStatus(config.publicUrl) === 'unreachable-default') {
 	app.log.warn(
 		{ publicUrl: config.publicUrl },
@@ -157,3 +194,5 @@ try {
 catch (error) {
 	app.log.error({ error }, 'Library scanner startup failed; API remains available');
 }
+
+await recordStartedVersion(config);

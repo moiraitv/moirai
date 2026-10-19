@@ -20,7 +20,6 @@ import { requestConfirmation } from '../confirmation';
 import {
 	ArrowDownAZ,
 	ArrowUpAZ,
-	AlertTriangle,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
@@ -73,6 +72,7 @@ import {
 	emptyLibraryFilterDraft,
 	type LibraryFilterDraft,
 } from '../components/library/library-filter';
+import LibraryReconciliationBanner from '../components/library/LibraryReconciliationBanner.vue';
 import LibraryReconciliationModal from '../components/library/LibraryReconciliationModal.vue';
 import AddItemsToProgramModal from '../components/programs/AddItemsToProgramModal.vue';
 import ProgramAdditionToast from '../components/programs/ProgramAdditionToast.vue';
@@ -94,7 +94,7 @@ const reconciliation = ref<LibraryReconciliation>();
 const genres = ref<MediaGenreFacet[]>([]);
 const browse = ref<MediaBrowseResult>();
 const latestScan = computed(() => scans.value[0]);
-const scanAttention = computed(() => libraryScanAttention(library.value, scans.value));
+const scanAttention = computed(() => libraryScanAttention(library.value, scans.value, reconciliation.value?.status));
 const currentScanIssues = computed(() => scanAttention.value.issues);
 const activeScanId = ref<string>();
 const activeScanProgress = ref<ScanProgress>();
@@ -1225,17 +1225,7 @@ onUnmounted(() => {
 				</div>
 				<button v-if="!isScanRunning()" class="button secondary" @click="scan">Scan Again</button>
 			</div>
-			<div
-				v-if="reconciliation && reconciliation.status !== 'idle'"
-				class="reconciliation-banner"
-			>
-				<span class="reconciliation-icon"><AlertTriangle :size="22" /></span>
-				<div>
-					<strong>Library index needs review</strong>
-					<p>{{ countLabel(reconciliation.pendingRemovalCount, 'indexed item') }} {{ reconciliation.pendingRemovalCount === 1 ? 'is' : 'are' }} awaiting reconciliation.</p>
-				</div>
-				<button class="button secondary" @click="showReconciliation = true">Review</button>
-			</div>
+			<LibraryReconciliationBanner v-if="reconciliation" :reconciliation="reconciliation" @review="showReconciliation = true" />
 
 			<section class="library-status-panel" aria-label="Library status">
 				<div class="status-stat status-watcher">

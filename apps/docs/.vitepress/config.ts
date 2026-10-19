@@ -75,10 +75,17 @@ export default defineConfig({
 				],
 			},
 			{
+				text: 'Settings',
+				items: [
+					{ text: 'Playback', link: '/settings/playback' },
+					{ text: 'AI', link: '/settings/ai' },
+					{ text: 'Backups', link: '/settings/backups' },
+				],
+			},
+			{
 				text: 'Watch and operate',
 				items: [
 					{ text: 'Guide and IPTV clients', link: '/playback/guide-and-clients' },
-					{ text: 'Playback settings', link: '/playback/settings' },
 					{ text: 'Status and logs', link: '/operations/status-and-logs' },
 					{ text: 'Account and recovery', link: '/operations/account-and-recovery' },
 					{ text: 'Troubleshooting', link: '/operations/troubleshooting' },

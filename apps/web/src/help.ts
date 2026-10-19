@@ -15,7 +15,17 @@ export const helpTopicIds = [
 	'scheduling.templates',
 	'filler.presets',
 	'scheduling.channel-schedules',
-	'playback.settings',
+	'settings.playback',
+	'settings.playback#playback-capacity',
+	'settings.playback#filler',
+	'settings.playback#viewing-preferences',
+	'settings.playback#playback-status',
+	'settings.ai',
+	'settings.ai#ai-provider',
+	'settings.backups',
+	'settings.backups#backup-and-restore',
+	'settings.backups#automatic-backup',
+	'settings.backups#backups',
 	'operations.account',
 	'welcome',
 ] as const;
@@ -81,7 +91,7 @@ export function helpTopicForPath(pathname: string): string {
 		return 'scheduling.channel-schedules';
 	}
 	if (pathname.startsWith('/settings')) {
-		return 'playback.settings';
+		return 'settings.playback';
 	}
 	if (pathname.startsWith('/logs')) {
 		return 'operations.status';

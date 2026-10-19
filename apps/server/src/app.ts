@@ -1,3 +1,4 @@
+import { BackupService } from './backup/service.js';
 import path from 'node:path';
 import { GuideArtworkStore } from './artwork/guide-artwork-store.js';
 import { reconcileGuideArtwork } from './routes/guide-artwork.js';
@@ -48,6 +49,7 @@ import { responseSerializerCompiler } from './routes/contracts.js';
 
 /** Long-lived services owned by one Fastify application instance. */
 export interface AppServices {
+	backups: BackupService;
 	aiSettings: AiSettingsService;
 	authentication: AuthenticationService;
 	repository: Repository;
@@ -72,6 +74,7 @@ export interface AppServices {
 export async function buildApp(
 	config: AppConfig,
 	db: MoiraiDatabase,
+	restartAfterRestore?: () => Promise<void>,
 ): Promise<{ app: FastifyInstance; services: AppServices }> {
 	const aiSettings = new AiSettingsService(config.dataDir);
 	await aiSettings.load();
@@ -102,6 +105,7 @@ export async function buildApp(
 		db.$client.pragma('query_only = ON');
 	}
 	const repository = databaseWriter ? writerRepository(new Repository(db, true), databaseWriter) : new Repository(db);
+	const backups = new BackupService(config, repository);
 	const authentication = new AuthenticationService(
 		repository,
 		config,
@@ -308,6 +312,7 @@ export async function buildApp(
 		throwFileSizeLimit: true,
 	});
 	registerAuthenticationGuard(app, authentication, config);
+	backups.fence.register(app);
 
 	// Start and stop background services with the HTTP application lifecycle.
 	app.addHook('onReady', async () => {
@@ -323,8 +328,10 @@ export async function buildApp(
 		playout.start();
 		await playback.start();
 		maintenance.start();
+		await backups.start();
 	});
 	app.addHook('onClose', async () => {
+		await backups.close();
 		responsiveness.close();
 		authentication.close();
 		unsubscribeSessionRevocations();
@@ -339,11 +346,11 @@ export async function buildApp(
 		await timelineMaterializer.close();
 		await schedulingWorkers.close();
 		await maintenance.close();
+		await scanner.close();
 		await mediaProbe.close();
 		unregisterPressureShedders.forEach((unregister) => unregister());
 		await resourcePressure.close();
 		events.close();
-		await scanner.close();
 		await databaseWriter?.close();
 		await logs.close();
 	});
@@ -360,6 +367,8 @@ export async function buildApp(
 
 	// Register API domains after their shared dependencies are ready.
 	registerHttpRoutes(app, {
+		backups,
+		...(restartAfterRestore ? { restartAfterRestore } : {}),
 		aiSettings,
 		requestEmbeddingWork: (includeMedia, concepts) => embeddings.requestPreferences(includeMedia, concepts),
 		playout,
@@ -400,6 +409,7 @@ export async function buildApp(
 	return {
 		app,
 		services: {
+			backups,
 			aiSettings,
 			authentication,
 			repository,

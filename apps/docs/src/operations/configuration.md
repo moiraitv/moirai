@@ -14,8 +14,9 @@ Most installations need only a few environment values:
 | `MOIRAI_PUBLIC_URL` | HTTP or HTTPS origin that IPTV clients use for playlists, guide data, artwork, and streams. |
 | `MOIRAI_MANAGEMENT_URL` | Browser origin when the management interface uses a different port. |
 | `MOIRAI_DATA_DIR` | Persistent database, artwork cache, logs, and playback working files. |
+| `MOIRAI_BACKUP_DIR` | Dedicated directory for configuration ZIPs; can use a separate writable Docker mount. Host bind mounts need [folder ownership and permissions](/getting-started/docker#bind-mount-permissions-on-linux) that allow the container user to read, write, and search the directory. |
 | `MOIRAI_PLAYBACK_STREAM_DIR` | Folder for generated playback/transcode output. Defaults to `streams` inside the data directory (`/data/streams` in Docker). An absolute path can point to a separate writable mount. |
-| `MOIRAI_TIME_ZONE` | Local time zone used for guide dates and schedule boundaries. |
+| `MOIRAI_TIME_ZONE` | Local time zone used for guide dates, schedule boundaries, and automatic backups. |
 | `MOIRAI_LOG_LEVEL` | Amount of server detail retained in logs. |
 | `MOIRAI_TRUST_PROXY` | Narrow IP addresses or networks allowed to supply forwarded client addresses. |
 
@@ -51,8 +52,9 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_LOG_RETENTION_DAYS` | `14` | Maximum age of retained JSONL logs |
 | `MOIRAI_LOG_MAX_MB` | `200` | Maximum total retained log size |
 | `MOIRAI_LOG_FILE_MAX_MB` | `10` | Rotation size for an individual log file |
-| `MOIRAI_TIME_ZONE` | Host time zone | IANA time zone used for guide and schedule generation |
+| `MOIRAI_TIME_ZONE` | Host time zone | IANA time zone used for guides, schedules, and automatic backups |
 | `MOIRAI_DATA_DIR` | `./data` | SQLite, artwork cache, and persistent application data |
+| `MOIRAI_BACKUP_DIR` | `<data>/backups` (`/backups` in Docker) | Configuration ZIPs with independent automatic, manual, pre-restore, and upgrade recovery retention |
 | `MOIRAI_ARTWORK_CACHE_MAX_MB` | `2048` | Maximum persistent artwork cache size |
 | `MOIRAI_ARTWORK_CACHE_MAX_ENTRY_MB` | `25` | Maximum size of one cached image |
 | `MOIRAI_ARTWORK_TRANSFORM_CONCURRENCY` | `4` | Maximum concurrent artwork renders |

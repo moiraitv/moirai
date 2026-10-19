@@ -177,7 +177,7 @@ export class ApiError extends Error {
 }
 
 /** Send an API request and parse its JSON response or throw a typed API error. */
-async function request<T>(url: string, init?: RequestInit, readResponse?: (response: Response) => Promise<T>): Promise<T> {
+export async function request<T>(url: string, init?: RequestInit, readResponse?: (response: Response) => Promise<T>): Promise<T> {
 	const requestAuthenticationGeneration = authenticationGeneration;
 	const method = init?.method?.toUpperCase() ?? 'GET';
 	const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method);
@@ -186,7 +186,7 @@ async function request<T>(url: string, init?: RequestInit, readResponse?: (respo
 		...init,
 		credentials: 'same-origin',
 		headers: {
-			...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+			...(hasBody && !(init?.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
 			...(unsafe && csrfToken ? { 'X-Moirai-CSRF': csrfToken } : {}),
 			...init?.headers,
 		},

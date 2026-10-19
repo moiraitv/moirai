@@ -1,0 +1,383 @@
+.settings-card-heading {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+
+	h2 {
+		margin: 0;
+		font-size: 1.2rem;
+	}
+
+	> div > p {
+		margin: 5px 0 0;
+		color: var(--muted-strong);
+		font-size: 0.85rem;
+	}
+}
+
+.settings-card-icon {
+	display: grid;
+	place-items: center;
+	flex: 0 0 46px;
+	height: 46px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel-hover);
+	color: var(--accent);
+}
+
+.ai-settings-panel {
+	align-items: start;
+}
+
+.ai-settings-panel > p {
+	margin: 0;
+}
+
+.ai-settings-advanced summary {
+	cursor: pointer;
+	color: var(--accent);
+}
+
+.ai-settings-advanced > .form-grid {
+	margin-top: 14px;
+}
+
+.viewing-preferences-panel {
+	display: grid;
+	gap: 0.85rem;
+}
+
+.settings-toggle {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-self: start;
+	gap: 0.7rem;
+}
+
+.settings-toggle input {
+	width: auto;
+}
+
+.ai-settings-research-note {
+	display: block;
+	margin: 0.2rem 0 0;
+	color: var(--muted-strong);
+	font-weight: 400;
+	line-height: 1.35;
+}
+
+.fallback-filler-panel {
+	display: grid;
+	gap: 14px;
+}
+
+.fallback-filler-panel > h2,
+.fallback-filler-panel > p,
+.fallback-filler-panel > h3 {
+	margin: 0;
+}
+
+.viewing-preference-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.settings-tablist {
+	display: flex;
+	gap: 24px;
+	overflow-x: auto;
+	border-bottom: 1px solid var(--line);
+	margin-bottom: 20px;
+}
+
+.settings-tablist > button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+	min-height: 48px;
+	padding: 10px 4px;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: transparent;
+	color: var(--muted);
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.settings-tablist > button[aria-selected='true'] {
+	color: var(--accent);
+	border-bottom-color: var(--accent);
+}
+
+.settings-tab-dirty {
+	color: var(--accent);
+	font-size: 0.65rem;
+}
+
+.settings-tab-attention {
+	color: var(--gold);
+	font-weight: 800;
+}
+
+.settings-playback {
+	display: grid;
+	gap: 16px;
+}
+
+.settings-status {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex-wrap: wrap;
+	padding: 14px 20px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: var(--panel);
+}
+
+.settings-status-title {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-right: auto;
+}
+
+.settings-status > .notice,
+.settings-engine-details {
+	flex-basis: 100%;
+	margin: 0;
+}
+
+.settings-engine-details {
+	display: flex;
+	gap: 16px;
+	color: var(--muted);
+}
+
+.settings-playback-groups {
+	display: grid;
+	gap: 16px;
+}
+
+.settings-section {
+	margin: 0;
+	padding: 20px;
+}
+
+.settings-section h2 {
+	margin: 0;
+	font-size: 1.2rem;
+}
+
+.settings-section p {
+	margin: 6px 0 0;
+	color: var(--muted);
+}
+
+.settings-section > label > input[type='number'] {
+	max-width: 240px;
+}
+
+.settings-section .form-actions,
+.settings-actions {
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.settings-section .button,
+.settings-actions .button {
+	min-height: 36px;
+	padding: 7px 12px;
+	font-size: 0.82rem;
+}
+
+.settings-section .form-disclosure-trigger,
+.backup-settings-panel .form-disclosure-trigger {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 16px;
+	width: 100%;
+	min-height: 48px;
+}
+
+.settings-summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--muted);
+	font-size: 0.82rem;
+	font-weight: 400;
+	text-align: right;
+}
+
+.settings-section .form-disclosure-content,
+.backup-settings-panel .form-disclosure-content {
+	padding: 16px;
+}
+
+.settings-help summary {
+	color: var(--accent);
+	cursor: pointer;
+}
+
+.settings-help p {
+	font-size: 0.85rem;
+}
+
+.settings-policy-summary {
+	margin: 0;
+	color: var(--muted);
+}
+
+.settings-section .form-disclosure {
+	margin-top: 0;
+}
+
+.settings-section .is-open > .form-disclosure-trigger svg {
+	transform: rotate(180deg);
+}
+
+.settings-page .viewing-preferences-panel {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+}
+
+.settings-page .viewing-preferences-panel > .settings-card-heading,
+.settings-page .viewing-preferences-panel > p {
+	grid-column: 1 / -1;
+}
+
+.settings-tab-editor {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 16px;
+	margin: 0;
+	min-width: 0;
+}
+
+.settings-save-footer {
+	position: sticky;
+	bottom: 0;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 14px 20px;
+	border: 1px solid var(--line-bright);
+	border-radius: 12px;
+	background: var(--panel);
+}
+
+.settings-save-state {
+	color: var(--muted);
+	font-size: 0.82rem;
+}
+
+.settings-save-footer .form-actions {
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.settings-save-footer .button {
+	min-height: 36px;
+	padding: 7px 12px;
+	font-size: 0.82rem;
+}
+
+.backup-settings-panel .backup-automatic {
+	margin-top: 0;
+}
+
+.backup-settings-panel .backup-automatic-header {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 16px;
+	padding: 20px;
+}
+
+.backup-automatic-header h3 {
+	margin: 0;
+	min-width: 0;
+}
+
+.backup-automatic-header .settings-policy-summary {
+	grid-column: 1 / -1;
+}
+
+.backup-automatic-toggle {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 48px;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.backup-automatic-copy {
+	flex: 1;
+	min-width: 0;
+}
+
+.backup-automatic-copy strong,
+.backup-automatic-copy small {
+	display: block;
+}
+
+.backup-automatic-copy small {
+	margin-top: 5px;
+	color: var(--muted-strong);
+	font-size: 0.85rem;
+	font-weight: 400;
+}
+
+.backup-automatic.is-open .backup-automatic-toggle > svg {
+	transform: rotate(180deg);
+}
+
+.backup-automatic-content {
+	display: grid;
+	gap: 16px;
+}
+
+
+.settings-card-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+
+	> h2,
+	> h3 {
+		margin: 0;
+	}
+}
+
+.backup-automatic-heading {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	min-width: 0;
+
+	h3 {
+		flex: 1;
+	}
+
+	> .page-help-button {
+		margin-top: 8px;
+	}
+}

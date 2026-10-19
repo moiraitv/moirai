@@ -1,3 +1,5 @@
+import { backupValidationCodeSchema } from '@moirai/shared';
+
 /** Error shape used by the API client to retain a safe public response body. */
 interface ErrorWithPublicBody extends Error {
 	body?: {
@@ -15,12 +17,13 @@ export function errorMessage(value: unknown): string {
 	const publicError = value as ErrorWithPublicBody;
 	const requestId = publicError.body?.requestId;
 	if (
-		publicError.body?.code === 'internal_error'
+		(publicError.body?.code === 'internal_error' || backupValidationCodeSchema.safeParse(publicError.body?.code).success)
 		&& typeof requestId === 'string'
 		&& requestId.length > 0
 		&& requestId.length <= 128
 	) {
-		return `${value.message}. Check server logs for request ${requestId}.`;
+		const message = value.message.endsWith('.') ? value.message : `${value.message}.`;
+		return `${message} Check server logs for request ${requestId}.`;
 	}
 
 	return value.message;

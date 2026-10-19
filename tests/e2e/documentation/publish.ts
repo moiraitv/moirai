@@ -66,6 +66,8 @@ export const screenshotNames = [
 	'programs.png',
 	'quick-setup.png',
 	'settings.png',
+	'backup-settings.png',
+	'backup-restore.png',
 	'template-editor.png',
 	'template-preview.png',
 	'template-filler-preview.png',

@@ -106,7 +106,6 @@ onMounted(() => {
 							<strong>{{ helpReviewLabel(topic.reviewReasons) }}</strong>
 							This guidance needs review before production.
 						</div>
-						<p class="eyebrow">Contextual guide</p>
 						<h2 id="help-drawer-title">{{ topic.title }}</h2>
 						<p class="help-drawer-description">{{ topic.description }}</p>
 						<!-- eslint-disable-next-line vue/no-v-html -->

@@ -1,3 +1,5 @@
+import { BackupContentError, BackupValidationError, validationFailure } from '@server/backup/errors.js';
+import { BACKUP_VALIDATION_MESSAGES, type BackupValidationCode } from '@moirai/shared';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { publicError } from '@server/routes/public-errors.js';
@@ -27,6 +29,20 @@ describe('public error policy', () => {
 		const mapped = publicError(error, REQUEST_ID);
 		expect(mapped.statusCode).toBe(503);
 		expect(mapped.body.code).toBe('storage_unavailable');
+		expect(mapped.body.message).not.toContain('/private');
+	});
+
+	it.each([
+		['EACCES', 'Permission denied'], ['EPERM', 'Permission denied'], ['EROFS', 'read-only'],
+		['ENOSPC', 'full'], ['ENOTDIR', 'not a directory'], ['ENOENT', 'missing'],
+		['EIO', 'read or write failed'], ['SQLITE_FULL', 'full'], ['SQLITE_READONLY', 'read-only'],
+	])('explains %s storage failures without exposing raw paths', (code, expected) => {
+		const error = Object.assign(new Error(`${code}: sensitive detail /private/backup.zip`), { code });
+		const mapped = publicError(error, REQUEST_ID);
+		expect(mapped.statusCode).toBe(503);
+		expect(mapped.body.code).toBe('storage_unavailable');
+		expect(mapped.body.message).toContain(expected);
+		expect(mapped.body.message).not.toContain('sensitive detail');
 		expect(mapped.body.message).not.toContain('/private');
 	});
 
@@ -101,4 +117,22 @@ describe('public error policy', () => {
 			expect.objectContaining({ path: ['count'], code: 'too_small' }),
 		]);
 	});
+});
+
+
+it.each(Object.keys(BACKUP_VALIDATION_MESSAGES) as BackupValidationCode[])('returns a safe %s failure with its request ID', code => {
+	const error = new BackupValidationError(code, { name: 'Error', reason: 'private diagnostic' });
+	const mapped = publicError(error, REQUEST_ID);
+	expect(mapped.statusCode).toBe(422);
+	expect(mapped.body).toMatchObject({ code, message: BACKUP_VALIDATION_MESSAGES[code], requestId: REQUEST_ID });
+	expect(JSON.stringify(mapped.body)).not.toContain('private diagnostic');
+});
+
+
+it('logs application-authored validation reasons while withholding raw parser input', () => {
+	const expected = validationFailure('backup_invalid_archive', new BackupContentError('Backup content checksum mismatch')) as BackupValidationError;
+	expect(expected.diagnostic?.reason).toBe('Backup content checksum mismatch');
+	const parser = validationFailure('backup_invalid_records', new SyntaxError('PRIVATE_CONFIGURATION_VALUE')) as BackupValidationError;
+	expect(parser.diagnostic?.reason).toBe('invalid_json');
+	expect(JSON.stringify(parser)).not.toContain('PRIVATE_CONFIGURATION_VALUE');
 });

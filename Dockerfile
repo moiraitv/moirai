@@ -36,6 +36,7 @@ ENV NODE_ENV=production \
     MOIRAI_HOST=0.0.0.0 \
     MOIRAI_PORT=3000 \
     MOIRAI_DATA_DIR=/data \
+    MOIRAI_BACKUP_DIR=/backups \
     MOIRAI_ETV_CHANNEL_PATH=/app/ersatztv-channel
 COPY --from=node-runtime /usr/local /usr/local
 WORKDIR /moirai
@@ -48,11 +49,11 @@ COPY --from=build --chown=ersatztv:ersatztv /app/apps/web/dist ./apps/web/dist
 COPY --from=build --chown=ersatztv:ersatztv /app/apps/docs/dist ./apps/web/dist/help
 COPY --from=build --chown=ersatztv:ersatztv /app/drizzle ./drizzle
 RUN usermod --shell /bin/bash ersatztv \
-    && mkdir -p /data /home/ersatztv \
-    && chown ersatztv:ersatztv /data /home/ersatztv
+    && mkdir -p /data /backups /home/ersatztv \
+    && chown ersatztv:ersatztv /data /backups /home/ersatztv
 USER ersatztv
 EXPOSE 3000
-VOLUME ["/data"]
+VOLUME ["/data", "/backups"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 ENTRYPOINT []

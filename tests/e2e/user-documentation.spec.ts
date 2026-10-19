@@ -1,3 +1,5 @@
+import './documentation/settings-help';
+import './documentation/backups';
 import './documentation/playback-progress';
 import './documentation/subtitle-preview';
 import './documentation/subtitle-language';
@@ -677,7 +679,6 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	await page.goto('/settings');
 	await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 	await expect(page.locator('.fallback-filler-loading')).toBeHidden();
-	await expect(page.locator('.fallback-filler-editor video')).toBeVisible();
 	await capture(page, 'settings.png');
 	await normalizeFixtureLogs(documentationServer.directory);
 	await page.goto('/logs');

@@ -33,6 +33,7 @@ export interface AppConfig {
 	scanHistoryRetentionDays: number;
 	scanHistoryMaxPerLibrary: number;
 	dataDir: string;
+	backupDir: string;
 	databasePath: string;
 	artworkCacheDir: string;
 	artworkCacheMaxBytes: number;
@@ -313,6 +314,7 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 		debug: overrides.debug ?? debugFromEnvironment(process.env.MOIRAI_DEBUG),
 		logLevel: overrides.logLevel ?? process.env.MOIRAI_LOG_LEVEL ?? 'info',
 		dataDir,
+		backupDir: overrides.backupDir ?? path.resolve(dataDir, process.env.MOIRAI_BACKUP_DIR ?? 'backups'),
 		logDir: overrides.logDir
 			?? (process.env.MOIRAI_LOG_DIR
 				? resolveFromProjectRoot(process.env.MOIRAI_LOG_DIR)

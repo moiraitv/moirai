@@ -1564,6 +1564,7 @@ test('keeps the latest global fallback response when startup refreshes overlap',
 	});
 
 	await page.goto('/settings');
+	await page.getByRole('button', { name: /^Global fallback filler/ }).click();
 	await expect.poll(() => requestCount).toBeGreaterThanOrEqual(1);
 	await readyEvent;
 	const removed = await page.request.delete('/api/v1/playback/fallback-filler', {
@@ -1635,172 +1636,54 @@ test('removes a configured channel fallback whose asset is unavailable', async (
 	await expect.poll(() => removed).toBe(true);
 });
 
-test('loads playback controls before tracking and independently saving panel drafts', async ({
-	page,
-}) => {
+test('loads playback controls and saves or resets the tab as one draft', async ({ page }) => {
 	await authenticateAdministrator(page);
-	let releaseSettings: (() => void) | undefined;
-	const settingsGate = new Promise<void>((resolve) => {
-		releaseSettings = resolve;
+	let release!: () => void;
+	const gate = new Promise<void>(resolve => {
+		release = resolve;
 	});
-	await page.route('**/api/v1/playback/settings', async (route) => {
-		await settingsGate;
-		await route.continue();
-	});
-	let rejectFallbackLoad = true;
-	let rejectFallbackSave = false;
-	await page.route('**/api/v1/playback/fallback-filler', async (route) => {
-		if (route.request().method() === 'GET' && rejectFallbackLoad) {
-			await route.fulfill({
-				status: 500,
-				json: { code: 'load_failed', message: 'Fallback status could not be loaded.' },
-			});
-			return;
-		}
-		if (route.request().method() === 'PUT' && rejectFallbackSave) {
-			await route.fulfill({
-				status: 500,
-				json: { code: 'save_failed', message: 'Fallback could not be saved.' },
-			});
-			return;
-		}
+	await page.route('**/api/v1/playback/settings', async route => {
+		await gate;
 		await route.continue();
 	});
 	await page.goto('/settings');
-	const save = page.locator('form').getByRole('button', { name: 'Save Settings' });
-	await expect(page.getByRole('status').filter({ hasText: 'Loading playback settings' }))
-		.toBeVisible();
-	await expect(save).toHaveCount(0);
-	releaseSettings?.();
+	const panel = page.getByRole('tabpanel', { name: /^Playback/ });
+	const save = panel.getByRole('button', { name: 'Save Playback Settings', exact: true });
+	await expect(panel.getByRole('status').filter({ hasText: 'Loading playback settings' })).toBeVisible();
 	await expect(save).toBeDisabled();
-	await expect(page.locator('.fallback-filler-panel')).toContainText(
-		'Fallback status could not be loaded.',
-	);
-	const disabledSaveOpacity = Number(await save.evaluate((element) =>
-		getComputedStyle(element).opacity));
-	expect(disabledSaveOpacity).toBeLessThan(0.6);
+	release();
+	const capacity = panel.getByRole('spinbutton');
+	await expect(capacity).toBeVisible();
 	await page.unroute('**/api/v1/playback/settings');
-
-	const maximumSessions = page.getByLabel('Maximum active channel sessions');
-	const viewingEnabled = page.getByLabel(
-		'Learn from channel viewing and apply it to Weighted Random programs',
-	);
-	const preferencePanel = page.locator('.viewing-preferences-panel');
-	const savePreferences = preferencePanel.getByRole('button', { name: 'Save Settings' });
-	const originalMaximum = Number(await maximumSessions.inputValue());
-	const originalViewingEnabled = await viewingEnabled.isChecked();
-	const updatedMaximum = originalMaximum === 32 ? 31 : originalMaximum + 1;
-	await expect(savePreferences).toBeDisabled();
-	await maximumSessions.fill(String(updatedMaximum));
-	await expect(save).toBeEnabled();
-	await expect.poll(() => save.evaluate((element) =>
-		Number(getComputedStyle(element).opacity))).toBeGreaterThan(disabledSaveOpacity);
-	await maximumSessions.fill(String(originalMaximum));
-	await expect(save).toBeDisabled();
-	await maximumSessions.fill(String(updatedMaximum));
-	await viewingEnabled.setChecked(!originalViewingEnabled);
-	await expect(save).toBeEnabled();
-	await expect(savePreferences).toBeEnabled();
-
-	const settingsUpdates: Array<Record<string, unknown>> = [];
-	let rejectNextUpdate = false;
-	await page.route('**/api/v1/playback/settings', async (route) => {
+	const baseline = await (await page.request.get('/api/v1/playback/settings')).json();
+	const nextCapacity = baseline.maxActiveSessions === 8 ? 9 : 8;
+	await capacity.fill(String(nextCapacity));
+	const viewing = panel.getByRole('checkbox');
+	await viewing.setChecked(!baseline.viewingPreferencesEnabled);
+	let fail = true;
+	const writes: Record<string, unknown>[] = [];
+	await page.route('**/api/v1/playback/settings', async route => {
 		if (route.request().method() !== 'PUT') {
 			await route.continue();
 			return;
 		}
-
-		const payload = route.request().postDataJSON() as Record<string, unknown>;
-		settingsUpdates.push(payload);
-		if (rejectNextUpdate) {
-			rejectNextUpdate = false;
-			await route.fulfill({
-				status: 500,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					code: 'save_failed',
-					message: 'Settings could not be saved.',
-					requestId: 'e2e-settings-failure',
-				}),
-			});
-			return;
-		}
-
-		await route.fulfill({ json: payload });
+		writes.push(route.request().postDataJSON());
+		await route.fulfill(fail ? { status: 500, json: { message: 'Playback settings could not be saved.' } } : { json: route.request().postDataJSON() });
 	});
 	await save.click();
+	await expect(panel.getByRole('alert')).toContainText('Playback settings could not be saved.');
+	await expect(save).toBeEnabled();
+	fail = false;
+	await save.click();
 	await expect(save).toBeDisabled();
-	expect(await viewingEnabled.isChecked()).toBe(!originalViewingEnabled);
-	await expect(savePreferences).toBeEnabled();
-	expect(settingsUpdates[0]).toEqual({
-		maxActiveSessions: updatedMaximum,
-		viewingPreferencesEnabled: originalViewingEnabled,
-	});
-
-	rejectNextUpdate = true;
-	await savePreferences.click();
-	await expect(page.getByText('Settings could not be saved.')).toBeVisible();
-	await expect(savePreferences).toBeEnabled();
-	await savePreferences.click();
-	await expect(savePreferences).toBeDisabled();
-	expect(settingsUpdates.at(-1)).toEqual({
-		maxActiveSessions: updatedMaximum,
-		viewingPreferencesEnabled: !originalViewingEnabled,
-	});
-
-	const fallbackPanel = page.locator('.fallback-filler-panel');
-	const fallbackInput = fallbackPanel.locator('input[type="file"]');
-	const fallbackFixture = {
-		name: 'global-fallback.mp4',
-		mimeType: 'video/mp4',
-		buffer: Buffer.from('global-fallback-fixture'),
-	};
-	await fallbackInput.setInputFiles(fallbackFixture);
-	await expect(fallbackPanel).toContainText('Pending upload');
-	await fallbackPanel.getByRole('button', { name: 'Reset fallback draft' }).click();
-	await fallbackPanel.getByRole('button', { name: 'Confirm Reset fallback draft' }).click();
-	await expect(fallbackInput).toHaveValue('');
-	await fallbackInput.setInputFiles(fallbackFixture);
-	await expect(fallbackPanel).toContainText('Pending upload');
-	rejectFallbackLoad = false;
-	rejectFallbackSave = true;
-	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
-	await expect(fallbackPanel.getByText('Fallback could not be saved.')).toBeVisible();
-	await page.getByRole('button', { name: 'Refresh Status' }).click();
-	await expect(fallbackPanel.getByText('Fallback could not be saved.')).toBeVisible();
-	rejectFallbackSave = false;
-	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
-	await page.unroute('**/api/v1/playback/fallback-filler');
-	await expect(fallbackPanel.getByRole('button', { name: 'Save Fallback' })).toBeDisabled({ timeout: 30_000 });
-	await expect(fallbackPanel).toContainText('Global override', { timeout: 30_000 });
-	await expect(fallbackPanel).toContainText('global-fallback.mp4');
-	await fallbackPanel.getByRole('button', { name: 'Remove fallback filler override' }).click();
-	await fallbackPanel.getByRole('button', {
-		name: 'Confirm remove fallback filler override',
-	}).click();
-	await expect(fallbackPanel).toContainText('Bundled Moirai fallback after save');
-	await expect(fallbackPanel).toContainText('dead-air.mp4');
-	await expect(fallbackPanel.locator('video')).toBeVisible();
-	await fallbackPanel.getByRole('button', { name: 'Save Fallback' }).click();
-	await expect(fallbackPanel).toContainText('Bundled Moirai fallback');
-
-	let viewingHistoryCleared = false;
-	await page.route('**/api/v1/viewing-preferences/clear', async (route) => {
-		viewingHistoryCleared = true;
-		await route.fulfill({ status: 204 });
-	});
-	await preferencePanel.getByRole('button', { name: 'View Current Scores' }).click();
-	const scoresDialog = page.getByRole('dialog', { name: 'Current scores' });
-	const clearHistory = scoresDialog.getByRole('button', { name: 'Clear History', exact: true });
-	await clearHistory.click();
-	await expect(scoresDialog.getByRole('button', { name: 'Confirm Clear History' })).toBeVisible();
-	await page.keyboard.press('Escape');
-	await expect(clearHistory).toBeVisible();
-	expect(viewingHistoryCleared).toBe(false);
-	await clearHistory.click();
-	await scoresDialog.getByRole('button', { name: 'Confirm Clear History' }).click();
-	await expect(page.getByText('Viewing history cleared.')).toBeVisible();
-	expect(viewingHistoryCleared).toBe(true);
+	expect(writes).toHaveLength(2);
+	expect(writes[1]).toEqual({ ...baseline, maxActiveSessions: nextCapacity, viewingPreferencesEnabled: !baseline.viewingPreferencesEnabled });
+	await capacity.fill('0');
+	await expect(save).toBeDisabled();
+	await panel.getByRole('button', { name: 'Reset Playback settings draft', exact: true }).click();
+	await panel.getByRole('button', { name: 'Confirm Reset Playback settings draft', exact: true }).click();
+	await expect(capacity).toHaveValue(String(nextCapacity));
+	await expect(save).toBeDisabled();
 });
 
 test('enables local credential creation only after its required fields agree', async ({ page }) => {

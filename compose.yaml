@@ -6,6 +6,7 @@ services:
     ports:
       - '3000:3000'
     environment:
+      MOIRAI_BACKUP_DIR: /backups
       MOIRAI_LOG_LEVEL: info
       MOIRAI_LOG_DIR: ${MOIRAI_LOG_DIR:-/data/logs}
       MOIRAI_LOG_RETENTION_DAYS: ${MOIRAI_LOG_RETENTION_DAYS:-14}
@@ -31,6 +32,7 @@ services:
       MOIRAI_SCAN_HISTORY_MAX_PER_LIBRARY: ${MOIRAI_SCAN_HISTORY_MAX_PER_LIBRARY:-2000}
     volumes:
       - moirai-data:/data
+      - moirai-backups:/backups
       # Add media libraries as read-only mounts, for example:
       # - /host/media/movies:/media/movies:ro
     # Optional Intel/AMD GPU access on Linux. Choose the correct host render node, then run:
@@ -45,3 +47,4 @@ services:
 
 volumes:
   moirai-data:
+  moirai-backups:

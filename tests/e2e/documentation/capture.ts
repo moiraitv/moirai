@@ -64,7 +64,8 @@ async function prepare(page: Page): Promise<void> {
 		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
 		while (walker.nextNode()) {
 			const original = walker.currentNode.textContent ?? '';
-			const sanitized = original.replace(/[^\s<>"']*\/test-results\/documentation-runtime\/scene-[^\s<>"']*/gu, '/media/movies');
+			const replacement = walker.currentNode.parentElement?.closest('.backup-details code') ? '/backups' : '/media/movies';
+			const sanitized = original.replace(/[^\s<>"']*\/test-results\/documentation-runtime\/scene-[^\s<>"']*/gu, replacement);
 			if (sanitized !== original) {
 				walker.currentNode.textContent = sanitized;
 			}

@@ -15,6 +15,7 @@ await build({
 		main: path.join(directory, 'src/main.ts'),
 		'credit-worker': path.join(directory, 'src/playback/credit-worker.ts'),
 		'writer.worker': path.join(directory, 'src/repository/writer.worker.ts'),
+		'backup-worker': path.join(directory, 'src/backup/worker.ts'),
 		'migrate-worker': path.join(directory, 'src/db/migrate-worker.ts'),
 		worker: path.join(directory, 'src/scheduling/worker.ts'),
 	},

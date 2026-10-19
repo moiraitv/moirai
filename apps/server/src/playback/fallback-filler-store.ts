@@ -41,7 +41,7 @@ const STAGED_NAME = 'staged';
 const PREVIOUS_NAME = 'previous';
 
 /** Persisted facts needed to present and play one validated fallback asset. */
-const storedFallbackFillerSchema = z.object({
+export const storedFallbackFillerSchema = z.object({
 	version: z.literal(1),
 	filename: z.string().min(1).max(180),
 	contentType: z.string().min(1).max(120),
@@ -110,7 +110,7 @@ interface EffectiveFallbackLookup {
 }
 
 /** Select a supported content type from ffprobe container metadata. */
-function fallbackContentType(result: MediaProbeResult, originalExtension: string): string {
+export function fallbackContentType(result: MediaProbeResult, originalExtension: string): string {
 	const container = result.container?.toLowerCase() ?? '';
 	if (container.includes('matroska') && container.includes('webm')) {
 		return mediaMimeType(originalExtension === '.webm' ? 'asset.webm' : 'asset.mkv');
@@ -138,7 +138,7 @@ function fallbackContentType(result: MediaProbeResult, originalExtension: string
 }
 
 /** Return the measured duration of the only video stream accepted for fallback playback. */
-function fallbackVideoDuration(result: MediaProbeResult): number | null {
+export function fallbackVideoDuration(result: MediaProbeResult): number | null {
 	const videoStreams = result.streams.filter((stream) => stream.type === 'video' && !stream.isAttachedPicture);
 	if (videoStreams.length !== 1) {
 		throw new FallbackFillerValidationError(

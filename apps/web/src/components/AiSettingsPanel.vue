@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { BrainCircuit } from '@lucide/vue';
 import { AI_WEB_SEARCH_DEFAULT_TIME_LIMIT_MINUTES, type AiProvider, type AiSettingsStatus,
 	type AiSettingsSave, type AiWebSearchTimeLimitMinutes } from '@moirai/shared';
 import { api } from '../api';
 import { requestConfirmation } from '../confirmation';
 import { errorMessage } from '../error-message';
 import LoadingState from './LoadingState.vue';
+import SettingsSaveFooter from './SettingsSaveFooter.vue';
+import PageHelpButton from './PageHelpButton.vue';
 
-const emit = defineEmits<{ dirty: [value: boolean]; saving: [value: boolean]; saved: [message: string] }>();
+const emit = defineEmits<{ dirty: [value: boolean]; saving: [value: boolean]; saved: [message: string]; attention: [value: boolean] }>();
 const providers: { id: AiProvider; label: string }[] = [
 	{ id: 'openai', label: 'OpenAI' }, { id: 'anthropic', label: 'Anthropic' },
 	{ id: 'xai', label: 'xAI' }, { id: 'openrouter', label: 'OpenRouter' },
@@ -18,6 +21,8 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref('');
 const selected = ref<AiProvider>('openai');
+const baselineProvider = ref<AiProvider>('openai');
+const activationRequested = ref(false);
 const key = ref('');
 const modelOverride = ref('');
 const webSearch = ref(false);
@@ -35,11 +40,8 @@ const profileFieldsDirty = computed(() => Boolean(key.value)
 	|| (selected.value === 'custom' && (baseUrl.value !== (profile.value?.baseUrl ?? '')
 		|| protocol.value !== (profile.value?.protocol ?? 'chat-completions')
 		|| chatJsonMode.value !== (profile.value?.chatJsonMode ?? 'json_object'))));
-const dirty = computed(() => Boolean(status.value) && (
-	profileFieldsDirty.value || (selected.value !== status.value?.activeProvider
-		&& (Boolean(profile.value?.hasKey) || (selected.value === 'custom'
-			&& Boolean(profile.value?.baseUrl && profile.value.effectiveModel))))
-));
+const dirty = computed(() => Boolean(status.value)
+	&& (profileFieldsDirty.value || selected.value !== baselineProvider.value || activationRequested.value));
 const valid = computed(() => {
 	if (selected.value === 'custom') {
 		return Boolean(modelOverride.value.trim()) && Boolean(baseUrl.value.trim())
@@ -49,6 +51,8 @@ const valid = computed(() => {
 });
 watch(dirty, value => emit('dirty', value), { immediate: true });
 watch(saving, value => emit('saving', value), { immediate: true });
+watch(() => Boolean(error.value || status.value?.connectionWarning), value => emit('attention', value), { immediate: true });
+
 /** Copy redacted saved preferences into the draft for the selected provider. */
 function loadProfile(): void {
 	const saved = profile.value;
@@ -60,6 +64,14 @@ function loadProfile(): void {
 	protocol.value = saved?.protocol ?? 'chat-completions';
 	chatJsonMode.value = saved?.chatJsonMode ?? 'json_object';
 	allowInsecureHttp.value = false;
+	activationRequested.value = false;
+}
+
+/** Restore the active provider and its saved profile without changing stored credentials. */
+function reset(): void {
+	selected.value = baselineProvider.value;
+	loadProfile();
+	error.value = '';
 }
 
 /** Load Settings with an explicit initial and failed state. */
@@ -68,6 +80,7 @@ async function load(): Promise<void> {
 	try {
 		status.value = await api.aiSettings();
 		selected.value = status.value.activeProvider ?? 'openai';
+		baselineProvider.value = selected.value;
 		loadProfile();
 		error.value = '';
 	}
@@ -113,6 +126,7 @@ async function save(): Promise<void> {
 				chatJsonMode: chatJsonMode.value, allowInsecureHttp: allowInsecureHttp.value } : {}),
 		} };
 		status.value = await api.saveAiSettings(body);
+		baselineProvider.value = selected.value;
 		loadProfile();
 		emit('saved', 'AI provider saved.');
 	}
@@ -122,6 +136,15 @@ async function save(): Promise<void> {
 	finally {
 		saving.value = false;
 	}
+}
+
+/** Re-enable the selected saved profile, retaining failed activation for footer retry or reset. */
+async function enable(): Promise<void> {
+	if (!status.value || saving.value || dirty.value || !valid.value) {
+		return;
+	}
+	activationRequested.value = true;
+	await save();
 }
 
 /** Disable new AI generations without removing saved provider credentials. */
@@ -176,43 +199,45 @@ onMounted(() => void load());
 </script>
 
 <template>
-	<section class="panel form-grid span-2 ai-settings-panel" aria-labelledby="ai-settings-heading">
-		<div class="span-2">
-			<p class="eyebrow">Content selection</p>
-			<h2 id="ai-settings-heading">AI provider</h2>
-			<p>Choose a provider and enter its API key. Provider charges and results vary by model.</p>
-		</div>
-		<LoadingState v-if="loading" class="span-2" label="Loading AI settings…" />
-		<div v-else-if="!status" class="span-2">
-			<p class="notice error" role="alert">{{ error }}</p>
-			<button type="button" class="button secondary" @click="load">Retry AI Settings</button>
-		</div>
-		<template v-else>
-			<p v-if="!status.activeProvider" class="span-2">AI is off. Saving a provider enables it.</p>
-			<label><span>Provider</span><select :value="selected" :disabled="saving" @change="selectProvider"><option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.label }}</option></select></label>
-			<label><span>API Key {{ selected === 'custom' ? '(optional)' : '' }}</span><input v-model="key" type="password" autocomplete="off" :disabled="saving" :placeholder="profile?.keyPlaceholder ?? 'Enter API Key'" /><small v-if="profile?.hasKey">A key is saved for this provider. Enter a new key to replace it.</small></label>
-			<p class="span-2">{{ modelOverride ? 'Custom model' : 'Recommended model' }}: <strong>{{ modelOverride || profile?.effectiveModel || 'Enter a model ID' }}</strong></p>
-			<details class="span-2 ai-settings-advanced">
-				<summary>Advanced</summary>
-				<div class="form-grid">
-					<label><span>Custom model ID</span><input v-model="modelOverride" :disabled="saving" placeholder="Use recommended model" /></label>
-					<template v-if="selected === 'custom'">
-						<label><span>Endpoint base URL</span><input v-model="baseUrl" type="url" :disabled="saving" placeholder="https://example.com/v1" /></label>
-						<label><span>API format</span><select v-model="protocol" :disabled="saving"><option value="chat-completions">Chat Completions</option><option value="anthropic-messages">Anthropic Messages</option></select></label>
-						<label v-if="protocol === 'chat-completions'"><span>JSON mode</span><select v-model="chatJsonMode" :disabled="saving"><option value="json_object">JSON object</option><option value="json_schema">JSON schema</option><option value="prompt_only">Prompt only</option></select></label>
-						<label v-if="plaintext" class="settings-toggle span-2"><input v-model="allowInsecureHttp" type="checkbox" :disabled="saving" />I understand that HTTP sends the prompt and API key without encryption.</label>
-					</template>
-					<label v-if="profile?.researchAvailable" class="settings-toggle span-2"><input v-model="webSearch" type="checkbox" :disabled="saving" /><span>Use web research when generating<small class="ai-settings-research-note">May take longer, but can verify uncertain matches for a more accurate selection.</small></span></label>
-					<label v-if="webSearch"><span>Web research time limit</span><select v-model.number="webSearchTimeLimitMinutes" :disabled="saving"><option :value="5">5 minutes</option><option :value="7">7 minutes</option><option :value="10">10 minutes</option><option :value="15">15 minutes</option></select><small>No new searches start after three minutes. This limit lets work already running finish.</small></label>
-				</div>
-			</details>
-			<p v-if="status.connectionWarning" class="notice warning span-2" role="status">{{ status.connectionWarning }}</p>
-			<p v-if="error" class="notice error span-2" role="alert">{{ error }}</p>
-			<div class="form-actions span-2">
-				<button v-if="profile?.hasKey" type="button" class="button secondary" :disabled="saving" @click="forgetKey">Forget key</button>
-				<button v-if="status.activeProvider" type="button" class="button secondary" :disabled="saving" @click="disable">Disable AI</button>
-				<button type="button" class="button" :disabled="saving || !dirty || !valid" @click="save">{{ saving ? 'Checking…' : 'Save AI Settings' }}</button>
+	<form class="settings-tab-editor" novalidate @submit.prevent="save">
+		<section class="panel form-grid ai-settings-panel" aria-labelledby="ai-settings-heading">
+			<header class="settings-card-heading span-2">
+				<span class="settings-card-icon"><BrainCircuit :size="24" aria-hidden="true" /></span>
+				<div><div class="settings-card-title"><h2 id="ai-settings-heading">AI provider</h2><PageHelpButton label="AI provider" topic-id="settings.ai#ai-provider" /></div><p>Choose a provider and enter its API key. Provider charges and results vary by model.</p></div>
+			</header>
+			<LoadingState v-if="loading" class="span-2" label="Loading AI settings…" />
+			<div v-else-if="!status" class="span-2">
+				<p class="notice error" role="alert">{{ error }}</p>
+				<button type="button" class="button secondary" @click="load">Retry AI Settings</button>
 			</div>
-		</template>
-	</section>
+			<template v-else>
+				<p v-if="!status.activeProvider" class="span-2">AI is off. Saving a provider enables it.</p>
+				<label><span>Provider</span><select :value="selected" :disabled="saving" @change="selectProvider"><option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.label }}</option></select></label>
+				<label><span>API Key {{ selected === 'custom' ? '(optional)' : '' }}</span><input v-model="key" type="password" autocomplete="off" :disabled="saving" :placeholder="profile?.keyPlaceholder ?? 'Enter API Key'" /><small v-if="profile?.hasKey">A key is saved for this provider. Enter a new key to replace it.</small></label>
+				<p class="span-2">{{ modelOverride ? 'Custom model' : 'Recommended model' }}: <strong>{{ modelOverride || profile?.effectiveModel || 'Enter a model ID' }}</strong></p>
+				<details class="span-2 ai-settings-advanced">
+					<summary>Advanced</summary>
+					<div class="form-grid">
+						<label><span>Custom model ID</span><input v-model="modelOverride" :disabled="saving" placeholder="Use recommended model" /></label>
+						<template v-if="selected === 'custom'">
+							<label><span>Endpoint base URL</span><input v-model="baseUrl" type="url" :disabled="saving" placeholder="https://example.com/v1" /></label>
+							<label><span>API format</span><select v-model="protocol" :disabled="saving"><option value="chat-completions">Chat Completions</option><option value="anthropic-messages">Anthropic Messages</option></select></label>
+							<label v-if="protocol === 'chat-completions'"><span>JSON mode</span><select v-model="chatJsonMode" :disabled="saving"><option value="json_object">JSON object</option><option value="json_schema">JSON schema</option><option value="prompt_only">Prompt only</option></select></label>
+							<label v-if="plaintext" class="settings-toggle span-2"><input v-model="allowInsecureHttp" type="checkbox" :disabled="saving" />I understand that HTTP sends the prompt and API key without encryption.</label>
+						</template>
+						<label v-if="profile?.researchAvailable" class="settings-toggle span-2"><input v-model="webSearch" type="checkbox" :disabled="saving" /><span>Use web research when generating<small class="ai-settings-research-note">May take longer, but can verify uncertain matches for a more accurate selection.</small></span></label>
+						<label v-if="webSearch"><span>Web research time limit</span><select v-model.number="webSearchTimeLimitMinutes" :disabled="saving"><option :value="5">5 minutes</option><option :value="7">7 minutes</option><option :value="10">10 minutes</option><option :value="15">15 minutes</option></select><small>No new searches start after three minutes. This limit lets work already running finish.</small></label>
+					</div>
+				</details>
+				<p v-if="status.connectionWarning" class="notice warning span-2" role="status">{{ status.connectionWarning }}</p>
+				<p v-if="error" class="notice error span-2" role="alert">{{ error }}</p>
+				<div class="form-actions span-2 settings-actions">
+					<button v-if="profile?.hasKey" type="button" class="button secondary" :disabled="saving" @click="forgetKey">Forget key</button>
+					<button v-if="!status.activeProvider" type="button" class="button secondary" :disabled="saving || dirty || !valid" @click="enable">Enable AI</button>
+					<button v-if="status.activeProvider" type="button" class="button secondary" :disabled="saving" @click="disable">Disable AI</button>
+				</div>
+			</template>
+		</section>
+		<SettingsSaveFooter label="AI" :dirty="dirty" :valid="valid" :busy="saving" :saving="saving" saving-label="Checking…" :ready="status !== null && !loading" @reset="reset" />
+	</form>
 </template>

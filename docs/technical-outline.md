@@ -529,7 +529,11 @@ After the first full scan identifies a missing item, follow-up observations chec
 paths stored for current tombstones. These checks verify source identity and file presence without
 traversing the library, parsing metadata, processing artwork, probing media, or adding scan-history
 records. A restored or inconclusive path requests a normal reconciliation scan. Large removals and
-source-identity changes continue to require explicit operator approval. Large removals also receive
+source-identity changes continue to require explicit operator approval. Library banners distinguish
+source approval and acceptance from missing-media observation and removal approval; source changes
+do not display the unrelated pending-removal count. While that banner is active, scan attention
+omits duplicate source-approval and removal notices, preserving other failures and full scan history.
+Large removals also receive
 heal-only path checks: files found present return to scheduling immediately, while absent files are
 never advanced toward deletion and remain protected behind operator approval.
 
@@ -1820,6 +1824,21 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - administrator account and local fallback credential management;
 - playback, status, and log views.
 
+Settings separates Playback, AI, and Backups with accessible in-place tabs. Hidden panels remain
+mounted to retain drafts and existing resource polling; tab indicators expose pending changes and
+failures. Playback readiness is a compact strip, while saved-value disclosures hide secondary filler,
+engine, and backup details. Playback capacity, filler, and viewing preferences use separate content
+groups. Settings card headings share the backup cards’ icon badge treatment, and the AI card omits
+its eyebrow. A single Automatic Backup disclosure exposes the policy fields and schedule/storage details,
+with its enable switch and saved schedule summary available while collapsed. Each tab has a persistent
+Save/Reset footer. Playback saves all scalar fields in one request after publishing any staged fallback;
+partial success preserves the remaining draft for retry. Reset discards
+only the current tab’s edits after a two-step confirmation. Page departure and restore protect drafts
+across all tabs. Settings help lives in dedicated Playback, AI, and Backups guide pages. Card-heading help buttons
+open focused section topics through the existing drawer, with full-guide links anchored to the same
+section; the Settings page header has no redundant help button. The design-language Settings layout
+documents the same pattern.
+
 The primary Status navigation item also carries the live IPTV readiness state and active channel
 count without a separate sidebar card. Navigation scrolls within the available viewport while the
 account and sign-out controls remain accessible in the sidebar footer. Unmatched management paths
@@ -2025,6 +2044,58 @@ Guide consumers coalesce refreshes for reconnects, channel presentation, schedul
 timeline, and programming-affecting scan events. Watcher-status and playback-session noise does not
 invalidate guide data.
 
+## Configuration backup and restore
+
+Settings exposes configuration ZIP creation, download, import validation, restore, deletion, and
+an enabled-by-default automatic policy: every calendar day at 03:00 in `MOIRAI_TIME_ZONE`, retaining
+seven automatic archives. Schedule checkpoints include their timezone; timezone changes and legacy
+checkpoints re-anchor to the next local 03:00. Temporary backup-volume failures leave future runs
+scheduled. Missed occurrences are skipped. Manual and pre-restore recovery archives
+require explicit deletion; upgrade recovery retains only the newest three independently of the
+automatic policy. `MOIRAI_BACKUP_DIR` defaults to `<data>/backups`; Docker uses a separate `/backups`
+volume. Archive manifests carry category, identity, application version, migration markers, sizes,
+and SHA-256 checksums, so listing and retention do not depend on the application database. New stored
+and downloaded filenames include a filesystem-safe UTC creation timestamp and the opaque identity;
+legacy identity-only archives remain listable, restorable, downloadable, and deletable. Deletion uses
+a styled confirmation modal identifying the archive. Damaged archive metadata is reported separately
+without blocking healthy backups or automatic retention; unreadable archives remain explicitly deletable.
+Stored restores confirm intent before validation, then show progress,
+errors, and final replacement review in a focused dialog; imports share the same review dialog.
+Workers report four validation stages through status polling: archive integrity, database
+reconstruction, configuration and relationships, and managed assets.
+
+The backup domain exports durable catalog identities, configuration, viewing/selection state, and
+managed channel, guide, and fallback uploads. It excludes authentication, AI credentials, source
+media, generated images/search/embeddings/timelines/playout, logs, and scan history. Logical records
+prevent deleted secrets from leaking through raw SQLite pages. Workers perform export, ZIP work,
+validation, and historical-schema reconstruction using trusted bundled migrations and bound values.
+Archive SQL is never executed. Limits are 64 GiB compressed, 128 GiB expanded, and 100,000 entries;
+paths, duplicate members, links, encryption, checksums, and managed asset limits are validated.
+Authored template, slot, and boundary payloads are checked against shared scheduling contracts.
+Compatibility matches a contiguous bundled journal prefix by timestamp, tolerates older obsolete
+markers and historical SQL hashes, and deduplicates identical markers. Conflicting duplicates, gaps,
+and newer markers are rejected. Trusted schema reconstruction and exact record-column validation
+remain required. Validation errors retain safe archive, schema, record, or asset categories across
+workers, with request IDs and bounded diagnostics that exclude raw configuration values.
+
+Capture drains admitted configuration mutations before snapshotting the database and managed files,
+then releases protection before compression. A confirmed restore requires a retained pre-restore
+backup, stops consumers and database writers, preserves destination administrator identities while
+invalidating sessions, and replaces configuration through a persisted commit-forward journal.
+A committed restore restarts exactly once even if its HTTP response disconnects during preparation
+or delivery; failed preparation does not trigger a restart. Interrupted replacement resumes before
+migrations or consumers start. Fresh services restart in the same process; derived state is rebuilt.
+Managed asset directories retain their roots while their contents are replaced from immutable staging,
+so mounted asset volumes remain usable and interrupted copies can be retried. Generated directory
+contents are also cleared without removing their roots. Deployment settings and media paths are not
+remapped.
+Upgrade recovery runs before migrations and on version changes; failures warn but do not block
+startup. Restore preparation failures leave live configuration unchanged. Known storage errors retain
+actionable permission, read-only, capacity, or availability diagnostics across workers and persistent
+backup warnings; raw filesystem paths and exception messages are not exposed in API errors. Warning
+dismissal is authenticated, CSRF-protected, and persisted. Successful retries clear matching warning
+categories, while unrelated operations preserve unresolved warnings; future failures appear again.
+
 ## Logging and operations
 
 Server logs are redacted, structured JSONL files beneath the persistent data directory. Defaults are:
@@ -2049,7 +2120,7 @@ completion and error records. Starting and cancelling AI generations retain norm
 AI generation writes start, stage, and terminal entries with provider, timing, counts, usage, and safe
 failure categories. It never logs prompts, selected titles, provider text, or API keys.
 
-The server is assembled from domain-owned artwork, guide, media, operations, playback, repository,
+The server is assembled from domain-owned backup, artwork, guide, media, operations, playback, repository,
 route, scanner, and scheduling modules. Persistence remains behind one repository facade, while the
 server source root contains composition, bootstrap, configuration, documentation generation, and
 cross-cutting primitives. Scheduling views compose focused editor components. Styles are

@@ -21,6 +21,7 @@ describe('contextual help topics', () => {
 		expect(helpTopicForPath('/schedules/channels/channel-id')).toBe(
 			'scheduling.channel-schedules',
 		);
+		expect(helpTopicForPath('/settings')).toBe('settings.playback');
 		expect(helpTopicForPath('/unknown')).toBe('welcome');
 	});
 

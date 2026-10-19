@@ -1,3 +1,5 @@
+import { registerBackupRoutes } from './backups.js';
+import type { BackupService } from '../backup/service.js';
 import { registerGuideArtworkRoutes } from './guide-artwork.js';
 import type { GuideArtworkStore } from '../artwork/guide-artwork-store.js';
 import { registerFillerPresetRoutes } from './filler-presets.js';
@@ -39,6 +41,8 @@ import { registerSystemRoutes } from './system.js';
 
 /** Services captured by HTTP handlers after route registration. */
 export interface HttpRouteDependencies {
+	backups: BackupService;
+	restartAfterRestore?: () => Promise<void>;
 	config: AppConfig;
 	aiSettings: AiSettingsService;
 	playout: PlayoutSynchronizer;
@@ -66,6 +70,7 @@ export function registerHttpRoutes(
 ): void {
 	registerAuthenticationRoutes(app, dependencies.config, dependencies.authentication);
 	registerSystemRoutes(app, dependencies);
+	registerBackupRoutes(app, dependencies);
 	registerResourceUsageRoutes(app, dependencies);
 	registerCreditTemplateRoutes(app, dependencies);
 	registerSubtitlePreviewRoutes(app, dependencies);

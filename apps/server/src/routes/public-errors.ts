@@ -1,3 +1,4 @@
+import { storageFailureMessage } from '../operations/storage-errors.js';
 import { DatabaseWriteQueueFullError } from '../repository/writer.js';
 import { MidRollPresetError } from '../repository/mid-roll-presets.js';
 import { EncodingProfileError } from '../repository/encoding-profiles.js';
@@ -38,22 +39,6 @@ const SQLITE_CONFLICT_CODES = new Set([
 	'SQLITE_CONSTRAINT_PRIMARYKEY',
 	'SQLITE_CONSTRAINT_UNIQUE',
 ]);
-/** Filesystem and SQLite failures that map safely to temporary storage errors. */
-const STORAGE_CODES = new Set([
-	'EACCES',
-	'EIO',
-	'ENOENT',
-	'ENOSPC',
-	'ENOTDIR',
-	'EPERM',
-	'EROFS',
-	'SQLITE_BUSY',
-	'SQLITE_CANTOPEN',
-	'SQLITE_FULL',
-	'SQLITE_IOERR',
-	'SQLITE_READONLY',
-]);
-
 /** Return whether SQLite rejected a query because a pending schema migration is missing. */
 function isDatabaseSchemaMismatch(error: ErrorWithStatus): boolean {
 	return error.code === 'SQLITE_ERROR'
@@ -185,12 +170,13 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
-	if (normalized.code && STORAGE_CODES.has(normalized.code)) {
+	const storageMessage = storageFailureMessage(normalized);
+	if (storageMessage) {
 		return response(
 			requestId,
 			503,
 			'storage_unavailable',
-			'Required storage is temporarily unavailable',
+			storageMessage,
 			true,
 			undefined,
 			'5',

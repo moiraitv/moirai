@@ -13,6 +13,7 @@ test('offers web research for each provider and Custom Messages format', async (
 		await route.fulfill({ json: { activeProvider: null, profiles, connectionWarning: null } });
 	});
 	await page.goto('/settings');
+	await page.getByRole('tab', { name: /^AI/ }).click();
 	for (const provider of ['openai', 'anthropic', 'xai', 'openrouter']) {
 		await page.getByRole('combobox', { name: 'Provider' }).selectOption(provider);
 		await page.getByText('Advanced', { exact: true }).click();
@@ -46,6 +47,7 @@ test('loads AI Settings, keeps Save errors and warnings visible, and protects an
 		await route.fulfill({ json: { activeProvider: null, profiles, connectionWarning: null } });
 	});
 	await page.goto('/settings');
+	await page.getByRole('tab', { name: /^AI/ }).click();
 	await expect(page.getByText('Settings unavailable')).toBeVisible();
 	loadFails = false;
 	await page.getByRole('button', { name: 'Retry AI Settings' }).click();
@@ -80,6 +82,7 @@ test('clears the draft after saving normalized Custom settings', async ({ page }
 		await route.fulfill({ json: current });
 	});
 	await page.goto('/settings');
+	await page.getByRole('tab', { name: /^AI/ }).click();
 	await page.getByRole('combobox', { name: 'Provider' }).selectOption('custom');
 	await page.getByText('Advanced', { exact: true }).click();
 	await page.getByLabel('Custom model ID').fill('  local-model  ');
@@ -104,6 +107,7 @@ test('confirms before permanently forgetting a provider key', async ({ page }) =
 		await route.fulfill({ json: { activeProvider: null, profiles, connectionWarning: null } });
 	});
 	await page.goto('/settings');
+	await page.getByRole('tab', { name: /^AI/ }).click();
 	await expect(page.getByLabel('API Key')).toHaveAttribute('placeholder', 'sk-12...abcd');
 	await page.getByRole('button', { name: 'Forget key' }).click();
 	const confirmation = page.getByRole('alertdialog', { name: 'Forget Provider Key?' });
@@ -114,4 +118,33 @@ test('confirms before permanently forgetting a provider key', async ({ page }) =
 	await confirmation.getByRole('button', { name: 'Forget Key' }).click();
 	await expect(page.getByRole('button', { name: 'Forget key' })).toBeHidden();
 	expect(removals).toBe(1);
+});
+
+
+test('resets an invalid AI draft while off and re-enables a saved provider without leaving a dirty footer', async ({ page }) => {
+	await authenticateAdministrator(page);
+	let activeProvider: string | null = null;
+	const savedProfiles = profiles.map(profile => ({ ...profile, hasKey: profile.provider === 'openai' }));
+	await page.route('**/api/v1/ai/settings', async route => {
+		if (route.request().method() === 'PUT') {
+			activeProvider = route.request().postDataJSON().activeProvider;
+		}
+		await route.fulfill({ json: { activeProvider, profiles: savedProfiles, connectionWarning: null } });
+	});
+	await page.goto('/settings');
+	await page.getByRole('tab', { name: /^AI/ }).click();
+	const save = page.getByRole('button', { name: 'Save AI Settings', exact: true });
+	const reset = page.getByRole('button', { name: 'Reset AI settings draft', exact: true });
+	await expect(save).toBeDisabled();
+	await expect(reset).toBeDisabled();
+	await page.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('custom');
+	await expect(save).toBeDisabled();
+	await reset.click();
+	await page.getByRole('button', { name: 'Confirm Reset AI settings draft', exact: true }).click();
+	await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('openai');
+	await expect(reset).toBeDisabled();
+	await page.getByRole('button', { name: 'Enable AI', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Disable AI', exact: true })).toBeVisible();
+	await expect(save).toBeDisabled();
+	await expect(reset).toBeDisabled();
 });

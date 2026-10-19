@@ -44,12 +44,12 @@ test('recovers Settings resources independently and preserves drafts and save fa
 		? route.fulfill({ status: 503, json: { message: 'Fallback unavailable' } }) : route.continue());
 	await page.goto('/settings');
 	const capacity = page.getByRole('spinbutton', { name: /Maximum active channel sessions/ });
-	await expect(page.getByText('Settings unavailable', { exact: true })).toBeVisible();
+	await expect(page.locator('.settings-capacity').getByText('Settings unavailable', { exact: true })).toBeVisible();
 	await expect(capacity).toHaveCount(0);
 	await expect(page.getByRole('checkbox')).toHaveCount(0);
 	await page.screenshot({ path: 'test-results/batch2-settings-recovery.png' });
 	await refreshStatus(page);
-	await expect(page.getByText('Settings unavailable', { exact: true })).toBeVisible();
+	await expect(page.locator('.settings-capacity').getByText('Settings unavailable', { exact: true })).toBeVisible();
 	expect(settingsReads).toBe(1);
 	settingsFailed = false;
 	await page.getByRole('button', { name: 'Retry Settings' }).click();
@@ -58,8 +58,8 @@ test('recovers Settings resources independently and preserves drafts and save fa
 	await expectFieldError(capacity, /at least 1/);
 	await capacity.fill('9');
 	await expect(capacity).not.toHaveAttribute('aria-invalid');
-	const playback = page.locator('form').filter({ has: capacity });
-	await playback.getByRole('button', { name: 'Save Settings' }).click();
+	const playback = page.getByRole('tabpanel', { name: /^Playback/ });
+	await playback.getByRole('button', { name: 'Save Playback Settings' }).click();
 	await expect(playback).toContainText('Capacity save failed');
 	await refreshStatus(page);
 	await expect(playback).toContainText('Capacity save failed');
@@ -69,6 +69,7 @@ test('recovers Settings resources independently and preserves drafts and save fa
 	]);
 	await expect(page.getByRole('button', { name: 'Refresh Status' })).toBeEnabled();
 	await expect(playback).toContainText('Capacity save failed');
+	await page.getByRole('button', { name: /^Global fallback filler/ }).click();
 	await page.locator('.fallback-filler-panel input[type="file"]').setInputFiles({ name: 'draft.mp4', mimeType: 'video/mp4', buffer: Buffer.from('unsaved fixture') });
 	fallbackFailed = false;
 	await page.getByRole('button', { name: 'Retry Fallback' }).click();
@@ -84,12 +85,9 @@ test('recovers Settings resources independently and preserves drafts and save fa
 	await expect(capacity).toHaveValue('9');
 	saveFailed = false;
 	await page.getByRole('checkbox').uncheck();
-	await page.locator('.viewing-preferences-panel').getByRole('button', { name: 'Save Settings' }).click();
-	await expect(page.locator('.viewing-preferences-panel').getByRole('button', { name: 'Save Settings' })).toBeDisabled();
+	await playback.getByRole('button', { name: 'Save Playback Settings' }).click();
+	await expect(playback.getByRole('button', { name: 'Save Playback Settings' })).toBeDisabled();
 	await expect(capacity).toHaveValue('9');
-	await expect(playback).toContainText('Capacity save failed');
-	await playback.getByRole('button', { name: 'Save Settings' }).click();
-	await expect(playback.getByRole('button', { name: 'Save Settings' })).toBeDisabled();
 	await expect(playback).not.toContainText('Capacity save failed');
 	await expect(page.locator('.fallback-filler-panel')).toContainText('draft.mp4');
 });
@@ -102,14 +100,14 @@ test('keeps loaded Settings editable when initial status fails and retries statu
 	await page.goto('/settings');
 	const capacity = page.getByRole('spinbutton', { name: /Maximum active channel sessions/ });
 	await expect(capacity).toHaveValue('4');
-	await expect(page.locator('.playback-card')).toContainText('Status unavailable');
-	await expect(page.locator('.playback-card h2')).toHaveCount(0);
+	await expect(page.locator('.settings-status')).toContainText('Status unavailable');
+	await expect(page.locator('.settings-status strong')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Copy channel playlist URL' })).toHaveCount(0);
 	await capacity.fill('8');
 	failed = false;
-	await page.getByRole('button', { name: 'Retry Status' }).click();
-	await expect(page.locator('.playback-card')).not.toContainText('Status unavailable');
-	await expect(page.getByRole('button', { name: 'Copy channel playlist URL' })).toBeVisible();
+	await page.getByRole('button', { name: 'Refresh Status' }).click();
+	await expect(page.locator('.settings-status')).not.toContainText('Status unavailable');
+	await expect(page.locator('.settings-status strong')).toBeVisible();
 	await expect(capacity).toHaveValue('8');
 });
 

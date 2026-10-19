@@ -178,6 +178,40 @@ describe('user documentation review tracking', () => {
 		expect(manifest.topics.example.html).not.toContain('<script>');
 	});
 
+	it('builds focused card topics with section links and inherited review status', async () => {
+		const { paths, pagePath } = await fixture();
+		await writeFile(pagePath, `${await readFile(pagePath, 'utf8')}
+## Capacity {#capacity}
+
+Capacity instructions.
+
+### Active sessions
+
+Session details.
+
+\`\`\`md
+## Fake {#fake}
+\`\`\`
+
+## Filler {#filler}
+
+Filler instructions.
+`);
+		paths.requiredContextualTopicIds = ['example#capacity', 'example#filler'];
+		await writeUserDocsManifest(paths);
+		const { topics } = JSON.parse(await readFile(paths.generatedManifestPath, 'utf8'));
+		expect(topics['example#capacity']).toMatchObject({
+			title: 'Capacity', fullPath: '/help/example.html#capacity', reviewStatus: 'needs-review',
+		});
+		expect(topics['example#capacity'].html).toContain('Session details.');
+		expect(topics['example#capacity'].html).not.toContain('Filler instructions.');
+		expect(topics['example#filler'].html).toContain('Filler instructions.');
+		expect(topics['example#fake']).toBeUndefined();
+		expect(topics['example#capacity'].html).toContain('## Fake {#fake}');
+		paths.requiredContextualTopicIds = ['example#missing'];
+		await expect(loadUserDocPages(paths)).rejects.toThrow('example#missing');
+	});
+
 	it('normalizes line endings and includes screenshot bytes in page digests', async () => {
 		const { paths, screenshotPath } = await fixture();
 		const source = await readFile(path.join(paths.sourceRoot, 'example.md'), 'utf8');
