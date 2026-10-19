@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Channel schedules · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Channel schedules</h1><blockquote class="docs-introduction">
+<h2><img src="./assets/help/files/icons/introduction-layers.svg" alt=""> What is a channel schedule?</h2>
+<p>A channel schedule layers templates or programs into one resolved lineup. Start with an always-available base, then add conditional programming for specific days, dates, seasons, or hours.</p>
+<h3>Channel schedules help you</h3>
+<ul>
+<li>
+<p><img src="./assets/help/files/icons/introduction-layers.svg" alt=""></p>
+<p><strong>Keep a reliable base</strong></p>
+<p>Supply normal programming whenever no higher conditional layer applies.</p>
+</li>
+<li>
+<p><img src="./assets/help/files/icons/introduction-calendar.svg" alt=""></p>
+<p><strong>Target special times</strong></p>
+<p>Combine calendar and time predicates for seasonal or recurring programming.</p>
+</li>
+<li>
+<p><img src="./assets/help/files/icons/introduction-preview.svg" alt=""></p>
+<p><strong>Preview the result</strong></p>
+<p>Inspect the concrete lineup after template priority and boundaries resolve.</p>
+</li>
+</ul>
+</blockquote>
+<p>A <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal-play.svg" alt="">Channel Schedule</span> chooses which <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Templates</span> or <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Programs</span> apply to one <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal.svg" alt="">Channel</span>. Start with a base, then add conditional layers when particular dates or times need different programming. Choose a Program directly when one Program should run continuously, without maintaining a separate Template.</p>
+<h2>Choose the base Template or Program</h2>
+<p>Open the <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal.svg" alt="">Channel</span>’s schedule editor, select the base at the bottom of the <strong>Schedule stack</strong>, and choose its <strong>Base template</strong> or <strong>Base program</strong>. This supplies normal programming wherever no higher-priority layer provides content.</p>
+<p>For a new schedule, Moirai first looks for a Template whose name matches the Channel exactly, contains its full name, or has close spelling. If none fits, it looks for a Program in the same order and assigns that Program directly. If neither has a close match, it preselects a Template, or a Program when no Templates exist. You can change the selection before saving. Existing schedules keep their saved base assignment.</p>
+<p>To choose a Program manually, select the base and use the switch icon beside the picker. Select <strong>Base program</strong>. Moirai schedules it as a single full-day slot using the usual new-template start and boundary behavior. No Template is saved. Use the same icon to return to Template selection.</p>
+<p><img src="./assets/help/files/screenshots/channel-schedules.png" alt="Channel Schedule editor with a base Template and a resolved preview"></p>
+<p>Directly-assigned Programs default to a playback progress setting of <strong>Continue from saved position</strong>. Progress continues automatically for both the base and conditional program layers. Template slots can instead choose to either continue from their saved position or restart each day, as explained in <a href="./assets/help/scheduling.templates.html#playback-progress-and-item-starts">Templates</a>.</p>
+<p><img src="./assets/help/files/screenshots/channel-schedule-direct-program.png" alt="Direct Program assignment showing automatic playback progress"></p>
+<h2>Simultaneous duplicates</h2>
+<p>By default, channels will avoid selecting simultaneous duplicates when content appears on multiple channels. Shuffle, Random, Weighted random, Similar Items, and Theme programs prefer another item when the same episode or movie is already scheduled on another channel at an overlapping time.</p>
+<p>Change this behavior by selecting the base in the schedule edit or and opening <strong>Advanced scheduling</strong>. <strong>Avoid simultaneous duplicates on other channels</strong> controls it. Turn the setting off to let this channel select items without considering simultaneous playback on other channels. This setting does not change a program’s shuffle cycle or its rules for immediate repeats.</p>
+<p><img src="./assets/help/files/screenshots/channel-schedule-advanced.png" alt="Advanced scheduling with simultaneous duplicate avoidance enabled"></p>
+<p>Sequential programs retain their configured playback order and are not affected by the setting.</p>
+<h2>Add a conditional Template</h2>
+<p>A conditional <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> is a reusable day structure with a rule controlling when it applies here. For example, a weekend evening layer can replace ordinary programming on Saturday and Sunday from 18:00 to 23:00 without changing the rest of the week.</p>
+<ol>
+<li>Create the <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> you want to use, with its slots at the intended times of day.</li>
+<li>Choose <strong>Add Conditional Template</strong> in the schedule editor. A new layer is inserted at the top of the stack.</li>
+<li>Select the <strong>Conditional layer template</strong> in the right-hand panel.</li>
+<li>Set <strong>Show this layer when</strong> to the dates and times that should activate it. A newly added layer initially matches every weekday, so narrow this rule before saving if it is meant to be an exception.</li>
+<li>Configure the layer’s entry and exit boundaries, then preview matching and nonmatching dates.</li>
+</ol>
+<p>For a conditional layer that needs just one Program, use the switch icon beside the layer picker and select <strong>Conditional layer program</strong>. Its condition and entry and exit boundaries work the same way as for a Template. <strong>Edit Program</strong> changes the reusable Program wherever it is used. Removing the layer removes only this assignment.</p>
+<p><img src="./assets/help/files/screenshots/channel-schedule-conditional.png" alt="Conditional Template selected above the base with weekend and evening conditions"></p>
+<p>The stack runs from highest priority at the top to the base at the bottom. Use the up and down arrows to resolve overlaps: the highest matching layer that supplies a <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span> wins at that time. A <strong>No program — fall through</strong> slot lets lower layers provide content. A programmed slot that cannot find playable media is not the same as a deliberate fall-through slot; inspect preview warnings and filler settings.</p>
+<p>The condition limits when the layer is eligible; it does not move the <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span>’s slots to a new clock time. <strong>Edit Template</strong> changes the shared <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span>, including other schedules that use it. Removing a layer removes this assignment, not the underlying <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span>.</p>
+<h2>Use the predicate editor</h2>
+<p>A <em>predicate</em> is simply a condition that must match for a layer to apply. Under <strong>Show this layer when</strong>, choose a condition type and fill in its values.</p>
+<p><img src="./assets/help/files/screenshots/channel-schedule-predicates.png" alt="Predicate editor combining weekend days and an evening time range with All conditions"></p>
+<ul>
+<li><strong>All conditions</strong> requires every child condition to match. Use it for “weekend <strong>and</strong> evening.”</li>
+<li><strong>Any condition</strong> requires at least one child to match. Use it for alternatives such as “Saturday <strong>or</strong> an exact holiday date.”</li>
+<li><strong>Months</strong> and <strong>Weekdays</strong> match the selected months or days. Selecting both Saturday and Sunday in one Weekdays condition means either day matches.</li>
+<li><strong>Exact dates</strong> takes comma-separated dates in <code>YYYY-MM-DD</code> form.</li>
+<li><strong>Date range</strong> includes both its start and end dates.</li>
+<li><strong>Recurring annual range</strong> takes <code>MM-DD</code> endpoints and repeats each year. It can cross New Year, such as <code>12-20</code> through <code>01-05</code>.</li>
+<li><strong>Time range</strong> matches local clock time from the start up to, but not including, the end. A range such as 22:00–02:00 crosses midnight.</li>
+</ul>
+<p>Use <strong>Condition</strong> to add another rule to a group, or <strong>Group</strong> to nest an All/Any combination. <strong>Exclude</strong> reverses an individual condition—for example, exclude exact holiday dates from an otherwise matching weekend rule. Changing a condition’s type replaces its values with defaults, so check the new values afterward.</p>
+<p>For the example shown, keep the top group as <strong>All conditions</strong>, select only <strong>Sat</strong> and <strong>Sun</strong> in a Weekdays condition, then add a Time range of <strong>18:00–23:00</strong>. With <strong>Any condition</strong> instead, the layer would apply throughout the weekend and during those evening hours on other days too.</p>
+<p>Conditions use Moirai’s configured scheduling time zone. Preview both sides of midnight for overnight rules, and check the dates where seasonal rules begin or end.</p>
+<h2>Boundaries and overrun</h2>
+<p>Layer boundaries control transitions between priorities, while the slot boundaries inside a <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> control transitions within that day structure.</p>
+<ul>
+<li><strong>Entry boundary</strong> governs lower-priority content already playing when this layer begins.</li>
+<li><strong>Exit boundary</strong> governs this layer’s outgoing content when it ends and lower-priority programming resumes.</li>
+</ul>
+<p><img src="./assets/help/files/screenshots/channel-schedule-boundaries.png" alt="Entry and exit boundary controls, with a fifteen-minute entry overrun allowance"></p>
+<p>Choose <strong>Boundary behavior</strong> separately for entry and exit:</p>
+<ul>
+<li><strong>Hard boundary</strong> keeps the authored handoff time; an item crossing it may be cut.</li>
+<li><strong>Finish outgoing item within drift</strong> lets the outgoing item finish within the allowed delay.</li>
+<li><strong>Favor incoming content</strong> prioritizes the incoming programming rather than preserving the outgoing item at all costs.</li>
+</ul>
+<p><strong>Maximum drift past boundary (minutes)</strong> limits how far outgoing content may delay incoming programming. For example, a 15-minute allowance at an 18:00 entry permits a handoff as late as 18:15. <strong>No limit — always finish outgoing item</strong> removes that cap; use it only when finishing the current item matters more than the next block’s punctual start.</p>
+<p>The fallback labeled <strong>If the next outgoing item cannot satisfy this boundary</strong> controls what happens when the next item cannot meet the rule: <strong>Truncate outgoing content</strong>, <strong>Do not start it</strong>, or, with a finite finish-outgoing policy, <strong>Start incoming content early</strong>. The latter has a separate <strong>Maximum early start (minutes)</strong> allowance. With unlimited drift, the fallback is disabled because the outgoing item is allowed to finish.</p>
+<p>These settings work together with the <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span>’s item-start rules and filler. An overrun allowance does not guarantee every item can start or that no gap will occur. Check the resolved handoff, not just the nominal times.</p>
+<h2>Preview, save, and apply changes</h2>
+<p>Use <strong>Preview date</strong> and <strong>Refresh Now</strong> to inspect the actual lineup. Test a date where the condition matches, one where it does not, and any overlap with a higher layer. For time-limited layers, inspect the entry and exit times as well as the content inside the window. Review dead-air warnings and other issues before saving.</p>
+<p>Hover over a guide block to see a zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. Hover, focus, or tap a guide block to inspect the actual items within it; dead-air diagnostics continue to use actual playback times.</p>
+<p>Pending schedule edits are retained automatically in this browser. <strong>Add</strong> creates a new schedule and <strong>Save</strong> commits changes to an existing one. <strong>Reset</strong> discards pending changes after confirmation and restores the latest saved schedule.</p>
+<p>Saved changes normally become active at the next local midnight, protecting programming that has already been committed. When offered, <strong>Apply after current item</strong> brings a change forward without cutting the item viewers are currently watching.</p>
+<p><img src="./assets/help/files/screenshots/channel-filler-preview.png" alt="Layered schedule preview showing filler ticks and their compact legend"></p>
+<p>Markers below the preview timeline show the start and duration of each filler break. The legend identifies pre-roll, mid-roll, post-roll, tail, and channel fallback, and you can hover over a tick for its time range.</p>
+<h2>Channel default fillers</h2>
+<p>In the base schedule inspector, use <strong>Channel default filler</strong> to choose filler for the channel. Select a type in the movie illustration or the type selector:</p>
+<ul>
+<li><strong>Pre-Roll</strong> plays before each episode or movie.</li>
+<li><strong>Mid-Roll</strong> plays at allowed breaks within an episode or movie.</li>
+<li><strong>Post-Roll</strong> plays after each episode or movie.</li>
+<li><strong>Tail Filler</strong> plays after the slot’s main programming, within the time left before the next slot.</li>
+</ul>
+<p>Check the selected type’s checkbox, then choose a <strong>Preset</strong> and <strong>Source Program</strong>. The preset sets how much filler to play; the Source Program chooses the clips. Uncheck the checkbox to remove that channel default. Manage presets under <strong>Filler</strong>; see <a href="./assets/help/filler.presets.html">Filler presets</a> for budgets and fitting, and <a href="./assets/help/filler.presets.html#mid-roll-break-conditions">Mid-Roll break conditions</a> for break conditions.</p>
+<p>Each type inherits separately. A programmed slot uses its channel default when it inherits filler and its template has no default for that type. A slot override takes precedence over both defaults. Disabling a type on a slot prevents that type from being inherited.</p>
+<p>Active gaps in the illustration are filled; inactive gaps have dashed outlines. The 137-minute example movie uses the selected Mid-Roll’s timed interval and conditions. Use the resolved schedule preview to check your actual media.</p>
+<p><strong>Channel fallback filler</strong> is configured separately below the defaults. It covers gaps left after tail filler, including no-program intervals. Unchecking tail does not disable fallback. No-program intervals do not use pre-roll, mid-roll, or post-roll; channel tail retained from older settings can still cover them until you replace that assignment.</p>
+<p><strong>Apply after current item</strong> waits until the entire episode or movie, including its pre-roll, mid-roll, and post-roll filler, finishes before applying a pending change.</p>
+</main></body></html>

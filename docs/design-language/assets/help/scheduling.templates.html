@@ -1,0 +1,102 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Templates · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Templates</h1><blockquote class="docs-introduction">
+<h2><img src="./assets/help/files/icons/introduction-template.svg" alt=""> What is a template?</h2>
+<p>A template defines how a channel’s 24-hour day is structured using reusable schedule slots. Reuse templates across channels and dates to keep schedules consistent and easy to manage.</p>
+<h3>Templates help you</h3>
+<ul>
+<li>
+<p><img src="./assets/help/files/icons/introduction-clock.svg" alt=""></p>
+<p><strong>Plan a nominal day</strong></p>
+<p>Allocate time across slots without worrying about actual media durations.</p>
+</li>
+<li>
+<p><img src="./assets/help/files/icons/introduction-eye.svg" alt=""></p>
+<p><strong>Preview resolution</strong></p>
+<p>See how slots resolve with real media durations and boundary policies.</p>
+</li>
+<li>
+<p><img src="./assets/help/files/icons/introduction-repeat.svg" alt=""></p>
+<p><strong>Reuse everywhere</strong></p>
+<p>Use the same template across channels, rotations, and seasons.</p>
+</li>
+</ul>
+</blockquote>
+<p>In a saved template, <strong>Used by</strong> in the editor title bar lists channel schedules that assign it as a base or conditional template. Direct references do not include every indirectly affected channel.</p>
+<p>A <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> divides a nominal day into slots. Each slot starts at an authored time and normally uses one <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span>. <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal-play.svg" alt="">Channel Schedules</span> can reuse the same <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> on many dates or layers.</p>
+<p>The Templates list is alphabetical by name, ignoring punctuation and leading “A”, “An”, or “The”, just like Programs and media titles.</p>
+<p><img src="./assets/help/files/screenshots/templates.png" alt="The templates catalog"></p>
+<h2>Create a Template and add slots</h2>
+<p>New templates default to <strong>Allow overrun</strong> for <strong>Item start rule</strong>, <strong>Finish left item</strong> for the outgoing boundary <strong>Policy</strong>, and <strong>No Limit</strong> for <strong>Maximum drift</strong>. This lets the current item finish instead of cutting it at the nominal slot end. Added slots copy the selected slot’s item start rule and use these defaults for the new boundary. Existing templates keep their saved settings.</p>
+<p>Create the <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Programs</span> you want to use first, then open <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Templates</span> and choose <strong>New Template</strong>. Give it a descriptive name, such as “Evening Cinema Day.” A new <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> starts with one slot covering midnight to midnight. Timeline and slot labels use 12-hour time with AM or PM.</p>
+<ol>
+<li>Select the initial slot and choose its <strong>Program</strong> in the <strong>Selected slot</strong> panel.</li>
+<li>Choose <strong>Add Slot</strong>. Move over the timeline to choose where to divide an existing slot, then click to place the new boundary. With a keyboard, use the arrow keys to adjust the proposed position and Enter to confirm; Escape cancels.</li>
+<li>Select the new slot and choose its <strong>Program</strong>. Adding a slot divides the existing time rather than extending the day.</li>
+<li>Set <strong>Starts</strong> to the exact time you want. You can also drag the boundary between slots on the timeline. The first slot stays at midnight (12:00 AM); each slot ends where the next begins, and the last ends at the following midnight.</li>
+<li>Repeat for the remaining parts of the day. Switch to <strong>List</strong> if you prefer selecting slots from rows instead of the timeline.</li>
+</ol>
+<p><img src="./assets/help/files/screenshots/template-editor.png" alt="Template creation editor with three slots, selected-slot controls, and a resolved preview"></p>
+<blockquote>
+<p><img src="./assets/help/files/icons/info.svg" alt="Information"> <strong>Program colors are visual identifiers only.</strong> They help you see which <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span> supplies each slot or media item. The color does not indicate priority, playback order, or scheduling behavior.</p>
+</blockquote>
+<p>This example has three slots and preview warnings where the selected movies leave gaps. Adjust the slot rules or filler before relying on the lineup.</p>
+<p>To remove a slot, select it and activate <strong>Delete selected slot</strong> twice to confirm the draft change. You cannot remove the final remaining slot. Pending edits, including selected guide artwork, are retained automatically in this browser. Close or reload the editor, then reopen the same Template or New Template to continue. <strong>Add</strong> creates a Template and <strong>Save</strong> commits further changes. <strong>Reset</strong> discards pending edits after confirmation and restores the latest saved values.</p>
+<h2>Choose how a slot appears in the guide</h2>
+<p><img src="./assets/help/files/screenshots/template-slot-guide.png" alt="Slot guide title, description, and timing controls"></p>
+<p>Use <strong>Guide artwork (optional)</strong> under <strong>Single block</strong> to choose an image from your computer. PNG, JPEG, and WebP images can be up to 10 MiB and 4096 pixels per dimension. The preview keeps the image’s proportions; the Guide fits it to each listing. Choose <strong>Replace image</strong> to change it or confirm <strong>Remove</strong> to clear it. Artwork changes take effect when you save the template; Reset restores the saved artwork; closing retains pending artwork in this browser. The same image is included in Standard XMLTV for external guide clients.</p>
+<p>In the selected slot, use <strong>Guide output → Single block</strong> to show one listing such as “Rock Music” instead of each video. Leave <strong>Guide title</strong> empty to use the slot’s program name, or enter a custom title such as “Rock Music”. Optionally add a description, and choose <strong>Guide timing</strong>:</p>
+<ul>
+<li><strong>Scheduled boundaries</strong> uses the slot’s scheduled start and end. A slot scheduled for 8–9 stays at 8–9 in the guide even if its content runs 8:02–9:04, or none of its content plays.</li>
+<li><strong>Include drift</strong> follows the slot’s actual start and finish, including filler and gaps. In that example, the listing runs 8:02–9:04. A completely displaced slot has no listing in this mode.</li>
+</ul>
+<p>The resolved schedule preview shows the same guide blocks and timing as the Guide page, including unsaved changes. Hover, focus, or tap a block to see the actual items within it.</p>
+<p>Saving these settings immediately updates the Guide page and XMLTV output without changing playback or content selection. <strong>Individual items</strong> is the default and shows each episode or video in the Guide and connected TV apps. <strong>Single block</strong> shows one listing for the whole slot. This choice does not affect playback. Higher-priority schedule layers split the lower slot’s listing; fall-through slots use the lower layer’s settings. Scheduled boundaries take priority over overlapping listings, which are shortened in the guide only.</p>
+<p>Hover over a guide block to see a 30-minute zoomed timeline of its actual items, centered near the time under the pointer. Move along the block to inspect another time. The crop keeps the Guide’s item colors and clips items at the displayed time boundaries. Item labels show the source program name, or <strong>Filler</strong> or <strong>Gap</strong> when appropriate.</p>
+<h2>Configure what a slot plays</h2>
+<p>The <strong>Program</strong> choice supplies the content-selection rules for the slot. The adjacent <strong>Edit</strong> button opens that reusable <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span>, so changes can affect other places that use it too.</p>
+<p>Choose <strong>No program — fall through</strong> when this part of a layered schedule should leave room for a lower-priority layer (used by <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal-play.svg" alt="">Channel Schedules</span>). This does not provide media by itself; check the resolved preview to see what actually fills the time.</p>
+<p>Open <strong>Advanced scheduling behavior</strong> on a slot with a <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span> to configure playback progress, item starts, its outgoing boundary, and filler.</p>
+<h3>Playback progress and item starts</h3>
+<p><img src="./assets/help/files/screenshots/template-slot-playback.png" alt="Selected-slot playback progress and item start rule controls"></p>
+<p><strong>Playback progress</strong> determines whether selection continues from its saved position (<strong>Continue from saved position</strong>) or starts over for each day’s occurrence (<strong>Restart each day</strong>). Continuing resumes where the slot left off, including across days; it does not restart each block at its first episode. A program assigned directly to a channel continues from its saved position automatically.</p>
+<p><strong>Item start rule</strong> determines whether another item may begin near the end of the slot:</p>
+<ul>
+<li><strong>Require complete fit</strong> only starts an item that fits in the available time.</li>
+<li><strong>Allow truncation</strong> permits starting an item that may need to be cut short.</li>
+<li><strong>Allow overrun</strong> permits starting an item that may run beyond the normal slot end.</li>
+<li><strong>Within drift</strong> uses the configured <strong>Start drift (minutes)</strong> allowance when deciding whether an item may start.</li>
+</ul>
+<p>The item start rule and outgoing boundary work together. Allowing an item to start does not guarantee it will play to completion.</p>
+<h3>Handle the end of a slot</h3>
+<p><img src="./assets/help/files/screenshots/template-slot-boundary.png" alt="Outgoing boundary controls showing policy, maximum drift, and fallback"></p>
+<p>Real media rarely ends exactly on a slot boundary. Under <strong>Outgoing boundary</strong>, choose how the handoff to the next slot should work:</p>
+<ul>
+<li><strong>Hard boundary</strong> keeps the handoff at the authored time; content that crosses it may be cut.</li>
+<li><strong>Finish left item</strong> favors finishing the item in the outgoing slot, subject to the configured drift and fallback.</li>
+<li><strong>Favor right slot</strong> favors handing over to the following slot, potentially before the nominal boundary.</li>
+</ul>
+<p><strong>Maximum drift</strong> controls how far the handoff may move. The fallback controls what happens when that allowance cannot be honored, such as rejecting an item start or truncating the outgoing item. Use the preview to check the combined effect rather than choosing these settings independently.</p>
+<h3>Fill remaining time</h3>
+<p><img src="./assets/help/files/screenshots/template-slot-filler.png" alt="Tail filler override with preset and Source Program controls"></p>
+<p>Filler can occupy time that the main <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span> cannot fill. Select <strong>Tail Filler</strong> in the slot’s combined filler interface. A slot can inherit the <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> or <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal.svg" alt="">Channel</span> tail settings, disable tail, or use a <strong>Slot override</strong> with its own preset and <strong>Source Program</strong>. Disabling tail leaves channel fallback available for any remaining gap.</p>
+<p><strong>Whole Items Only</strong> plays complete clips that fit and can leave a gap if none fits. <strong>Allow Truncation</strong> searches for a complete clip first, then cuts a clip short if needed. Configure <strong>Template default tail filler</strong> when several slots should share the same filler rule. See <a href="./assets/help/filler.presets.html">Filler presets</a> for budgets and fitting behavior.</p>
+<h2>Preview and use the Template</h2>
+<p><img src="./assets/help/files/screenshots/template-filler-preview.png" alt="Resolved Template preview with filler ticks, gaps, and preview issues"></p>
+<p>Use the resolved preview to see actual start and finish times rather than relying only on the authored grid. Markers below the preview timeline show the start and duration of each filler break. The legend identifies pre-roll, mid-roll, post-roll, tail, and channel fallback, and you can hover over a tick to see its time range. Warnings call out missing media, invalid durations, and gaps that would otherwise become dead air.</p>
+<p>Save the <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span>, then assign it through a <a href="./assets/help/scheduling.channel-schedules.html"><span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal-play.svg" alt="">Channel Schedule</span></a>. Saving a <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-range.svg" alt="">Template</span> alone does not assign it to a <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal.svg" alt="">Channel</span>.</p>
+<p>Keep templates focused on a reusable daily structure. Date-specific choices belong in channel schedule layers rather than copies of nearly identical templates.</p>
+<p>See <a href="./assets/help/scheduling.example-schedules.html">Example schedules</a> for movie channels, genre double features, sitcom rotations, and cartoon lineups.</p>
+<h2>Template default fillers</h2>
+<p><img src="./assets/help/files/screenshots/template-mid-roll.png" alt="Template filler type selector with a Mid-Roll preset and Source Program"></p>
+<p>Under <strong>Template default filler</strong>, select a type in the movie illustration or the type selector:</p>
+<ul>
+<li><strong>Pre-Roll</strong> plays before each episode or movie.</li>
+<li><strong>Mid-Roll</strong> plays at allowed breaks within an episode or movie.</li>
+<li><strong>Post-Roll</strong> plays after each episode or movie.</li>
+<li><strong>Tail Filler</strong> fills time left after the slot’s main programming, before the next slot.</li>
+</ul>
+<p>Check the selected type’s checkbox to enable it, then choose a <strong>Preset</strong> and <strong>Source Program</strong>. The preset sets how much filler to play, and the Source Program chooses the clips. Uncheck the checkbox to remove that template default. Create presets under <strong>Filler</strong>; see <a href="./assets/help/filler.presets.html">Filler presets</a> for budgets and fitting, and <a href="./assets/help/filler.presets.html#mid-roll-break-conditions">Mid-Roll break conditions</a> for choosing breaks.</p>
+<p>Each type inherits separately. A programmed slot uses its template default when it inherits filler. If the template has no default for that type, the channel default applies. In the slot’s <strong>Advanced scheduling behavior</strong>, select a type under <strong>Slot filler</strong>, then choose whether to inherit, disable it, or use a <strong>Slot override</strong> with its own preset and source. Unchecking an override returns that type to inheritance; choose <strong>Disabled</strong> to stop inherited filler.</p>
+<p>Only the selected type’s settings are shown. Configured gaps appear active; unconfigured gaps remain inactive. The 137-minute movie illustration adjusts timed mid-roll points to the selected preset. Use the resolved preview to check your actual media.</p>
+<p>The complete episode or movie, including its pre-roll, mid-roll, and post-roll filler, must satisfy the slot’s item-start and boundary rules. A 20-minute episode with 30 seconds of filler needs 20 minutes 30 seconds to fit. A hard boundary may cut content or filler; a finish-outgoing rule considers the whole airing. The guide shows one episode or movie entry spanning this filler, with individual spans available in its details.</p>
+<p>Tail filler runs within the time left in the slot and never extends it. Channel fallback filler runs afterward if a gap remains. Disabling tail does not disable channel fallback. Pre-roll, mid-roll, and post-roll apply only to slots with a main Program.</p>
+</main></body></html>

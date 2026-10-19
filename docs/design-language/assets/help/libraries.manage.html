@@ -1,0 +1,124 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Libraries and scanning · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Libraries and scanning</h1><p>Choose <strong>Add Library</strong> to open the library editor. Enter the source details, then choose <strong>Add and Scan</strong> to create the Library, queue its initial scan, and continue in its settings editor.</p>
+<p><img src="./assets/help/files/screenshots/library-create.png" alt="Add Library editor"></p>
+<p>A <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/library.svg" alt="">Library</span> tells Moirai where media lives. Open <strong><span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/library.svg" alt="">Libraries</span></strong> to add a source, see its current health, or start a synchronization.</p>
+<p><img src="./assets/help/files/screenshots/libraries.png" alt="The libraries page before a source is added"></p>
+<p>Use the path as Moirai sees it. In Docker this is normally a mounted path such as <code>/media/movies</code>. Moirai reads video files and Kodi-compatible NFO sidecars, probes technical playback facts, and keeps an index in its database. The original media remains the source of truth.</p>
+<p>See <a href="./assets/help/libraries.file-naming.html">Media file naming</a> for recommended movie and show layouts, episode numbering, editions, multi-part videos, artwork, NFO files, and subtitle names.</p>
+<p>Direct streaming from media center software such as Jellyfin, Plex, Emby, and similar services is not currently supported. Make the underlying media files available to Moirai through a filesystem path instead, such as a folder mounted into its Docker container.</p>
+<p>Each library in the main navigation has a scan-status indicator on its right. Hover over it to read its status label.</p>
+<table>
+<thead>
+<tr>
+<th>Icon</th>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="./assets/help/files/icons/scan-idle.svg" alt="Green dot"></td>
+<td>Idle</td>
+<td>No scan is running, and no scan warnings or offline sources are reported.</td>
+</tr>
+<tr>
+<td><img src="./assets/help/files/icons/scan-scanning.svg" alt="Spinning arrows"></td>
+<td>Scanning</td>
+<td>A scan is running. The arrows spin unless reduced motion is enabled.</td>
+</tr>
+<tr>
+<td><img src="./assets/help/files/icons/scan-offline.svg" alt="Orange unplug"></td>
+<td>Offline</td>
+<td>A library source is offline.</td>
+</tr>
+<tr>
+<td><img src="./assets/help/files/icons/scan-warnings.svg" alt="Orange circled exclamation mark"></td>
+<td>Warnings</td>
+<td>The last scan reported warnings. Open <strong>Last scan</strong> to review them.</td>
+</tr>
+<tr>
+<td><img src="./assets/help/files/icons/scan-not-scanned.svg" alt="Gray dash"></td>
+<td>Not scanned</td>
+<td>The library has not completed its first scan.</td>
+</tr>
+</tbody>
+</table>
+<p>Scanning takes priority while a scan is running; otherwise, Offline takes priority over Warnings.</p>
+<p>The first scan can take time for a large collection. A source watcher handles ordinary additions and changes afterward. Use <img src="./assets/help/files/icons/refresh-cw.svg" alt="Sync library"> when you want an immediate full scan. After scanning, the catalog displays the indexed media with its posters and titles.</p>
+<p><img src="./assets/help/files/screenshots/library-catalog.png" alt="Evening Cinema library with 17 indexed movies, poster artwork, and scan status"></p>
+<p>At the top of the library screen you can see watcher health, the indexed count, scan history, and its most recent change. A scan may finish with warnings even when most media was indexed successfully. Click or tap <strong>Last scan</strong> at the top of the library to open <strong>Scan history</strong>, including scan results, item counts, and recorded issues. Review those issues before changing a schedule that depends on missing items.</p>
+<p><img src="./assets/help/files/screenshots/library-scan-history.png" alt="Scan history dialog with completed scan results"></p>
+<p>Library settings can change the display name or source path. A path change is staged for safety when it could make many existing items appear to have disappeared.</p>
+<h2>Library health</h2>
+<p>When a library scan finds issues, it will display a small alert at the top of the page. Open <strong>Review Issues</strong> on a library to see findings from that scan. <strong>Last scan</strong> opens the history of earlier results. Each finding includes a code and, when applicable, the affected path.</p>
+<p>Note that a warning does not necessarily mean the media cannot play. Choose <strong>Ignore issue</strong> to hide it from attention counts until its relevant files change. Ignoring does not repair media, make it playable, resolve catalog conflicts, or approve source changes or removals. Folder/source availability, scan-wide failures, and reconciliation decisions cannot be ignored.</p>
+<p>Open <strong>Show all issues → Suppressed issues</strong> to review automatically suppressed and manually ignored findings. You can also reach <strong>Suppressed issues</strong> from <strong>Last scan</strong>. Choose <strong>Restore issue</strong> on a manually ignored finding to return it to attention counts; a later scan may still suppress a duration finding automatically.</p>
+<p>After correcting a file, its metadata, or source access, synchronize the library to refresh its health. Use the finding code below to identify the problem and available remedies.</p>
+<h3>Audio/video duration differences</h3>
+<p>Moirai uses the first video track in stream-index order, excluding embedded cover artwork, for playback, duration, and resolution. Timing from a later video track is not substituted. It reads language-tagged timing in MKV and WebM files. If a file has exactly one video track and no usable video timing, Moirai uses the container’s duration instead. This fallback can include audio that runs beyond the video; it does not produce audio/video duration warnings or automatic silent-ending assessments because the video’s own duration is unknown.</p>
+<p><code>media_audio_video_duration_mismatch</code> means at least one measured audio track differs from the video duration by more than thirty seconds. Playback and scheduling prefer the video duration, but audio tracks that differ in length significantly from the main video duration can be a sign of incomplete media. Check the reported tracks and watch the affected ending before deciding whether the difference is harmless or the file needs replacing.</p>
+<p>Moirai automatically suppresses the finding when every measured audio track is no more than 5% shorter than the video and none is more than thirty seconds longer.</p>
+<p>For larger differences, Moirai checks short silent endings during library scans when all audio tracks finish before the video and within thirty seconds of one another. Inspection starts at the earliest audio ending and continues to the end of the video. Endings that remain at least 90% black throughout the inspected frames are automatically suppressed. This includes most white-on-black credit sequences. Endings that do not meet that threshold, incomplete inspection, and uncertain results remain warnings.</p>
+<h3>Missing NFO metadata</h3>
+<p><code>nfo_missing</code> means no matching NFO sidecar was found. Moirai uses the filename and available media tags for metadata instead. This needs attention only when the fallback cannot supply a usable title or, for shows, both season and episode numbers. Missing sidecars still leave metadata marked incomplete. Add a Kodi-compatible NFO if you want richer or more accurate details, using the layouts in <a href="./assets/help/libraries.file-naming.html">Media file naming</a>, then synchronize the library.</p>
+<h3>Invalid NFO metadata</h3>
+<p><code>nfo_invalid</code> means the media item’s NFO could not be read or parsed. Check the reported file’s permissions and XML contents, or regenerate it with your media manager, then synchronize the library.</p>
+<h3>Ignored or shortened metadata values</h3>
+<p>Moirai keeps detecting invalid values and metadata that exceeds its limits. Harmless findings stay out of library warnings and scan-history issue lists: unused episode numbers in show-level metadata, NFO playback measurements, values recovered through a valid fallback, and safely shortened descriptive text or lists. Invalid values that leave useful catalog information unresolved still need attention, as do shortened identifiers and unreadable or malformed files.</p>
+<p>Existing warnings are updated after the next library sync. Older scan history keeps the findings recorded at the time.</p>
+<h3>Invalid show metadata</h3>
+<p><code>tvshow_nfo_invalid</code> means show-level NFO metadata could not be read or parsed. Check the reported show metadata file, repair its contents or permissions, and synchronize the library.</p>
+<h3>NFO file too large</h3>
+<p><code>nfo_too_large</code> means an NFO exceeds the 2 MiB reading limit. Reduce or regenerate the sidecar so it contains only the needed metadata, then synchronize the library.</p>
+<h3>Metadata shortened</h3>
+<p><code>metadata_truncated</code> means some metadata exceeded Moirai’s supported length or list limits. The finding names the affected fields. Shorten those fields or reduce oversized lists in the NFO, then synchronize the library. Other usable metadata can still be indexed.</p>
+<h3>Invalid metadata values</h3>
+<p><code>metadata_invalid</code> means individual metadata values were ignored because they were invalid. Correct the fields named in the finding and synchronize the library; this finding does not mean the entire NFO was rejected.</p>
+<h3>Conflicting show identifiers</h3>
+<p><code>show_external_id_conflict</code> means multiple show folders share an external provider identifier. Moirai keeps the folders separate. Check their NFO identifiers and folder layout, correct accidental duplicates, and synchronize the library. See <a href="./assets/help/libraries.reconciliation.html">Missing media and conflicts</a>.</p>
+<h3>Folder cannot be read</h3>
+<p><code>directory_unreadable</code> means Moirai could not list a folder’s contents. Restore the mount or folder permissions and scan again. The scan is incomplete, so do not assume unlisted files were deliberately removed.</p>
+<h3>Media file cannot be read</h3>
+<p><code>media_unreadable</code> means a file could not be accessed while scanning. Check its permissions, storage connection, and the finding’s message, then scan again once access is restored.</p>
+<h3>Media changed during scanning</h3>
+<p><code>media_changed_during_scan</code> means a file disappeared, was replaced, or changed while Moirai was examining it. Let copies, downloads, or file moves finish, then synchronize again.</p>
+<h3>Media inspection unavailable</h3>
+<p><code>media_executable_unavailable</code> means Moirai could not use ffprobe to measure media. Check the server installation and ffprobe availability, then restart the server if needed and synchronize the library. Filename or NFO runtimes cannot substitute for timing read from the media file.</p>
+<h3>Insufficient resources for media inspection</h3>
+<p><code>media_resource_exhausted</code> means the server could not start media inspection because system resources were exhausted. Reduce competing work or resolve the host’s resource limits, then scan again. The finding may describe a library-wide problem rather than one damaged file.</p>
+<h3>Media inspection failed</h3>
+<p><code>media_probe_failed</code> means ffprobe could not read the media successfully. Check that the file is complete and accessible, and verify it in a media player. Repair or replace a damaged file, or restore source access, before scanning again.</p>
+<h3>Invalid media inspection result</h3>
+<p><code>media_invalid_output</code> means ffprobe returned unusable information or exceeded the supported output size. Check the file and server’s ffprobe installation. If the file plays correctly but the finding persists after another scan, retain the finding details for troubleshooting.</p>
+<h3>Media inspection timed out</h3>
+<p><code>media_timed_out</code> means inspecting a file exceeded the time limit. Check for slow or disconnected storage and heavy server load, then scan again. If the same file repeatedly fails, check whether it is damaged or incomplete.</p>
+<h3>Media inspection cancelled</h3>
+<p><code>media_cancelled</code> means inspection stopped before the file could be measured. Run another scan when the server is ready. This finding alone does not establish that the file is damaged.</p>
+<h3>No usable video track</h3>
+<p><code>media_missing_video</code> means Moirai found no usable video stream; embedded cover artwork does not count as video. Check that the file is the intended video rather than an audio-only file or a damaged export, then replace or re-export it as needed.</p>
+<h3>No usable video duration</h3>
+<p><code>media_missing_duration</code> means Moirai could not obtain valid video timing or an eligible container duration. A container duration can be used only when there is exactly one video track, excluding cover artwork. An NFO runtime cannot make the item schedulable because the value is not precise enough. Files recorded in live mode may lack both timing sources, and you’ll need to repair or re-export the file with valid timing, then synchronize the library.</p>
+<h3>Incomplete multipart video</h3>
+<p><code>multipart_incomplete</code> means a multipart title lacks a contiguous sequence beginning with part 1, or only one numbered part was found. Restore missing parts or correct their names using <a href="./assets/help/libraries.file-naming.html">Media file naming</a>, then synchronize the library.</p>
+<h3>Ambiguous multipart video</h3>
+<p><code>multipart_ambiguous</code> means part numbers are duplicated or the title exceeds the 128-part limit. Correct duplicate numbering or reorganize the files into a supported layout, then synchronize the library.</p>
+<h3>Invalid multipart duration</h3>
+<p><code>multipart_duration_invalid</code> means a complete multipart set has a missing measured duration or a total beyond the 366-day scheduling limit. Check each part’s inspection findings and make sure unrelated files were not grouped together, then correct the files or names and synchronize again.</p>
+<h3>Source path change needs approval</h3>
+<p><code>source_change_requires_approval</code> means a proposed library source change was inspected without replacing the existing index. Review the candidate source and its proposed changes. Approve it only if it is the intended replacement; otherwise correct the source settings. See <a href="./assets/help/libraries.reconciliation.html">Missing media and conflicts</a>.</p>
+<h3>Source identity change needs approval</h3>
+<p><code>source_identity_requires_approval</code> means the source no longer appears to be the same directory or storage location Moirai previously accepted. Check for an incorrect mount or replacement disk before approving the source. Restore the original source if the change was unintended.</p>
+<h3>Candidate source scan incomplete</h3>
+<p><code>source_candidate_incomplete</code> means Moirai could not finish inspecting a proposed replacement source, so it was not imported. Restore access to all affected folders and files, then scan again before reviewing the replacement.</p>
+<h3>Source changed during scanning</h3>
+<p><code>source_identity_changed_during_scan</code> means the source root changed while the scan was running. Moirai does not use that scan to confirm removals. Stabilize the source mount or directory and run another scan.</p>
+<h3>Missing items awaiting confirmation</h3>
+<p><code>removal_confirmation_pending</code> means indexed items were not found and are awaiting three healthy observations at least thirty minutes apart before removal is confirmed. Restore any files that should still exist and check mounts and permissions. Repeated immediate scans do not bypass the waiting interval. See <a href="./assets/help/libraries.reconciliation.html">Missing media and conflicts</a>.</p>
+<h3>Missing items need removal approval</h3>
+<p><code>removal_approval_required</code> means a substantial catalog change needs explicit review. Check that the source is correct and accessible before approving removal of indexed records. If the files should still exist, restore access instead of approving their removal. Follow <a href="./assets/help/libraries.reconciliation.html">Missing media and conflicts</a>.</p>
+<h3>Scan interrupted</h3>
+<p><code>scan_interrupted</code> means a scan was still marked as running when the server recovered it after an interruption. Run a new scan to obtain a complete result.</p>
+<h3>Scan failed</h3>
+<p><code>scan_failed</code> means the scan could not finish. Read its message, check source access and server health, and scan again after resolving the cause. An inaccessible source does not mean the indexed files were intentionally deleted.</p>
+<h3>Scan cancelled</h3>
+<p><code>scan_cancelled</code> records that a scan was cancelled before completion. Start another synchronization when you want a complete inventory; cancellation alone does not indicate damaged media.</p>
+</main></body></html>

@@ -1,0 +1,105 @@
+/** Fictitious movie metadata copied from tests/e2e/documentation/seed.ts for offline examples. */
+export const media = [
+	{
+		'title': 'Afterlight Station',
+		'year': 2026,
+		'genre': 'Science Fiction',
+		'poster': 'afterlight-station-poster.png',
+	},
+	{
+		'title': 'Borrowed Summer',
+		'year': 2020,
+		'genre': 'Drama',
+		'poster': 'borrowed-summer-poster.png',
+	},
+	{
+		'title': 'Checkout Please',
+		'year': 2025,
+		'genre': 'Comedy',
+		'poster': 'checkout-please-poster.png',
+	},
+	{
+		'title': 'Cinder Atlas',
+		'year': 2024,
+		'genre': 'Adventure',
+		'poster': 'cinder-atlas-poster.png',
+	},
+	{
+		'title': 'Echo Harbor',
+		'year': 2023,
+		'genre': 'Mystery',
+		'poster': 'echo-garden-poster.png',
+	},
+	{
+		'title': 'Glass Midnight',
+		'year': 2022,
+		'genre': 'Science Fiction',
+		'poster': 'glass-midnight-poster.png',
+	},
+	{
+		'title': 'Harbor Static',
+		'year': 2021,
+		'genre': 'Thriller',
+		'poster': 'harbor-static-poster.png',
+	},
+	{
+		'title': 'Little Machines',
+		'year': 2024,
+		'genre': 'Animation',
+		'poster': 'little-machines-poster.png',
+	},
+	{
+		'title': 'Moonrise Theater',
+		'year': 2024,
+		'genre': 'Drama',
+		'poster': 'moonrise-theater-poster.png',
+	},
+	{
+		'title': 'Northbound Zero',
+		'year': 2023,
+		'genre': 'Action',
+		'poster': 'northbound-zero-poster.png',
+	},
+	{
+		'title': 'Paper Constellations',
+		'year': 2022,
+		'genre': 'Romance',
+		'poster': 'paper-constellations-poster.png',
+	},
+	{
+		'title': 'Quiet Orbit',
+		'year': 2025,
+		'genre': 'Documentary',
+		'poster': 'quiet-orbit-poster.png',
+	},
+	{
+		'title': 'Red Current',
+		'year': 2021,
+		'genre': 'Thriller',
+		'poster': 'red-current-poster.png',
+	},
+	{
+		'title': 'Signal Garden',
+		'year': 2025,
+		'genre': 'Science Fiction',
+		'poster': 'signal-garden-poster.png',
+	},
+	{
+		'title': 'The Last Crossing',
+		'year': 2019,
+		'genre': 'Historical Drama',
+		'poster': 'the-last-crossing-poster.png',
+	},
+	{
+		'title': 'The Last Lighthouse',
+		'year': 2021,
+		'genre': 'Adventure',
+		'poster': 'the-last-lighthouse-poster.png',
+	},
+	{
+		'title': 'Winter Archive',
+		'year': 2020,
+		'genre': 'Mystery',
+		'poster': 'winter-archive-poster.png',
+	},
+];

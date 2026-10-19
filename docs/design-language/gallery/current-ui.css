@@ -1,0 +1,397 @@
+/* Source-shaped compositions: see docs/current-ui.md for owners and reviewed exceptions. */
+.app-main {
+	padding: 28px clamp(24px, 2.6vw, 42px) 54px;
+}
+.app-shell > .sidebar {
+	position: sticky;
+	top: 0;
+	height: 100dvh;
+	padding: 20px 16px 18px;
+}
+.sidebar > nav {
+	min-height: 0;
+	overflow-y: auto;
+	gap: 3px;
+}
+.sidebar .brand {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	padding: 0;
+}
+.sidebar .brand img {
+	width: 55px;
+	height: 55px;
+	object-fit: contain;
+}
+.sidebar .brand strong {
+	font-family: Georgia, 'Times New Roman', serif;
+	font-size: 1.7rem;
+	font-weight: 600;
+	letter-spacing: -0.035em;
+}
+.sidebar .brand small {
+	display: block;
+	color: var(--color-secondary);
+	font-size: 0.7rem;
+}
+.sidebar .current-nav-group {
+	border: 0;
+	padding: 0;
+}
+.current-nav-group summary,
+.current-nav-static {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	border-inline-start: 2px solid transparent;
+	padding: 8px 12px;
+	color: var(--color-secondary);
+	font-size: var(--font-body);
+}
+.current-nav-group summary {
+	list-style: none;
+	cursor: pointer;
+}
+.sidebar nav :is(a, summary, .current-nav-static) {
+	border-radius: var(--radius-control);
+}
+.sidebar nav :is(a, summary, .current-nav-static):hover {
+	color: var(--color-text);
+	background-color: var(--color-hover);
+	background-image: var(--surface-gradient);
+}
+.sidebar nav a[aria-current='page']:hover {
+	color: var(--color-accent);
+	background-color: var(--color-selected);
+}
+.sidebar nav :is(a, summary):active {
+	background-color: var(--color-selected);
+}
+.current-nav-group summary::-webkit-details-marker {
+	display: none;
+}
+.current-nav-group summary::after {
+	content: '';
+	width: var(--icon-small);
+	height: var(--icon-small);
+	margin-inline-start: auto;
+	flex: none;
+	background-color: currentColor;
+	mask: url(../assets/icons/chevron-down.svg) center / contain no-repeat;
+}
+.current-nav-group:not([open]) summary::after {
+	transform: rotate(-90deg);
+}
+.sidebar nav .action-glyph {
+	width: var(--icon-default);
+	height: var(--icon-default);
+}
+.current-nav-group > a,
+.current-nav-group > .current-nav-static {
+	margin-left: 12px;
+	padding-block: 8px;
+	min-height: 36px;
+}
+.current-mobile-brand {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-family: Georgia, 'Times New Roman', serif;
+	font-size: var(--font-section);
+}
+.current-mobile-brand img {
+	width: 36px;
+	height: 36px;
+}
+h1,
+h2,
+h3 {
+	font-family: var(--font-heading);
+}
+.page-header p,
+.editor-header p,
+.settings-card-heading p {
+	margin-top: var(--title-subtitle-gap);
+}
+.page-header > div:first-child {
+	max-width: 760px;
+}
+.page-header .eyebrow {
+	display: block;
+	margin-bottom: 4px;
+}
+.settings-card-title {
+	align-items: center;
+}
+.settings-card-heading {
+	align-items: flex-start;
+}
+.settings-card-icon {
+	margin-top: 1px;
+}
+.settings-help {
+	position: relative;
+	flex-basis: 24px;
+	width: 24px;
+	height: 24px;
+	min-height: 24px;
+}
+.settings-help::before {
+	content: '';
+	position: absolute;
+	inset: -10px;
+}
+.settings-automatic-header small {
+	margin-top: var(--title-subtitle-gap);
+}
+.current-program-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+.current-program-toolbar > * {
+	flex: 1 1 135px;
+	min-width: 0;
+}
+.current-program-toolbar > label:first-child {
+	flex: 2 1 220px;
+}
+.current-program-toolbar > label:not(:first-child) {
+	gap: 4px;
+	font-size: var(--font-small);
+	color: var(--color-secondary);
+}
+.current-program-list {
+	min-width: 0;
+	overflow: auto;
+	border: var(--border-width) solid var(--color-line);
+	border-radius: var(--radius-control);
+	background-color: var(--color-surface);
+}
+.current-program-columns,
+.current-program-row {
+	display: grid;
+	grid-template-columns: minmax(200px, 1fr) 90px 72px 75px 42px;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+}
+.current-program-columns {
+	font-size: var(--font-small);
+	color: var(--color-muted);
+	background-color: var(--color-raised);
+}
+.current-program-row {
+	min-height: 80px;
+	border-top: var(--border-width) solid var(--color-line);
+}
+.current-program-row.selected {
+	background-color: var(--color-selected);
+	box-shadow: inset 2px 0 var(--color-accent);
+}
+.current-program-identity {
+	display: grid;
+	gap: 7px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	text-align: left;
+	justify-content: stretch;
+	min-width: 0;
+}
+.current-program-identity > strong {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.current-program-identity .dot {
+	color: var(--color-success);
+}
+.current-program-identity .row {
+	gap: 6px;
+}
+.current-program-preview {
+	display: flex;
+	gap: 3px;
+}
+.current-program-preview .poster-mini {
+	width: 28px;
+	height: 42px;
+}
+.current-program-toolbar input,
+.current-search input {
+	min-width: 0;
+}
+.current-library-header {
+	align-items: center;
+}
+.current-library-header > .row {
+	min-width: 0;
+	flex: 0 1 500px;
+	flex-wrap: nowrap;
+}
+.current-library-header label {
+	flex: 1;
+}
+.current-library-status {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 16px;
+	padding: 16px;
+}
+.current-library-status > div {
+	display: grid;
+	gap: 2px;
+}
+.current-schedule-heading {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
+	gap: 20px;
+}
+.current-schedule-heading h3 + p {
+	margin-top: 2px;
+}
+.current-schedule-heading .pill {
+	padding-block: 0;
+}
+.current-schedule-stack {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px 16px;
+}
+.current-schedule-stack > .schedule-layer {
+	grid-column: 1;
+	padding: 12px 16px;
+}
+.current-schedule-stack > button {
+	grid-column: 2;
+	grid-row: 1;
+	align-self: center;
+}
+.current-schedule-stack:has(.override) > button {
+	grid-row: 1 / span 2;
+}
+.current-channel-identity {
+	display: grid;
+	grid-template-columns: 100px minmax(0, 1.5fr) minmax(0, 1fr);
+	gap: 12px;
+}
+.current-logo-placeholder {
+	width: 72px;
+	height: 72px;
+	display: grid;
+	place-items: center;
+	border: 1px dashed var(--color-control);
+	border-radius: var(--radius-control);
+}
+.current-enabled {
+	margin-left: auto;
+	font-size: var(--font-small);
+	white-space: nowrap;
+}
+.current-disclosure-body {
+	margin-top: 12px;
+}
+@media (max-width: 900px) {
+	.app-main {
+		padding: 24px 24px 40px;
+	}
+	.current-library-header > .row {
+		flex-basis: auto;
+		width: 100%;
+	}
+}
+@media (max-width: 600px) {
+	.app-main {
+		padding: 16px 16px 32px;
+	}
+	.current-program-columns,
+	.current-program-row {
+		grid-template-columns: minmax(0, 1fr) 44px;
+	}
+	.current-program-columns > :nth-child(n + 2):not(:last-child),
+	.current-program-row > :nth-child(n + 2):not(:last-child) {
+		display: none;
+	}
+	.current-program-identity {
+		white-space: normal;
+	}
+	.current-schedule-heading,
+	.current-channel-identity {
+		grid-template-columns: 1fr;
+	}
+	.current-schedule-stack {
+		grid-template-columns: 1fr;
+	}
+	.current-schedule-stack > button,
+	.current-schedule-stack:has(.override) > button {
+		grid-column: 1;
+		grid-row: auto;
+	}
+	.current-library-status {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.inspector > header h2 {
+	font-size: var(--font-section);
+	line-height: var(--line-section);
+}
+
+.inspector > header {
+	padding-inline-end: var(--control-height);
+}
+.inspector-close {
+	position: absolute;
+	inset-block-start: var(--space-1);
+	inset-inline-end: var(--space-1);
+}
+.inspector-close .action-glyph {
+	width: var(--icon-default);
+	height: var(--icon-default);
+}
+
+.action-circle-gauge {
+	mask-image: url(../assets/icons/circle-gauge.svg);
+}
+
+.action-layout-grid {
+	mask-image: url(../assets/icons/layout-grid.svg);
+}
+
+.action-tv-minimal {
+	mask-image: url(../assets/icons/tv-minimal.svg);
+}
+
+.action-settings {
+	mask-image: url(../assets/icons/settings.svg);
+}
+
+.action-file-code {
+	mask-image: url(../assets/icons/file-code.svg);
+}
+
+.action-file-text {
+	mask-image: url(../assets/icons/file-text.svg);
+}
+
+.action-copy {
+	mask-image: url(../assets/icons/copy.svg);
+}
+
+.action-library {
+	mask-image: url(../assets/icons/library.svg);
+}
+
+.action-calendar-range {
+	mask-image: url(../assets/icons/calendar-range.svg);
+}
+
+.action-tv-minimal-play {
+	mask-image: url(../assets/icons/tv-minimal-play.svg);
+}
+
+.action-list-video {
+	mask-image: url(../assets/icons/list-video.svg);
+}

@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Create your first channel · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Create your first channel</h1><p>You can use <strong>Quick Setup</strong> to combine several steps into one guided workflow and create simple channels more quickly, or complete each step independently with the full editors for more control over media selection, programming, and scheduling. Both approaches are described below, and you can use the full editors to refine a channel created with Quick Setup later.</p>
+<h2>Start with Quick Setup</h2>
+<p>Open <strong>Quick Setup</strong> from navigation or the dashboard. Choose <strong>Movie Channel</strong>, <strong>Show Channel</strong>, or <strong>Music Video Channel</strong> to open the four-step wizard.</p>
+<ol>
+<li><strong>Choose a media library.</strong> Reuse a compatible library or choose <strong>Create new</strong>, enter a name and the folder path as Moirai sees it, then select <strong>Create and Continue</strong>. Scanning starts immediately.</li>
+<li><strong>Choose the programming.</strong> Use a dynamic library query to include matching media as the library changes, or select specific items. Show channels can also select shows or seasons. Configure filters, ordering, an optional item limit, and playback selection behavior; then preview the matching media sample.</li>
+<li><strong>Name and brand the channel.</strong> Set a distinct channel number, name, optional group, and optional logo. As you type a number, similarly-numbered channels appear so you can see what may be already used. The Group field suggests existing groups, the logo keeps its full image and transparency, and playback starts with automatic defaults.</li>
+<li><strong>Review Setup.</strong> Inspect the library, programming, channel, and sample day, then select <strong>Create Channel</strong>. Open the schedule from the completion screen or visit <strong><span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-days.svg" alt="">Guide</span></strong> for IPTV addresses.</li>
+</ol>
+<p><img src="./assets/help/files/screenshots/quick-setup.png" alt="Quick Setup programming with an indexed movie library"></p>
+<p>The sample day uses the server timezone. It is illustrative: indexing and randomized selection can change the result. A preview error does not prevent an otherwise valid setup. A dynamic query can be saved while scanning is still underway, but playback needs usable indexed media.</p>
+<p>Quick Setup creates a linked <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/list-video.svg" alt="">Program</span>, <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal.svg" alt="">Channel</span>, and <span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal-play.svg" alt="">Channel Schedule</span> together. The schedule assigns the Program directly for continuous daily playback, so there is no extra Template to maintain. A <span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/library.svg" alt="">Library</span> created earlier in the wizard remains and continues scanning if you cancel. If an optional logo upload fails, the channel is still created; retry the upload from the completion screen.</p>
+<h2>Use the full editors</h2>
+<p>For finer control over individual resources or an existing setup, follow these steps.</p>
+<ol>
+<li>
+<p>Open <strong><span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/library.svg" alt="">Libraries</span></strong>, select <strong>Add Library</strong>, give the source a recognizable name, and enter its path inside the Moirai container. Choose <strong>Add and Scan</strong>.</p>
+<p><img src="./assets/help/files/screenshots/libraries.png" alt="Libraries page with the Add Library action"></p>
+</li>
+<li>
+<p>Wait for the library to report indexed items. Open it and make sure titles and durations look sensible.</p>
+<p><img src="./assets/help/files/screenshots/library-catalog.png" alt="Evening Cinema catalog after a completed scan, showing 17 indexed movies"></p>
+</li>
+<li>
+<p>Open <strong>Scheduling → Programs</strong> and create a program. A sequence program is a straightforward first choice: select the items you want and arrange their order.</p>
+<p><img src="./assets/help/files/screenshots/programs.png" alt="Programs page with New Program and an existing media selection"></p>
+</li>
+<li>
+<p>Open <strong>Scheduling → Templates</strong>. Create a template, add a slot, and assign the program. Use filler behavior if the selected media may not fill the entire slot.</p>
+<p><img src="./assets/help/files/screenshots/templates.png" alt="Templates page with New Template and a one-slot daily template"></p>
+</li>
+<li>
+<p>Open <strong><span class="docs-term-badge" data-tone="blue"><img src="./assets/help/files/icons/tv-minimal.svg" alt="">Channels</span></strong> and create the channel viewers will receive. Choose its channel number, name, and playback profile.</p>
+<p><img src="./assets/help/files/screenshots/channels.png" alt="Channels page with New Channel and Moonrise Classics awaiting a schedule"></p>
+</li>
+<li>
+<p>Open <strong>Scheduling → Channel Schedules</strong>, choose the channel, and assign the template as its base schedule. Review the preview and save it.</p>
+</li>
+</ol>
+<p>If the channel only needs the one Program all day, skip creating a Template in step 4. In the channel schedule editor, choose <strong>Program</strong> beside the base picker and select the Program directly.</p>
+<p><img src="./assets/help/files/screenshots/channel-schedules.png" alt="Channel Schedule editor with a base Template and a preview warning about a playback gap"></p>
+<p>This example preview shows a gap. Review warnings and adjust the programming or fallback behavior before relying on the lineup.</p>
+<ol start="7">
+<li>
+<p>Open <strong><span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-days.svg" alt="">Guide</span></strong>. When the rolling guide is healthy, copy the playlist and XMLTV addresses into your IPTV client.</p>
+<p><img src="./assets/help/files/screenshots/guide.png" alt="Guide page showing playlist and XMLTV addresses with Copy URL buttons"></p>
+</li>
+</ol>
+<p>The dashboard reports whether playback is ready. If the guide contains gaps or playback is degraded, start with <a href="./assets/help/operations.troubleshooting.html">Troubleshooting</a>.</p>
+<p>See <a href="./assets/help/scheduling.example-schedules.html">Example schedules</a> for movie channels, genre double features, sitcom rotations, and cartoon lineups.</p>
+</main></body></html>

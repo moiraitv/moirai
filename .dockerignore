@@ -9,3 +9,4 @@ playwright-report
 .DS_Store
 assets-src
 vendor/ersatztv-next
+docs/design-language

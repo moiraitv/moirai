@@ -10,3 +10,6 @@ package-lock.json
 **/*.ts
 **/*.tsx
 **/*.vue
+# Preserve copied contextual-help snapshots and source-format log fixtures.
+docs/design-language/assets/help/
+docs/design-language/assets/log-example.json

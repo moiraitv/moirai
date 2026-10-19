@@ -1,0 +1,114 @@
+/* Moirai / initial edition. Current UI roles with documented shared-style unifications; no application imports. */
+:root {
+	/* Color: semantic roles, all opaque for predictable contrast. */
+	--color-canvas: #06101a;
+	--color-navigation: #07121d;
+	--color-surface: #0b1723;
+	--color-raised: #0e1c29;
+	--color-hover: #162d3d;
+	--color-selected: #103c36;
+	--color-line: #294155;
+	--color-control: #58758a;
+	--color-text: #eef3f8;
+	--color-secondary: #b2bdc9;
+	--color-muted: #95a6b8;
+	--color-accent: #16d6a4;
+	--color-accent-hover: #55e4be;
+	--color-accent-pressed: #10b98d;
+	--color-on-accent: #04251d;
+	--color-info: #82baff;
+	--color-info-surface: #102b46;
+	--color-success: #69dfb3;
+	--color-warning: #ffd18a;
+	--color-warning-surface: #352719;
+	--color-danger: #ff97a3;
+	--color-danger-surface: #3c202b;
+	--color-purple: #d0b3ff;
+	--color-purple-surface: #2d2347;
+	--color-backdrop: rgb(0 5 12 / 76%);
+	/* Restrained button sheen over semantic state fills; no raised shadow. */
+	--button-surface-gradient: linear-gradient(180deg, rgb(255 255 255 / 3%), rgb(0 0 0 / 4%));
+	--surface-gradient: linear-gradient(180deg, rgb(255 255 255 / 1.5%), rgb(0 0 0 / 2.5%));
+	--canvas-gradient: linear-gradient(180deg, rgb(255 255 255 / 0.8%), rgb(0 0 0 / 1%));
+	--field-gradient: linear-gradient(180deg, rgb(0 0 0 / 2.5%), rgb(255 255 255 / 1%));
+	/* Typography: px equivalents assume a 16px root; respect user font size. */
+	--font-ui: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-heading: ui-rounded, 'SF Pro Rounded', Inter, system-ui, sans-serif;
+	--title-subtitle-gap: 2px;
+	--font-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+	--font-page: 2rem;
+	--line-page: 2.5rem;
+	--font-title: 1.5rem;
+	--line-title: 2rem;
+	--font-section: 1.125rem;
+	--line-section: 1.625rem;
+	--font-body: 0.875rem;
+	--line-body: 1.375rem;
+	--font-small: 0.75rem;
+	--line-small: 1.125rem;
+	--font-control: 0.875rem;
+	--line-control: 1.25rem;
+	--weight-regular: 400;
+	--weight-medium: 500;
+	--weight-semibold: 600;
+	--weight-bold: 700;
+	--tracking-heading: -0.025em;
+	--tracking-label: 0.08em;
+	/* Space: 4px base rhythm, with 2px for optical alignment only. */
+	--space-0: 0px;
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-8: 32px;
+	--space-10: 40px;
+	--space-12: 48px;
+	--space-16: 64px;
+	/* Geometry: sizes grow with content, never fixed-height text containers. */
+	--radius-small: 4px;
+	--radius-control: 8px;
+	--radius-panel: 12px;
+	--radius-dialog: 16px;
+	--radius-pill: 999px;
+	--border-width: 1px;
+	--focus-width: 2px;
+	--focus-offset: 3px;
+	--control-height: 42px;
+	--control-compact: 32px;
+	--target-touch: 44px;
+	--row-height: 56px;
+	--icon-small: 16px;
+	--icon-default: 20px;
+	--icon-feature: 24px;
+	--icon-stroke: 2px;
+	--sidebar-width: 244px;
+	--inspector-width: 390px;
+	--dialog-width: 820px;
+	--dialog-confirm: 430px;
+	--content-max: 1600px;
+	--field-max: 560px;
+	--poster-ratio: 2 / 3;
+	/* Catalog geometry mirrors catalog-virtualization.ts public constants. */
+	--preview-card-width: 112px;
+	--preview-card-gap: 9px;
+	--media-card-min: 170px;
+	--media-card-column-gap: 14px;
+	--media-card-row-gap: 13px;
+	/* Depth: elevation belongs to floating UI, not every panel. */
+	--shadow-popover: 0 8px 24px rgb(0 0 0 / 32%);
+	--shadow-dialog: 0 24px 80px rgb(0 0 0 / 48%);
+	--layer-base: 0;
+	--layer-sticky: 10;
+	--layer-popover: 20;
+	--layer-backdrop: 30;
+	--layer-dialog: 40;
+	--layer-toast: 50;
+	/* Motion: brief feedback; deliberate presentation uses system timing. */
+	--motion-fast: 110ms;
+	--motion-standard: 170ms;
+	--motion-system: 350ms;
+	--ease-feedback: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ease-system: cubic-bezier(0.42, 0, 0.58, 1);
+}

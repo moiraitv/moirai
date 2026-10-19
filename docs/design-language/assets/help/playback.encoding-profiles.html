@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Encoding profiles · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Encoding profiles</h1><p>Open <strong>Playback → Encoding profiles</strong> to manage reusable audio and video settings. <strong>Guide templates</strong> and <strong>Credit templates</strong> also live under Playback; scheduling pages continue to control what plays and when.</p>
+<p>Open <strong>Used by</strong> in the editor title bar of a saved profile to see channels linked to it. Channels created with the current default store that profile, so they appear here. Custom encoding is independent of the default. Open a channel from that list to inspect its settings.</p>
+<h2>Create a profile</h2>
+<p>Choose <strong>New profile</strong>, give it a distinct name, and configure its video and audio settings. A profile includes resolution, codecs, bitrates and buffers, scaling, bit depth, hardware acceleration, deinterlacing, audio channels, sample rate, and loudness normalization. <strong>Automatic</strong> hardware acceleration lets Moirai select a supported backend for each channel. When viewing or editing a profile, the Acceleration field shows a prediction using the server’s default FFmpeg.</p>
+<p><img src="./assets/help/files/screenshots/encoding-profile-editor.png" alt="Encoding profile editor showing reusable video and audio settings"></p>
+<p>Choose <strong>Add</strong> to create a profile or <strong>Save</strong> to commit changes. <strong>Duplicate</strong> starts an independent copy with its own retained draft.</p>
+<h2>Use a profile on a channel</h2>
+<p>Edit a <a href="./assets/help/channels.manage.html">Channel</a> and choose the profile under <strong>Encoding profile → Audio and video settings</strong>. The inherited settings remain visible but cannot be edited on that channel. Save the channel to apply the assignment.</p>
+<p>Changes saved to a profile apply to every linked channel, using the same playback refresh as editing a channel directly. Active sessions are marked stale when encoding settings change. Use the restart action on Status when you are ready to interrupt viewers. Already buffered video is unchanged.</p>
+<p>Profiles only own audio and video settings. Channel numbers, names, logos, groups, schedules, fallback media, subtitle selection and mode, credit templates, fonts, FFmpeg paths, and filter preferences remain channel-specific.</p>
+<h2>Keep channel-specific settings</h2>
+<p>Choose <strong>Custom</strong> to edit audio and video settings independently. Upgrades preserve each existing channel’s profile assignment or Custom settings.</p>
+<p>Switching from a profile to <strong>Custom</strong> automatically copies its audio and video values as the starting point for manual changes. Save to keep that choice. Later profile changes no longer affect the channel. To start a Custom configuration from another profile, select that profile first, then choose <strong>Custom</strong>.</p>
+<h2>Delete a profile</h2>
+<p>Open the profile and choose <strong>Delete Encoding Profile</strong>, then confirm in the dialog. Built-in presets cannot be deleted. A custom profile cannot be deleted while selected as the default or used by any channel. Change those channels to another profile or Custom and save them first.</p>
+<h2>Built-in presets and the default</h2>
+<p><img src="./assets/help/files/screenshots/encoding-presets.png" alt="Built-in encoding presets with 1080p selected as the default for new channels"></p>
+<p>Moirai includes non-deletable, read-only presets for 480p, 576p, 720p, 1080p, 1440p, and 4K. Choose <strong>View</strong> to inspect one or <strong>Duplicate</strong> to make an editable custom copy. The view also has a <strong>Duplicate</strong> button at the bottom. Video and audio fields keep their labels inside the field borders. The cards show a description, a <strong>Built-in</strong> badge, and a <strong>Default</strong> badge for the selected default. Duplicating a profile also copies its description. Each uses progressive, square-pixel 16:9 video, H.264 with 8-bit color, AAC stereo at 192 kbps, scaling with padding, and automatic hardware acceleration. These are starting configurations; duplicate one to tune its bitrate or codec for your content and server.</p>
+<p><img src="./assets/help/files/screenshots/encoding-profile-view.png" alt="Read-only encoding profile with video and audio sections and a Duplicate action"></p>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Resolution</th>
+<th>Video bitrate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>480p</td>
+<td>854 × 480</td>
+<td>1,500 kbps</td>
+</tr>
+<tr>
+<td>576p</td>
+<td>1024 × 576</td>
+<td>2,000 kbps</td>
+</tr>
+<tr>
+<td>720p</td>
+<td>1280 × 720</td>
+<td>4,000 kbps</td>
+</tr>
+<tr>
+<td>1080p</td>
+<td>1920 × 1080</td>
+<td>8,000 kbps</td>
+</tr>
+<tr>
+<td>1440p</td>
+<td>2560 × 1440</td>
+<td>16,000 kbps</td>
+</tr>
+<tr>
+<td>4K</td>
+<td>3840 × 2160</td>
+<td>32,000 kbps</td>
+</tr>
+</tbody>
+</table>
+<p><strong>1080p</strong> is the initial default. Choose any preset or custom profile under <strong>Default for new channels</strong> to change it. This selection applies to the new-channel editor and Quick Setup; it never reassigns existing channels. Choose Custom in the channel editor to opt out. A custom profile selected as the default cannot be deleted until you choose another default.</p>
+<p>Expand <strong>Hardware acceleration setup and diagnostics</strong> in the video editor to inspect the Automatic encode check and open the <a href="./assets/help/installation.docker.html">device mapping and permissions guide</a>. Failures can include missing devices, denied permissions, unavailable encoders, and unavailable drivers. The panel opens automatically when Automatic cannot select a backend.</p>
+</main></body></html>

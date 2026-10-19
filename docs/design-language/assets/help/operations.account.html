@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Account and recovery · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Account and recovery</h1><p>The <strong>Account</strong> page shows the current sign-in methods and lets an administrator add, change, or remove the local fallback credentials when allowed. It can be reached by clicking on your sign-in details at the bottom of the navigation.</p>
+<p><img src="./assets/help/files/screenshots/account.png" alt="The administrator account page"></p>
+<p>Use a unique password stored in a password manager. Removing the local account leaves provider sign-in as the only route back in, so verify Logto first.</p>
+<p>If local credentials are unavailable, run this inside the supplied container:</p>
+<pre><code class="language-sh">docker compose exec moirai npm run auth:reset
+</code></pre>
+<p>The command prints a single-use recovery link that expires after 15 minutes. Open it in a trusted browser, choose new local credentials, and discard the link. The password is entered in the browser, not on the command line.</p>
+<p>Changing the Logto endpoint or application identifier revokes existing provider-backed sessions the next time Moirai starts.</p>
+</main></body></html>

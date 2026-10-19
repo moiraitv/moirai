@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../../"><link rel="stylesheet" href="./tokens.css"><link rel="stylesheet" href="./gallery/base.css"><link rel="stylesheet" href="./gallery/help.css"><title>Troubleshooting · Local guide snapshot</title></head><body><main class="local-help-page"><a href="./README.md">Design reference</a><p class="small muted">Local snapshot of the bundled application guide. Review state is preserved.</p><h1>Troubleshooting</h1><h2>Playback is degraded</h2>
+<p>Open the dashboard and inspect the playback status. Confirm the channel worker is present in a custom installation. For Docker hardware acceleration, confirm <code>/dev/dri</code> is passed through and that the container user belongs to the numeric groups owning the video and render devices. Switch the channel to automatic or software processing to isolate a device problem.</p>
+<h2>Diagnose black or silent playback</h2>
+<p>Check Logs for the failed item and its scheduled time. For temporary on-screen diagnostics, set <code>MOIRAI_DEBUG=true</code> in the server environment and restart Moirai. When the playback engine cannot select or play an item, its fallback can show the reason to viewers, including file paths and FFmpeg error details. Set <code>MOIRAI_DEBUG=false</code> and restart to turn these cards off. This setting is off by default and is independent of <code>MOIRAI_LOG_LEVEL</code>.</p>
+<p>Debug cards do not replace your configured fallback video for schedule gaps. They appear only when the engine itself substitutes fallback after a selection or playback failure, or an uncovered interval.</p>
+<h2>An IPTV client cannot connect</h2>
+<p>Open <strong><span class="docs-term-badge" data-tone="green"><img src="./assets/help/files/icons/calendar-days.svg" alt="">Guide</span></strong> and inspect the published addresses. Replace a loopback <code>MOIRAI_PUBLIC_URL</code> with an origin reachable from the client. Check firewall and reverse-proxy rules, then try the M3U URL in a browser on the client device.</p>
+<h2>Media disappeared</h2>
+<p>Check that the source is mounted and readable before confirming removals. Restore the mount and scan again. Use reconciliation only when the files were deliberately removed or moved.</p>
+<h2>The guide has gaps or warnings</h2>
+<p>Open the channel schedule and generate a preview. Check program eligibility, media duration, template boundaries, and filler. A fallback video keeps the stream valid but does not make the schedule warning go away.</p>
+<h2>The browser shows “Updating the database”</h2>
+<p>The first start after an upgrade can take several minutes while Moirai updates its database. Leave that page open; it reloads when the application is ready. This screen does not require a sign-in. If it stays for much longer than a typical upgrade or reports a failure, check container logs and restart Moirai.</p>
+<h2>A change is not visible yet</h2>
+<p>Saved schedule changes normally begin at the next local midnight. Use <strong>Apply after current item</strong> when available. Refresh the page after the server reconnects, and check Logs if generation failed.</p>
+</main></body></html>

@@ -1,0 +1,43 @@
+/* A restrained surface language shared by every specimen and full layout. */
+body,
+.board,
+.dialog-stage,
+.reference-nav,
+.sidebar,
+.mobile-bar {
+	background-image: var(--canvas-gradient);
+}
+.panel,
+.inset,
+.pill,
+.media-card,
+.banner,
+.popover-sample,
+.toast,
+.editor-surface,
+.editor-footer,
+.settings-save-footer,
+dialog,
+.tooltip,
+.timeline-header,
+.program-block,
+.schedule-layer,
+details:not(.current-nav-group),
+.current-program-list,
+.current-program-columns,
+.current-program-row.selected,
+th,
+tr.selected,
+tbody tr:hover,
+.segment,
+.segment button[aria-pressed='true'] {
+	background-image: var(--surface-gradient);
+}
+input:not([type='checkbox'], [type='radio'], [type='range']),
+select,
+textarea {
+	background-image: var(--field-gradient);
+}
+.sidebar a[aria-current='page'] {
+	background-image: var(--surface-gradient);
+}

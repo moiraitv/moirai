@@ -1,0 +1,7 @@
+/* Reversible 50% corner-radius trial. Remove its index.html link to restore the base scale. */
+:root {
+	--radius-small: 2px;
+	--radius-control: 4px;
+	--radius-panel: 6px;
+	--radius-dialog: 8px;
+}
