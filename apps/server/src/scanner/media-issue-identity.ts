@@ -4,7 +4,7 @@ import path from 'node:path';
 import { isIgnorableMediaIssue, type ScanIssue } from '@moirai/shared';
 import type { CatalogConflictObservation, DiscoveredItem } from '../repository/contracts.js';
 import { openSourceFile, SourceFileError } from '../media/source-file.js';
-import { mediaProbeFingerprint } from '../media/media-probe.js';
+import { mediaFileFingerprint } from '../media/file-fingerprint.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 
 /** Observations shared by all findings in one discovery, avoiding repeated identity reads. */
@@ -71,7 +71,7 @@ export async function attachMediaIssueIdentities(
 		try {
 			const source = await openSourceFile(root, file);
 			try {
-				return mediaProbeFingerprint(source.stat);
+				return mediaFileFingerprint(source.stat);
 			}
 			finally {
 				await source.handle.close();
@@ -117,5 +117,5 @@ export async function unavailableMediaIssueIdentity(file: string, error: unknown
 	const info = observed === undefined ? await lstat(file).catch(() => null) : observed;
 	const code = (error as NodeJS.ErrnoException).code;
 	const state = error instanceof SourceFileError ? error.reason : code === 'ENOENT' ? 'missing' : code ?? 'unavailable';
-	return stableJsonFingerprint({ state, identity: info ? mediaProbeFingerprint(info) : null, mode: info?.mode ?? null });
+	return stableJsonFingerprint({ state, identity: info ? mediaFileFingerprint(info) : null, mode: info?.mode ?? null });
 }

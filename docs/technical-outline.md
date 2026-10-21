@@ -383,7 +383,11 @@ per scan loads cached outcomes; reconciliation persists them transactionally in 
 Migration 0036 adds ignored_media_issues keyed by library, normalized relative path, and issue code,
 migrating explicit silent-ending acceptance without changing cached results or historical scans.
 General ignore decisions are authoritative; the legacy acceptance endpoint and field remain compatible.
-Media fingerprints use size and modification time within their library/path scope;
+Media issue and tail-assessment fingerprints use size and modification time within their
+library/path scope, independently of the technical probe-cache version. The fixed identity-format
+marker preserves existing decisions across probe upgrades without a database migration. Visual
+results are reused only with a reusable technical probe; refreshing probe measurements also
+refreshes visual inspection so an assessment cannot describe an outdated interval or stream;
 metadata uses relevant media/NFO inputs and sidecar absence;
 Multipart decisions include ordered member identities; show conflicts include participating metadata.
 Unavailable inputs include observable identity and stable availability state rather than error messages.

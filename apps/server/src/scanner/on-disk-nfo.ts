@@ -5,7 +5,7 @@ import path from 'node:path';
 import { MAX_NFO_BYTES, type ScanIssue } from '@moirai/shared';
 import { parseKodiNfo, type ParsedNfo } from './nfo.js';
 import { readSourceFile, SourceFileError } from '../media/source-file.js';
-import { mediaProbeFingerprint } from '../media/media-probe.js';
+import { mediaFileFingerprint } from '../media/file-fingerprint.js';
 import { internalErrorMessage } from '../error-message.js';
 import { recordSidecarIdentity, unavailableMediaIssueIdentity, type MediaIssueInputs } from './media-issue-identity.js';
 
@@ -37,7 +37,7 @@ async function selectNfo(candidates: string[], root: string, inputs: MediaIssueI
 async function readObservedNfo(root: string, file: string, inputs: MediaIssueInputs, signal?: AbortSignal) {
 	try {
 		const source = await readSourceFile(root, file, MAX_NFO_BYTES, signal);
-		recordSidecarIdentity(inputs, root, file, mediaProbeFingerprint(source.stat));
+		recordSidecarIdentity(inputs, root, file, mediaFileFingerprint(source.stat));
 		return source;
 	}
 	catch (error) {

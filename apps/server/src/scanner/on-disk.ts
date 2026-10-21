@@ -1,3 +1,4 @@
+import { mediaFileFingerprint } from '../media/file-fingerprint.js';
 import { classifyMissingNfo, metadataDiagnostics } from './metadata-diagnostics.js';
 import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { readNfo, readGroupNfo } from './on-disk-nfo.js';
@@ -375,20 +376,21 @@ export async function discoverOnDisk(
 		const filename = parsedByFile.get(file)!;
 		const logicalStem = path.join(path.dirname(file), filename.logicalStem);
 		const probeFingerprint = mediaProbeFingerprint(mediaInfo);
-		recordMediaIssueInputs(healthInputs, scanRoot, file, logicalStem, library.typeKey, probeFingerprint);
+		const fileFingerprint = mediaFileFingerprint(mediaInfo);
+		recordMediaIssueInputs(healthInputs, scanRoot, file, logicalStem, library.typeKey, fileFingerprint);
 		const cachedProbe = options.probeCache?.get(relativePath);
+		const cachedDuration = cachedProbe?.durationMilliseconds;
 
 		let probeResult: MediaProbeResult | null = null;
 		let probeErrorCode: string | null = null;
 		let probeUpdatedAt = currentTimestamp();
-		if (
-			cachedProbe?.probeStatus === 'complete'
+		const reuseProbe = cachedProbe?.probeStatus === 'complete'
 			&& cachedProbe.probeFingerprint === probeFingerprint
-			&& cachedProbe.durationMilliseconds !== null
-		) {
+			&& cachedDuration != null;
+		if (reuseProbe) {
 			probeResult = {
-				durationMilliseconds: cachedProbe.durationMilliseconds,
-				chapters: normalizeMediaChapters(cachedProbe.technicalMetadata.chapters, cachedProbe.durationMilliseconds / 1_000),
+				durationMilliseconds: cachedDuration,
+				chapters: normalizeMediaChapters(cachedProbe.technicalMetadata.chapters, cachedDuration / 1_000),
 				chapterLimitExceeded: cachedProbe.technicalMetadata.chapterLimitExceeded === true
 					|| chapterInputExceedsLimit(cachedProbe.technicalMetadata.chapters),
 				fileSizeBytes: typeof cachedProbe.technicalMetadata.fileSizeBytes === 'number'
@@ -455,9 +457,11 @@ export async function discoverOnDisk(
 		}
 
 		if (probeResult) {
+			// Visual results describe probe-derived intervals; a fresh probe requires fresh inspection.
 			issues.push(...await assessDurationHealth(probeResult, {
-				root: scanRoot, file, relativePath, fingerprint: probeFingerprint,
-				cached: options.tailAssessments?.get(relativePath), inspect: options.inspectTail, signal,
+				root: scanRoot, file, relativePath, fingerprint: fileFingerprint,
+				cached: reuseProbe ? options.tailAssessments?.get(relativePath) : undefined,
+				inspect: options.inspectTail, signal,
 			}));
 		}
 

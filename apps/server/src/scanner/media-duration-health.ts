@@ -87,6 +87,7 @@ export interface DurationHealthContext {
 	file: string;
 	relativePath: string;
 	fingerprint: string;
+	/** Prior outcome only when the technical probe facts that defined its interval are reused. */
 	cached: ScanIssue['tailAssessment'];
 	inspect: TailInspector | undefined;
 	signal: AbortSignal | undefined;

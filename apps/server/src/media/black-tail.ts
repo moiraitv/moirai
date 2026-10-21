@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { openSourceFile } from './source-file.js';
-import { mediaProbeFingerprint } from './media-probe.js';
+import { mediaFileFingerprint } from './file-fingerprint.js';
 
 /** Bound optional tail decoding to two minutes of source and thirty seconds of wall time. */
 export const MAX_BLACK_TAIL_SECONDS = 120;
@@ -36,7 +36,7 @@ export async function inspectBlackTail(root: string, file: string, target: Black
 	try {
 		const source = await openSourceFile(root, file);
 		try {
-			if (mediaProbeFingerprint(await source.handle.stat({ bigint: true })) !== target.fingerprint) {
+			if (mediaFileFingerprint(await source.handle.stat({ bigint: true })) !== target.fingerprint) {
 				return 'uncertain';
 			}
 			const result = await new Promise<BlackTailResult>((resolve) => {
@@ -84,7 +84,7 @@ export async function inspectBlackTail(root: string, file: string, target: Black
 				});
 			});
 			signal?.throwIfAborted();
-			return mediaProbeFingerprint(await source.handle.stat({ bigint: true })) === target.fingerprint ? result : 'uncertain';
+			return mediaFileFingerprint(await source.handle.stat({ bigint: true })) === target.fingerprint ? result : 'uncertain';
 		}
 		finally {
 			await source.handle.close();

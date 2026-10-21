@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { blackTailResult, inspectBlackTail, MAX_BLACK_TAIL_SECONDS, BLACK_TAIL_PIXEL_RATIO } from '@server/media/black-tail.js';
-import { mediaProbeFingerprint } from '@server/media/media-probe.js';
+import { mediaFileFingerprint } from '@server/media/file-fingerprint.js';
 
 const ffmpeg = process.env.MOIRAI_TEST_FFMPEG ?? 'ffmpeg';
 let root: string;
@@ -21,7 +21,7 @@ describe('black-tail inspection', () => {
 		const whiteWidth = Math.round((1 - BLACK_TAIL_PIXEL_RATIO) * 100) + offset;
 		execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'color=black:s=100x100:r=24:d=3',
 			'-vf', `drawbox=x=0:y=0:w=${whiteWidth}:h=100:color=white:t=fill`, '-c:v', 'ffv1', file]);
-		const fingerprint = mediaProbeFingerprint(await stat(file, { bigint: true }));
+		const fingerprint = mediaFileFingerprint(await stat(file, { bigint: true }));
 		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint }, undefined, ffmpeg))
 			.resolves.toBe(offset <= 0 ? 'mostly-black' : 'not-black');
 	});
@@ -31,7 +31,7 @@ describe('black-tail inspection', () => {
 		execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'color=black:s=640x360:r=24:d=3',
 			'-vf', "drawtext=text='VERSION FRANCAISE':fontcolor=white:fontsize=24:x=(w-tw)/2:y=100",
 			'-c:v', 'ffv1', file]);
-		const fingerprint = mediaProbeFingerprint(await stat(file, { bigint: true }));
+		const fingerprint = mediaFileFingerprint(await stat(file, { bigint: true }));
 		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint }, undefined, ffmpeg))
 			.resolves.toBe('mostly-black');
 	});
@@ -39,7 +39,7 @@ describe('black-tail inspection', () => {
 	it.each(['black', 'white'])('decodes the entire %s tail through a validated descriptor', async color => {
 		const file = path.join(root, `${color}.mp4`);
 		execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', `color=${color}:s=64x64:r=24:d=3`, '-c:v', 'libx264', file]);
-		const fingerprint = mediaProbeFingerprint(await stat(file, { bigint: true }));
+		const fingerprint = mediaFileFingerprint(await stat(file, { bigint: true }));
 		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint }, undefined, ffmpeg))
 			.resolves.toBe(color === 'black' ? 'mostly-black' : 'not-black');
 		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint: 'stale' }, undefined, ffmpeg))
@@ -50,10 +50,25 @@ describe('black-tail inspection', () => {
 		const file = path.join(root, 'brief-content.mp4');
 		execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'color=black:s=64x64:r=24:d=3',
 			'-vf', "drawbox=x=0:y=0:w=64:h=64:color=white:t=fill:enable='between(t,1.45,1.55)'", '-c:v', 'libx264', file]);
-		const fingerprint = mediaProbeFingerprint(await stat(file, { bigint: true }));
+		const fingerprint = mediaFileFingerprint(await stat(file, { bigint: true }));
 		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint }, undefined, ffmpeg))
 			.resolves.toBe('not-black');
 		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint }, undefined, '/missing/ffmpeg'))
+			.resolves.toBe('uncertain');
+	});
+
+	it.each(['size', 'mtime'])('rejects a file whose %s changed after its identity was captured', async change => {
+		const file = path.join(root, `changed-${change}.mp4`);
+		execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'color=black:s=64x64:r=24:d=3', '-c:v', 'libx264', file]);
+		const info = await stat(file, { bigint: true });
+		const fingerprint = mediaFileFingerprint(info);
+		if (change === 'size') {
+			await appendFile(file, 'changed');
+		}
+		else {
+			await utimes(file, 2_000, 2_000);
+		}
+		await expect(inspectBlackTail(root, file, { streamIndex: 0, startSeconds: 1, durationSeconds: 2, fingerprint }, undefined, ffmpeg))
 			.resolves.toBe('uncertain');
 	});
 

@@ -1,8 +1,9 @@
+import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { isIgnorableMediaIssue, isSuppressedScanIssue, libraryCreateSchema, type ScanIssue } from '@moirai/shared';
 import { createDatabase } from '@server/db/index.js';
@@ -12,9 +13,11 @@ import { applyMediaIssueIgnores } from '@server/repository/ignored-media-issues.
 import { persistTailAssessments } from '@server/repository/media-tail-assessments.js';
 import { discoverOnDisk } from '@server/scanner/on-disk.js';
 import { parseMediaProbeOutput } from '@server/media/media-probe.js';
+import * as mediaProbe from '@server/media/media-probe.js';
 
 const cleanups: Array<() => unknown> = [];
 afterEach(async () => {
+	vi.restoreAllMocks();
 	for (const cleanup of cleanups.splice(0).reverse()) {
 		await cleanup();
 	}
@@ -257,4 +260,120 @@ it.each([['movies', 'metadata_invalid'], ['shows', 'metadata_invalid'], ['movies
 		expect(changed.ignoreState?.fingerprint).not.toBe(initial.ignoreState?.fingerprint);
 		expect(changed.ignoreState?.ignored).toBe(false);
 	}
+});
+
+it.each(['missing metadata', 'invalid metadata', 'multipart'])('preserves existing ignores across a probe upgrade with %s', async scenario => {
+	const multipart = scenario === 'multipart';
+	const { root, database, repository, library } = await fixture();
+	const paths = multipart ? ['Film-part1.mp4', 'Film-part3.mp4'] : ['Film.mp4'];
+	for (const file of paths) {
+		await writeFile(path.join(root, file), 'video');
+		await utimes(path.join(root, file), 1_000, 1_000);
+	}
+	if (scenario === 'invalid metadata') {
+		await writeFile(path.join(root, 'Film.nfo'), '<movie><title>Film</title><runtime>-1</runtime></movie>');
+	}
+	const probeMedia = vi.fn(async () => parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ index: 0, codec_type: 'video', start_time: '0', duration: '100' },
+		{ index: 1, codec_type: 'audio', start_time: '0', duration: '60' },
+	] }), 5));
+	const inspectTail = vi.fn(async (): Promise<'not-black'> => 'not-black');
+	async function scan() {
+		const run = await repository.beginScan(library.id, 'manual');
+		const found = await discoverOnDisk(library, {
+			probeMedia, inspectTail, tailAssessments: await repository.listTailAssessments(library.id),
+			probeCache: new Map((await repository.listMediaProbeCache(library.id)).map(entry => [entry.relativePath, entry])),
+		});
+		return repository.reconcileScan(run, found.groups, found.items, found.issues, found.traversalComplete, found.sourceIdentity, found.conflicts);
+	}
+	const initial = await scan();
+	expect(initial.issues.map(issue => issue.code)).toContain(scenario === 'invalid metadata' ? 'metadata_invalid' : 'nfo_missing');
+	if (multipart) {
+		expect(initial.issues.map(issue => issue.code)).toContain('multipart_incomplete');
+	}
+	const info = await stat(path.join(root, paths[0]!), { bigint: true });
+	const legacyFingerprint = createHash('sha256').update(`11:${info.size}:${info.mtimeMs}`).digest('hex');
+	const duration = initial.issues.find(issue => issue.code === 'media_audio_video_duration_mismatch')!;
+	expect(duration.ignoreState?.fingerprint).toBe(legacyFingerprint);
+	expect(duration.tailAssessment?.fingerprint).toBe(legacyFingerprint);
+	for (const issue of initial.issues) {
+		expect(repository.setMediaIssueIgnored(library.id, issue.path!, issue.code, issue.ignoreState!.fingerprint, true)).toBe(true);
+	}
+	const decisions = database.db.select().from(ignoredMediaIssues).all();
+	const history = (await repository.listScans(library.id))[0];
+	await scan();
+	const inspectedBeforeUpgrade = inspectTail.mock.calls.length;
+	probeMedia.mockClear();
+
+	// Change the actual cache-key function used by discovery to simulate a future probe release.
+	vi.spyOn(mediaProbe, 'mediaProbeFingerprint').mockImplementation(info => createHash('sha256')
+		.update(`${mediaProbe.MEDIA_PROBE_VERSION + 1}:${info.size}:${info.mtimeMs}`).digest('hex'));
+	const upgraded = await scan();
+	expect(probeMedia).toHaveBeenCalledTimes(paths.length);
+	expect(inspectTail).toHaveBeenCalledTimes(inspectedBeforeUpgrade + paths.length);
+	expect(upgraded.issues).toHaveLength(initial.issues.length);
+	expect(upgraded.issues.every(issue => issue.ignoreState?.ignored)).toBe(true);
+	expect((await repository.getLibrary(library.id))?.warningCount).toBe(0);
+	expect(database.db.select().from(ignoredMediaIssues).all()).toEqual(decisions);
+	expect((await repository.listScans(library.id)).find(scan => scan.id === initial.id)).toEqual(history);
+	const cache = await repository.listMediaProbeCache(library.id);
+	expect(cache.find(entry => entry.relativePath === paths[0])?.probeFingerprint).toBe(mediaProbe.mediaProbeFingerprint(info));
+
+	// Both legacy acceptance and general ignore actions retain their existing fingerprints.
+	expect(repository.setSilentEndingAcceptance(library.id, duration.path!, legacyFingerprint, false)).toBe(true);
+	expect((await repository.getLibrary(library.id))?.warningCount).toBe(1);
+	expect(repository.setSilentEndingAcceptance(library.id, duration.path!, legacyFingerprint, true)).toBe(true);
+	await utimes(path.join(root, paths[0]!), 2_000, 2_000);
+	const changed = await scan();
+	expect(changed.issues.find(issue => issue.path === duration.path && issue.code === duration.code)?.ignoreState?.ignored).toBe(false);
+	expect((await repository.getLibrary(library.id))!.warningCount).toBeGreaterThan(0);
+});
+
+it.each(['interval', 'stream'])('rechecks visual suppression when a probe upgrade changes the %s', async change => {
+	const { root, repository, library } = await fixture();
+	await writeFile(path.join(root, 'Film.mp4'), 'video');
+	await writeFile(path.join(root, 'Film.nfo'), '<movie><title>Film</title></movie>');
+	const initialProbe = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ index: 0, codec_type: 'video', start_time: '0', duration: '140' },
+		{ index: 1, codec_type: 'audio', start_time: '0', duration: '100' },
+	] }), 5);
+	const refreshedProbe = parseMediaProbeOutput(JSON.stringify({ streams: [
+		{ index: change === 'stream' ? 2 : 0, codec_type: 'video', start_time: '0', duration: '140' },
+		{ index: 1, codec_type: 'audio', start_time: '0', duration: change === 'interval' ? '60' : '100' },
+	] }), 5);
+	const probeMedia = vi.fn().mockResolvedValue(initialProbe);
+	const inspectTail = vi.fn().mockResolvedValue('mostly-black');
+	async function scan() {
+		const run = await repository.beginScan(library.id, 'manual');
+		const found = await discoverOnDisk(library, {
+			probeMedia, inspectTail, tailAssessments: await repository.listTailAssessments(library.id),
+			probeCache: new Map((await repository.listMediaProbeCache(library.id)).map(entry => [entry.relativePath, entry])),
+		});
+		return repository.reconcileScan(run, found.groups, found.items, found.issues, found.traversalComplete, found.sourceIdentity, found.conflicts);
+	}
+	const initial = await scan();
+	await scan();
+	expect(probeMedia).toHaveBeenCalledOnce();
+	expect(inspectTail).toHaveBeenCalledOnce();
+	expect((await repository.getLibrary(library.id))?.warningCount).toBe(0);
+
+	vi.spyOn(mediaProbe, 'mediaProbeFingerprint').mockImplementation(info => createHash('sha256')
+		.update(`${mediaProbe.MEDIA_PROBE_VERSION + 1}:${info.size}:${info.mtimeMs}`).digest('hex'));
+	probeMedia.mockResolvedValue(refreshedProbe);
+	inspectTail.mockResolvedValue('not-black');
+	const upgraded = await scan();
+	expect(probeMedia).toHaveBeenCalledTimes(2);
+	expect(inspectTail).toHaveBeenCalledTimes(2);
+	expect(inspectTail.mock.calls[1]?.[2]).toMatchObject({
+		streamIndex: change === 'stream' ? 2 : 0,
+		startSeconds: change === 'interval' ? 60 : 100,
+		durationSeconds: change === 'interval' ? 80 : 40,
+	});
+	const issue = upgraded.issues.find(issue => issue.code === 'media_audio_video_duration_mismatch')!;
+	expect(issue.tailAssessment?.result).toBe('not-black');
+	expect(issue.ignoreState).toEqual(initial.issues.find(entry => entry.code === issue.code)?.ignoreState);
+	expect((await repository.getLibrary(library.id))?.warningCount).toBe(1);
+	await scan();
+	expect(inspectTail).toHaveBeenCalledTimes(2);
+	expect((await repository.listTailAssessments(library.id)).get('Film.mp4')?.result).toBe('not-black');
 });
