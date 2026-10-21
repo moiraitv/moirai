@@ -1503,7 +1503,12 @@ and synchronized time ruler remain sticky during page scrolling, below the mobil
 page channel column uses fixed-width number, unbezeled icon, and name tracks. Guide listings may show
 a landscape or poster thumbnail when width allows, using the card artwork variant so stills stay
 sharp at listing height. Landscape thumbs are cropped to a square. Listings show vertically centered
-title and timespan copy, a 24-hour timespan, and a dimmed fanart wash. Adjacent listings leave a small gutter.
+title and timespan copy, a 24-hour timespan, and a dimmed fanart wash. At painted widths below 144px,
+cards show only the title with reduced padding; below 48px, they become colored strips without copy
+or artwork. Cards remain within their elapsed-time spans, clipped at both guide-window edges,
+including subpixel items, with small gutters where space permits. Strips retain accessible names,
+keyboard access, previews, and click details; grouped listings retain their own focusable control.
+Content density uses mounted listing metadata without per-frame measurement.
 Guide listings, schedule editors, and previews share 32 curated program gradients selected by a stable
 program-ID hash. Opaque white text maintains at least 4.5:1 contrast across the gradients; the fanart
 wash is darkened before compositing to preserve that contrast even with bright artwork. Thumbnails
@@ -1560,7 +1565,9 @@ Authenticated uploads accept still PNG, JPEG, or WebP up to 10 MiB and 4096 pixe
 full decoding strips metadata and normalizes to PNG under the same byte limit. Public UUID-addressed
 image URLs serve Guide thumbnails and washes and the XMLTV `block.artwork_url` variable. Standard
 XMLTV emits the block icon; authored sources remain unchanged. Image selection and removal remain
-local to the editor until Save, and successful uploads survive failed-save retries. Shared references
+local to the editor until Save, and successful uploads survive retries within the open editor.
+Recovered selections upload their retained files again because uncommitted references may have expired.
+Shared references
 support copied slots and templates. Startup and template-write reconciliation remove unreferenced
 images after a 24-hour grace period; serialization with template writes protects committed references.
 Existing guide JSON needs no migration, and guide reads add no artwork database queries.

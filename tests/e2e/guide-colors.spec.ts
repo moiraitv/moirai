@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { PROGRAM_COLOR_PALETTE } from '../../apps/web/src/program-colors';
 import { installGuideFixture } from './performance/guide-fixture';
 
-for (const segmentsPerDay of [6, 48]) {
+for (const segmentsPerDay of [6, 36]) {
 	test(`keeps guide copy white with absent, dark, and bright artwork (${segmentsPerDay} daily items)`, async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await installGuideFixture(page, 3);

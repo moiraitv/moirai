@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import sharp from 'sharp';
 import { authenticateAdministrator } from './authentication';
 
-test('saves block artwork once across retries and retains draft artwork and keeps reset and removal local', async ({ page }) => {
+test('reuses block uploads within an editor, refreshes recovered uploads, and keeps reset and removal local', async ({ page }) => {
 	const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
 	const buffer = await sharp({ create: { width: 160, height: 90, channels: 3, background: '#37678c' } }).png().toBuffer();
 	const file = { name: 'guide.png', mimeType: 'image/png', buffer };
@@ -47,6 +47,18 @@ test('saves block artwork once across retries and retains draft artwork and keep
 	await editor.getByRole('button', { name: 'Add', exact: true }).click();
 	await expect(editor.getByText('Save temporarily unavailable')).toBeVisible();
 	expect(uploads).toBe(2);
+	await editor.getByRole('button', { name: 'Add', exact: true }).click();
+	await expect(editor.getByText('Save temporarily unavailable')).toBeVisible();
+	expect(uploads).toBe(2);
+	// Older recovery envelopes cached upload IDs that may already have been cleaned up.
+	const previousArtworkId = await page.evaluate(() => {
+		const key = Object.keys(localStorage).find(key => key.endsWith(':schedule-template:new'))!;
+		const envelope = JSON.parse(localStorage.getItem(key)!);
+		const slot = envelope.fields.template.slots[0];
+		envelope.fields.uploads = { [slot.id]: slot.guide.artworkId };
+		localStorage.setItem(key, JSON.stringify(envelope));
+		return slot.guide.artworkId as string;
+	});
 	await page.reload();
 	await expect(preview).toBeVisible();
 	await page.unroute('**/api/v1/schedule-templates');
@@ -55,9 +67,10 @@ test('saves block artwork once across retries and retains draft artwork and keep
 	await editor.getByRole('button', { name: 'Add', exact: true }).click();
 	const saved = await (await savedResponse).json();
 	await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
-	expect(uploads).toBe(2);
+	expect(uploads).toBe(3);
 	const artworkId = saved.slots[0].guide.artworkId;
 	expect(artworkId).toBeTruthy();
+	expect(artworkId).not.toBe(previousArtworkId);
 
 	await page.goto(`/schedules/templates/${saved.id}`);
 	await expect(preview).toHaveAttribute('src', `/api/v1/guide-artwork/${artworkId}`);
@@ -71,7 +84,7 @@ test('saves block artwork once across retries and retains draft artwork and keep
 	await editor.getByRole('button', { name: 'Reset', exact: true }).click();
 	await editor.getByRole('button', { name: /Confirm.*reset/i }).click();
 	await expect(preview).toHaveAttribute('src', `/api/v1/guide-artwork/${artworkId}`);
-	expect(uploads).toBe(2);
+	expect(uploads).toBe(3);
 
 	await editor.getByRole('button', { name: 'Remove artwork', exact: true }).click();
 	await editor.getByRole('button', { name: 'Confirm remove artwork', exact: true }).click();

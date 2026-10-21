@@ -158,25 +158,23 @@ const usedPrograms = computed(() => {
 const isDirty = computed(() =>
 	draft.value ? guideArtwork.hasPending.value || JSON.stringify({ template: draft.value }) !== originalSnapshot.value : false);
 const hasPendingSave = computed(() => Boolean(draft.value) && (!editingId.value || isDirty.value));
-let restoredUploads: Record<string, string> = {};
 const retained = useResourceDraft({
 	kind: 'schedule-template', identity: () => editingId.value ?? 'new',
 	nullableSchema: z.object({ template: scheduleTemplateCreateSchema }),
 	restoreNewBaseline: version => {
 		originalSnapshot.value = version;
 	},
-	capture: () => ({ template: draft.value, uploads: guideArtwork.uploaded() }),
+	capture: () => ({ template: draft.value }),
 	restore: fields => {
 		if (!fields.template || typeof fields.template.name !== 'string'
 			|| !Array.isArray(fields.template.slots) || !Array.isArray(fields.template.boundaries)) {
 			throw new Error('Incomplete template recovery');
 		}
 		draft.value = fields.template;
-		restoredUploads = fields.uploads;
 		selectedSlotId.value = draft.value?.slots[0]?.id ?? '';
 	},
 	dirty: () => isDirty.value,
-	files: guideArtwork.files, restoreFiles: files => guideArtwork.restore(files, restoredUploads),
+	files: guideArtwork.files, restoreFiles: guideArtwork.restore,
 });
 const { warning: draftWarning, restoring: restoringDraft } = retained;
 const previewDraftFingerprint = computed(() => {

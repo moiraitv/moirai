@@ -352,6 +352,31 @@
 	text-overflow: unset;
 }
 
+.guide-frame-page .guide-programme.guide-listing-title .guide-programme-copy {
+	padding: 8px 6px;
+}
+
+.guide-frame-page .guide-programme.guide-listing-strip {
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: var(--surface-gradient), var(--program-color-dark);
+
+	.guide-block-copy {
+		position: relative;
+		left: auto;
+		width: 100%;
+		min-width: 0;
+		padding: 0;
+	}
+
+	.guide-block-copy:focus-visible {
+		outline: 2px solid var(--program-color-foreground);
+		outline-offset: -2px;
+	}
+}
+
 .guide-programme-timespan {
 	flex-shrink: 0;
 	font-size: 0.64rem;

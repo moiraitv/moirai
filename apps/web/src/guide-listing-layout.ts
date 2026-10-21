@@ -9,6 +9,22 @@ export const GUIDE_LISTING_THUMB_GAP_PX = 12;
 /** Inset from each timed edge so adjacent Guide cards do not share a border. */
 export const GUIDE_LISTING_GUTTER_PX = 3;
 
+/** Minimum card width that can retain readable title copy. */
+export const GUIDE_LISTING_TITLE_MIN_PX = 48;
+/** Minimum card width that can retain subtitle and timespan copy. */
+export const GUIDE_LISTING_DETAILS_MIN_PX = 144;
+
+/** Content density chosen from the available painted width of a Guide listing. */
+export type GuideListingPresentation = 'full' | 'title' | 'strip';
+
+/** Hide secondary copy, then all copy, as a timed listing becomes narrower. */
+export function guideListingPresentation(width: number): GuideListingPresentation {
+	if (width < GUIDE_LISTING_TITLE_MIN_PX) {
+		return 'strip';
+	}
+	return width < GUIDE_LISTING_DETAILS_MIN_PX ? 'title' : 'full';
+}
+
 /** Chosen left thumbnail for a Guide listing. */
 export type GuideListingThumb = { kind: 'landscape' | 'poster'; url: string };
 

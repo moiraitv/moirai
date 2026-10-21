@@ -20,6 +20,7 @@ import { programColorStyle } from '../program-colors';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
 import {
 	GUIDE_PROGRAMME_INNER_HEIGHT_PX,
+	guideListingPresentation,
 	guideListingThumb,
 	guideListingTimespan,
 	guideListingVisualWidth,
@@ -291,11 +292,15 @@ function localTimelinePosition(value: string): number {
 
 /** Position and color a guide segment from its absolute playback interval and program identity. */
 function segmentStyle(segment: Pick<TimelineSegment, 'start' | 'finish' | 'programId'>): Record<string, string> {
-	const span = guideSegmentWidth(segment.start, segment.finish, hourWidth.value);
+	const left = localTimelinePosition(segment.start);
+	// Clip both timed edges so an overnight listing cannot extend into its successor's slot.
+	const span = props.listingPresentation === 'guide'
+		? Math.max(0, localTimelinePosition(segment.finish) - left)
+		: guideSegmentWidth(segment.start, segment.finish, hourWidth.value);
 	const visual = props.listingPresentation === 'guide' ? guideListingVisualWidth(span) : span;
 
 	return {
-		left: `${localTimelinePosition(segment.start) + (span - visual) / 2}px`,
+		left: `${left + (span - visual) / 2}px`,
 		width: `${visual}px`,
 		...programColorStyle(segment.programId),
 	};
@@ -304,20 +309,6 @@ function segmentStyle(segment: Pick<TimelineSegment, 'start' | 'finish' | 'progr
 /** Read a template-rendered subtitle when the listing was presented from XMLTV. */
 function listingSubtitle(segment: TimelineSegment | GuideEntry): string {
 	return 'subtitle' in segment && typeof segment.subtitle === 'string' ? segment.subtitle : '';
-}
-
-/** Reserve readable text beside thumbnails, bounding long blocks by the visible track width. */
-function listingThumb(segment: TimelineSegment | GuideEntry): ReturnType<typeof guideListingThumb> {
-	if (props.listingPresentation !== 'guide') {
-		return null;
-	}
-
-	const width = guideListingVisualWidth(guideSegmentWidth(segment.start, segment.finish, hourWidth.value));
-	return guideListingThumb(
-		'kind' in segment && segment.kind === 'block' ? Math.min(width, trackWidth.value) : width,
-		segment.landscapeUrl,
-		segment.posterUrl,
-	);
 }
 
 /** Choose right-side wash art, using landscape when the item has no fanart file. */
@@ -336,17 +327,22 @@ const listingViews = computed(() => {
 		thumb: ReturnType<typeof guideListingThumb>;
 		wash: string | null;
 		timespan: string;
+		presentation: ReturnType<typeof guideListingPresentation>;
 	}>();
 	for (const programmes of visibleByChannel.value.values()) {
 		for (const programme of programmes) {
-			const thumb = listingThumb(programme);
 			const style = segmentStyle(programme);
+			const width = 'kind' in programme && programme.kind === 'block'
+				? Math.min(Number.parseFloat(style.width!), trackWidth.value) : Number.parseFloat(style.width!);
+			const presentation = props.listingPresentation === 'guide' ? guideListingPresentation(width) : 'full';
+			const thumb = props.listingPresentation === 'guide' && presentation === 'full'
+				? guideListingThumb(width, programme.landscapeUrl, programme.posterUrl) : null;
 			if ('kind' in programme && programme.kind === 'block') {
 				style['--guide-block-thumb-width'] = `${thumb ? GUIDE_PROGRAMME_INNER_HEIGHT_PX * (thumb.kind === 'poster' ? 2 / 3 : 1) : 0}px`;
 				style['--guide-block-artwork-width'] = `${Math.min(Number.parseFloat(style.width!), trackWidth.value)}px`;
 			}
 			views.set(programme, {
-				style, thumb, wash: listingWash(programme),
+				style, thumb, presentation, wash: presentation === 'full' ? listingWash(programme) : null,
 				timespan: props.listingPresentation === 'guide'
 					? guideListingTimespan(programme.start, programme.finish, props.timeZone) : '',
 			});
@@ -661,7 +657,11 @@ onBeforeUnmount(() => {
 										type="button"
 										class="guide-programme"
 										:data-program-id="segment.programId"
-										:class="[`role-${segment.role}`, { truncated: segment.truncated, 'guide-block': 'kind' in segment && segment.kind === 'block' }]"
+										:class="[
+											`role-${segment.role}`,
+											{ truncated: segment.truncated, 'guide-block': 'kind' in segment && segment.kind === 'block' },
+											listingPresentation === 'guide' ? `guide-listing-${listingView(segment).presentation}` : '',
+										]"
 										:style="listingView(segment).style"
 										:aria-label="`${segment.title}, ${segment.start} – ${segment.finish}`"
 										@click="openEntry(segment, $event, true)"
@@ -692,13 +692,15 @@ onBeforeUnmount(() => {
 										/>
 										<component
 											:is="'kind' in segment && segment.kind === 'block' ? 'button' : 'span'"
+											v-if="listingView(segment).presentation !== 'strip' || ('kind' in segment && segment.kind === 'block')"
 											class="guide-programme-copy"
+											:aria-label="'kind' in segment && segment.kind === 'block' ? `${segment.title}, ${segment.start} – ${segment.finish}` : undefined"
 											:class="{ 'guide-block-copy': 'kind' in segment && segment.kind === 'block' }">
-											<strong>{{
+											<strong v-if="listingView(segment).presentation !== 'strip'">{{
 												useEntryTitles || segment.role !== 'dead-air' ? segment.title : 'No programming'
 											}}</strong>
 											<small
-												v-if="subtitleMode === 'source' || listingSubtitle(segment) || segment.truncated"
+												v-if="listingView(segment).presentation === 'full' && (subtitleMode === 'source' || listingSubtitle(segment) || segment.truncated)"
 											>{{
 												subtitleMode === 'source'
 													? ('kind' in segment && segment.kind === 'block' ? 'Slot' : guideSourceLabel(segment, programNames))
@@ -707,7 +709,7 @@ onBeforeUnmount(() => {
 												subtitleMode === 'source' || listingSubtitle(segment) ? ' · truncated' : 'truncated'
 											}}</template></small
 											>
-											<small v-if="listingPresentation === 'guide'" class="guide-programme-timespan">{{
+											<small v-if="listingPresentation === 'guide' && listingView(segment).presentation === 'full'" class="guide-programme-timespan">{{
 												listingView(segment).timespan
 											}}</small>
 										</component>
