@@ -1763,6 +1763,11 @@ npm run etv:check  # Compare schemas and revision with the selected checkout
 npm run etv:sync   # Deliberately refresh the compatibility snapshot
 ```
 
+Native installations require Node.js 24.22.1 or newer within the Node 24 release line. The development
+version in `.nvmrc` and both Docker Node stages select 24.22.1, which includes the October 21, 2026
+security fixes. Existing installations must update their local runtime or rebuild and recreate their
+container to receive these fixes.
+
 The production image derives from the immutable official ErsatzTV-Next image digest recorded in the
 Dockerfile and builds the Node application around its `/app/ersatztv-channel` executable. The pinned
 upstream image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`; Moirai releases
@@ -1785,6 +1790,8 @@ An explicit `--skip-build-checks` sets the build-stage-only `MOIRAI_SKIP_BUILD_C
 running the ordinary build without audit or approval checks. Dependency installation and compilation
 remain required; approval records and dependencies are unchanged. Release workflows retain the gated
 default.
+The documentation build uses markdown-it 14.3.3 or newer in its 14.x line and a scoped Vite 7.3.7
+override for VitePress 1.6.4 to address parser and development-server security advisories.
 The Transformers.js 3.8.1 dependency uses a scoped Sharp 0.35.5 override to remove vulnerable
 image libraries while retaining ONNX runtime support for Intel macOS development.
 ONNX Runtime 1.21.0 uses global-agent 4.1.3 for its installer, and js-yaml 3.15.2 uses

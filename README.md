@@ -117,7 +117,7 @@ See [Account and recovery](apps/docs/src/operations/account-and-recovery.md) for
 
 ### Local running
 
-To run without Docker, install Git, Node.js 24.8 or newer in the Node 24 release line, FFmpeg with `ffprobe` on your `PATH`, and a Rust toolchain for the playback worker. The commands below use `nvm` to select Node 24.
+To run without Docker, install Git, Node.js 24.22.1 or newer in the Node 24 release line, FFmpeg with `ffprobe` on your `PATH`, and a Rust toolchain for the playback worker. The commands below use `nvm` to select Node 24.22.1.
 
 ```sh
 git clone https://github.com/moiraitv/moirai.git

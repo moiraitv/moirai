@@ -10,7 +10,7 @@ Run the commands below from the root of the checkout or worktree you want to tes
 
 ### Initial setup
 
-Use Node.js 24.8 or newer within the Node 24 LTS line, as specified by `.nvmrc` and `package.json`. Install FFmpeg so `ffprobe` is available on `PATH`. For live playback, also install a Rust toolchain and build the pinned ErsatzTV Next worker:
+Use Node.js 24.22.1 or newer within the Node 24 LTS line, as specified by `.nvmrc` and `package.json`. Install FFmpeg so `ffprobe` is available on `PATH`. For live playback, also install a Rust toolchain and build the pinned ErsatzTV Next worker:
 
 ```sh
 nvm use

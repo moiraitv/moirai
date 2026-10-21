@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS dependencies
+FROM node:24.22.1-bookworm-slim AS dependencies
 ENV npm_config_nodedir=/usr/local
 WORKDIR /app
 RUN apt-get update || { \
@@ -25,7 +25,7 @@ RUN case "$MOIRAI_SKIP_BUILD_CHECKS" in \
         *) echo >&2 'MOIRAI_SKIP_BUILD_CHECKS must be true or false'; exit 1 ;; \
     esac
 
-FROM node:24-bookworm-slim AS node-runtime
+FROM node:24.22.1-bookworm-slim AS node-runtime
 
 # ErsatzTV Next revision f6350a0ad9077290c0fbad7ea3feacaef71f0ca3. The
 # upstream image index is pinned to prevent an unnoticed engine change.
