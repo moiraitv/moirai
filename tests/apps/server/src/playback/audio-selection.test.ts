@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { audioPreferencesSchema, channelCreateSchema, type Channel, type TimelineSegment, type ScheduleGuide } from '@moirai/shared';
+import { audioPreferencesSchema, playbackSettingsSchema, channelCreateSchema, type Channel, type TimelineSegment, type ScheduleGuide } from '@moirai/shared';
 import { audioPreferences, prepareAudio, prepareMediaStreams, selectAudio, selectVideo } from '@server/playback/audio-selection.js';
 import type { Repository } from '@server/repository/index.js';
 
@@ -34,6 +34,8 @@ describe('audio selection', () => {
 	it('validates and normalizes optional persisted preferences', () => {
 		expect(audioPreferencesSchema.parse({ language: ' EN ', title: ' Surround ' })).toEqual({ language: 'en', title: 'Surround' });
 		expect(audioPreferencesSchema.parse({})).toEqual({});
+		expect(playbackSettingsSchema.parse({ audioPreferences: { language: ' EN ', title: ' Original ' } }).audioPreferences)
+			.toEqual({ language: 'en', title: 'Original' });
 		expect(audioPreferencesSchema.safeParse({ title: 'x'.repeat(201) }).success).toBe(false);
 		expect(audioPreferencesSchema.safeParse({ language: '../' }).success).toBe(false);
 	});
@@ -43,6 +45,21 @@ describe('audio selection', () => {
 		expect(audioPreferences(channel, segment, new Map([
 			['outer', { language: 'fr' }], ['inner', { title: null }], ['leaf', { language: 'ja' }],
 		]))).toEqual({ language: 'ja', title: null });
+	});
+
+	it('resolves global fields independently and lets channels and programs clear or override them', () => {
+		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Audio' }) } as Channel;
+		const segment = { programAncestry: ['outer', 'leaf'] } as TimelineSegment;
+		const defaults = { language: 'en', title: 'Original' };
+		expect(audioPreferences(channel, segment, new Map(), defaults)).toEqual(defaults);
+		expect(audioPreferences({ ...channel, audioPreferences: { language: 'fr' } }, segment, new Map(), defaults))
+			.toEqual({ language: 'fr', title: 'Original' });
+		expect(audioPreferences({ ...channel, audioPreferences: { language: null } }, segment, new Map(), defaults))
+			.toEqual({ language: null, title: 'Original' });
+		const programs = new Map([['outer', { title: null }], ['leaf', { language: 'ja' }]]);
+		expect(audioPreferences(channel, segment, programs, defaults)).toEqual({ language: 'ja', title: null });
+		const cleared = audioPreferences({ ...channel, audioPreferences: { language: null, title: null } }, segment, new Map(), defaults);
+		expect(selectAudio(metadata, cleared)).toBeNull();
 	});
 	it('selects different multipart indices with one metadata lookup and keeps automatic audio without preferences', async () => {
 		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Audio' }), id: 'channel', audioPreferences: { language: 'fr' } } as Channel;

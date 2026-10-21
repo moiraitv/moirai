@@ -1,19 +1,25 @@
 ---
 id: settings.playback
 title: Playback settings
-description: Manage stream capacity, filler, viewing preferences, and playback status.
+description: Manage stream capacity, audio selection defaults, filler, viewing preferences, and playback status.
 contextual: true
 ---
 
 # Playback settings
 
-Open **Settings → Playback** to adjust stream capacity, filler, and viewing preferences.
+Open **Settings → Playback** to adjust stream capacity, audio selection defaults, filler, and viewing preferences.
 
 ![Moirai playback settings](/screenshots/settings.png)
 
 ## Playback capacity {#playback-capacity}
 
 Set **Maximum active channel sessions** to the number of channel streams that may play at once. The default is **4**, and the supported range is **1–32**. This does not directly control the number of simultaneously clients watching because an active stream will be shared by two or more clients watching the same channel.
+
+## Audio selection defaults {#audio-selection-defaults}
+
+Set **Preferred language code** to two or three letters, such as `en` or `eng`, and **Preferred audio title** to part of a track title, such as `Original` (case-insensitive). Leave a field blank to allow any language or title.
+
+These defaults apply to channels whose matching audio selection fields are blank. Each field inherits independently: global defaults, then Channel overrides, then enclosing Sequence Programs, then the current Program. Enter `*` in a Channel or Program field to clear an inherited preference. If no track matches, playback uses another available audio track.
 
 ## Filler {#filler}
 

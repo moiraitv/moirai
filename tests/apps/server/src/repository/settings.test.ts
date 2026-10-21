@@ -11,9 +11,11 @@ it('defaults legacy settings and persists warning tolerance alongside unrelated 
 		expect((await repository.getPlaybackSettings()).fillerShortfallWarningThresholdPercent).toBe(80);
 		database.sqlite.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)').run('playback', JSON.stringify({ maxActiveSessions: 6, viewingPreferencesEnabled: false }), '2026-10-03T00:00:00Z');
 		const legacy = await repository.getPlaybackSettings();
+		expect(legacy.audioPreferences).toEqual({});
 		expect(legacy).toEqual(playbackSettingsSchema.parse({ maxActiveSessions: 6, viewingPreferencesEnabled: false }));
-		await repository.setPlaybackSettings({ ...legacy, fillerShortfallWarningThresholdPercent: 73 });
+		await repository.setPlaybackSettings({ ...legacy, fillerShortfallWarningThresholdPercent: 73, audioPreferences: { language: 'fr', title: 'Original' } });
 		const saved = await repository.getPlaybackSettings();
+		expect(saved.audioPreferences).toEqual({ language: 'fr', title: 'Original' });
 		await repository.setPlaybackSettings({ ...saved, maxActiveSessions: 8 });
 		expect(await repository.getPlaybackSettings()).toEqual({ ...saved, maxActiveSessions: 8 });
 	}

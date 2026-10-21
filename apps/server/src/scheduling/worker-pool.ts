@@ -153,7 +153,8 @@ export class SchedulingWorkerPool {
 		}
 		else if (!event || (event.type === 'library.changed' && event.data.change !== 'watcher-status' && event.data.change !== 'change-detected')
 			|| (event.type === 'scan.changed' && event.data.affectsProgramming)
-			|| (event.type === 'scheduling.changed' && (event.data.entity === 'program' || event.data.entity === 'credit-template'))) {
+			|| (event.type === 'scheduling.changed' && (event.data.entity === 'program' || event.data.entity === 'credit-template'))
+			|| (event.type === 'playback.changed' && event.data.reason === 'settings-changed')) {
 			// Shared media facts and rendering preferences can affect existing committed playback.
 			this.sharedPlayoutRevision = this.readRevision;
 		}

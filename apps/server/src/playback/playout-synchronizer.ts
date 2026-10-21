@@ -130,7 +130,8 @@ export class PlayoutSynchronizer {
 
 	/** Synchronize affected channels after authoritative schedule or presentation changes. */
 	handleEvent(event: LiveEvent): void {
-		if (event.type === 'scheduling.changed' && event.data.entity === 'credit-template') {
+		if ((event.type === 'scheduling.changed' && event.data.entity === 'credit-template')
+			|| (event.type === 'playback.changed' && event.data.reason === 'settings-changed')) {
 			void this.syncAll().catch(() => undefined);
 		}
 		else if (event.type === 'timeline.changed' && event.data.status === 'ready') {
@@ -319,7 +320,8 @@ export class PlayoutSynchronizer {
 		const sourcePrograms = preparation ? null : this.repository.listPrograms();
 		const programs = preparation ? Promise.resolve(preparation.programs) : sourcePrograms!;
 		const selections = await this.subtitles.prepare(channel, guide, programs);
-		const streams = preparation ? undefined : await sourcePrograms!.then((items) => prepareMediaStreams(this.repository, channel, guide, items)).catch(() => ({ audio: new Map(), video: new Map() }));
+		const streams = preparation ? undefined : await Promise.all([sourcePrograms!, this.repository.getPlaybackSettings()])
+			.then(([items, settings]) => prepareMediaStreams(this.repository, channel, guide, items, settings.audioPreferences)).catch(() => ({ audio: new Map(), video: new Map() }));
 		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
 		return this.withChannelConfiguration(channelId, async () => {
 			const files = preparation

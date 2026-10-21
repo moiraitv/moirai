@@ -1442,12 +1442,16 @@ test('saves channel and inherited program audio and subtitle preferences', async
 	await page.goto('/channels');
 	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
 	let audio = page.getByRole('group', { name: 'Audio selection', exact: true });
+	await expect(audio.getByRole('textbox', { name: /^Preferred language code/ })).toHaveAttribute('placeholder', 'Inherit (use * for any)');
+	await expect(audio.getByRole('textbox', { name: /^Preferred audio title/ })).toHaveAttribute('placeholder', 'Inherit (use * for any)');
 	await audio.getByRole('textbox', { name: /^Preferred language code/ }).fill('EN');
 	await audio.getByRole('textbox', { name: /^Preferred audio title/ }).pressSequentially('Original Surround');
 	await page.getByRole('radio', { name: 'Any matching track', exact: true }).check();
 	await page.getByRole('combobox', { name: 'Subtitle title rule', exact: true }).selectOption('specific');
 	await page.getByRole('textbox', { name: /^Subtitle title contains/ }).pressSequentially('Songs & Signs');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
 	await expect(page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ })).toBeHidden();
 	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).audioPreferences).toEqual({ language: 'en', title: 'Original Surround' });
 	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).subtitlePreferences).toMatchObject({ title: 'Songs & Signs' });
@@ -1455,6 +1459,17 @@ test('saves channel and inherited program audio and subtitle preferences', async
 	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
 	await expect(audio.getByRole('textbox', { name: /^Preferred audio title/ })).toHaveValue('Original Surround');
 	await expect(page.getByRole('textbox', { name: /^Subtitle title contains/ })).toHaveValue('Songs & Signs');
+	await audio.getByRole('textbox', { name: /^Preferred language code/ }).fill('*');
+	await audio.getByRole('textbox', { name: /^Preferred audio title/ }).fill('');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
+	await page.getByRole('button', { name: 'Close channel editor' }).click();
+	await expect(page.getByRole('dialog', { name: /(?:Edit|Create) Channel/ })).toBeHidden();
+	expect((await (await page.request.get('/api/v1/channels')).json()).find((item: { id: string }) => item.id === channel.id).audioPreferences).toEqual({ language: null });
+	await page.reload();
+	await page.getByRole('button', { name: 'Edit Moonrise Classics', exact: true }).click();
+	await expect(audio.getByRole('textbox', { name: /^Preferred language code/ })).toHaveValue('*');
+	await expect(audio.getByRole('textbox', { name: /^Preferred audio title/ })).toHaveValue('');
 	await page.getByRole('button', { name: 'Close channel editor' }).click();
 
 	for (const id of [program.id, sequence.id]) {

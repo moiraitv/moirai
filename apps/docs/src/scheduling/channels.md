@@ -101,7 +101,7 @@ These settings are available either by using `Custom` for the channel or with a 
 
 ![Channel audio selection with optional language and track-title preferences](/screenshots/channel-editor-audio-selection.png)
 
-Use **Audio selection** to prefer an audio language or track title. Both fields are optional; leave them blank to keep automatic audio selection.
+Use **Audio selection** to prefer an audio language or track title. Both fields are optional; leave a field blank to inherit its [global default in Playback settings](/settings/playback#audio-selection-defaults). Enter `*` to allow any language or title for that field instead. With no effective preferences, audio selection stays automatic.
 
 - **Preferred language code:** enter two or three letters, such as `en` or `eng`. Equivalent language codes match the same language.
 - **Preferred audio title:** enter part of the audio track's title, such as `Original` or `Commentary`. Matching checks alternate localized names and MP4 handler names too, ignores case, and does not use regular expressions.

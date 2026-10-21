@@ -531,6 +531,7 @@ export const DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT = 80;
 
 /** Validate settings that can be changed without restarting the playback engine. */
 export const playbackSettingsSchema = z.object({
+	audioPreferences: audioPreferencesSchema.default({}),
 	maxActiveSessions: z.number().int().min(1).max(32).default(4),
 	viewingPreferencesEnabled: z.boolean().default(true),
 	fillerShortfallWarningThresholdPercent: z.number().int().min(0).max(100)

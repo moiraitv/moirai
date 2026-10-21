@@ -270,7 +270,7 @@ export class PlaybackEngine {
 		};
 	}
 
-	/** Persist playback and filler diagnostic settings without rewriting committed schedules. */
+	/** Persist playback defaults and diagnostics without rewriting committed schedules. */
 	async updateSettings(settings: PlaybackSettings): Promise<PlaybackSettings> {
 		const saved = await this.repository.setPlaybackSettings(settings);
 		this.viewingPreferences?.setEnabled(saved.viewingPreferencesEnabled);

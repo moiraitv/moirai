@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { ChevronDown, RefreshCw, MonitorPlay, Clapperboard, Heart } from '@lucide/vue';
+import { ChevronDown, RefreshCw, MonitorPlay, Clapperboard, Heart, Languages } from '@lucide/vue';
 import type {
 	PlaybackEngineStatus,
 	PlaybackSettings,
@@ -12,6 +12,8 @@ import { useFieldValidation, numericInputAttributes } from '../field-validation'
 import { api } from '../api';
 import { errorMessage } from '../error-message';
 import LoadingState from './LoadingState.vue';
+import AudioPreferencesEditor from './AudioPreferencesEditor.vue';
+import { cloneContractValue } from '../reactive-clone';
 import FillerWarningSettings from './FillerWarningSettings.vue';
 import FallbackFillerEditor from './FallbackFillerEditor.vue';
 import FormDisclosure from './FormDisclosure.vue';
@@ -23,11 +25,13 @@ import ViewingPreferenceScoresModal from './ViewingPreferenceScoresModal.vue';
 import { liveEvents } from '../live-events';
 
 const settings = reactive<PlaybackSettings>({
+	audioPreferences: {},
 	maxActiveSessions: 4,
 	viewingPreferencesEnabled: true,
 	fillerShortfallWarningThresholdPercent: DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT,
 });
 const savedSettings = ref<PlaybackSettings | null>(null);
+const audioResetRevision = ref(0);
 const status = ref<PlaybackEngineStatus | null>(null);
 const initialLoading = ref(true);
 const saving = ref(false);
@@ -52,6 +56,10 @@ const removeFallbackOnSave = ref(false);
 const fallbackLoading = ref(true);
 const fallbackError = ref('');
 const fallbackLoadError = ref('');
+const audioSettingsDirty = computed(() => savedSettings.value !== null
+	&& (settings.audioPreferences.language !== savedSettings.value.audioPreferences.language
+		|| settings.audioPreferences.title !== savedSettings.value.audioPreferences.title));
+const audioSettingsValid = computed(() => playbackSettingsSchema.shape.audioPreferences.safeParse(settings.audioPreferences).success);
 const playbackSettingsDirty = computed(() => savedSettings.value !== null
 	&& settings.maxActiveSessions !== savedSettings.value.maxActiveSessions);
 const playbackSettingsValid = computed(() => playbackSettingsSchema.shape.maxActiveSessions.safeParse(settings.maxActiveSessions).success);
@@ -81,8 +89,9 @@ async function loadSettings(): Promise<void> {
 	initialLoading.value = true;
 	try {
 		const loaded = await api.playbackSettings();
-		Object.assign(settings, loaded);
-		savedSettings.value = { ...loaded };
+		Object.assign(settings, cloneContractValue(loaded));
+		savedSettings.value = cloneContractValue(loaded);
+		audioResetRevision.value += 1;
 		settingsLoadError.value = '';
 		capacityValidation.reset();
 	}
@@ -163,7 +172,8 @@ async function refreshFallback(showLoading = false): Promise<void> {
 /** Restore every playback field and staged fallback to the latest saved baseline. */
 function reset(): void {
 	if (savedSettings.value) {
-		Object.assign(settings, savedSettings.value);
+		Object.assign(settings, cloneContractValue(savedSettings.value));
+		audioResetRevision.value += 1;
 	}
 	fallbackFile.value = null;
 	removeFallbackOnSave.value = false;
@@ -221,10 +231,10 @@ async function save(): Promise<void> {
 		return;
 	}
 
-	const submitted = { ...settings };
+	const submitted = cloneContractValue(settings);
 	const submittedFile = fallbackFile.value;
 	const submittedRemoval = removeFallbackOnSave.value;
-	const settingsChanged = playbackSettingsDirty.value || viewingPreferenceSettingsDirty.value || fillerSettingsDirty.value;
+	const settingsChanged = audioSettingsDirty.value || playbackSettingsDirty.value || viewingPreferenceSettingsDirty.value || fillerSettingsDirty.value;
 	saving.value = true;
 	saveError.value = '';
 	let fallbackSaved = false;
@@ -244,7 +254,11 @@ async function save(): Promise<void> {
 
 		// Persist all playback settings in one existing request and capture the acknowledged baseline.
 		const authoritative = settingsChanged ? await api.savePlaybackSettings(submitted) : baseline;
-		savedSettings.value = { ...authoritative };
+		savedSettings.value = cloneContractValue(authoritative);
+		if (JSON.stringify(settings.audioPreferences) === JSON.stringify(submitted.audioPreferences)) {
+			settings.audioPreferences = cloneContractValue(authoritative.audioPreferences);
+			audioResetRevision.value += 1;
+		}
 		if (settings.maxActiveSessions === submitted.maxActiveSessions) {
 			settings.maxActiveSessions = authoritative.maxActiveSessions;
 		}
@@ -295,12 +309,12 @@ onUnmounted(() => {
 		clearInterval(statusRefreshTimer);
 	}
 });
-const dirty = computed(() => playbackSettingsDirty.value || viewingPreferenceSettingsDirty.value || fillerBlockDirty.value);
+const dirty = computed(() => audioSettingsDirty.value || playbackSettingsDirty.value || viewingPreferenceSettingsDirty.value || fillerBlockDirty.value);
 watch(dirty, value => emit('dirty', value), { immediate: true });
 watch(saving, value => emit('saving', value), { immediate: true });
 watch(() => Boolean(settingsLoadError.value || statusError.value || status.value?.detail
 	|| fallbackLoadError.value || fallbackError.value || fallbackStatus.value?.overrideError
-	|| (savedSettings.value && !playbackSettingsValid.value)
+	|| (savedSettings.value && (!playbackSettingsValid.value || !audioSettingsValid.value))
 	|| historyError.value || preferencesError.value || saveError.value), value => emit('attention', value), { immediate: true });
 
 /** Describe the saved fallback without exposing a staged upload as persisted. */
@@ -333,6 +347,15 @@ const fallbackSummary = computed(() => fallbackLoading.value ? 'Loading…'
 					<small v-if="capacityValidation.error('maxActiveSessions')" :id="capacityValidation.errorId('maxActiveSessions')" class="field-error">{{ capacityValidation.error('maxActiveSessions') }}</small>
 					<small>Additional tune requests receive a retryable capacity response. Default: 4.</small>
 				</label>
+			</section>
+			<section class="panel settings-section form-grid">
+				<header class="settings-card-heading span-2">
+					<span class="settings-card-icon"><Languages :size="24" aria-hidden="true" /></span>
+					<div><div class="settings-card-title"><h2>Audio selection defaults</h2><PageHelpButton label="Audio selection defaults" topic-id="settings.playback#audio-selection-defaults" /></div><p>Choose the default audio language and track title. Channels and programs can override each field.</p></div>
+				</header>
+				<LoadingState v-if="initialLoading" class="span-2" label="Loading audio selection defaults…" />
+				<p v-else-if="settingsLoadError" class="notice error span-2" role="alert">{{ settingsLoadError }}</p>
+				<AudioPreferencesEditor v-else-if="savedSettings" v-model="settings.audioPreferences" class="span-2" unframed :disabled="saving" :reset-revision="audioResetRevision" />
 			</section>
 			<section class="panel settings-section fallback-filler-panel">
 				<header class="settings-card-heading"><span class="settings-card-icon"><Clapperboard :size="24" aria-hidden="true" /></span><div class="settings-card-title"><h2>Filler</h2><PageHelpButton label="Filler" topic-id="settings.playback#filler" /></div></header>

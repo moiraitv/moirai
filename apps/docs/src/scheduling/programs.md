@@ -202,7 +202,7 @@ All Program types retain pending edits automatically in this browser. Close the 
 
 ## Audio and subtitles
 
-Programs can have their own audio and subtitle preferences, independently of the Channel they appear on. Set an override to use the Program's preference wherever it plays, or leave a field set to inherit so it follows the enclosing Sequence Program or Channel.
+Programs can have their own audio and subtitle preferences, independently of the Channel they appear on. Set an override to use the Program's preference wherever it plays, or leave a field set to inherit so it follows the enclosing Sequence Program or Channel, including any [global audio defaults](/settings/playback#audio-selection-defaults) inherited by the Channel.
 
 ![Expanded Program audio and subtitle settings showing inherited preferences and music video credits](/screenshots/program-subtitles.png)
 

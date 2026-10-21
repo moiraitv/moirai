@@ -1746,9 +1746,13 @@ appended to the configured committed window.
 
 ### Audio stream preferences
 
-Channel and content/sequence program configuration can carry independent optional audio language
-and title preferences. Absent fields inherit through captured program ancestry; null clears an
-inherited preference. No preferences preserves worker defaults. Otherwise selection ranks matching
+Playback settings provide global audio language and title defaults, with independent field overrides
+in Channel and content/sequence program configuration. Absent fields inherit from global defaults
+through Channel and captured program ancestry; null clears an inherited preference. Legacy settings
+default to empty preferences without a database migration; backups preserve the settings record.
+Playout preparation reads defaults once alongside snapshot inputs, and settings-change events
+invalidate read snapshots and shared publication revisions before normal playout reconciliation.
+No preferences preserves worker defaults. Otherwise selection ranks matching
 language aliases and case-insensitive substrings across display titles and alternate names. Explicit
 title matches may select commentary or audio description. Without a matching title, selection prefers
 tracks not marked with either disposition when available, then default disposition, descending channel

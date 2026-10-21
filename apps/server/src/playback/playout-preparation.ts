@@ -1,5 +1,5 @@
 import { timeAsyncPhase, timePhase } from '../scheduling/job-timing.js';
-import type { Channel, ScheduleGuide, SchedulingProgram } from '@moirai/shared';
+import type { AudioPreferences, Channel, ScheduleGuide, SchedulingProgram } from '@moirai/shared';
 import type { Repository } from '../repository/index.js';
 import { readCommittedChannelScheduleGuide } from '../guide/schedule-guide.js';
 import { resolveSubtitlePreferences } from './subtitle-selection.js';
@@ -27,7 +27,7 @@ export interface PlayoutPreparation {
 
 /** Keep one coherent playout snapshot per executing worker, discarded on authoritative invalidation. */
 export class PlayoutPreparationReader {
-	private snapshot: { key: string; channel: Channel; guide: ScheduleGuide; programs: SchedulingProgram[] } | null = null;
+	private snapshot: { key: string; channel: Channel; guide: ScheduleGuide; programs: SchedulingProgram[]; audioPreferences: AudioPreferences } | null = null;
 
 	constructor(private readonly repository: Repository) {}
 
@@ -40,7 +40,7 @@ export class PlayoutPreparationReader {
 	async read(request: PlayoutReadRequest): Promise<PlayoutPreparation | Map<string, string>> {
 		const key = JSON.stringify([request.channelId, request.timeZone, request.startDate, request.days]);
 		if (!this.snapshot || this.snapshot.key !== key) {
-			const [channel, guide, programs] = await timeAsyncPhase('read', () => Promise.all([
+			const [channel, guide, programs, settings] = await timeAsyncPhase('read', () => Promise.all([
 				this.repository.getChannel(request.channelId),
 				readCommittedChannelScheduleGuide(
 					this.repository, 
@@ -51,15 +51,16 @@ export class PlayoutPreparationReader {
 					request.days,
 				),
 				this.repository.listPrograms(),
+				this.repository.getPlaybackSettings(),
 			]));
 			if (!channel) {
 				throw new Error('Channel not found');
 			}
-			this.snapshot = { key, channel, guide, programs };
+			this.snapshot = { key, channel, guide, programs, audioPreferences: settings.audioPreferences };
 		}
-		const { channel, guide, programs } = this.snapshot;
+		const { channel, guide, programs, audioPreferences } = this.snapshot;
 		if (request.kind === 'playout-documents') {
-			const streams = await timeAsyncPhase('read', () => prepareMediaStreams(this.repository, channel, guide, programs));
+			const streams = await timeAsyncPhase('read', () => prepareMediaStreams(this.repository, channel, guide, programs, audioPreferences));
 			return timePhase('compute', () => buildEtvPlayoutFiles(
 				[channel], 
 				guide, 

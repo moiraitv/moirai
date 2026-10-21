@@ -257,7 +257,8 @@ export async function buildApp(
 	});
 	const unsubscribeEpg = events.subscribe((event) => {
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed'
-			|| event.type === 'embeddings.changed' || event.type === 'scan.changed' || event.type === 'library.changed') {
+			|| event.type === 'embeddings.changed' || event.type === 'scan.changed' || event.type === 'library.changed'
+			|| (event.type === 'playback.changed' && event.data.reason === 'settings-changed')) {
 			schedulingWorkers.invalidateReads(event);
 		}
 		if (event.type === 'timeline.changed' || event.type === 'channel.changed' || event.type === 'scheduling.changed') {

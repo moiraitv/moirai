@@ -46,9 +46,9 @@ export function selectVideo(metadata: unknown): number | null {
 	return primaryVideoStream(streams)?.index ?? null;
 }
 
-/** Resolve each field from channel through the captured outer-to-inner program path. */
-export function audioPreferences(channel: Channel, segment: TimelineSegment, programs: ReadonlyMap<string, AudioPreferences>): AudioPreferences {
-	let result = { ...channel.audioPreferences };
+/** Resolve global defaults through channel and captured outer-to-inner program overrides. */
+export function audioPreferences(channel: Channel, segment: TimelineSegment, programs: ReadonlyMap<string, AudioPreferences>, defaults: AudioPreferences = {}): AudioPreferences {
+	let result = { ...defaults, ...channel.audioPreferences };
 	for (const id of segment.programAncestry?.length ? segment.programAncestry : segment.programId ? [segment.programId] : []) {
 		result = { ...result, ...programs.get(id) };
 	}
@@ -97,12 +97,12 @@ export function selectAudio(metadata: unknown, preferences: AudioPreferences): n
 }
 
 /** Select indexed streams in bounded batches, preserving worker defaults if preparation fails. */
-export async function prepareMediaStreams(repository: Repository, channel: Channel, guide: ScheduleGuide, programs: SchedulingProgram[]): Promise<PreparedMediaStreams> {
+export async function prepareMediaStreams(repository: Repository, channel: Channel, guide: ScheduleGuide, programs: SchedulingProgram[], defaults: AudioPreferences = {}): Promise<PreparedMediaStreams> {
 	const result: PreparedMediaStreams = { audio: new Map(), video: new Map() };
 	const preferences = new Map(programs.map((program) => [program.id, program.config.audioPreferences ?? {}]));
 	const selected = guide.channels.flatMap((entry) => entry.preview.segments)
 		.filter((segment) => segment.channelId === channel.id && segment.mediaItemId)
-		.map((segment) => ({ segment, preference: audioPreferences(channel, segment, preferences) }));
+		.map((segment) => ({ segment, preference: audioPreferences(channel, segment, preferences, defaults) }));
 	if (!selected.length) {
 		return result;
 	}
@@ -141,6 +141,6 @@ export async function prepareMediaStreams(repository: Repository, channel: Chann
 }
 
 /** Preserve audio-only callers while sharing the same stream preparation implementation. */
-export async function prepareAudio(repository: Repository, channel: Channel, guide: ScheduleGuide, programs: SchedulingProgram[]): Promise<PreparedAudio> {
-	return (await prepareMediaStreams(repository, channel, guide, programs)).audio;
+export async function prepareAudio(repository: Repository, channel: Channel, guide: ScheduleGuide, programs: SchedulingProgram[], defaults: AudioPreferences = {}): Promise<PreparedAudio> {
+	return (await prepareMediaStreams(repository, channel, guide, programs, defaults)).audio;
 }

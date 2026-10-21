@@ -115,6 +115,7 @@ function fixture() {
 		listScheduleTemplates: vi.fn(async () => [template]),
 		listPrograms: vi.fn(async () => programs),
 		getPlaybackSettings: vi.fn(async () => ({
+			audioPreferences: {},
 			maxActiveSessions: 4,
 			viewingPreferencesEnabled: true,
 			fillerShortfallWarningThresholdPercent: 80,
@@ -1177,7 +1178,7 @@ it('loads warning tolerance once per pass, forwards it to generation, and retain
 		const original = structuredClone(test.materialization());
 		const spans = structuredClone(test.segments());
 		const commits = vi.mocked(test.repository.commitMaterializedTimeline).mock.calls.length;
-		vi.mocked(test.repository.getPlaybackSettings).mockResolvedValue({ maxActiveSessions: 4, viewingPreferencesEnabled: true, fillerShortfallWarningThresholdPercent: 0 });
+		vi.mocked(test.repository.getPlaybackSettings).mockResolvedValue({ audioPreferences: {}, maxActiveSessions: 4, viewingPreferencesEnabled: true, fillerShortfallWarningThresholdPercent: 0 });
 		await materializer.runNow(true);
 		expect(test.repository.getPlaybackSettings).toHaveBeenCalledTimes(2);
 		expect(generate).toHaveBeenCalledTimes(1);

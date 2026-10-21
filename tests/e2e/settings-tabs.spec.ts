@@ -63,6 +63,8 @@ test('exposes hidden-tab failures and distinguishes pending playback data from s
 	const warning = page.getByRole('button', { name: /^Break budget warnings/ });
 	await expect(warning).toContainText('Loading…');
 	await expect(warning).not.toContainText('80%');
+	await expect(page.getByText('Loading audio selection defaults…', { exact: true })).toBeVisible();
+	await expect(page.getByRole('textbox', { name: /^Preferred language code/ })).toHaveCount(0);
 	const ai = page.getByRole('tab', { name: /^AI/ });
 	const backups = page.getByRole('tab', { name: /^Backups/ });
 	await expect(ai).toHaveAccessibleName(/Needs attention/);
@@ -301,4 +303,92 @@ test('dismisses Engine details when the page or a nested container scrolls', asy
 	await page.keyboard.press('Escape');
 	await expect(popup).toBeHidden();
 	await expect(trigger).toBeFocused();
+});
+
+test('saves global audio defaults, validates fields and retains the draft after a failed save', async ({ page }) => {
+	const csrfToken = await authenticateAdministrator(page);
+	const baseline = await (await page.request.get('/api/v1/playback/settings')).json();
+	await page.goto('/settings/playback');
+	const card = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Audio selection defaults', exact: true }) });
+	const language = card.getByRole('textbox', { name: /^Preferred language code/ });
+	const title = card.getByRole('textbox', { name: /^Preferred audio title/ });
+	const save = page.getByRole('button', { name: 'Save Playback Settings', exact: true });
+	try {
+		await expect(language).toBeVisible();
+		await expect(language).toHaveAttribute('placeholder', 'Any language');
+		await language.fill('EN');
+		await title.fill('Original Surround');
+		await save.click();
+		await expect(save).toBeDisabled();
+		await page.reload();
+		await expect(language).toHaveValue('en');
+		await expect(title).toHaveValue('Original Surround');
+		expect((await (await page.request.get('/api/v1/playback/settings')).json()).audioPreferences)
+			.toEqual({ language: 'en', title: 'Original Surround' });
+
+		await language.fill('x');
+		await title.focus();
+		await expect(language).toHaveAttribute('aria-invalid', 'true');
+		await expect(card.locator('.field-error')).toBeVisible();
+		await expect(save).toBeDisabled();
+		await page.getByRole('button', { name: 'Reset Playback settings draft', exact: true }).click();
+		await page.getByRole('button', { name: 'Confirm Reset Playback settings draft', exact: true }).click();
+		await expect(language).toHaveValue('en');
+		await expect(language).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(save).toBeDisabled();
+
+		await language.fill('fr');
+		await title.fill('Commentary');
+		await page.getByRole('button', { name: 'Reset Playback settings draft', exact: true }).click();
+		await page.getByRole('button', { name: 'Confirm Reset Playback settings draft', exact: true }).click();
+		await expect(title).toHaveValue('Original Surround');
+		await expect(language).toHaveValue('en');
+		await language.fill('fr');
+		await page.route('**/api/v1/playback/settings', async route => {
+			if (route.request().method() === 'PUT') {
+				await route.fulfill({ status: 503, json: { message: 'Settings temporarily unavailable' } });
+			}
+			else {
+				await route.continue();
+			}
+		});
+		await save.click();
+		await expect(page.getByRole('alert').filter({ hasText: 'Settings temporarily unavailable' })).toBeVisible();
+		await expect(language).toHaveValue('fr');
+		await expect(save).toBeEnabled();
+		await page.unroute('**/api/v1/playback/settings');
+		let releaseSave!: () => void;
+		const pendingSave = new Promise<void>(resolve => {
+			releaseSave = resolve;
+		});
+		await page.route('**/api/v1/playback/settings', async route => {
+			await pendingSave;
+			await route.continue();
+		});
+		const saved = page.waitForResponse(response => response.url().endsWith('/api/v1/playback/settings') && response.request().method() === 'PUT');
+		try {
+			await save.click();
+			await expect(language).toBeDisabled();
+			await expect(title).toBeDisabled();
+		}
+		finally {
+			releaseSave();
+		}
+		await saved;
+		await expect(language).toBeEnabled();
+		await expect(save).toBeDisabled();
+		await page.unroute('**/api/v1/playback/settings');
+		await page.reload();
+		await expect(language).toHaveValue('fr');
+		await language.fill('');
+		await title.fill('');
+		await save.click();
+		await expect(save).toBeDisabled();
+		expect((await (await page.request.get('/api/v1/playback/settings')).json()).audioPreferences).toEqual({});
+	}
+	finally {
+		await page.unroute('**/api/v1/playback/settings');
+		const restored = await page.request.put('/api/v1/playback/settings', { headers: { 'x-moirai-csrf': csrfToken }, data: baseline });
+		expect(restored.ok()).toBe(true);
+	}
 });

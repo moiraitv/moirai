@@ -10,6 +10,7 @@ test('opens Settings card help at the matching tab guide section', async ({ page
 	await expect(page.getByRole('button', { name: 'Help with Settings', exact: true })).toHaveCount(0);
 	const sections = [
 		['Playback', 'Playback capacity', 'playback', 'playback-capacity', 'Maximum active channel sessions'],
+		['Playback', 'Audio selection defaults', 'playback', 'audio-selection-defaults', 'Preferred language code'],
 		['Playback', 'Filler', 'playback', 'filler', 'Warn when filler supplies less than'],
 		['Playback', 'Viewing preferences', 'playback', 'viewing-preferences', 'View Current Scores'],
 		['Playback', 'Playback status', 'playback', 'playback-status', 'Refresh Status'],

@@ -95,6 +95,8 @@ it('round-trips stable catalog identities, managed images, and settings without 
 	const value = await fixture();
 	try {
 		await value.repository.setBackupSettings({ enabled: true, intervalDays: 2, retention: 4 });
+		await value.repository.setPlaybackSettings({ ...await value.repository.getPlaybackSettings(),
+			audioPreferences: { language: 'fr', title: 'Original' } });
 		const backup = await exportFixture(value);
 		const manifest = await readManifest(path.join(value.config.backupDir, backupFilename(backup)));
 		expect(manifest.tables).toEqual(expect.arrayContaining(['libraries', 'media_items', 'settings']));
@@ -111,6 +113,8 @@ it('round-trips stable catalog identities, managed images, and settings without 
 		try {
 			expect(restored.prepare('SELECT last_scan_id,consecutive_observations FROM media_removal_tombstones').get()).toEqual({ last_scan_id: null, consecutive_observations: 2 });
 			expect(restored.prepare('SELECT accepted FROM media_tail_assessments').get()).toEqual({ accepted: 1 });
+			expect(JSON.parse((restored.prepare("SELECT value FROM settings WHERE key='playback'").get() as { value: string }).value).audioPreferences)
+				.toEqual({ language: 'fr', title: 'Original' });
 			expect(restored.prepare('SELECT id FROM libraries').get()).toEqual({ id: value.library.id });
 			expect(restored.prepare('SELECT id,library_id FROM media_items').get()).toEqual({ id: value.mediaId, library_id: value.library.id });
 			expect(restored.prepare("SELECT entity_id FROM catalog_search WHERE catalog_search MATCH 'Example'").get()).toEqual({ entity_id: value.mediaId });
@@ -291,7 +295,7 @@ it('captures the existing prior schema before migrations and restores it through
 	await prepareDatabase(config, staging, manifest);
 	const upgraded = createDatabase(path.join(staging, 'restored.sqlite'), config.migrationsDir);
 	try {
-		expect(await new Repository(upgraded.db).getPlaybackSettings()).toMatchObject({ maxActiveSessions: 9 });
+		expect(await new Repository(upgraded.db).getPlaybackSettings()).toMatchObject({ maxActiveSessions: 9, audioPreferences: {} });
 	}
 	finally {
 		upgraded.close();

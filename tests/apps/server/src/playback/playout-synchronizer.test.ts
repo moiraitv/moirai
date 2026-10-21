@@ -1,5 +1,5 @@
 import { ETV_PLAYOUT_VERSION } from '@ersatztv-source/index.js';
-import { channelCreateSchema, type ScheduleGuide, type LiveEventInput, type TimelineSegment } from '@moirai/shared';
+import { channelCreateSchema, playbackSettingsSchema, type ScheduleGuide, type LiveEventInput, type TimelineSegment } from '@moirai/shared';
 import * as scheduleGuide from '@server/guide/schedule-guide.js';
 import * as mediaStreams from '@server/playback/audio-selection.js';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +24,7 @@ describe('playout synchronizer', () => {
 		['another channel timeline', false], ['another channel edit', false], ['scan progress', false],
 		['embedding progress', false], ['guide template', false], ['watcher status', false],
 		['this channel timeline', true], ['this channel edit', true], ['scan reconciliation', true],
-		['program preferences', true], ['credit template', true], ['library edit', true],
+		['global audio defaults', true], ['program preferences', true], ['credit template', true], ['library edit', true],
 	] as const)('publishes live playout with the correct retry behavior during %s', async (change, retry) => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-invalidation-'));
 		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Live' }), id: randomUUID(),
@@ -38,6 +38,9 @@ describe('playout synchronizer', () => {
 			const channelId = change.startsWith('this') ? channel.id : otherId;
 			event = change.endsWith('timeline') ? { type: 'timeline.changed', data: { channelId, status: 'ready' } }
 				: { type: 'channel.changed', data: { channelId, change: 'updated' } };
+		}
+		else if (change === 'global audio defaults') {
+			event = { type: 'playback.changed', data: { channelId: null, reason: 'settings-changed' } };
 		}
 		else if (change.startsWith('scan')) {
 			event = { type: 'scan.changed', data: { libraryId: otherId, scanId: randomUUID(), trigger: 'manual',
@@ -288,6 +291,7 @@ describe('playout synchronizer', () => {
 		const synchronizer = new PlayoutSynchronizer(
 			{
 				getChannel: async () => channel,
+				getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }),
 				listPrograms: async () => [],
 			} as unknown as Repository,
 			root,
@@ -335,6 +339,7 @@ describe('playout synchronizer', () => {
 		const synchronizer = new PlayoutSynchronizer(
 			{
 				getChannel: async () => channel,
+				getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }),
 				listPrograms: async () => [],
 			} as unknown as Repository,
 			root,
@@ -390,7 +395,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	const configured = { ...channelCreateSchema.parse({ number: '1', name: 'Music', subtitleMode: 'convert' }), id: channelId, createdAt: '', updatedAt: '' };
 	const logger = loggerFixture();
 	const synchronizer = new PlayoutSynchronizer(
-		{ getChannel: async () => configured, listPrograms: async () => [] } as unknown as Repository,
+		{ getChannel: async () => configured, getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }), listPrograms: async () => [] } as unknown as Repository,
 		linked,
 		'UTC',
 		60,
@@ -441,7 +446,15 @@ it.each(['0.0.3', '0.0.4', '0.0.5'])('replaces %s playout while preserving media
 		channels: [{ channelId: channel.id, preview: { segments: [segment] } }],
 	} as ScheduleGuide;
 	const synchronizer = new PlayoutSynchronizer(
-		{ getChannel: async () => channel, listPrograms: async () => [] } as unknown as Repository,
+		{
+			getChannel: async () => channel,
+			getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }),
+			listPrograms: async () => [],
+			audioMetadata: async () => new Map([['/media/movie.mkv', { streams: [
+				{ type: 'video', index: 0 }, { type: 'audio', index: 1, language: 'eng' },
+				{ type: 'audio', index: 2, language: 'fra' },
+			] }]]),
+		} as unknown as Repository,
 		root,
 		'UTC',
 		60,
@@ -452,9 +465,7 @@ it.each(['0.0.3', '0.0.4', '0.0.5'])('replaces %s playout while preserving media
 	);
 	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue(guideValue);
 	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map([[segment.id, [{ streamIndex: 4 }]]]));
-	const streams = vi.spyOn(mediaStreams, 'prepareMediaStreams').mockResolvedValue({
-		audio: new Map([[segment.id, [2]]]), video: new Map([[segment.id, [0]]]),
-	});
+	const streams = vi.spyOn(mediaStreams, 'prepareMediaStreams');
 	try {
 		const folder = await synchronizer.syncChannel(channel.id);
 		const file = path.join(folder, (await readdir(folder)).find((name) => name.endsWith('.json'))!);
@@ -463,6 +474,7 @@ it.each(['0.0.3', '0.0.4', '0.0.5'])('replaces %s playout while preserving media
 
 		await synchronizer.syncChannel(channel.id);
 		const updated = JSON.parse(await readFile(file, 'utf8'));
+		expect(streams).toHaveBeenCalledWith(expect.anything(), channel, guideValue, [], { language: 'fr' });
 		expect(updated.version).toBe(ETV_PLAYOUT_VERSION);
 		expect(updated.items.length).toBeGreaterThan(0);
 		expect(updated.items).toEqual(current.items);

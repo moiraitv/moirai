@@ -17,6 +17,7 @@ export const helpTopicIds = [
 	'scheduling.channel-schedules',
 	'settings.playback',
 	'settings.playback#playback-capacity',
+	'settings.playback#audio-selection-defaults',
 	'settings.playback#filler',
 	'settings.playback#viewing-preferences',
 	'settings.playback#playback-status',
