@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.0 - 2026-10-21
+
+### New
+
+- **Settings → Backups** supports manual and automatic configuration backups, backup importing or downloading, and restoration. Backups preserve configuration, the library index, channel icons, custom guide artwork, and fallback videos; library media and credentials are excluded. Automatic backups default to daily at **3:00 am**, retaining the newest **7**, and create separate upgrade and pre-restore recovery backups.
+- All core resource editors retain unsaved drafts and selected files across closing, navigation, and reloads within the same browser.
+- **AI**, **Similar Items**, and **Theme** Programs support searchable match review and persistent item exclusions.
+- **Settings → Playback** provides global preferred audio language and title defaults. Each field inherits through Channels and Sequence Programs to the current Program; explicit overrides remain available, and `*` clears an inherited preference.
+
+### Improvements
+
+- Refined and applied a consistent design across navigation, editors, cards, and controls, with locally bundled Inter typography, updated colors and spacing, and improved compact layouts.
+- Combined several configuration screens, organizing their content into tabs with shared **Save** and **Reset** footers and section permalinks. Filler and Playback navigation, disclosures, help, library controls, and Sequence steps are now more consistent.
+
+### Changes
+
+- The bundled **ErsatzTV Next** engine is updated to **v0.2.2**, with channel configuration schema **0.1.2** and playout schema **0.0.6**.
+- Native installations now require **Node.js 24.22.1 or newer within Node 24**. Docker builds include the updated runtime and patched build dependencies. Native playback-worker builds use the upstream **Rust 1.99.0** toolchain.
+- Docker configuration backups use a separate **/backups** directory, which may be mapped to a dedicated volume in the compose file or standalone container configuration. **MOIRAI_BACKUP_DIR** can select another writable location.
+
+### Fixes
+
+- Ignored scan warnings remain suppressed across probe-cache updates when the underlying files have not changed. Changed files still trigger fresh assessment.
+- Guide listings are clipped at the visible boundaries, preventing overnight cards from overlapping adjacent content.
+
 ## 0.6.2 - 2026-10-15
 
 ### Improvements
