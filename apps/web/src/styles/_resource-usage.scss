@@ -27,7 +27,7 @@
 	min-width: 0;
 	align-self: start;
 	margin-top: 0;
-	border-radius: 26px 0 0 26px;
+	border-radius: var(--radius-dialog) 0 0 var(--radius-dialog);
 }
 
 .resource-usage-layout.usage-open::before,
@@ -67,7 +67,7 @@
 	min-height: 36px;
 	padding: 0 12px 0 10px;
 	border: 1px solid var(--line);
-	border-radius: 10px;
+	border-radius: var(--radius-control);
 	background: #0d1c28;
 	color: var(--text);
 	cursor: pointer;
@@ -131,7 +131,7 @@
 
 .resource-usage-content {
 	padding-top: 14px;
-	font-size: .875rem;
+	font-size: 0.875rem;
 	overflow-wrap: anywhere;
 }
 
@@ -155,7 +155,7 @@
 	gap: 10px;
 	padding: 14px 10px;
 	border: 1px solid var(--line);
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 	color: var(--text);
 	text-decoration: none;
 	background: #07141e;
@@ -177,15 +177,13 @@
 	gap: 10px;
 	padding: 12px;
 	border: 1px solid var(--line);
-	border-radius: 8px;
-	background: rgba(255, 255, 255, .03);
+	border-radius: var(--radius-control);
+	background: rgba(255, 255, 255, 0.03);
 }
 
 .resource-usage svg {
 	flex-shrink: 0;
 }
-
-
 
 .resource-editor-scroll:has(> .resource-usage-layout),
 .scheduling-workspace-scroll:has(> .resource-usage-layout) {
@@ -237,8 +235,8 @@
 	gap: 6px;
 	padding: 12px;
 	border: 1px solid var(--line);
-	border-radius: 10px;
-	font-size: .85rem;
+	border-radius: var(--radius-control);
+	font-size: 0.85rem;
 }
 
 .media-airing a {
@@ -264,6 +262,6 @@
 }
 
 .media-playing-at-refresh:disabled {
-	opacity: .5;
+	opacity: 0.5;
 	cursor: default;
 }

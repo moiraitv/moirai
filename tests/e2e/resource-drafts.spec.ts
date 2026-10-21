@@ -42,7 +42,10 @@ for (const collection of ['encoding-profiles', 'credit-templates', 'guide-templa
 		await page.reload();
 		await expect(name).toHaveValue('Further changes');
 		await editor.getByRole('button', { name: 'Close', exact: true }).click();
-		await expect(page).toHaveURL(base);
+		await expect(page).toHaveURL(url => url.pathname === base);
+		if (collection === 'guide-templates') {
+			await expect(page).toHaveURL(url => url.searchParams.get('tab') === 'channel');
+		}
 		await expect(editor).toHaveCount(0);
 	});
 }
@@ -201,7 +204,9 @@ test('creates a Library and keeps its settings editor open after subsequent save
 	await name.fill('Updated retained library');
 	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
-	await expect(page).toHaveURL(/\/settings$/);
+	await expect(page).toHaveURL(/\/libraries\/[^/]+\/settings$/);
+	await expect(page.locator('.transient-toast')).toHaveCount(1);
+	await expect(editor.getByRole('status')).toContainText('Library saved.');
 	await name.fill('Pending reset');
 	await reset(editor);
 	await expect(name).toHaveValue('Updated retained library');

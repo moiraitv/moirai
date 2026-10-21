@@ -39,7 +39,7 @@ test('creates, validates, reloads and edits Similar Items with only compatible s
 		await select.selectOption(aiSource.id);
 		await expect(page.getByLabel('Quantity', { exact: true })).toHaveValue('20');
 		await page.getByLabel('Quantity', { exact: true }).fill('0');
-		await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
 		await page.getByLabel('Quantity', { exact: true }).fill('5');
 		await page.getByLabel('Cohesion / Variety', { exact: true }).fill('75');
 		await page.getByLabel('Preferences', { exact: true }).fill('Slow science fiction');
@@ -47,7 +47,7 @@ test('creates, validates, reloads and edits Similar Items with only compatible s
 		await page.getByLabel('Exclusions', { exact: true }).blur();
 		await page.getByLabel('Exclusion strictness', { exact: true }).fill('65');
 		const savedResponse = page.waitForResponse((response) => response.url().endsWith('/programs') && response.request().method() === 'POST');
-		await page.getByRole('button', { name: 'Save', exact: true }).click();
+		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		const saved = await (await savedResponse).json();
 		ids.push(saved.id);
 		expect(saved.config).toMatchObject({ type: 'similarity', sourceProgramId: aiSource.id, variety: 75, quantity: 5, softPreferences: 'Slow science fiction', hardExclusions: ['superhero', 'Comedy'], exclusionStrictness: 65 });
@@ -153,7 +153,7 @@ test('shows draft sample loading, populated and failed states, and saved list sa
 		await page.getByLabel('Exclusion strictness', { exact: true }).fill('70');
 		await expect(page.getByRole('region', { name: 'Excluded matches', exact: true }).getByRole('link')).toHaveCount(1);
 		const savedResponse = page.waitForResponse((response) => response.url().endsWith('/programs') && response.request().method() === 'POST');
-		await page.getByRole('button', { name: 'Save', exact: true }).click();
+		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		savedId = (await (await savedResponse).json()).id;
 		await page.route('**/api/v1/scheduling/overview', async (route) => {
 			const response = await route.fetch();
@@ -185,7 +185,7 @@ test('shows draft sample loading, populated and failed states, and saved list sa
 	}
 });
 
-test('protects and saves exclusion text typed immediately before Escape', async ({ page }) => {
+test('protects and saves unsafe exclusion text typed immediately before Escape', async ({ page }) => {
 	const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
 	const ids: string[] = [];
 	try {
@@ -198,6 +198,12 @@ test('protects and saves exclusion text typed immediately before Escape', async 
 		} })).json();
 		ids.push(program.id);
 		await page.goto(`/schedules/programs/${program.id}`);
+		// Exercise the confirmation fallback when the draft cannot be retained locally.
+		await page.evaluate(() => {
+			Storage.prototype.setItem = () => {
+				throw new Error('Storage unavailable');
+			};
+		});
 		const exclusions = page.getByLabel('Exclusions', { exact: true });
 		await exclusions.pressSequentially('superhero movies, romantic comedies, ');
 		await expect(exclusions).toHaveValue('superhero movies, romantic comedies, ');
@@ -230,7 +236,7 @@ test('creates a Theme Program with library filters and preserves edits', async (
 		await page.getByPlaceholder('e.g. Evening Lineup').fill('Space discovery');
 		await page.getByLabel('Target library', { exact: true }).selectOption(library.id);
 		await expect(page.getByLabel('Source Program', { exact: true })).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
 		await page.getByRole('button', { name: 'Configure Filters' }).click();
 		const filters = page.getByRole('dialog', { name: 'Filter media' });
 		await filters.getByPlaceholder('Partial title').fill('Space');
@@ -240,7 +246,7 @@ test('creates a Theme Program with library filters and preserves edits', async (
 		await page.getByLabel('Theme', { exact: true }).fill('Space exploration and first contact');
 		await page.getByLabel('Quantity', { exact: true }).fill('4');
 		const savedResponse = page.waitForResponse((response) => response.url().endsWith('/programs') && response.request().method() === 'POST');
-		await page.getByRole('button', { name: 'Save', exact: true }).click();
+		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		const saved = await (await savedResponse).json();
 		id = saved.id;
 		expect(saved.config).toMatchObject({ type: 'theme', libraryId: library.id, theme: 'Space exploration and first contact', quantity: 4, filter: { name: 'Space' } });
@@ -284,22 +290,22 @@ test('saves and reopens optional Similar Items filters from the source library',
 		await page.getByPlaceholder('e.g. Evening Lineup').fill('Filtered recommendations');
 		await page.getByLabel('Source Program', { exact: true }).selectOption(source.id);
 		const disclosure = page.locator('.similarity-library-filters');
-		await expect(disclosure).not.toHaveAttribute('open');
-		await disclosure.locator('summary').click();
+		await expect(disclosure.locator('.plain-disclosure-trigger')).toHaveAttribute('aria-expanded', 'false');
+		await disclosure.locator('.plain-disclosure-trigger').click();
 		await page.getByRole('button', { name: 'Configure Filters' }).click();
 		const filters = page.getByRole('dialog', { name: 'Filter media' });
 		await filters.getByPlaceholder('Partial title').fill('Night');
 		await filters.getByRole('button', { name: 'Apply Filters', exact: true }).click();
-		await expect(disclosure.locator('summary')).toContainText('Night');
+		await expect(disclosure.locator('.plain-disclosure-trigger')).toContainText('Night');
 		const response = page.waitForResponse((r) => r.url().endsWith('/programs') && r.request().method() === 'POST');
-		await page.getByRole('button', { name: 'Save', exact: true }).click();
+		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		const saved = await (await response).json();
 		id = saved.id;
 		expect(saved.config).toMatchObject({ type: 'similarity', sourceProgramId: source.id, filter: { name: 'Night' } });
 		await page.goto(`/schedules/programs/${id}`);
-		await expect(disclosure).not.toHaveAttribute('open');
-		await expect(disclosure.locator('summary')).toContainText('Night');
-		await disclosure.locator('summary').click();
+		await expect(disclosure.locator('.plain-disclosure-trigger')).toHaveAttribute('aria-expanded', 'false');
+		await expect(disclosure.locator('.plain-disclosure-trigger')).toContainText('Night');
+		await disclosure.locator('.plain-disclosure-trigger').click();
 		await page.getByRole('button', { name: 'Configure Filters' }).click();
 		await expect(filters.getByPlaceholder('Partial title')).toHaveValue('Night');
 	}

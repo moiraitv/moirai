@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ArrowLeft, Asterisk, ChevronDown, Layers3, Plus, X } from '@lucide/vue';
+import FormDisclosure from '../FormDisclosure.vue';
+import { ArrowLeft, Asterisk, Layers3, Plus, X } from '@lucide/vue';
 import type { ContentSource, MediaGroup, MediaItem, MediaSourcePickerEntry } from '@moirai/shared';
 import { mediaSearchMatchText } from '../../media-search-matches';
 import LoadingState from '../LoadingState.vue';
@@ -48,12 +49,12 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 </script>
 
 <template>
-	<details
+	<FormDisclosure
+		v-model:open="open"
+		plain
 		class="source-browser-disclosure"
-		:open="open"
-		@toggle="open = ($event.target as HTMLDetailsElement).open"
 	>
-		<summary>Browse media <ChevronDown :size="17" /></summary>
+		<template #summary>Browse media</template>
 		<div class="source-picker-toolbar">
 			<input
 				v-model="search"
@@ -175,5 +176,5 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 				Next
 			</button>
 		</div>
-	</details>
+	</FormDisclosure>
 </template>

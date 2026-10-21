@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDisclosure from './FormDisclosure.vue';
 import { liveEvents } from '../live-events';
 import { useLibrariesStore } from '../stores/libraries';
 import { RouterLink } from 'vue-router';
@@ -170,7 +171,7 @@ onBeforeUnmount(() => {
 							<img v-if="preview" :src="preview.image" alt="Music video frame with the generated credits" />
 						</Transition>
 					</div>
-					<details v-if="preview" :open="sourceOpen" @toggle="sourceOpen = ($event.target as HTMLDetailsElement).open"><summary>Generated subtitles (.ass)</summary><pre>{{ preview.ass }}</pre></details>
+					<FormDisclosure v-if="preview" v-model:open="sourceOpen" plain><template #summary>Generated subtitles (.ass)</template><pre>{{ preview.ass }}</pre></FormDisclosure>
 				</div>
 			</div>
 		</Transition>

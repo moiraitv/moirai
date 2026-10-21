@@ -10,7 +10,7 @@ Preserve Content, Similar Items, Theme and Sequence terminology and each type’
 
 Source owners: [ProgramEditor.vue](../../../apps/web/src/components/programs/ProgramEditor.vue), [SequenceProgramEditor.vue](../../../apps/web/src/components/programs/SequenceProgramEditor.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 Prefer [detailed choice cards](choices.md#detailed-choices-for-significant-decisions) for significant selection and ordering decisions. Preserve the existing strategy descriptions and distinguish Content selection from Sequence ordering.
 
@@ -22,7 +22,7 @@ Show how eligible content becomes a program. Distinguish a source definition, an
 
 | Component         | Standard                                                                                                    | Content and ownership                                                       |
 | ----------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Source card       | 24px inset, 12px radius, structural border                                                                  | Source name with adjacent type badge, summary, explicit edit/remove actions |
+| Source card       | 24px inset, 6px radius, structural border                                                                   | Source name with adjacent type badge, summary, explicit edit/remove actions |
 | Sequence row      | Ordered list, 16px gaps, 40px leading number handle, 45px right arrow handle; body inset 24px / 16px mobile | Author order is meaningful; visible order controls                          |
 | Type badge        | Shared badge geometry                                                                                       | Content / Sequence / Similar labels with semantic category tones            |
 | Selection review  | Panel with 16px gap                                                                                         | Count, total duration, selected items and Review Selection action           |
@@ -32,6 +32,8 @@ Show how eligible content becomes a program. Distinguish a source definition, an
 ## States and behavior
 
 Sources can be loading, loaded, unavailable or invalid. Preserve a missing source’s identity and show a repair action instead of quietly dropping it. A preview has separate loading and failed states; it must not imply an empty program before the lookup finishes. A disabled source row can still provide inspection and explanation.
+
+Sequence steps identify their source through the Program selector beside the count. Do not repeat that selected name in a separate title or add a type badge above the controls. Keep the leading number, centered removal action and stacked ordering handle.
 
 Authored sequence order is stable and deliberate. Place the ordinal in an integrated 40px-wide leading handle with a raised fill, mint tabular number and 1px right divider. The handle follows the card’s left corners; the whole card and Add source button share the same left and right edges. Reset the ordered list’s external marker gutter while retaining list semantics. This handle presents the step number, not a draggable affordance; do not add a grab cursor or drag-only interaction. Provide Move up / Move down as a vertically stacked pair of 18px Lucide arrow buttons in an integrated 45px-wide right handle (including its 1px left divider, leaving 44px-wide targets). Each half has at least a 44px interaction height, with equal height, a shared raised surface and a 1px separator. Keep the first step’s Up and the last step’s Down disabled. Give each button an explicit accessible name including the source and direction; native buttons support Enter/Space. Inset the focus outline by 4px to keep it inside the handle. Do not put separate text movement buttons in the content body. If drag handles are added later, provide equivalent keyboard operation and announce the resulting position. Draft-local removal sits vertically centered within the complete step, immediately before the right ordering handle. It uses an initially bezel-free 18px trash icon in a 42px desktop / 44px mobile target, with an accessible name that identifies the source. It changes to the 17px confirmation checkmark with a subtle danger-tinted bezel and no geometry change, and follows the two-step confirmation contract and can be undone by discarding the editor. Stable source identifiers must not share ownership accidentally; duplicate identifiers are a data-boundary validation concern, not a visual normalization rule.
 

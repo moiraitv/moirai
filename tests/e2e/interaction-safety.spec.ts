@@ -21,7 +21,7 @@ async function checkFocusBoundary(page: Page, dialog: Locator): Promise<void> {
 }
 
 for (const kind of ['program', 'template', 'channel', 'library', 'encoding', 'credit'] as const) {
-	test(`contains ${kind} editor focus and protects its dirty draft on reload`, async ({ page, documentationServer }) => {
+	test(`contains ${kind} editor focus and protects unsafe drafts on reload`, async ({ page, documentationServer }) => {
 		const { program, template, libraryId } = await seedSchedule(page, documentationServer.directory);
 		if (kind === 'program' || kind === 'template') {
 			await page.goto(`/schedules/${kind}s/${kind === 'program' ? program.id : template.id}`);
@@ -43,9 +43,17 @@ for (const kind of ['program', 'template', 'channel', 'library', 'encoding', 'cr
 		await expect(name).toBeVisible();
 		await checkFocusBoundary(page, dialog);
 		await expect.poll(() => page.locator('.sidebar').evaluate((node) => Boolean(node.closest('[inert]')))).toBe(true);
+		// Native unload protection is the fallback when the draft cannot be retained locally.
+		await page.evaluate(() => {
+			Storage.prototype.setItem = () => {
+				throw new Error('Storage unavailable');
+			};
+		});
+		await name.click();
 		await name.fill('Protected draft');
-		const warning = page.waitForEvent('dialog');
-		const reload = page.reload({ timeout: 2_000 }).catch(() => null);
+		await expect(dialog.getByRole('alert').filter({ hasText: 'could not be retained' })).toBeVisible();
+		const warning = page.waitForEvent('dialog', { timeout: 15_000 });
+		const reload = page.reload({ timeout: 15_000 }).catch(() => null);
 		const nativeDialog = await warning;
 		expect(nativeDialog.type()).toBe('beforeunload');
 		await nativeDialog.dismiss();
@@ -66,9 +74,14 @@ test('protects library creation and each independent Settings draft on navigatio
 	await page.goto('/channels');
 	await page.locator('.sidebar').getByRole('link', { name: 'Libraries', exact: true }).click();
 	await page.getByRole('button', { name: 'Add Library', exact: true }).first().click();
+	await page.evaluate(() => {
+		Storage.prototype.setItem = () => {
+			throw new Error('Storage unavailable');
+		};
+	});
 	await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Unsaved library');
 	await page.goBack();
-	await page.getByRole('button', { name: 'Keep Editing', exact: true }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(page.locator('.confirmation-modal-backdrop')).toHaveCount(0);
 	await expect(page).toHaveURL(/\/libraries\/new$/u);
 	await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unsaved library');
@@ -85,7 +98,7 @@ test('protects library creation and each independent Settings draft on navigatio
 		}
 		await page.locator('.sidebar').getByRole('link', { name: 'Channels', exact: true }).click();
 		await page.getByRole('button', { name: 'Keep Editing', exact: true }).click();
-		await expect(page).toHaveURL(/\/settings$/u);
+		await expect(page).toHaveURL(/\/settings\/playback$/u);
 		await page.locator('.sidebar').getByRole('link', { name: 'Channels', exact: true }).click();
 		await page.getByRole('button', { name: 'Discard Changes', exact: true }).click();
 		await expect(page).toHaveURL(/\/channels$/u);
@@ -148,8 +161,9 @@ test('does not warn when reloading read-only profiles or a saved program', async
 	await page.goto(`/schedules/programs/${program.id}`);
 	await page.getByRole('textbox', { name: /^Name/ }).fill('Saved program');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(page.getByRole('dialog')).toBeHidden();
+	await expect(page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 	await page.reload();
+	await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue('Saved program');
 	expect(warnings).toEqual([]);
 });
 

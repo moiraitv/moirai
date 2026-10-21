@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import QuickStepActions from './QuickStepActions.vue';
 import { computed, onMounted, ref, watch } from 'vue';
-import { ChevronDown, ChevronUp, GripVertical, Trash2 } from '@lucide/vue';
+import {ArrowRight, ChevronDown, ChevronUp, GripVertical, Trash2 } from '@lucide/vue';
 import { VueDraggable } from 'vue-draggable-plus';
 import type {
 	MediaGroup,
@@ -400,7 +400,7 @@ onMounted(() => {
 		/>
 		<QuickStepActions>
 			<button class="button secondary" type="button" @click="emit('back')">Back</button>
-			<button class="button" type="button" :disabled="!canContinue" @click="emit('next')">Continue</button>
+			<button class="button" type="button" :disabled="!canContinue" @click="emit('next')"><ArrowRight :size="18" aria-hidden="true" />Continue</button>
 		</QuickStepActions>
 	</section>
 </template>

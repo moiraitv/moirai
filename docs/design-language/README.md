@@ -1,16 +1,16 @@
 # Moirai design language
 
-A source-backed reference for the current Moirai UI, with shared styling unified where the application is inconsistent. Existing page layouts, resource ownership, controls and navigation are the starting point. This guide does not change the application.
+A source-backed reference for the current Moirai UI, with shared styling unified where the application is inconsistent. Existing page layouts, resource ownership, controls and navigation are the starting point. The application now implements the reviewed rules; see [application adoption](docs/application-adoption.md) for runtime ownership, coverage and production token ownership.
 
-The [current UI mapping](docs/current-ui.md) identifies the source owners for every component family, distinguishes observed behavior from reviewed style unifications, and links stored application captures. Substantial layout or interaction changes require separate proposals. The half-radius experiment stays active.
+The [current UI mapping](docs/current-ui.md) identifies the source owners for every component family, distinguishes observed behavior from reviewed style unifications, and links stored application captures. Substantial layout or interaction changes require separate proposals. The reviewed smaller corner scale is now permanent.
 
-**Start here:** [Audit and preserved decisions](docs/audit.md) → [Current UI mapping](docs/current-ui.md) → [Foundations](components/foundations.md) → [Shared behavior](docs/behavior.md) → [Component specifications](#component-specifications) → [Layout recipes](docs/layouts.md).
+**Start here:** [Audit and preserved decisions](docs/audit.md) → [Current UI mapping](docs/current-ui.md) → [Foundations](components/foundations.md) → [Shared behavior](docs/behavior.md) → [Motion](docs/motion.md) → [Component specifications](#component-specifications) → [Layout recipes](docs/layouts.md).
 
 ![Moirai program catalog reference](images/layouts/catalog.png)
 
-## Active experiment: 50% smaller corners
+## Corner scale
 
-The gallery and current screenshots use a reversible radius trial: small **4→2px**, controls **8→4px**, panels **12→6px**, and dialogs **16→8px**. Circular artwork, status dots and fully rounded switch tracks remain round. Written component measurements and `tokens.css` retain the baseline while this trial is under review. [Comparison images and revert instructions](experiments/radius-50/README.md).
+The application, gallery, tokens and component specifications use the permanent smaller scale: small **2px**, controls **4px**, panels **6px**, and dialogs **8px**. Circular artwork, status dots and fully rounded switch tracks remain round. [Historical comparison images](experiments/radius-50/README.md) document the completed trial.
 
 ## Open the reference
 
@@ -76,7 +76,7 @@ See [layout recipes and the new-screen checklist](docs/layouts.md) for compositi
 - [Exploratory concepts and exact generation prompts](concepts/README.md).
 - [Capture environment and screenshot hashes](images/captures.json).
 
-The guide preserves the current app’s composition and makes its shared-style exceptions explicit. Subtle gradients across surfaces and actions, consistent control sizing, stronger essential boundaries, plain icons and connected view selectors remain reviewed unifications. The radius reduction is still a reversible experiment; source-owned layouts remain the baseline.
+The guide preserves the current app’s composition and makes its shared-style exceptions explicit. Subtle gradients across surfaces and actions, consistent control sizing, stronger essential boundaries, plain icons and connected view selectors remain reviewed unifications. The smaller corner scale is permanent; source-owned layouts remain the baseline.
 
 ## Reference influences
 

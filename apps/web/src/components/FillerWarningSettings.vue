@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDisclosure from './FormDisclosure.vue';
 import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, playbackSettingsSchema } from '@moirai/shared';
 import { numericInputAttributes, useFieldValidation } from '../field-validation';
 import LoadingState from './LoadingState.vue';
@@ -30,8 +31,8 @@ const attributes = numericInputAttributes(schema.shape.fillerShortfallWarningThr
 			<small v-if="validation.error('fillerShortfallWarningThresholdPercent')" :id="validation.errorId('fillerShortfallWarningThresholdPercent')" class="field-error">{{ validation.error('fillerShortfallWarningThresholdPercent') }}</small>
 			<small>Warn when filler supplies less than this share of a break.</small>
 		</label>
-		<details v-if="baseline !== null" class="span-2 settings-help"><summary>How warnings work</summary>
+		<FormDisclosure v-if="baseline !== null" plain class="span-2 settings-help"><template #summary>How warnings work</template>
 			<p>Default: {{ DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT }}%. Use 0 to turn off budget-shortfall warnings or 100 to warn about any incomplete budget. Applies to pre-roll, mid-roll, and post-roll in new previews and newly generated schedules. Existing warnings remain until their coverage is replaced.</p>
-		</details>
+		</FormDisclosure>
 	</div>
 </template>

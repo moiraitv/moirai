@@ -55,6 +55,12 @@ async function prepare(page: Page): Promise<void> {
 	await expect.poll(() => page.evaluate(() => Array.from(document.images)
 		.filter((image) => Boolean(image.getAttribute('src')) && (!image.complete || !image.naturalWidth))
 		.map((image) => image.getAttribute('src'))), { timeout: 15_000 }).toEqual([]);
+	// Matching catalog content can appear before loading dimming has finished fading out.
+	const catalog = page.locator('.catalog-results');
+	if (await catalog.count()) {
+		await expect(catalog).not.toHaveClass(/\bloading\b/);
+		await expect(catalog).toHaveCSS('opacity', '1');
+	}
 	await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) =>
 		animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity).length)).toBe(0);
 	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));

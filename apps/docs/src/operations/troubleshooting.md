@@ -19,7 +19,7 @@ Debug cards do not replace your configured fallback video for schedule gaps. The
 
 ## An IPTV client cannot connect
 
-Open **![](/icons/calendar-days.svg) Guide** and inspect the published addresses. Replace a loopback `MOIRAI_PUBLIC_URL` with an origin reachable from the client. Check firewall and reverse-proxy rules, then try the M3U URL in a browser on the client device.
+Open **![](/icons/calendar-days.svg) Guide** and use **M3U** or **XMLTV** to copy the published address. Replace a loopback `MOIRAI_PUBLIC_URL` with an origin reachable from the client. Check firewall and reverse-proxy rules, then try the M3U URL in a browser on the client device.
 
 ## Media disappeared
 

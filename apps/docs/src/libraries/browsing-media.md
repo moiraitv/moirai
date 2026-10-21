@@ -35,7 +35,7 @@ Use **Duration → From** and **To** to filter by playback length. Enter hours, 
 
 Music-video libraries also offer **Artist** and **Album** filters. Artist matches any credited artist or the parent artist; Album matches album metadata or the parent album. Both accept part of a name, ignoring case.
 
-Use the eye button in the upper-left corner of a media card for a quick preview. It appears on hover or keyboard focus on desktop and stays visible on touch devices.
+Hover over a media card or focus it with the keyboard for a quick preview. On touch-screen devices, use the eye button in the upper-left corner of the card.
 
 Open an item to inspect its artwork, plot, credits, source paths, subtitles, and technical playback details. Missing information usually means it was absent from the NFO file or media probe.
 

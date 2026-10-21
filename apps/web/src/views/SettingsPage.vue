@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { useDraftProtection } from '../draft-protection';
 import { requestConfirmation } from '../confirmation';
 import PageHeader from '../components/PageHeader.vue';
@@ -10,16 +10,23 @@ import AiSettingsPanel from '../components/AiSettingsPanel.vue';
 import BackupSettingsPanel from '../components/BackupSettingsPanel.vue';
 import TransientToast from '../components/TransientToast.vue';
 
-const activeTab = ref('playback');
+const route = useRoute();
+const router = useRouter();
+const activeTab = computed({
+	get: () => String(route.params.section),
+	set: (section: string) => {
+		void router.push({ path: `/settings/${section}`, query: route.query, hash: route.hash });
+	},
+});
 const dirty = reactive({ playback: false, ai: false, backups: false });
 const saving = reactive({ playback: false, ai: false, backups: false });
 const attention = reactive({ playback: false, ai: false, backups: false });
 const message = ref('');
 const restoring = ref(false);
 const sections = computed(() => [
-	{ id: 'playback', label: 'Playback', dirty: dirty.playback, attention: attention.playback },
-	{ id: 'ai', label: 'AI', dirty: dirty.ai, attention: attention.ai },
-	{ id: 'backups', label: 'Backups', dirty: dirty.backups, attention: attention.backups },
+	{ id: 'playback', label: 'Playback', dirty: dirty.playback, attention: attention.playback, to: { path: '/settings/playback', query: route.query, hash: route.hash } },
+	{ id: 'ai', label: 'AI', dirty: dirty.ai, attention: attention.ai, to: { path: '/settings/ai', query: route.query, hash: route.hash } },
+	{ id: 'backups', label: 'Backups', dirty: dirty.backups, attention: attention.backups, to: { path: '/settings/backups', query: route.query, hash: route.hash } },
 ]);
 const unsavedSections = computed(() => sections.value.filter(section => section.dirty).map(section => section.label));
 const busy = computed(() => Object.values(saving).some(Boolean));

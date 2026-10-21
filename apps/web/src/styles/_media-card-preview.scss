@@ -23,7 +23,7 @@
 	display: grid;
 	place-items: center;
 	border: 1px solid rgba(224, 237, 244, 0.28);
-	border-radius: 10px;
+	border-radius: var(--radius-control);
 	color: #f4f9fb;
 	background: rgba(4, 13, 21, 0.88);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
@@ -71,7 +71,7 @@
 	grid-template-columns: 92px minmax(0, 1fr);
 	gap: 14px;
 	border: 1px solid #385268;
-	border-radius: 12px;
+	border-radius: var(--radius-panel);
 	color: #edf5f8;
 	background: rgba(5, 16, 25, 0.98);
 	box-shadow: 0 18px 52px rgba(0, 0, 0, 0.48);
@@ -98,9 +98,9 @@
 	display: grid;
 	place-items: center;
 	overflow: hidden;
-	border-radius: 8px;
+	border-radius: var(--radius-control);
 	color: #668096;
-	background: linear-gradient(145deg, #183044, #0a1722);
+	background: var(--surface-gradient), #0a1722;
 }
 
 .media-card-preview-poster img {
@@ -168,6 +168,12 @@
 		height: 44px;
 		opacity: 1;
 		transform: scale(1);
+	}
+}
+
+@media (hover: hover) {
+	.media-card-preview-info {
+		display: none;
 	}
 }
 

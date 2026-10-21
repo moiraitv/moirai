@@ -1015,7 +1015,6 @@ function handleKeydown(event: KeyboardEvent): void {
 async function finishSettings(updated: Library): Promise<void> {
 	library.value = updated;
 	actionError.value = '';
-	message.value = 'Library settings saved. Sync the library to apply source changes to the index.';
 	await librariesStore.load();
 }
 
@@ -1185,7 +1184,7 @@ onUnmounted(() => {
 		<header ref="libraryHeader" class="library-page-header">
 			<div>
 				<p class="eyebrow">Libraries</p>
-				<div class="title-row">
+				<div class="page-title-with-help">
 					<h1>{{ library.name }}</h1>
 					<PageHelpButton label="Libraries" />
 				</div>

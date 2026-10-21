@@ -10,7 +10,7 @@ ActionMenu provides one contextual action surface; native-style rows share that 
 
 Source owners: [ActionMenu.vue](../../../apps/web/src/components/ActionMenu.vue), [ConfirmationModal.vue](../../../apps/web/src/components/ConfirmationModal.vue), [HelpDrawer.vue](../../../apps/web/src/components/HelpDrawer.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,9 +20,9 @@ Use a tooltip for a brief explanation, a popover for anchored contextual content
 
 | Component             | Standard                                                | Content                                                                                                                 |
 | --------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Tooltip               | 12/18px, 8px vertical / 12px horizontal, 8px radius     | Raised fill, control boundary, popover shadow; 8px anchor gap                                                           |
-| Action list / popover | 240px width bounded by viewport; 4px inset, 8px radius  | Adjacent full-width rows, 32px minimum desktop / 44px phone, 4px vertical / 12px horizontal inset; no individual bezels |
-| Editor dialog         | 820px max width; 16px radius                            | 24px sections; persistent header and actions                                                                            |
+| Tooltip               | 12/18px, 8px vertical / 12px horizontal, 4px radius     | Raised fill, control boundary, popover shadow; 8px anchor gap                                                           |
+| Action list / popover | 240px width bounded by viewport; 4px inset, 4px radius  | Adjacent full-width rows, 32px minimum desktop / 44px phone, 4px vertical / 12px horizontal inset; no individual bezels |
+| Editor dialog         | 820px max width; 8px radius                             | 24px sections; persistent header and actions                                                                            |
 | Confirmation dialog   | 430px max width; 24px inset                             | Resource name, consequence, safe cancel and explicit action                                                             |
 | Drawer                | Help: 620px max width; full dynamic viewport height     | Right edge, square viewport attachment, accessible close icon                                                           |
 | Backdrop              | `--color-backdrop`                                      | Blocks interaction with the underlying task                                                                             |
@@ -36,7 +36,7 @@ Tooltips appear for hover and focus, use `aria-describedby`, contain no interact
 
 ## Contextual action menus
 
-Use one raised floating surface with adjacent left-aligned action rows. Each row has a 4px corner
+Use one raised floating surface with adjacent left-aligned action rows. Each row has a 2px corner
 radius, 14/20px regular text and no visible resting border or fill. Use an 18px leading icon on every action row
 consistently; do not add icons to only some rows without a reserved icon column. Separate destructive
 actions with a 1px structural divider and 4px margins. Destructive text is danger-colored, with a
@@ -52,7 +52,7 @@ specimen and live popup use identical menu-row markup and styling.
 
 Top-level persisted deletion always requires the styled modal. State the resource name and consequence; unsaved changes do not block access to Delete. Nested draft-local removals use the [two-step action](actions.md). Draft protection is described in [editors](editor.md).
 
-Use 16px minimum viewport gutters, including safe-area insets in production. Mobile editors may use 8px gutters as shown in the reference full-height composition, with internal controls 44px tall. The body scrolls inside a bounded overlay; the header and footer remain visible. Do not animate surrounding heavy layout continuously; follow [motion rules](../docs/behavior.md).
+Use 16px minimum viewport gutters, including safe-area insets in production. Mobile editors may use 8px gutters as shown in the reference full-height composition, with internal controls 44px tall. The body scrolls inside a bounded overlay; the header and footer remain visible. Do not animate surrounding heavy layout continuously; follow [motion rules](../docs/motion.md).
 
 All numeric values are CSS pixels at the default root size unless expressed in rem. Exact token values are indexed in [the token reference](../docs/tokens.md).
 

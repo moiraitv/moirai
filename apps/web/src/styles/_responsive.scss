@@ -248,7 +248,6 @@
 	}
 
 	.metric-grid,
-
 	.fallback-filler-content {
 		grid-template-columns: 1fr;
 	}
@@ -342,9 +341,9 @@
 	}
 
 	.template-row {
-		min-height: 210px;
+		min-height: 0;
 		padding: 16px;
-		grid-template-columns: 45px minmax(0, 1fr) 34px;
+		grid-template-columns: 45px minmax(0, 1fr) 44px;
 		grid-template-rows: auto auto auto;
 		align-items: start;
 	}
@@ -363,12 +362,23 @@
 	}
 
 	.template-row-duration {
-		grid-column: 1 / 2;
-		display: grid;
+		grid-column: 1 / -1;
+		grid-row: 2;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.template-row-menu {
+		grid-column: 3;
+		grid-row: 1;
+		align-self: center;
 	}
 
 	.template-mini-track {
 		grid-column: 1 / -1;
+		grid-row: 3;
 		width: 100%;
 		height: 17px;
 	}
@@ -843,10 +853,10 @@
 		width: 44px;
 		min-height: 44px;
 		padding: 0;
+	}
 
-		> span {
-			display: none;
-		}
+	.resource-editor-danger-actions .button > span {
+		display: none;
 	}
 
 	.encoding-profile-view-actions.resource-editor-action-bar .button {
@@ -1202,7 +1212,6 @@
 	}
 }
 
-
 @media (max-width: 680px) {
 	.backup-restore-modal .resource-editor-action-bar {
 		.form-actions {
@@ -1276,6 +1285,172 @@
 @media (max-width: 600px) {
 	.backup-settings-panel .backup-automatic-header {
 		grid-template-columns: minmax(0, 1fr);
-		padding: 16px;
+		padding: 16px 48px 16px 16px;
+	}
+}
+
+@media (max-width: 600px) {
+	.button,
+	.toolbar-button,
+	.square-button,
+	.icon-button,
+	.catalog-icon-button,
+	.view-switch button,
+	.pagination-placeholder button,
+	.genre-rule-split button,
+	.filter-duration-unit input {
+		min-height: var(--target-touch);
+	}
+	.icon-button,
+	.square-button,
+	.catalog-icon-button {
+		min-width: var(--target-touch);
+	}
+	.epg-feed-card {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+	.epg-feed-actions {
+		grid-column: 2;
+	}
+	.sequence-entry {
+		grid-template-columns: 24px minmax(0, 1fr) 44px 44px;
+		gap: 6px;
+	}
+	.sequence-entry-order {
+		grid-column: 4;
+		grid-row: 1;
+	}
+	.sequence-entry-order .icon-button {
+		min-height: var(--target-touch);
+	}
+	.sequence-entry > .two-step-action-button {
+		grid-column: 3;
+		grid-row: 1;
+		justify-self: center;
+	}
+	.sequence-entry-fields {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.sequence-entry-ordinal {
+		grid-row: 1;
+	}
+	.sequence-entry-selection {
+		flex-wrap: wrap;
+	}
+	.sequence-entry-selection select {
+		flex-basis: 100%;
+	}
+	.sequence-entry-selection input {
+		width: 60px;
+	}
+	.page-help-button {
+		width: 24px;
+		height: 24px;
+		min-width: 24px;
+		min-height: 24px;
+	}
+}
+
+@media (max-width: 600px) {
+	.resource-editor-header {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+	}
+	.resource-editor-heading-copy {
+		padding-right: 44px;
+	}
+	.resource-editor-header-trailing {
+		display: contents;
+	}
+	.resource-editor-close {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+	}
+	.resource-editor-usage-slot:not(:empty) {
+		padding: 0;
+		border: 0;
+		justify-self: start;
+	}
+	.resource-editor-save-actions .button > span:not(.two-step-content, .two-step-confirmation) {
+		display: inline;
+	}
+	.resource-editor-save-actions .two-step-content {
+		display: contents;
+	}
+	.resource-editor-save-actions .two-step-confirmation {
+		display: flex;
+	}
+	.program-sequence-panel {
+		padding: 8px;
+	}
+}
+
+@media (max-width: 680px) {
+	.resource-editor-save-actions .button {
+		flex-basis: auto;
+		width: auto;
+		min-width: 64px;
+		padding-inline: 10px;
+	}
+}
+
+@media (max-width: 380px) {
+	.templates-pagination {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.templates-pagination > select,
+	.template-page-buttons {
+		justify-self: center;
+		max-width: 100%;
+	}
+}
+
+@media (max-width: 600px) {
+	.ai-settings-panel .settings-card-heading {
+		display: grid;
+		grid-template-columns: 24px minmax(0, 1fr);
+		align-items: start;
+	}
+
+	.ai-enable {
+		grid-column: 2;
+		margin-left: 0;
+	}
+}
+
+@media (pointer: coarse), (max-width: 600px) {
+	.catalog-toolbar {
+		--catalog-control-height: max(
+			var(--control-height),
+			calc(var(--target-touch) + 2 * var(--border-width))
+		);
+	}
+}
+
+@media (pointer: coarse) {
+	.library-settings-checks > label.check {
+		min-height: var(--target-touch);
+	}
+}
+
+@media (pointer: coarse), (max-width: 600px) {
+	:root {
+		--control-height: var(--target-touch);
+	}
+
+	input:not(
+		[type='checkbox'],
+		[type='radio'],
+		[type='range'],
+		[type='color'],
+		[type='file'],
+		[type='hidden']
+	),
+	select,
+	.settings-enable {
+		min-height: var(--target-touch);
 	}
 }

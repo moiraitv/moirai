@@ -1,7 +1,9 @@
 /** Capture the rendered positions of the form sections surrounding the disclosure. */
 export function captureDisclosureLayout(root: HTMLElement): Map<HTMLElement, DOMRect> {
 	const settings = root.closest('[data-disclosure-layout]');
-	const sections = settings?.querySelectorAll('[data-disclosure-item]') ?? root.closest('.resource-editor-scroll')?.children ?? [];
+	const marked = settings?.querySelectorAll('[data-disclosure-item]');
+	const sections = settings ? (marked?.length ? marked : settings.children)
+		: root.closest('.resource-editor-scroll')?.children ?? root.parentElement?.children ?? [];
 	return new Map(Array.from(sections).filter((element): element is HTMLElement =>
 		element instanceof HTMLElement && !element.contains(root)).map((element) => [element, element.getBoundingClientRect()]));
 }

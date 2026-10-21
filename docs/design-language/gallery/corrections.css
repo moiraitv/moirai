@@ -124,6 +124,15 @@
 	height: 100%;
 }
 
+.backup-delete.icon {
+	color: var(--color-danger);
+}
+.backup-delete.icon:hover,
+.backup-delete.icon:active {
+	color: var(--color-danger);
+	background-color: var(--color-danger-surface);
+}
+
 .settings-readiness {
 	display: flex;
 	align-items: center;
@@ -134,7 +143,7 @@
 .settings-readiness-title {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: var(--space-2);
 	margin-right: auto;
 	flex-wrap: wrap;
 }
@@ -302,7 +311,7 @@
 }
 .reference-disclosure-copy small {
 	color: var(--color-secondary);
-	margin-top: 4px;
+	margin-top: var(--title-subtitle-gap);
 	font-size: var(--font-body);
 	font-weight: 400;
 }
@@ -627,4 +636,89 @@
 		height: var(--target-touch);
 		min-height: var(--target-touch);
 	}
+}
+
+.ai-reference-heading {
+	position: relative;
+	justify-content: space-between;
+	width: calc(100% + 2 * var(--space-6));
+	margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) 0;
+	padding: var(--space-6) 80px var(--space-6) var(--space-6);
+	border-bottom: 1px solid var(--color-line);
+}
+.ai-reference-heading .settings-card-heading {
+	flex: 1;
+	min-width: 0;
+}
+.ai-reference-heading .ai-reference-enable {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	flex: none;
+	margin-left: auto;
+}
+.ai-reference-title,
+.settings-automatic-title {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+.ai-reference-handle,
+.settings-automatic-handle {
+	position: absolute;
+	inset: 0 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	padding: 0;
+	border: 0;
+	border-left: 1px solid var(--color-line);
+	border-radius: 0;
+	background: transparent;
+}
+.ai-reference-handle[aria-expanded='false'] img,
+.settings-automatic-handle[aria-expanded='false'] img {
+	transform: rotate(-90deg);
+}
+.ai-reference-advanced {
+	padding: 0;
+	border: 0;
+}
+@media (max-width: 600px) {
+	.ai-reference-heading {
+		width: calc(100% + 2 * var(--space-4));
+		margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+		padding: var(--space-4) 64px var(--space-4) var(--space-4);
+	}
+}
+
+.settings-card-title > h2,
+.settings-card-title > h3 {
+	margin: 0;
+	min-width: 0;
+}
+.settings-automatic-header {
+	position: relative;
+	padding-right: 52px;
+}
+.settings-automatic-heading {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	min-width: 0;
+}
+.settings-automatic-heading > div {
+	min-width: 0;
+}
+.settings-automatic-title {
+	min-height: 32px;
+	text-align: left;
+}
+.settings-automatic-handle {
+	top: -16px;
+	right: -16px;
+	bottom: -16px;
 }

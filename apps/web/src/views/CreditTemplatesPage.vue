@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDisclosure from '../components/FormDisclosure.vue';
 import { useResourceDraft } from '../composables/useResourceDraft';
 import { useRoute } from 'vue-router';
 import { readWithRetry } from '../read-recovery';
@@ -14,7 +15,7 @@ import { api } from '../api';
 import { errorMessage } from '../error-message';
 import { requestConfirmation } from '../confirmation';
 import { closeUnsavedEditor } from '../unsaved-editor';
-import PageHeader from '../components/PageHeader.vue';
+import ManagementPageHeader from '../components/ManagementPageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
@@ -196,7 +197,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value &&
 
 <template>
 	<div>
-		<PageHeader title="Credit Templates" description="Create styled artist, song, and album credits for music videos."><button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New template</button></PageHeader>
+		<ManagementPageHeader section="Playback" title="Credit Templates" description="Create styled artist, song, and album credits for music videos."><button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New template</button></ManagementPageHeader>
 		<p v-if="error" class="notice error">{{ error }} <button type="button" class="button secondary" @click="load">Retry</button></p>
 		<LoadingState v-if="!loaded && !error" />
 		<div v-if="loaded" class="credit-template-list">
@@ -216,7 +217,7 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value &&
 						<p v-if="readonlyTemplate" class="credit-template-info"><Info :size="22" aria-hidden="true" /><span>Built-in templates are read-only. Duplicate this template to customize its credits.</span></p>
 						<label><span class="credit-template-source-label"><FileCode :size="20" aria-hidden="true" />Credit template (Liquid)</span><textarea v-model="form.source" :readonly="readonlyTemplate" :disabled="busy" class="credit-template-source" :maxlength="MAX_CREDIT_TEMPLATE_LENGTH" spellcheck="false" required /></label>
 						<p class="credit-template-syntax-help">Use <a href="https://liquidjs.com/tutorials/intro-to-liquid.html" target="_blank" rel="noopener noreferrer">Liquid expressions and tags</a> to generate subtitles in <a href="https://aegisub.org/docs/latest/ass_tags/" target="_blank" rel="noopener noreferrer">Advanced SubStation Alpha (ASS) format</a>. Text values are escaped automatically. Use <code>ass_time</code> to format seconds. Credits use fixed source time and require Burn mode.</p>
-						<details :open="metadataOpen" @toggle="metadataOpen = ($event.target as HTMLDetailsElement).open"><summary>Available metadata and fonts</summary><p><code>resolution.width</code>, <code>resolution.height</code>, <code>title</code>, <code>artist</code>, <code>all_artists</code>, <code>album</code>, <code>track</code>, <code>plot</code>, <code>release_date.year</code>, <code>studios</code>, <code>directors</code>, <code>duration.total_seconds</code>. Guard missing release dates with an if condition. Font names must match fonts installed on the server or in the channel’s subtitle fonts folder.</p></details>
+						<FormDisclosure v-model:open="metadataOpen" plain><template #summary>Available metadata and fonts</template><p><code>resolution.width</code>, <code>resolution.height</code>, <code>title</code>, <code>artist</code>, <code>all_artists</code>, <code>album</code>, <code>track</code>, <code>plot</code>, <code>release_date.year</code>, <code>studios</code>, <code>directors</code>, <code>duration.total_seconds</code>. Guard missing release dates with an if condition. Font names must match fonts installed on the server or in the channel’s subtitle fonts folder.</p></FormDisclosure>
 						<CreditTemplatePreview :source="form.source" @busy="previewBusy = $event" />
 						<p v-if="editorError" class="notice error">{{ editorError }}</p>
 					</ResourceUsage>

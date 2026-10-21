@@ -24,6 +24,10 @@ behavior contract because CSS custom properties cannot be used directly in media
 | `--color-accent-hover`      | `#55e4be`                                                             |
 | `--color-accent-pressed`    | `#10b98d`                                                             |
 | `--color-on-accent`         | `#04251d`                                                             |
+| `--color-primary`           | `#007b66`                                                             |
+| `--color-primary-hover`     | `#00816c`                                                             |
+| `--color-primary-pressed`   | `#006653`                                                             |
+| `--color-on-primary`        | `#ffffff`                                                             |
 | `--color-info`              | `#82baff`                                                             |
 | `--color-info-surface`      | `#102b46`                                                             |
 | `--color-success`           | `#69dfb3`                                                             |
@@ -71,10 +75,10 @@ behavior contract because CSS custom properties cannot be used directly in media
 | `--space-10`                | `40px`                                                                |
 | `--space-12`                | `48px`                                                                |
 | `--space-16`                | `64px`                                                                |
-| `--radius-small`            | `4px`                                                                 |
-| `--radius-control`          | `8px`                                                                 |
-| `--radius-panel`            | `12px`                                                                |
-| `--radius-dialog`           | `16px`                                                                |
+| `--radius-small`            | `2px`                                                                 |
+| `--radius-control`          | `4px`                                                                 |
+| `--radius-panel`            | `6px`                                                                 |
+| `--radius-dialog`           | `8px`                                                                 |
 | `--radius-pill`             | `999px`                                                               |
 | `--border-width`            | `1px`                                                                 |
 | `--focus-width`             | `2px`                                                                 |

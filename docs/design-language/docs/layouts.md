@@ -30,14 +30,15 @@ Settings variants: [AI](../images/layouts/settings-ai.png), [Backups](../images/
 4. Specify first-load, loaded-empty, populated and failed states. Define the exact scope of selection,
    validation, saving, deletion and dismissal. Keep user-authored ordering and spelling.
 5. Check keyboard order, control names, visible focus, contrast, 320px width, 200% text scaling,
-   safe areas, long content, body scrolling and reduced motion.
+   safe areas, long content and body scrolling. Apply the [motion standard](motion.md): review opening,
+   closing, affected layout, focus and rapid reversal with normal and reduced motion.
 6. Add a representative specimen if the screen introduces a reusable pattern. Capture it with the
    existing command, inspect it at actual size, and update the relevant guidance and links together.
 
 ## What to avoid
 
 Do not make every section a raised card, put several primary actions in one task area, replace
-visible labels with placeholders, encode status only through color, use white small text on mint,
+visible labels with placeholders, encode status only through color, use white small text on bright mint accent fills,
 show zero counts while loading, dismiss errors on a timer, or place save controls beyond a long
 scrolling body. Avoid oversized decorative headings on dense operational screens and tiny controls
 on touch layouts.

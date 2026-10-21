@@ -77,10 +77,11 @@ test('handbook coverage, local references and token table remain complete', asyn
 	for (const [key, value] of tokens) {
 		assert.equal(documented.get(key), value, `Token table: ${key}`);
 	}
-	for (const name of ['base', 'content', 'layouts', 'current-ui', 'surfaces', 'radius-trial', 'library', 'audit', 'help', 'corrections']) {
+	for (const name of ['base', 'content', 'layouts', 'current-ui', 'surfaces', 'library', 'audit', 'help', 'corrections']) {
 		const source = await readFile(path.join(referenceRoot, `gallery/${name}.css`), 'utf8');
+		const declared = new Set([...tokens.keys(), ...[...source.matchAll(/(--[\w-]+)\s*:/g)].map(([, key]) => key)]);
 		for (const [, key] of source.matchAll(/var\((--[\w-]+)/g)) {
-			assert.ok(tokens.has(key), `Undefined token: ${key}`);
+			assert.ok(declared.has(key), `Undefined token: ${key}`);
 		}
 	}
 });
@@ -100,7 +101,7 @@ test('semantic palette meets AA text contrast and essential boundary contrast', 
 			}
 		}
 	}
-	for (const [text, surface] of [['info', 'info-surface'], ['danger', 'danger-surface'], ['warning', 'warning-surface'], ['purple', 'purple-surface'], ['success', 'selected'], ['on-accent', 'accent'], ['on-accent', 'accent-hover'], ['on-accent', 'accent-pressed']]) {
+	for (const [text, surface] of [['info', 'info-surface'], ['danger', 'danger-surface'], ['warning', 'warning-surface'], ['purple', 'purple-surface'], ['success', 'selected'], ['on-accent', 'accent'], ['on-accent', 'accent-hover'], ['on-accent', 'accent-pressed'], ['on-primary', 'primary'], ['on-primary', 'primary-hover'], ['on-primary', 'primary-pressed']]) {
 		for (const background of backgrounds(color[surface], true)) {
 			assert.ok(contrast(color[text], background) >= 4.5, `${text} on ${surface} / ${background}`);
 		}
@@ -111,6 +112,21 @@ test('semantic palette meets AA text contrast and essential boundary contrast', 
 			assert.ok(contrast(color.accent, background) >= 3, `Focus on ${surface}`);
 		}
 	}
+	await visit('?family=actions');
+	const primary = page.locator('button.primary').first();
+	await page.mouse.move(1400, 950);
+	for (const state of ['primary', 'primary-hover', 'primary-pressed']) {
+		if (state === 'primary-hover') {
+			await primary.hover();
+		}
+		if (state === 'primary-pressed') {
+			await page.mouse.down();
+		}
+		await expect(primary).toHaveCSS('color', 'rgb(255, 255, 255)');
+		await expect(primary).toHaveCSS('background-color', `rgb(${color[state].match(/[\da-f]{2}/gi).map(value => parseInt(value, 16)).join(', ')})`);
+	}
+	await page.mouse.move(1400, 950);
+	await page.mouse.up();
 });
 
 test('all rendered families and layouts load local Inter and images without page overflow', async () => {
@@ -236,7 +252,7 @@ test('editor protects dirty drafts, resets to latest saved baseline and confirms
 	assert.match(await page.getByRole('status').textContent(), /prototype only/);
 });
 
-test('current UI compositions preserve source-owned controls and tight titles without losing the radius trial', async () => {
+test('current UI compositions preserve source-owned controls, tight titles and the permanent corner scale', async () => {
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await visit('?layout=catalog');
 	const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
@@ -660,7 +676,7 @@ test('source navigation preserves destinations and separates group links from mo
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await visit('?layout=catalog');
 	const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
-	for (const label of ['Status', 'Quick Setup', 'Guide', 'Channels', 'Pre-Rolls', 'Mid-Rolls', 'Post-Rolls', 'Tail Fillers']) {
+	for (const label of ['Status', 'Quick Setup', 'Guide', 'Channels', 'Filler', 'Playback']) {
 		assert.equal(await navigation.getByRole('link', { name: label === 'Status' ? /^Status/ : label, exact: label !== 'Status' }).count(), 1);
 	}
 	assert.equal(await page.getByRole('link', { name: 'User Guide', exact: true }).count(), 1);
@@ -768,7 +784,7 @@ test('Sequence editor protects drafts, validates counts and retains approved ste
 		await expect(form.locator('[data-program-save]')).toBeDisabled();
 		await form.getByLabel('Selections', { exact: true }).first().fill('2');
 		await form.getByRole('button', { name: 'Move Evening cinema down', exact: true }).click();
-		await expect(form.locator('.sequence-identity strong').first()).toHaveText('Night flight');
+		await expect(form.getByRole('combobox', { name: 'Program', exact: true }).first()).toHaveValue('Night flight');
 		await expect(form.locator('.sequence-number').first()).toHaveText('1');
 		await form.getByRole('button', { name: 'Shuffled blocks', exact: true }).click();
 		await expect(form.locator('[data-sequence-seed]')).toBeVisible();
@@ -791,7 +807,7 @@ test('AI custom-provider dependencies and structured log filtering remain local 
 	await visit('?layout=settings');
 	await page.getByRole('tab', { name: 'AI', exact: true }).click();
 	await page.locator('[data-ai-provider]').selectOption('Custom');
-	await page.getByText('Advanced', { exact: true }).click();
+	await page.getByRole('button', { name: 'Toggle advanced AI settings', exact: true }).click();
 	await expect(page.getByLabel('Endpoint base URL', { exact: true })).toBeVisible();
 	await page.getByRole('combobox', { name: 'API format', exact: true }).selectOption('Anthropic Messages');
 	await expect(page.getByRole('combobox', { name: 'JSON mode', exact: true })).toBeHidden();
@@ -857,6 +873,11 @@ test('review corrections retain shell geometry, separate Status/Logs and popup e
 		for (const layout of ['status', 'logs']) {
 			await visit(`?layout=${layout}`);
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, layout);
+			const help = page.getByRole('button', { name: `Help with ${layout === 'status' ? 'Status' : 'Logs'}`, exact: true });
+			await help.click();
+			await expect(page.locator('#help-dialog').getByRole('link', { name: 'Open full guide' })).toHaveAttribute('href', /operations\.status\.html/);
+			await page.keyboard.press('Escape');
+			await expect(help).toBeFocused();
 		}
 	}
 	for (const width of [1440, 390, 320]) {

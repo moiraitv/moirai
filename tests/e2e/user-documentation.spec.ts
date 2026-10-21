@@ -1,3 +1,4 @@
+import './documentation/management-navigation';
 import './documentation/settings-help';
 import './documentation/backups';
 import './documentation/playback-progress';
@@ -177,6 +178,8 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 		await page.locator('.sequence-entry input').nth(index).fill(index === 0 ? '2' : '1');
 	}
 	await expect(page.locator('.sequence-entry')).toHaveCount(3);
+	await page.locator('.sequence-entry input').last().blur();
+	await page.mouse.move(0, 0);
 	await page.setViewportSize({ width: 1440, height: 1600 });
 	await expect(page.locator('.sequence-guide-segment').first()).toBeAttached();
 	await expect(page.locator('.sequence-guide-preview').getByRole('status')).toHaveCount(0);
@@ -702,6 +705,10 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	await enabledSwitch.press('Space');
 	await expect(enabledSwitch).toBeChecked();
 	await expect(broadcastEditor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+	// Capture the resting editor after checking keyboard interaction.
+	await enabledSwitch.blur();
+	await page.mouse.move(0, 0);
+	await expect(enabledSwitch).not.toBeFocused();
 	await capture(page, 'channel-editor.png');
 	await captureSection(page, broadcastEditor.locator('.channel-logo-editor'), 'channel-editor-logo.png');
 	await broadcastEditor.getByRole('button', { name: /Channel fallback override/ }).click();
@@ -928,7 +935,7 @@ test('captures music-video credit templates and verifies draft actions', { tag: 
 test('captures guide templates', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	await seedSchedule(page, documentationServer.directory);
 	await page.goto('/playback/guide-templates');
-	await expect(page.getByRole('heading', { name: 'Guide Templates', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Playback sections' }).getByRole('link', { name: 'Guide Templates', exact: true })).toBeVisible();
 	await capture(page, 'guide-templates.png');
 	await page.getByRole('button', { name: 'View', exact: true }).click();
 	const view = page.getByRole('dialog', { name: 'View Guide Template' });

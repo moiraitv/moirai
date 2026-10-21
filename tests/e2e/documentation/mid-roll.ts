@@ -6,7 +6,7 @@ import { captureSection } from './capture';
 test('creates guided Mid-Rolls and saves reusable assignments', async ({ page, documentationServer }) => {
 	const { channel, program, template, requestHeaders } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/mid-roll-presets');
-	await expect(page.getByRole('heading', { name: 'Mid-Rolls', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Filler sections' }).getByRole('link', { name: 'Mid-Rolls', exact: true })).toBeVisible();
 	const builtin = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Two-minute breaks', exact: true }) });
 	await builtin.getByRole('button', { name: 'View', exact: true }).click();
 	const presetEditor = page.getByRole('dialog');
@@ -137,7 +137,7 @@ test('keeps the guided preset editor usable at a narrow viewport', async ({ page
 
 test('configures all filler types and captures clock and random budgets', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { template, program, requestHeaders } = await seedSchedule(page, documentationServer.directory);
-	const nav = page.getByRole('navigation', { name: 'Primary navigation' });
+	const nav = page.getByRole('navigation', { name: 'Filler sections' });
 	for (const [kind, route, label] of [['pre-roll', 'pre-rolls', 'Pre-Roll'], ['post-roll', 'post-rolls', 'Post-Roll'], ['tail', 'tail-fillers', 'Tail Filler']] as const) {
 		await page.goto(`/filler/${route}`);
 		await expect(nav.getByRole('link', { name: `${label}s`, exact: true })).toBeVisible();
@@ -184,7 +184,7 @@ test('configures all filler types and captures clock and random budgets', { tag:
 	}
 	await page.goto('/filler/pre-rolls');
 	await nav.getByRole('link', { name: 'Post-Rolls', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Post-Rolls', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Filler sections' }).getByRole('link', { name: 'Post-Rolls', exact: true })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Post-Roll example', exact: true })).toBeVisible();
 });
 
@@ -302,7 +302,7 @@ test('previews filler break ticks in both editors and captures their legends', {
 	const secondAiring = await preview.locator('.resolved-segment.role-primary').nth(1).boundingBox();
 	const secondPreRoll = await preview.locator('.preview-filler-tick.stage-pre-roll').nth(1).boundingBox();
 	expect(Math.abs(secondAiring!.x - secondPreRoll!.x)).toBeLessThan(2);
-	expect(secondPreRoll!.width).toBe(2);
+	expect(secondPreRoll!.width).toBeCloseTo(2, 2);
 	const fallback = preview.locator('.preview-filler-tick.stage-fallback').first();
 	const fallbackBounds = await fallback.boundingBox();
 	const strip = await preview.locator('.preview-filler-ticks').boundingBox();

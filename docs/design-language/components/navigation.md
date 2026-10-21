@@ -6,11 +6,11 @@
 
 ## Current UI baseline
 
-Preserve the 244px desktop rail, current wordmark and “IPTV Scheduler” tagline, grouped Libraries / Scheduling / Filler / Playback navigation, resource names, and service readiness. Mobile replaces the rail with navigation access rather than inventing different destinations.
+Preserve the 244px desktop rail, current wordmark and “IPTV Scheduler” tagline, grouped Libraries / Scheduling navigation and single Filler / Playback destinations, resource names, and service readiness. Mobile replaces the rail with navigation access rather than inventing different destinations.
 
 Source owners: [App.vue](../../../apps/web/src/App.vue), [PageHeader.vue](../../../apps/web/src/components/PageHeader.vue), [ResourceEditorHeader.vue](../../../apps/web/src/components/ResourceEditorHeader.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -21,12 +21,12 @@ Provide a stable frame for the active resource and its next task. The shell owns
 | Component      | Geometry and appearance                                                          | Content rules                                                           |
 | -------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | Desktop rail   | `--sidebar-width` 244px; navigation background; 16px horizontal / 20px top inset | Brand, named destinations, service state at bottom                      |
-| Destination    | 44px minimum, 12px inset, 12px icon gap, 8px radius                              | 20px icon plus 14px label; current page has mint edge and selected fill |
+| Destination    | 44px minimum, 12px inset, 12px icon gap, 4px radius                              | 20px icon plus 14px label; current page has mint edge and selected fill |
 | Page header    | 32/40px title, 2px description gap, 24px action gap                              | Main action aligned top right on desktop                                |
-| Panel          | 24px inset, 16px internal gap, 12px radius, structural border                    | Use one panel per coherent responsibility                               |
+| Panel          | 24px inset, 16px internal gap, 6px radius, structural border                     | Use one panel per coherent responsibility                               |
 | Section header | 18/26px, 600; 16px before body                                                   | Optional compact action at right                                        |
 | Section links  | 24px gap; 12px vertical inset; 2px active underline                              | `aria-current="page"` for the active destination                        |
-| Disclosure     | 16px inset; 8px radius; 12px expanded-content gap                                | Native `details` / `summary`, sentence-case task label                  |
+| Disclosure     | 16px inset; 4px radius; 12px expanded-content gap                                | Shared animated disclosure; sentence-case task label                    |
 
 Settings section headings may include a plain 24px outline icon. Do not surround heading icons with a decorative bezel, background tile or oversized empty frame. Preserve the existing section composition when standardizing its typography and spacing.
 
@@ -45,7 +45,7 @@ Open full guide link. The self-contained gallery copies the existing bundled top
 
 ## States and behavior
 
-The current destination uses `--color-selected`, a mint edge and `aria-current`; hover uses `--color-hover`, press uses the selected surface, and keyboard focus uses the global ring. Apply the hover fill and brighter text/icon color to destination rows and disclosure headings; retain the mint selected fill and edge when the current destination is hovered. Decorative destination examples receive the same hover appearance. [Layout hover example](../images/layouts/catalog-navigation-hover.png). Do not make the entire rail mint. A collapsed disclosure shows its title and indicator; expanded content stays in reading order. Native summary supports Enter and Space. Section links navigate between locations. The Settings layout demonstrates actual in-place tabs.
+The current destination uses `--color-selected`, a mint edge and `aria-current`; hover uses `--color-hover`, press uses the selected surface, and keyboard focus uses the global ring. Apply the hover fill and brighter text/icon color to destination rows and disclosure headings; retain the mint selected fill and edge when the current destination is hovered. Decorative destination examples receive the same hover appearance. [Layout hover example](../images/layouts/catalog-navigation-hover.png). Do not make the entire rail mint. A collapsed disclosure shows its title and indicator; expanded content stays in reading order. Disclosure triggers support Enter and Space. Production uses the shared animated `FormDisclosure`, including its compact plain presentation; the gallery retains bounded native examples. Follow the [motion standard](../docs/motion.md) for synchronized layout movement, retained drafts, focus and reduced motion. Section links navigate between locations. The Settings layout demonstrates in-place tabs. Production gives each section a permalink (`/settings/playback`, `/settings/ai`, `/settings/backups`) while keeping all panels mounted to retain drafts. Tabs expose native links for opening another browser tab; arrow-key selection and history retain the current Settings session. Older query-string links redirect to the corresponding section.
 
 For an actual in-place tab interface, use a tablist with one tab stop, arrow-key movement, Home/End, associated tabpanels and retained focus. Choose automatic activation only when panel switching is immediate. Never add tab roles to ordinary page links.
 
@@ -69,19 +69,44 @@ Use [the behavior contract](../docs/behavior.md) for overlay focus and motion. P
 
 All numeric values are CSS pixels at the default root size unless expressed in rem. Exact token values are indexed in [the token reference](../docs/tokens.md).
 
+Use the same help alignment across page titles, resource-editor titles, Settings card headings and inline playback status: an 8px gap, a 24px control with a 20px glyph, and vertical centering beside the associated text. Keep the larger invisible hit target and prevent the help control from shrinking beside wrapped titles. Reset heading margins inside the shared title row; put exterior heading or subtitle spacing on the containing row or subtitle instead.
+
 Settings has no page-level help button. Put an independent question-mark button after each card heading, including beside a disclosure heading without nesting it inside the disclosure button. It opens only that card’s section in the existing help drawer. Keep **Open full guide** in the drawer footer and link it to the same section on the tab’s dedicated guide page. The guide sidebar groups Playback, AI, and Backups under Settings. Closing help restores focus to its opener and preserves drafts and disclosure state.
 
 ## Shell inventory
 
 Use the current order: Status and playback summary; Quick Setup; Guide; Channels; Scheduling
-(Channel Schedules, Templates, Programs); Filler (Pre-Rolls, Mid-Rolls, Post-Rolls, Tail Fillers);
-Libraries (configured library names and loading/failure/empty variants); Playback (Credit Templates,
-Encoding Profiles, Guide Templates); Settings; Logs. Keep User Guide and the account/sign-out footer.
+(Channel Schedules, Templates, Programs);
+Libraries (configured library names and loading/failure/empty variants); Filler; Playback; Settings; Logs. Keep User Guide and the account/sign-out footer.
 Group heading links and expansion buttons have independent targets and semantics. A library scan
 indicator belongs beside its configured library, not an invented global readiness footer.
 
 Status summaries retain their source mint color and .67rem type below the title. Status rows never
-shrink within the scrolling navigation. Quick Setup has 8px spacer gaps rather than divider lines.
+shrink within the scrolling navigation. Quick Setup has 8px spacer gaps rather than divider lines. The scrollable application navigation retains a 16px (`--space-4`) bottom gutter after Logs, including at the end of its scroll range, before the User Guide divider.
 Keep separate full-sidebar-width rules above User Guide and above the account row; the account text expands and the
 chevron/sign-out remain aligned at the right. Status and Logs navigate to separate layouts. The account row keeps a flexible identity column
 and independent chevron/sign-out targets.
+
+## Filler and Playback collection tabs
+
+Filler and Playback each have one sidebar entry with no expansion control or child links. Their
+shared page heading is followed by a single horizontally scrollable row of icon-and-label tabs.
+Filler contains Pre-Rolls, Mid-Rolls, Post-Rolls and Tail Fillers; Playback contains Credit Templates,
+Encoding Profiles and Guide Templates. Preserve the existing default destinations: Pre-Rolls and
+Encoding Profiles respectively.
+
+These are route-backed collection links, not an in-place tablist: retain native link keyboard and
+open-in-new-tab behavior, use `aria-current="page"` for the active collection, and keep the active
+underline while an editor within that collection is open. Preserve all existing collection/editor
+paths, browser history, contextual help and draft guards. Restore focus to the activated collection
+link after navigation so Tab and Shift+Tab continue within the row. Modified clicks retain native
+link behavior. Inactive collections are not mounted.
+Use the Settings tab rhythm: 48px minimum height, 24px gap, 8px icon gap, 18px icons, muted text and
+2px mint active underline. Hover highlights the label and surface; the shared focus ring remains
+visible. Overflow scrolls within the row at narrow widths without shrinking targets.
+
+Production owner: [ManagementPageHeader.vue](../../../apps/web/src/components/ManagementPageHeader.vue).
+The standalone gallery represents these destinations in its shell; full Filler/Playback collection
+bodies remain application-owned rather than simulated layouts.
+
+AI Settings uses the same separate switch and right-edge disclosure handle as Automatic Backup. Put the Enable AI switch and the 44px advanced-disclosure handle in the AI provider header, matching Automatic Backup. The provider title and right handle control the same optional fields; keep Provider and API Key visible, and retain advanced drafts when collapsed. Do not add a separate Advanced card or row. Keep the header divider visible with the same thickness in both disclosure states. The switch reflects saved activation, stays disabled during work, and preserves its state on failure. Enabling requires a valid, unchanged saved profile; saving provider changes can also activate AI.

@@ -126,18 +126,86 @@ test('sorts saved backups and keeps the populated table within the mobile panel'
 	const typography = await panel.locator('.backup-automatic-header').evaluate(element => {
 		const title = element.querySelector('.backup-automatic-copy strong')!;
 		const helper = element.querySelector('.backup-automatic-copy small')!;
+		const icon = element.querySelector('.backup-automatic-heading > .settings-card-icon')!;
+		const peer = element.closest('.backup-settings-panel')!.querySelector('.backup-section-title')!;
+		const peerTitle = peer.querySelector('h3')!;
+		const peerIcon = peer.querySelector('.settings-card-icon')!;
 		const track = element.querySelector('.channel-enabled-track')!;
 		const knob = getComputedStyle(track, '::before');
 		return {
 			titleSize: parseFloat(getComputedStyle(title).fontSize), helperSize: parseFloat(getComputedStyle(helper).fontSize),
 			inset: helper.getBoundingClientRect().left - title.getBoundingClientRect().left,
+			titleGap: title.getBoundingClientRect().left - icon.getBoundingClientRect().right,
+			peerTitleGap: peerTitle.getBoundingClientRect().left - peerIcon.getBoundingClientRect().right,
 			trackHeight: track.getBoundingClientRect().height,
 			knobHeight: parseFloat(knob.height), padding: parseFloat(getComputedStyle(track).paddingTop),
 		};
 	});
 	expect(typography.helperSize).toBeLessThan(typography.titleSize);
 	expect(typography.inset).toBe(0);
+	expect(typography.titleGap).toBe(typography.peerTitleGap);
 	expect(typography.trackHeight).toBe(typography.knobHeight + 2 * typography.padding);
+	for (const width of [1440, 390, 320]) {
+		await page.setViewportSize({ width, height: 900 });
+		const headingAlignment = await panel.locator('.settings-card-title').evaluateAll(rows => rows.map(row => {
+			const heading = row.querySelector('h2, h3')!;
+			const range = document.createRange();
+			range.selectNodeContents(heading.querySelector('strong') ?? heading);
+			const text = range.getBoundingClientRect();
+			const help = row.querySelector('.page-help-button')!.getBoundingClientRect();
+			return {
+				label: heading.textContent,
+				centerOffset: help.y + help.height / 2 - text.y - text.height / 2,
+				gap: help.x - heading.getBoundingClientRect().right,
+			};
+		}));
+		for (const alignment of headingAlignment) {
+			expect(Math.abs(alignment.centerOffset), alignment.label!).toBeLessThanOrEqual(1.5);
+			expect(Math.abs(alignment.gap - 8), alignment.label!).toBeLessThanOrEqual(0.5);
+		}
+		const disclosure = panel.getByRole('button', { name: 'Automatic Backup', exact: true });
+		const help = panel.getByRole('button', { name: 'Help with Automatic Backup', exact: true });
+		const title = await panel.locator('.backup-automatic-copy strong').boundingBox();
+		const helpBounds = await help.boundingBox();
+		if (width >= 390) {
+			expect(title!.height).toBeLessThan(32);
+		}
+		expect((await disclosure.boundingBox())!.height).toBeGreaterThanOrEqual(32);
+		expect(helpBounds!.x).toBeGreaterThanOrEqual(title!.x + title!.width);
+		expect(helpBounds!.x - title!.x - title!.width).toBeLessThanOrEqual(16);
+		const handleControl = panel.getByRole('button', { name: 'Toggle automatic backup details', exact: true });
+		const handle = await handleControl.boundingBox();
+		const header = await panel.locator('.backup-automatic-header').boundingBox();
+		const enabled = await panel.locator('.backup-enable').boundingBox();
+		expect(handle!.width).toBeGreaterThanOrEqual(44);
+		expect(Math.abs(handle!.x + handle!.width - header!.x - header!.width)).toBeLessThanOrEqual(1);
+		expect(handle!.height).toBeGreaterThanOrEqual(header!.height - 2);
+		expect(enabled!.x + enabled!.width).toBeLessThanOrEqual(handle!.x);
+		await disclosure.click();
+		await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+		await expect(panel.getByRole('switch')).not.toBeChecked();
+		await handleControl.click();
+		await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+		const rowLayout = await table.locator('tbody tr').first().evaluate(row => {
+			const filename = row.querySelector<HTMLElement>('.backup-name span')!;
+			const icon = row.querySelector('svg')!;
+			const timestamp = row.querySelector('time')!;
+			const range = document.createRange();
+			range.selectNodeContents(timestamp);
+			return {
+				filenameTruncated: filename.scrollWidth > filename.clientWidth,
+				fullName: filename.title === filename.textContent,
+				iconOffset: Math.abs(icon.getBoundingClientRect().top - filename.getBoundingClientRect().top),
+				timestampLines: range.getClientRects().length,
+			};
+		});
+		expect(rowLayout.filenameTruncated).toBe(true);
+		expect(rowLayout.fullName).toBe(true);
+		expect(rowLayout.iconOffset).toBeLessThanOrEqual(4);
+		expect(rowLayout.timestampLines).toBe(1);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	}
+	await page.setViewportSize({ width: 1440, height: 900 });
 	await panel.screenshot({ path: 'test-results/backup-settings-populated.png' });
 	await page.setViewportSize({ width: 390, height: 844 });
 	await panel.scrollIntoViewIfNeeded();

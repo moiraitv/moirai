@@ -10,7 +10,7 @@ The Program inspector presents identity, type/definition, media preview, counts,
 
 Source owners: [ProgramInspector.vue](../../../apps/web/src/components/programs/ProgramInspector.vue), [StatusPill.vue](../../../apps/web/src/components/StatusPill.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,16 +20,18 @@ Present secondary facts without making them compete with the resource identity. 
 
 | Component       | Standard                                                                | Use                                                                           |
 | --------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Badge           | 12/18px, 4px vertical / 8px horizontal, 4px radius                      | Text label; category or state, no unexplained abbreviations                   |
+| Badge           | 12/18px, 4px vertical / 8px horizontal, 2px radius                      | Text label; category or state, no unexplained abbreviations                   |
 | Status dot      | 8px circle, 4px label gap                                               | Supplemental cue; never sole state indication                                 |
 | Semantic pairs  | Info / info surface, warning / warning surface, danger / danger surface | Success uses selected surface; purple uses purple surface                     |
 | Metadata list   | `dl`, 12px row gap, 16px column gap                                     | Muted keys, primary values; right-aligned values on desktop                   |
-| Inspector       | 390px width; 20px inset; 12px radius                                    | Name/type header, health, media preview, definition, usage and footer actions |
+| Inspector       | 390px width; 20px inset; 6px radius                                     | Name/type header, health, media preview, definition, usage and footer actions |
 | Inspector title | 18/26px 600, 12px before                                                | Full resource name; close action if transient                                 |
 
 ## States and behavior
 
 Status changes update the label and semantic tone together. Unknown / checking is neutral and explicit; do not imply success. If a field is unavailable use a stated “Unavailable” or omit the nonessential field, not a fabricated zero. Clickable relationship counts are links to the related resources; plain counts are not styled as actions.
+
+Keep short status badges on one line, including scan results such as Complete and Cancelled. They must not inherit the arbitrary word-breaking used for long paths or diagnostic messages.
 
 An inspector’s current resource must match the visible selected row. Loading a new selection preserves or marks prior content as stale rather than showing mismatched details. Initial detail loading and failures are explicit. Badge hover and pressed states apply only if the badge is actually a control; ordinary labels must not look interactive. Keyboard focus belongs to actual links and actions.
 

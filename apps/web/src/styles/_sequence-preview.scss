@@ -4,7 +4,7 @@
 	margin-top: 1rem;
 
 	> p {
-		font-size: .85rem;
+		font-size: 0.85rem;
 		color: var(--muted);
 	}
 }
@@ -23,7 +23,7 @@
 	overflow-x: auto;
 	max-width: 100%;
 	border: 1px solid var(--line);
-	border-radius: 10px;
+	border-radius: var(--radius-control);
 	overscroll-behavior-x: contain;
 }
 
@@ -34,7 +34,7 @@
 .sequence-guide-ruler {
 	position: relative;
 	height: 28px;
-	font-size: .75rem;
+	font-size: 0.75rem;
 
 	span {
 		position: absolute;
@@ -53,12 +53,13 @@
 	top: 0;
 	height: 100%;
 	padding: 10px;
-	border: 1px solid rgba(255, 255, 255, .22);
-	border-radius: 5px;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: var(--radius-small);
 	overflow: hidden;
 	min-width: 0;
 
-	strong, small {
+	strong,
+	small {
 		display: block;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -71,7 +72,7 @@
 	}
 
 	&.is-gap {
-		background: var(--panel);
+		background: var(--surface-gradient), var(--panel);
 		color: var(--muted);
 	}
 }
@@ -82,7 +83,7 @@
 	gap: 8px 16px;
 	padding: 0;
 	list-style: none;
-	font-size: .8rem;
+	font-size: 0.8rem;
 
 	li {
 		display: flex;
@@ -93,7 +94,7 @@
 	span {
 		width: 12px;
 		height: 12px;
-		border-radius: 3px;
+		border-radius: var(--radius-small);
 		flex-shrink: 0;
 	}
 }

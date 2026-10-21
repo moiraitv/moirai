@@ -7,7 +7,7 @@ contextual: true
 
 # Music video credit templates
 
-Credit templates show song information over music videos. Open **Playback → Credit templates**, choose **New template**, and start with the included design. Templates are reusable: choose a default in a Channel’s **Subtitles and music video credits** settings, or select an override in a Program.
+Credit templates show song information over music videos. Open **Playback** in the sidebar and choose the **Credit Templates** tab. Choose **New template** and start with the included design. Templates are reusable: choose a default in a Channel’s **Subtitles and music video credits** settings, or select an override in a Program.
 
 Open **Used by** in the editor title bar of a saved credit template to see its explicit channel and program assignments. These are direct references, not a complete list of channels that may inherit the template through their programs.
 
@@ -25,7 +25,7 @@ Give the template a distinct name and an optional single-line description. The *
 
 ![Credit template editor with the included music video design](/screenshots/credit-template-editor.png)
 
-Choose a music video from the preview carousel, set the source time in seconds, and choose **Render preview**. The preview uses the default encoding profile’s resolution and scaling with installed system fonts; no Channel is required. Audio settings do not affect the still image. 
+Choose a music video from the preview carousel, set the source time in seconds, and choose **Render preview**. The preview uses the default encoding profile’s resolution and scaling with installed system fonts; no Channel is required. Audio settings do not affect the still image.
 
 ![Music video carousel and preview controls using the default encoding profile](/screenshots/credit-template-preview.png)
 

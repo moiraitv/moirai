@@ -1,14 +1,15 @@
-/* LibraryPage composition retained with shared palette, targets and the radius trial. */
+/* LibraryPage composition retained with shared palette, targets and permanent corner scale. */
 .app-shell > div {
 	min-width: 0;
 }
 .current-title-help {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: var(--space-2);
 }
 .current-title-help h1,
 .current-title-help h2 {
+	margin: 0;
 	min-width: 0;
 }
 .current-title-help .page-help {
@@ -117,12 +118,14 @@
 	background: var(--color-hover);
 }
 .current-library-toolbar {
+	--catalog-control-height: var(--control-height);
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto auto auto;
 	align-items: center;
 	gap: 12px;
 }
 .current-alphabet {
+	min-height: var(--catalog-control-height);
 	display: flex;
 	align-items: stretch;
 	min-width: 0;
@@ -133,6 +136,7 @@
 	background: var(--surface-gradient), var(--color-surface);
 }
 .current-alphabet button {
+	min-height: calc(var(--catalog-control-height) - 2 * var(--border-width));
 	flex: 1 0 19px;
 	min-width: 19px;
 	padding: 0;
@@ -321,4 +325,16 @@
 .current-library-bulk :is(.action-glyph, .lucide) {
 	width: 16px;
 	height: 16px;
+}
+
+.current-library-toolbar > button {
+	min-height: var(--catalog-control-height);
+}
+@media (pointer: coarse), (max-width: 600px) {
+	.current-library-toolbar {
+		--catalog-control-height: max(
+			var(--control-height),
+			calc(var(--target-touch) + 2 * var(--border-width))
+		);
+	}
 }

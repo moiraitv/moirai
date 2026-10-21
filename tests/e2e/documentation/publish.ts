@@ -75,6 +75,8 @@ export const screenshotNames = [
 	'template-slot-filler.png',
 	'template-mid-roll.png',
 	'mid-roll-predicate.png',
+	'filler-tabs.png',
+	'playback-tabs.png',
 	'filler-random-budget.png',
 	'filler-clock-budget.png',
 	'template-slot-playback.png',

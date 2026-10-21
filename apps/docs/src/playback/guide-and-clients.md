@@ -19,6 +19,8 @@ Hover over an individual media item, or focus it with the keyboard, to see its d
 
 ![The electronic program guide and connection addresses](/screenshots/guide.png)
 
+Select **M3U** or **XMLTV** on the right of **Playlist and guide URLs** to copy that address. A brief confirmation appears after copying.
+
 Use the M3U playlist address for channels and the XMLTV address for program listings. Some clients ask for both during setup; others can read the guide address embedded in the playlist. XMLTV title, description, and related fields come from the channel’s [guide template](/playback/guide-templates), or from the default template when the channel does not choose one.
 
 The addresses use `MOIRAI_PUBLIC_URL`. If they contain `127.0.0.1` or `localhost`, a client on another device will try to connect to itself. Set the public URL to the reachable HTTP or HTTPS origin, restart Moirai, and copy the new addresses.

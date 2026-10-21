@@ -11,7 +11,6 @@ import {
 	CircleAlert,
 	CircleGauge,
 	BookOpen,
-	FileCode,
 	FileText,
 	LayoutGrid,
 	Library,
@@ -61,9 +60,7 @@ function updateViewport(): void {
 	}
 }
 const libraryNavOpen = useDisclosureState('navigation-libraries', true);
-const fillerNavOpen = useDisclosureState('navigation-filler', true);
 const scheduleNavOpen = useDisclosureState('navigation-scheduling', true);
-const playbackNavOpen = useDisclosureState('navigation-playback', true);
 const playback = ref<PlaybackEngineStatus | null>(null);
 
 const playbackLabel = computed(() => {
@@ -271,16 +268,6 @@ onUnmounted(() => {
 
 				<div class="nav-section">
 					<div class="nav-section-heading">
-						<RouterLink class="nav-link nav-section-link" to="/filler"><ListVideo :size="18" /><span>Filler</span></RouterLink>
-						<button class="nav-section-toggle" :aria-expanded="fillerNavOpen" aria-label="Toggle filler navigation" @click="fillerNavOpen = !fillerNavOpen"><ChevronDown :size="16" :class="{ rotated: !fillerNavOpen }" /></button>
-					</div>
-					<Transition name="moirai-collapse"><div v-show="fillerNavOpen" class="library-nav">
-						<RouterLink v-for="entry in [{ path: 'pre-rolls', label: 'Pre-Rolls' }, { path: 'mid-rolls', label: 'Mid-Rolls' }, { path: 'post-rolls', label: 'Post-Rolls' }, { path: 'tail-fillers', label: 'Tail Fillers' }]" :key="entry.path" class="library-nav-link" :to="`/filler/${entry.path}`"><span class="library-nav-icon"><ListVideo :size="16" /></span><span>{{ entry.label }}</span></RouterLink>
-					</div></Transition>
-				</div>
-
-				<div class="nav-section">
-					<div class="nav-section-heading">
 						<RouterLink class="nav-link nav-section-link" to="/libraries">
 							<Library :size="18" /><span>Libraries</span>
 						</RouterLink>
@@ -311,18 +298,9 @@ onUnmounted(() => {
 					</Transition>
 				</div>
 
-				<div class="nav-section">
-					<div class="nav-section-heading">
-						<RouterLink class="nav-link nav-section-link" to="/playback"><TvMinimalPlay :size="18" /><span>Playback</span></RouterLink>
-						<button class="nav-section-toggle" :aria-expanded="playbackNavOpen" aria-label="Toggle playback navigation" @click="playbackNavOpen = !playbackNavOpen"><ChevronDown :size="16" :class="{ rotated: !playbackNavOpen }" /></button>
-					</div>
-					<Transition name="moirai-collapse"><div v-show="playbackNavOpen" class="library-nav">
-						<RouterLink class="library-nav-link" to="/playback/credit-templates"><span class="library-nav-icon"><FileText :size="16" /></span><span>Credit Templates</span></RouterLink>
-						<RouterLink class="library-nav-link" to="/playback/encoding-profiles"><span class="library-nav-icon"><Settings :size="16" /></span><span>Encoding Profiles</span></RouterLink>
-						<RouterLink class="library-nav-link" to="/playback/guide-templates"><span class="library-nav-icon"><FileCode :size="16" /></span><span>Guide Templates</span></RouterLink>
-					</div></Transition>
-				</div>
-				<RouterLink class="nav-link" to="/settings"
+				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/filler/') }" :aria-current="route.path.startsWith('/filler/') ? 'page' : undefined" to="/filler"><ListVideo :size="18" /><span>Filler</span></RouterLink>
+				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/playback/') }" :aria-current="route.path.startsWith('/playback/') ? 'page' : undefined" to="/playback"><TvMinimalPlay :size="18" /><span>Playback</span></RouterLink>
+				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/settings/') }" :aria-current="route.path.startsWith('/settings/') ? 'page' : undefined" to="/settings"
 				><Settings :size="18" /><span>Settings</span></RouterLink
 				>
 				<RouterLink class="nav-link" to="/logs"

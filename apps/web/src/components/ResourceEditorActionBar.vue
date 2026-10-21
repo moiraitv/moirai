@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RotateCcw, Save, Trash2, X } from '@lucide/vue';
+import { Save, Trash2 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import TransientToast from './TransientToast.vue';
 import TwoStepActionButton from './TwoStepActionButton.vue';
@@ -93,11 +93,10 @@ function activateSave(): void {
 				tone="caution"
 				label="Reset"
 				confirm-label="Confirm Reset"
-				confirm-text="Confirm Reset"
 				:disabled="busy || resetDisabled"
 				@confirm="emit('reset')"
 			>
-				<RotateCcw class="resource-editor-action-icon" :size="18" aria-hidden="true" /><span>Reset</span>
+				<span>Reset</span>
 			</TwoStepActionButton>
 			<button
 				:type="pending && saveSubmits ? 'submit' : 'button'"
@@ -108,7 +107,7 @@ function activateSave(): void {
 				:title="saving ? savingLabel : pending ? saveLabel : 'Close'"
 				@click="activateSave"
 			>
-				<component :is="pending ? Save : X" class="resource-editor-action-icon" :size="18" aria-hidden="true" /><span>{{ saving ? savingLabel : pending ? saveLabel : 'Close' }}</span>
+				<Save v-if="pending" class="resource-editor-action-icon" :size="18" aria-hidden="true" /><span>{{ saving ? savingLabel : pending ? saveLabel : 'Close' }}</span>
 			</button>
 		</div>
 		<div v-if="noticeMessage" class="resource-editor-save-notice"><TransientToast inline :message="noticeMessage" :tone="noticeMessage === 'Previous draft restored' ? 'neutral' : 'success'" @close="noticeMessage = ''" /></div>

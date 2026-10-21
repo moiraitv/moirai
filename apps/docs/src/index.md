@@ -21,4 +21,6 @@ Moirai builds a rolling schedule from reusable pieces:
 
 The quickest route through this guide is [Install with Docker](/getting-started/docker), then [Create your first channel](/getting-started/first-channel).
 
+The sidebar marks your current page with mint text, a dark mint background, and a mint line along its left edge.
+
 For help while using Moirai, select the question-mark button beside a page or section title to open instructions for it. The **User Guide** link at the bottom of the sidebar opens this complete guide in a new tab.

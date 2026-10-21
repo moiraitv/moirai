@@ -10,7 +10,7 @@ Programs is the existing overview list: Program / Definition, Preview, Items, Us
 
 Source owners: [ProgramCatalogList.vue](../../../apps/web/src/components/programs/ProgramCatalogList.vue), [_program-management.scss](../../../apps/web/src/styles/_program-management.scss).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,7 +20,7 @@ Use tables when users compare several attributes and lists when the primary task
 
 | Element            | Current pattern / unified geometry                     | Behavior                                                       |
 | ------------------ | ------------------------------------------------------ | -------------------------------------------------------------- |
-| Program list frame | 1px structural border; normalized 8px radius           | Scrollable source-owned overview; trial radius is 4px          |
+| Program list frame | 1px structural border; normalized 4px radius           | Scrollable source-owned overview; uses `--radius-control`      |
 | Header / columns   | Program / Definition, Preview, Items, Used by, actions | 12px text, 10px vertical / 14px horizontal inset               |
 | Program row        | 80px minimum; 12px gaps                                | Native identity button, selected state and independent actions |
 | Preview            | Two or more 28×42px thumbnails, 3px gap                | Supporting artwork, not an invented duration column            |

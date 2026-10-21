@@ -22,6 +22,7 @@ test('saves all sequence ordering modes and resets ordering drafts', async ({ pa
 		}
 		await page.getByPlaceholder('e.g. Evening Lineup').fill(`Ordering fixture ${type}`);
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
+		await page.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(page).toHaveURL(/\/schedules\/programs(?:\?.*)?$/);
 		await page.goto(`/schedules/programs/${id}`);
 		await expect(page.getByRole('button', { name: new RegExp(`^${label} `) })).toHaveAttribute('aria-pressed', 'true');
@@ -35,7 +36,8 @@ test('saves all sequence ordering modes and resets ordering drafts', async ({ pa
 	await page.getByRole('button', { name: 'Reset', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
 	await expect(page.getByRole('button', { name: /^Balanced rotation / })).toHaveAttribute('aria-pressed', 'true');
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.getByRole('button', { name: /^Shuffled allocations / }).scrollIntoViewIfNeeded();
 	await expect(page.getByRole('button', { name: /^Shuffled allocations / })).toBeVisible();

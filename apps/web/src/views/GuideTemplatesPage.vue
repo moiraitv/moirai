@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useResourceDraft } from '../composables/useResourceDraft';
+import { useRouteTab } from '../composables/useRouteTab';
 import { useRoute } from 'vue-router';
 import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
@@ -19,7 +20,6 @@ import {
 	type GuideEntry,
 	type GuideTemplate,
 	type GuideTemplatePreviewValue,
-	type GuideTemplateSourceKey,
 	type GuideTemplateSources,
 	type ScheduleGuide,
 } from '@moirai/shared';
@@ -28,7 +28,7 @@ import { errorMessage } from '../error-message';
 import { requestConfirmation } from '../confirmation';
 import { closeUnsavedEditor } from '../unsaved-editor';
 import { cloneContractValue } from '../reactive-clone';
-import PageHeader from '../components/PageHeader.vue';
+import ManagementPageHeader from '../components/ManagementPageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
@@ -58,7 +58,6 @@ const open = ref(false);
 const id = ref<string>();
 const readonlyTemplate = ref(false);
 const busy = ref(false);
-const activeTab = ref<GuideTemplateSourceKey>('channel');
 const previewChannelId = ref('');
 const nameInput = ref<HTMLInputElement>();
 const form = reactive({
@@ -115,6 +114,7 @@ const inspectedLabel = computed(() => {
 	return previewEntries.value.find((entry) => entry.id === inspectedId.value)?.title ?? 'Listing';
 });
 const route = useRoute();
+const activeTab = useRouteTab(GUIDE_TEMPLATE_SOURCE_KEYS, 'channel', () => Boolean(route.params.id));
 const retained = useResourceDraft({
 	kind: 'guide-template', identity: () => id.value ?? `new:${String(route.query.duplicate ?? '')}`,
 	capture: () => form, restore: fields => {
@@ -169,7 +169,6 @@ async function openDraft(template?: GuideTemplate, duplicate = false): Promise<v
 	form.description = template?.description ?? '';
 	form.name = template ? template.name + (duplicate ? ' copy' : '') : 'New guide template';
 	form.sources = cloneContractValue(template?.sources ?? BUILTIN_GUIDE_TEMPLATE.sources);
-	activeTab.value = 'channel';
 	baseline.value = JSON.stringify(form);
 	if (!readonlyTemplate.value) {
 		await retained.open(baseline.value);
@@ -451,9 +450,9 @@ useDraftProtection(() => open.value && !readonlyTemplate.value && dirty.value &&
 
 <template>
 	<div>
-		<PageHeader title="Guide Templates" description="Control how channels and programmes appear in XMLTV.">
+		<ManagementPageHeader section="Playback" title="Guide Templates" description="Control how channels and programmes appear in XMLTV.">
 			<button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New template</button>
-		</PageHeader>
+		</ManagementPageHeader>
 		<p v-if="error" class="notice error">{{ error }} <button type="button" class="button secondary" @click="load">Retry</button></p>
 		<LoadingState v-if="!loaded && !error" />
 		<section v-if="loaded" class="panel encoding-default-panel">

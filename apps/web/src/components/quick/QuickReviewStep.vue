@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import FormDisclosure from '../FormDisclosure.vue';
 import { useDisclosureState } from '../../disclosure-state';
 import QuickStepActions from './QuickStepActions.vue';
 import type { Library, QuickChannelSetupCreate } from '@moirai/shared';
-import { RefreshCw } from '@lucide/vue';
+import { Check, RefreshCw } from '@lucide/vue';
 import type { PreparedChannelLogo } from '../../channel-logo-image';
 import { quickSourceSummary } from '../../quick-setup';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
@@ -106,17 +107,17 @@ onBeforeUnmount(() => {
 					<LoadingState v-else-if="loading" label="Resolving…" />
 					<p v-else>Schedule sample unavailable.</p>
 				</div>
-				<details v-if="preview?.schedule.issues.length" :open="warningsOpen" class="notice warning quick-review-schedule-warnings" @toggle="warningsOpen = ($event.target as HTMLDetailsElement).open">
-					<summary>{{ preview.schedule.issues.length }} scheduling warning(s)</summary>
+				<FormDisclosure v-if="preview?.schedule.issues.length" v-model:open="warningsOpen" plain class="notice warning quick-review-schedule-warnings">
+					<template #summary>{{ preview.schedule.issues.length }} scheduling warning(s)</template>
 					<p v-for="(issue, index) in preview.schedule.issues" :key="index">{{ issue.message }}</p>
-				</details>
+				</FormDisclosure>
 			</article>
 		</div>
 		<p v-if="previewError" class="notice error">{{ previewError }} Preview failure does not prevent creation.</p>
 		<QuickStepActions>
 			<p v-if="error" class="notice error" role="alert">{{ error }}</p>
 			<button class="button secondary" type="button" :disabled="busy" @click="emit('back')">Back</button>
-			<button class="button" type="button" :disabled="busy" @click="emit('finish')">{{ busy ? 'Creating channel…' : 'Create Channel' }}</button>
+			<button class="button" type="button" :disabled="busy" @click="emit('finish')"><Check :size="18" aria-hidden="true" />{{ busy ? 'Creating channel…' : 'Create Channel' }}</button>
 		</QuickStepActions>
 	</section>
 </template>

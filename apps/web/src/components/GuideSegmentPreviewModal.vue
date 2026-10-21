@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDisclosure from './FormDisclosure.vue';
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { Asterisk, Clock3, Film, Folder, Layers3, ListVideo, X } from '@lucide/vue';
@@ -131,14 +132,14 @@ const roleLabel = computed(() => {
 						>
 							The media source is temporarily unavailable.
 						</p>
-						<details v-if="detail.airingSegments?.length" class="guide-preview-airing">
-							<summary>Content and mid-roll breaks</summary>
+						<FormDisclosure v-if="detail.airingSegments?.length" plain class="guide-preview-airing">
+							<template #summary>Content and mid-roll breaks</template>
 							<ol>
 								<li v-for="span in detail.airingSegments" :key="span.id">
 									{{ timeLabel(span.start) }} – {{ timeLabel(span.finish) }} · {{ span.role === 'filler' ? 'Mid-roll' : 'Content' }}: {{ span.title }}
 								</li>
 							</ol>
-						</details>
+						</FormDisclosure>
 						<div class="guide-preview-source">
 							<h3>Schedule source</h3>
 							<p><ListVideo :size="16" /><span>Program</span><strong>{{ detail.source.programName ?? 'None' }}</strong></p>

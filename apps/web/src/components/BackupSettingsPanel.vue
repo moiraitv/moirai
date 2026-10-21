@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarClock, Clock3, Database, Download, FileArchive, Files, HardDrive, Settings2, Upload, ArrowDown, ArrowUp, X } from '@lucide/vue';
+import { CalendarClock, Clock3, Database, Download, FileArchive, Files, HardDrive, Settings2, Trash2, Upload, ArrowDown, ArrowUp, X } from '@lucide/vue';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { backupFilename, backupSettingsSchema, type BackupInfo, type BackupReview, type BackupStatus } from '@moirai/shared';
 import { backupCategory as category, backupCreatedDate as formatDate, backupSize as formatSize } from '../backup-format';
@@ -283,22 +283,30 @@ onUnmounted(() => {
 				<FormDisclosure v-model:open="automaticOpen" class="backup-automatic" data-disclosure-item>
 					<template #header="{ expanded, contentId }">
 						<div class="form-disclosure-trigger backup-automatic-header">
+							<button type="button" class="settings-disclosure-handle" :aria-expanded="expanded" :aria-controls="contentId" aria-label="Toggle automatic backup details" @click="automaticOpen = !expanded"><ChevronDown :size="20" aria-hidden="true" /></button>
 							<div class="backup-automatic-heading">
-								<h3 id="automatic-backup-heading">
-									<button type="button" class="backup-automatic-toggle" :aria-expanded="expanded" :aria-controls="contentId" aria-label="Automatic Backup" @click="automaticOpen = !expanded">
-										<span class="settings-card-icon"><Settings2 :size="24" aria-hidden="true" /></span>
-										<span class="backup-automatic-copy"><strong>Automatic Backup</strong><small>Configure automatic backups to protect your configuration.</small></span>
-										<ChevronDown :size="17" aria-hidden="true" />
-									</button>
-								</h3>
-								<PageHelpButton label="Automatic Backup" topic-id="settings.backups#automatic-backup" />
+								<span class="settings-card-icon"><Settings2 :size="24" aria-hidden="true" /></span>
+								<div class="backup-automatic-copy">
+									<div class="settings-card-title">
+										<h3 id="automatic-backup-heading"><button type="button" class="settings-disclosure-title" :aria-expanded="expanded" :aria-controls="contentId" aria-label="Automatic Backup" @click="automaticOpen = !expanded"><strong>Automatic Backup</strong></button></h3>
+										<PageHelpButton label="Automatic Backup" topic-id="settings.backups#automatic-backup" />
+									</div>
+									<small>Configure automatic backups to protect your configuration.</small>
+								</div>
 							</div>
-							<label class="backup-enable">
+							<label class="backup-enable settings-enable">
 								<input v-model="draft.enabled" type="checkbox" role="switch" :disabled="disabled" aria-label="Enable automatic backups" />
 								<span class="channel-enabled-track" aria-hidden="true" />
 								<span><strong>{{ draft.enabled ? 'Enabled' : 'Disabled' }}</strong></span>
 							</label>
-							<p class="settings-policy-summary">{{ status.settings.enabled ? `Every ${status.settings.intervalDays} day${status.settings.intervalDays === 1 ? '' : 's'} at 3:00 am (${status.timeZone}) · Keep ${status.settings.retention}` : 'Automatic backups disabled' }}<span v-if="dirty"> · Unsaved changes</span></p>
+							<div class="settings-policy-summary backup-policy-summary" aria-label="Saved automatic backup policy">
+								<template v-if="status.settings.enabled">
+									<span class="backup-policy-item"><Clock3 :size="17" aria-hidden="true" /><span><strong>{{ status.settings.intervalDays === 1 ? 'Daily' : `Every ${status.settings.intervalDays} days` }} at 3:00 am</strong><small>{{ status.timeZone }}</small></span></span>
+									<span class="backup-policy-item"><Files :size="17" aria-hidden="true" /><span><strong>Keep {{ status.settings.retention }} {{ status.settings.retention === 1 ? 'backup' : 'backups' }}</strong><small>Automatic backup retention</small></span></span>
+								</template>
+								<span v-else class="backup-policy-item"><Clock3 :size="17" aria-hidden="true" /><span>Automatic backups disabled</span></span>
+								<span v-if="dirty" class="backup-policy-unsaved">Unsaved changes</span>
+							</div>
 						</div>
 					</template>
 					<div class="backup-automatic-content">
@@ -332,16 +340,16 @@ onUnmounted(() => {
 							<tbody>
 								<tr v-if="!status.backups.length && !status.damagedBackups?.length"><td colspan="5"><div class="backup-empty"><Database :size="30" aria-hidden="true" /><div><strong>No saved backups yet.</strong><p>Manual and automatic backups will appear here.</p></div></div></td></tr>
 								<tr v-for="backup in sortedBackups" :key="backup.id">
-									<td class="backup-name"><FileArchive :size="18" aria-hidden="true" /><div><span>{{ backupFilename(backup) }}</span><small>Moirai {{ backup.applicationVersion }}</small></div></td>
+									<td class="backup-name"><div class="backup-name-content"><FileArchive :size="18" aria-hidden="true" /><div><span :title="backupFilename(backup)">{{ backupFilename(backup) }}</span><small>Moirai {{ backup.applicationVersion }}</small></div></div></td>
 									<td><time :datetime="backup.createdAt">{{ formatDate(backup.createdAt) }}</time></td>
 									<td><span class="backup-kind" :data-kind="backup.kind">{{ category(backup.kind) }}</span></td>
 									<td class="backup-size">{{ formatSize(backup.size) }}</td>
-									<td><div class="form-actions backup-row-actions"><a class="button secondary" :href="`/api/v1/backups/${backup.id}/download`" download>Download</a><button type="button" class="button secondary" :disabled="disabled" @click="inspect(backup)">Restore</button><button type="button" class="button secondary" :aria-label="`Delete backup ${backupFilename(backup)}`" :disabled="disabled" @click="remove({ id: backup.id, name: backupFilename(backup) })">Delete</button></div></td>
+									<td><div class="form-actions backup-row-actions"><a class="button secondary" :href="`/api/v1/backups/${backup.id}/download`" download>Download</a><button type="button" class="button secondary" :disabled="disabled" @click="inspect(backup)">Restore</button><button type="button" class="icon-button backup-delete" :aria-label="`Delete backup ${backupFilename(backup)}`" :title="`Delete backup ${backupFilename(backup)}`" :disabled="disabled" @click="remove({ id: backup.id, name: backupFilename(backup) })"><Trash2 :size="18" aria-hidden="true" /></button></div></td>
 								</tr>
 								<tr v-for="backup in status.damagedBackups ?? []" :key="`damaged-${backup.id}`">
-									<td class="backup-name"><FileArchive :size="18" aria-hidden="true" /><div><span>{{ backup.name }}</span><small>Unreadable backup</small></div></td>
+									<td class="backup-name"><div class="backup-name-content"><FileArchive :size="18" aria-hidden="true" /><div><span :title="backup.name">{{ backup.name }}</span><small>Unreadable backup</small></div></div></td>
 									<td colspan="3"><p class="notice warning">This archive’s metadata could not be read. Other backups remain available. Delete it only if you no longer need it.</p></td>
-									<td><button type="button" class="button secondary" :aria-label="`Delete backup ${backup.name}`" :disabled="disabled" @click="remove(backup)">Delete</button></td>
+									<td><button type="button" class="icon-button backup-delete" :aria-label="`Delete backup ${backup.name}`" :title="`Delete backup ${backup.name}`" :disabled="disabled" @click="remove(backup)"><Trash2 :size="18" aria-hidden="true" /></button></td>
 								</tr>
 							</tbody>
 						</table>

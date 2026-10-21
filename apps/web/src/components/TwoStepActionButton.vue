@@ -89,10 +89,10 @@ onBeforeUnmount(() => {
 		@blur="disarm"
 		@keydown="handleKeydown"
 	>
-		<template v-if="armed">
-			<Check :size="17" aria-hidden="true" />
+		<span class="two-step-content" :aria-hidden="armed || undefined"><slot /></span>
+		<span v-if="armed" class="two-step-confirmation" aria-hidden="true">
+			<Check :size="17" />
 			<span v-if="confirmText">{{ confirmText }}</span>
-		</template>
-		<slot v-else />
+		</span>
 	</button>
 </template>

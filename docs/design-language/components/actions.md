@@ -10,7 +10,7 @@ Use existing primary, secondary, contextual and icon action roles. Reset and dra
 
 Source owners: [TwoStepActionButton.vue](../../../apps/web/src/components/TwoStepActionButton.vue), [ResourceEditorActionBar.vue](../../../apps/web/src/components/ResourceEditorActionBar.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -18,21 +18,21 @@ Make the next intentional step obvious. A button combines a verb, leading icon f
 
 ## Parameters and variants
 
-| Variant     | Parameters                                                                             | Use                                                                |
-| ----------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Primary     | 42px minimum, 16px horizontal / 8px vertical padding, 8px gap, 8px radius, 14/20px 600 | Mint fill and border; dark `--color-on-accent` text                |
-| Secondary   | Same geometry, raised fill, control border, primary text                               | Reset, Edit, other supporting actions                              |
-| Ghost       | Same target, transparent boundary, secondary text                                      | Cancel or a clearly contextual action                              |
-| Destructive | Same geometry, danger surface/text/border                                              | Delete persisted resource; opens a modal                           |
-| Compact     | 32px minimum, 12px horizontal / 4px vertical, 12/18px 600                              | Dense desktop row action; never phone-only target                  |
-| Icon-only   | 42×42px desktop; 20px icon                                                             | Bezel-free for utilities such as refresh; accessible name required |
-| Link        | 14/22px, mint, visible underline                                                       | Navigation embedded in prose                                       |
+| Variant     | Parameters                                                                             | Use                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Primary     | 42px minimum, 16px horizontal / 8px vertical padding, 8px gap, 4px radius, 14/20px 600 | Green `--color-primary` fill, mint border; white `--color-on-primary` text and icons |
+| Secondary   | Same geometry, raised fill, control border, primary text                               | Reset, Edit, other supporting actions                                                |
+| Ghost       | Same target, transparent boundary, secondary text                                      | Cancel or a clearly contextual action                                                |
+| Destructive | Same geometry, danger surface/text/border                                              | Delete persisted resource; opens a modal                                             |
+| Compact     | 32px minimum, 12px horizontal / 4px vertical, 12/18px 600                              | Dense desktop row action; never phone-only target                                    |
+| Icon-only   | 42×42px desktop; 20px icon                                                             | Bezel-free for utilities such as refresh; accessible name required                   |
+| Link        | 14/22px, mint, visible underline                                                       | Navigation embedded in prose                                                         |
 
 ## Icons for prominent actions
 
 Pair the visible verb with a leading Lucide icon for prominent primary or destructive actions,
 such as Save, New Program, Review Selection, Create backup and Delete. Use 18×18px glyphs, a 2px stroke
-and the existing 8px button gap. The glyph inherits the label color, including dark-on-mint,
+and the existing 8px button gap. The glyph inherits the label color, including white-on-green,
 destructive and disabled states; it has no separate bezel. Keep the visible text label.
 
 Detailed selection cards are a distinct control family; their icons explain the options rather than promoting an action. See [significant choices](choices.md#detailed-choices-for-significant-decisions).
@@ -60,15 +60,15 @@ semantic state fill: white at 3% on top to black at 4% below, vertically. Keep t
 overlay on hover and pressed fills. There is no drop shadow, inset bevel, text shadow or movement.
 Ghost actions, utility icons, tabs and menu rows retain their transparent surfaces. Segmented
 choices use the quieter shared surface gradient.
-The half-radius trial is unchanged.
+The permanent corner scale applies to every action state.
 
 ## State matrix
 
 | State    | Appearance and semantics                                                                                                        |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Default  | Variant styling above                                                                                                           |
-| Hover    | Raised actions use hover surface; primary uses `--color-accent-hover`                                                           |
-| Pressed  | Primary uses `--color-accent-pressed`; other actions use selected surface                                                       |
+| Hover    | Raised actions use hover surface; primary uses `--color-primary-hover`                                                          |
+| Pressed  | Primary uses `--color-primary-pressed`; other actions use selected surface                                                      |
 | Focus    | Global 2px mint outline and 3px offset; never replace with hover                                                                |
 | Selected | Use toggle buttons with `aria-pressed`; selection is not a generic action state                                                 |
 | Disabled | Native disabled; 0.48 opacity, no click, not-allowed cursor; explain non-obvious prerequisites nearby                           |

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDisclosure from '../components/FormDisclosure.vue';
 import { instantLabel } from '../time-format';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -183,7 +184,7 @@ onUnmounted(() => {
 			<template v-if="playbackRecovering">Reconnecting—showing last update.</template>
 			<template v-else>{{ playback ? 'Playback status could not be refreshed.' : 'Playback status could not be loaded.' }}
 				<button class="button secondary" type="button" :disabled="playbackRefreshing" @click="dashboardStore.refreshPlayback()">Retry playback status</button>
-				<details><summary>Details</summary>{{ playbackError }}</details>
+				<FormDisclosure plain><template #summary>Details</template>{{ playbackError }}</FormDisclosure>
 			</template>
 			<span v-if="playbackUpdatedAt"> Last updated {{ instantLabel(playbackUpdatedAt, { dateStyle: 'short', timeStyle: 'medium' }) }}.</span>
 		</div>

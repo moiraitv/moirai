@@ -12,7 +12,7 @@ import { requestConfirmation } from '../confirmation';
 import { closeUnsavedEditor } from '../unsaved-editor';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
-import PageHeader from '../components/PageHeader.vue';
+import ManagementPageHeader from '../components/ManagementPageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
@@ -182,7 +182,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value && r
 
 <template>
 	<div class="mid-roll-presets-page">
-		<PageHeader :title="`${label}s`" description="Reuse filler budgets with different source Programs."><button type="button" class="button" :disabled="busy || !loaded" @click="edit()"><Plus :size="20" />New {{ label }}</button></PageHeader>
+		<ManagementPageHeader section="Filler" :title="`${label}s`" description="Reuse filler budgets with different source Programs."><button type="button" class="button" :disabled="busy || !loaded" @click="edit()"><Plus :size="20" />New {{ label }}</button></ManagementPageHeader>
 		<LoadingState v-if="!loaded && !error" :label="`Loading ${label}s…`" />
 		<p v-if="error" class="notice error">{{ error }} <button type="button" @click="load">Retry</button></p>
 		<div v-if="loaded" class="mid-roll-preset-list">

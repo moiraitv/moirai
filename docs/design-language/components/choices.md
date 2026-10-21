@@ -10,7 +10,7 @@ Keep checkboxes, radio groups and the existing switch/selection semantics. List/
 
 Source owners: [TwoStepActionButton.vue](../../../apps/web/src/components/TwoStepActionButton.vue), [_library.scss](../../../apps/web/src/styles/_library.scss).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,11 +20,11 @@ Use independent checkboxes for membership or draft flags, radio groups for one m
 
 | Component        | Standard                                                                        | Label and content                                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Checkbox         | 20px native box; 8px label gap; 42px row                                        | 44px row on mobile; indeterminate only for partially selected groups                                                 |
+| Checkbox         | 16px native box; 6px source label gap; 42px row                                 | 44px row on mobile; indeterminate only for partially selected groups                                                 |
 | Radio            | 20px native circle; same row geometry                                           | Group with `fieldset` and `legend`; one named value                                                                  |
-| Switch           | 36×22px track, 16px thumb, 3px inset, 14px travel                               | 42px row desktop / 44px mobile; mint when on                                                                         |
+| Switch           | 36×20px track, 14px thumb, 3px inset, 16px travel                               | 42px row desktop / 44px mobile; mint when on                                                                         |
 | Slider           | Native range, 100% field width, accent fill                                     | Visible label, endpoint meaning and value / units when meaningful                                                    |
-| Segmented choice | Intrinsic width, equal adjoining segments, 4px inset, no gaps; 8px track radius | 32px desktop / 44px phone segment target; 4px inner radius; filled selection with primary text, no individual border |
+| Segmented choice | Intrinsic width, equal adjoining segments, 4px inset, no gaps; 4px track radius | 32px desktop / 44px phone segment target; 2px inner radius; filled selection with primary text, no individual border |
 
 ## Detailed choices for significant decisions
 
@@ -48,7 +48,7 @@ Source owners: [SelectionStrategyEditor.vue](../../../apps/web/src/components/pr
 
 Card parameters follow the current Program control: 170px minimum height, 18px vertical / 12px
 horizontal padding, 10px internal and inter-card gaps, 29px Lucide icon, 1px control boundary and
-`--radius-control` (8px baseline, 4px in the active trial). Use `--font-control` / `--line-control`
+`--radius-control` (4px). Use `--font-control` / `--line-control`
 for titles, `--font-small` / `--line-small` and secondary text for explanations. The shared surface
 gradient overlays raised fill; selected uses mint border, selected fill and a 12px selection marker
 at a 10px top/left inset. Never rely on fill color alone. Keyboard focus remains the global outline;
@@ -84,14 +84,18 @@ including the 4px inset and 1px track boundary. Retain a distinct focus ring for
 
 ## Draft versus immediate settings
 
-Inside a Save-based resource editor a switch changes the draft; it does not silently persist. Outside an editor, an immediate switch needs explicit progress, error recovery and clear persistence semantics. The gallery demonstrates draft choices only. Selection in a media catalog is a checkbox rather than a switch.
+Inside a Save-based resource editor a switch changes the draft; it does not silently persist. Outside an editor, an immediate switch needs explicit progress, error recovery and clear persistence semantics. The generic choice board demonstrates draft-local controls. The Settings layout also demonstrates the explicitly immediate Enable AI switch; it reflects saved activation, shows failures in context, and does not alter the Advanced disclosure. Selection in a media catalog is a checkbox rather than a switch.
 
 ## Adaptation and edge behavior
 
-Wrap labels beside the control, allowing height to grow while keeping the control aligned to the first line. At ≤600px use 44px interaction rows, and wrap or stack segmented choices if they cannot fit. Never shrink the 20px glyph to fit a label. Reduced motion makes thumb movement effectively immediate. Native control rendering may vary; use the documented geometry and semantic states when implementing a custom visual treatment. See [shared behavior](../docs/behavior.md).
+Wrap labels beside the control, allowing height to grow while keeping the control aligned to the first line. At ≤600px use 44px interaction rows, and wrap or stack segmented choices if they cannot fit. Keep the documented glyph size rather than shrinking it to fit a label. Reduced motion makes thumb movement effectively immediate. Native control rendering may vary; use the documented geometry and semantic states when implementing a custom visual treatment. See [shared behavior](../docs/behavior.md).
 
 All numeric values are CSS pixels at the default root size unless expressed in rem. Exact token values are indexed in [the token reference](../docs/tokens.md).
 
 ## Narrow reference captures
 
 [390px specimen](../images/specimens/choices-390.png) · [320px specimen](../images/specimens/choices-320.png)
+
+## Source-owned compact rows
+
+Library editor checkboxes use 32px rows with no extra grid gap for fine pointers, or 44px rows for coarse pointers. Keep Watch for changes and Enabled for scheduling adjacent, without stretching their row gap to match the neighboring field. AI and Automatic Backup header switches use the same 36×20px track and independent 42px hit row, growing to at least 44px for touch or phone widths. Expanding a header does not change its switch value.

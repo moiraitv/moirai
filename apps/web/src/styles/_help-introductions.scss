@@ -2,9 +2,11 @@
 	margin: 1.5rem 0;
 	padding: 24px;
 	border: 1px solid #294453;
-	border-radius: 12px;
+	border-radius: var(--radius-panel);
 	color: #c7d0da;
-	background: radial-gradient(circle at 8% 0%, rgba(21, 104, 91, .13), transparent 25rem), linear-gradient(135deg, #0c1b27, #0b1722);
+	background:
+		radial-gradient(circle at 8% 0%, rgba(21, 104, 91, 0.13), transparent 25rem),
+		linear-gradient(135deg, #0c1b27, #0b1722);
 
 	> h2 {
 		display: flex;
@@ -39,7 +41,7 @@
 		padding: 13px;
 		border: 0;
 		border-radius: 50%;
-		background: linear-gradient(145deg, #116557, #0a4139);
+		background: var(--surface-gradient), #0a4139;
 	}
 
 	> h2 img {
@@ -63,10 +65,10 @@
 		margin: 0;
 		padding: 14px 13px;
 		border: 1px solid #294453;
-		border-radius: 10px;
-		background: linear-gradient(145deg, #122330, #0d1b27);
+		border-radius: var(--radius-control);
+		background: var(--surface-gradient), #0d1b27;
 		text-align: center;
-		font-size: .85rem;
+		font-size: 0.85rem;
 	}
 
 	li p + p {
@@ -74,14 +76,14 @@
 	}
 
 	li:nth-child(2) img {
-		background: linear-gradient(145deg, #265f93, #17456d);
+		background: var(--surface-gradient), #17456d;
 	}
 
 	li:nth-child(3) img {
-		background: linear-gradient(145deg, #75459a, #482c68);
+		background: var(--surface-gradient), #482c68;
 	}
 
 	li:nth-child(4) img {
-		background: linear-gradient(145deg, #86602b, #553c20);
+		background: var(--surface-gradient), #553c20;
 	}
 }

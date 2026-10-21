@@ -1749,7 +1749,7 @@ test('uses an accessible navigation drawer on small screens', async ({ page }) =
 	const sidebar = page.locator('.sidebar');
 	await page.getByRole('button', { name: 'Open navigation' }).click();
 	await expect(sidebar).toHaveClass(/sidebar-open/);
-	for (const name of ['Toggle schedule navigation', 'Toggle playback navigation']) {
+	for (const name of ['Toggle schedule navigation']) {
 		const toggle = page.getByRole('button', { name });
 		if (await toggle.getAttribute('aria-expanded') === 'false') {
 			await toggle.click();
@@ -1759,7 +1759,7 @@ test('uses an accessible navigation drawer on small screens', async ({ page }) =
 		await page.setViewportSize(viewport);
 		await expect(sidebar.getByRole('button', { name: 'Sign out' })).toBeInViewport();
 		await expect(sidebar.getByRole('link', { name: /Signed in via local/i })).toBeInViewport();
-		const templates = sidebar.getByRole('link', { name: 'Credit Templates', exact: true });
+		const templates = sidebar.getByRole('link', { name: 'Playback', exact: true });
 		await templates.scrollIntoViewIfNeeded();
 		await expect(templates).toBeInViewport();
 	}
@@ -1771,22 +1771,16 @@ test('uses an accessible navigation drawer on small screens', async ({ page }) =
 	await guideLink.click();
 	await expect(page).toHaveURL(/\/guide$/);
 	await expect(page.getByRole('heading', { name: 'Guide', exact: true })).toBeVisible();
-	await expect(page.getByLabel('Channel playlist (M3U)')).toHaveValue(/\/iptv\/channels\.m3u$/);
-	await expect(page.getByLabel('XMLTV guide')).toHaveValue(/\/epg\.xml$/);
 	await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 	const feedCard = page.locator('.epg-feed-card');
 	const restingHeight = await feedCard.evaluate((element) => element.getBoundingClientRect().height);
-	const playlistUrl = page.locator('.epg-url-field').filter({ hasText: 'Channel playlist' });
-	await playlistUrl.getByRole('button', { name: 'Copy URL' }).click();
-	await expect(playlistUrl.locator('.epg-copy-status')).toHaveText('Playlist URL copied');
-	await expect(playlistUrl.locator('.epg-copy-status')).toHaveClass(/visible/);
-	await expect.poll(() => feedCard.evaluate((element) => element.getBoundingClientRect().height))
-		.toBe(restingHeight);
-	await expect(playlistUrl.locator('.epg-copy-status')).not.toHaveClass(/visible/, { timeout: 3_000 });
-	const guideUrl = page.locator('.epg-url-field').filter({ hasText: 'XMLTV guide' });
-	await guideUrl.getByRole('button', { name: 'Copy URL' }).click();
-	await expect(guideUrl.locator('.epg-copy-status')).toHaveText('EPG URL copied');
-	await expect(guideUrl.locator('.epg-copy-status')).toHaveClass(/visible/);
+	await feedCard.getByRole('button', { name: 'Copy M3U playlist URL', exact: true }).click();
+	await expect(page.locator('.transient-toast')).toContainText('Playlist URL copied');
+	await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/iptv\/channels\.m3u$/);
+	await expect.poll(() => feedCard.evaluate((element) => element.getBoundingClientRect().height)).toBe(restingHeight);
+	await feedCard.getByRole('button', { name: 'Copy XMLTV guide URL', exact: true }).click();
+	await expect(page.locator('.transient-toast')).toContainText('EPG URL copied');
+	await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/epg\.xml$/);
 	await page.getByRole('button', { name: 'Open navigation' }).click();
 	await page.keyboard.press('Escape');
 	await expect(sidebar).not.toHaveClass(/sidebar-open/);

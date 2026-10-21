@@ -22,11 +22,9 @@
 	grid-template-columns: minmax(330px, 0.82fr) minmax(520px, 1.25fr);
 	overflow: hidden;
 	border: 1px solid var(--line-bright);
-	border-radius: 12px;
-	background:
-		radial-gradient(circle at 8% 0%, rgba(21, 104, 91, 0.13), transparent 25rem),
-		linear-gradient(135deg, rgba(12, 27, 39, 0.98), rgba(11, 23, 34, 0.9));
-	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.1);
+	border-radius: var(--radius-panel);
+	background: var(--surface-gradient), var(--panel);
+	box-shadow: none;
 }
 
 .channel-schedules-about-copy,
@@ -52,8 +50,8 @@
 	place-items: center;
 	border-radius: 50%;
 	color: #4be8c0;
-	background: linear-gradient(145deg, #116557, #0a4139);
-	box-shadow: 0 0 28px rgba(22, 214, 164, 0.1);
+	background: var(--surface-gradient), #0a4139;
+	box-shadow: none;
 }
 
 .channel-schedules-about h2,
@@ -110,17 +108,17 @@
 	place-items: center;
 	border-radius: 50%;
 	color: #55e4bd;
-	background: linear-gradient(145deg, #116557, #0a4139);
+	background: var(--surface-gradient), #0a4139;
 }
 
 .channel-schedules-benefit-icon.tone-blue {
 	color: #7bc7ff;
-	background: linear-gradient(145deg, #265f93, #17456d);
+	background: var(--surface-gradient), #17456d;
 }
 
 .channel-schedules-benefit-icon.tone-purple {
 	color: #dda2ff;
-	background: linear-gradient(145deg, #75459a, #482c68);
+	background: var(--surface-gradient), #482c68;
 }
 
 .channel-schedules-benefit-grid h3 {
@@ -195,10 +193,8 @@
 	padding: 18px 20px 16px;
 	overflow: hidden;
 	border: 1px solid var(--line-bright);
-	border-radius: 13px;
-	background:
-		radial-gradient(circle at 10% 0%, rgba(23, 102, 87, 0.09), transparent 22rem),
-		linear-gradient(140deg, rgba(10, 26, 38, 0.97), rgba(7, 18, 29, 0.95));
+	border-radius: var(--radius-panel);
+	background: var(--surface-gradient), var(--panel);
 }
 
 .schedule-channel-card.has-dead-air {
@@ -218,10 +214,10 @@
 	height: 88px;
 	display: grid;
 	place-items: center;
-	border-radius: 18px;
+	border-radius: var(--radius-dialog);
 	color: var(--accent);
-	background: linear-gradient(145deg, rgba(11, 74, 66, 0.52), rgba(8, 42, 48, 0.82));
-	box-shadow: inset 0 1px rgba(255, 255, 255, 0.02);
+	background: var(--surface-gradient), rgba(8, 42, 48, 0.82);
+	box-shadow: none;
 }
 
 .schedule-channel-icon img {
@@ -263,7 +259,7 @@
 
 .channel-ready-pill {
 	padding: 3px 7px;
-	border-radius: 7px;
+	border-radius: var(--radius-control);
 	color: #9df0ce;
 	background: rgba(19, 105, 74, 0.55);
 }
@@ -321,7 +317,7 @@
 	align-items: center;
 	gap: 12px;
 	border: 1px dashed rgba(22, 191, 151, 0.5);
-	border-radius: 10px;
+	border-radius: var(--radius-control);
 	background: rgba(6, 23, 31, 0.5);
 }
 
@@ -383,7 +379,7 @@
 .schedule-channel-stack-row > i {
 	width: 8px;
 	min-height: 38px;
-	border-radius: 8px;
+	border-radius: var(--radius-control);
 	background: var(--program-color, var(--accent));
 }
 
@@ -445,7 +441,7 @@
 	align-items: center;
 	gap: 24px;
 	border: 1px dashed rgba(22, 191, 151, 0.5);
-	border-radius: 12px;
+	border-radius: var(--radius-panel);
 	background: rgba(6, 21, 30, 0.45);
 }
 
@@ -497,7 +493,7 @@
 	grid-template-columns: auto minmax(0, 1fr);
 	gap: 13px;
 	border: 1px solid var(--line);
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 }
 
 .layered-scheduling-guide article > span {

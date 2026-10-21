@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Check, Trash2 } from '@lucide/vue';
 import { nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
 
 const props = withDefaults(defineProps<{
@@ -118,7 +119,7 @@ watch(
 							:class="{ danger: props.alternateDestructive }"
 							@click="requestClose('alternate')"
 						>
-							{{ alternateLabel }}
+							<Trash2 v-if="props.alternateDestructive" :size="18" aria-hidden="true" />{{ alternateLabel }}
 						</button>
 						<button
 							type="button"
@@ -127,7 +128,7 @@ watch(
 							:disabled="requiredText !== null && confirmationText !== requiredText"
 							@click="requestClose('confirm')"
 						>
-							{{ confirmLabel }}
+							<component :is="props.destructive ? Trash2 : Check" :size="18" aria-hidden="true" />{{ confirmLabel }}
 						</button>
 					</footer>
 				</section>

@@ -9,7 +9,8 @@ export default defineConfig({
 	use: {
 		viewport: { width: 1440, height: 1000 },
 		actionTimeout: 15000,
-		locale: 'en-US', timezoneId: 'UTC', colorScheme: 'dark', reducedMotion: 'reduce',
+		locale: 'en-US', timezoneId: 'UTC', colorScheme: 'dark',
+		contextOptions: { reducedMotion: 'reduce' },
 		launchOptions: { args: ['--disable-gpu'] },
 	},
 });

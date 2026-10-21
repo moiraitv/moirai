@@ -13,7 +13,7 @@ Open **Settings → Playback** to adjust stream capacity, filler, and viewing pr
 
 ## Playback capacity {#playback-capacity}
 
-Set **Maximum active channel sessions** to the number of channel streams that may play at once. The default is **4**, and the supported range is **1–32**.  This does not directly control the number of simultaneously clients watching because an active stream will be shared by two or more clients watching the same channel.
+Set **Maximum active channel sessions** to the number of channel streams that may play at once. The default is **4**, and the supported range is **1–32**. This does not directly control the number of simultaneously clients watching because an active stream will be shared by two or more clients watching the same channel.
 
 ## Filler {#filler}
 
@@ -27,4 +27,4 @@ Viewing preferences let Moirai account for what viewers choose while building fu
 
 ## Playback status {#playback-status}
 
-Playback readiness and active stream counts appear in a compact status strip. Use **Refresh Status** to check again, or expand **Engine details** to inspect the version and contract revision.
+Playback readiness and active stream counts appear in a compact status strip. Use **Refresh Status** to check again, or select **Engine details** to inspect the ErsatzTV-next version and revision in use.

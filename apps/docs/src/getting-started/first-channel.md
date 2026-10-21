@@ -52,13 +52,13 @@ For finer control over individual resources or an existing setup, follow these s
 
 If the channel only needs the one Program all day, skip creating a Template in step 4. In the channel schedule editor, choose **Program** beside the base picker and select the Program directly.
 
-   ![Channel Schedule editor with a base Template and a preview warning about a playback gap](/screenshots/channel-schedules.png)
+![Channel Schedule editor with a base Template and a preview warning about a playback gap](/screenshots/channel-schedules.png)
 
-   This example preview shows a gap. Review warnings and adjust the programming or fallback behavior before relying on the lineup.
+This example preview shows a gap. Review warnings and adjust the programming or fallback behavior before relying on the lineup.
 
-7. Open **![](/icons/calendar-days.svg) Guide**. When the rolling guide is healthy, copy the playlist and XMLTV addresses into your IPTV client.
+7. Open **![](/icons/calendar-days.svg) Guide**. When the rolling guide is healthy, use the **M3U** and **XMLTV** copy buttons to copy the playlist and guide addresses into your IPTV client.
 
-   ![Guide page showing playlist and XMLTV addresses with Copy URL buttons](/screenshots/guide.png)
+   ![Guide page with compact M3U and XMLTV copy buttons](/screenshots/guide.png)
 
 The dashboard reports whether playback is ready. If the guide contains gaps or playback is degraded, start with [Troubleshooting](/operations/troubleshooting).
 

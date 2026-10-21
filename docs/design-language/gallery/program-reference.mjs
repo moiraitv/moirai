@@ -6,7 +6,7 @@ import { bindTwoStep } from './two-step.mjs';
 
 /** Source-owned counted sequence steps, retaining the user's integrated handles and trash treatment. */
 export function authoredSequence() {
-	return `<section class="stack" data-sequence><ol class="stack authored-sequence" role="list">${[0, 2].map((program, index) => `<li class="panel sequence-row"><span class="sequence-number" aria-hidden="true">${index + 1}</span><div class="sequence-body"><div class="row sequence-identity"><strong>${programs[program][0]}</strong><span class="pill info">${programs[program][2]}</span></div><div class="grid sequence-fields"><label>Selections<input type="number" min="1" max="10000" value="${index === 0 ? 2 : 1}" required></label><label>Program<span class="select-control"><select>${programs.filter(item => item[2] !== 'Sequence').map(item => `<option ${item === programs[program] ? 'selected' : ''}>${item[0]}</option>`).join('')}</select></span></label></div></div><button type="button" class="icon two-step-delete" aria-label="Remove ${programs[program][0]} source" title="Remove source" data-sequence-remove data-remove-source>${actionIcon('trash-2')}</button><div class="sequence-moves" role="group" aria-label="Reorder ${programs[program][0]}"><button type="button" class="icon" data-sequence-move="up" aria-label="Move ${programs[program][0]} up" ${index === 0 ? 'disabled' : ''}>${actionIcon('arrow-up')}</button><button type="button" class="icon" data-sequence-move="down" aria-label="Move ${programs[program][0]} down" ${index === 1 ? 'disabled' : ''}>${actionIcon('arrow-down')}</button></div></li>`).join('')}</ol><button type="button" data-sequence-add>${actionIcon('plus')}Add Step</button><label class="check"><input type="checkbox" checked>Repeat sequence</label></section>`;
+	return `<section class="stack" data-sequence><ol class="stack authored-sequence" role="list">${[0, 2].map((program, index) => `<li class="panel sequence-row"><span class="sequence-number" aria-hidden="true">${index + 1}</span><div class="sequence-body"><div class="grid sequence-fields"><label>Selections<input type="number" min="1" max="10000" value="${index === 0 ? 2 : 1}" required></label><label>Program<span class="select-control"><select>${programs.filter(item => item[2] !== 'Sequence').map(item => `<option ${item === programs[program] ? 'selected' : ''}>${item[0]}</option>`).join('')}</select></span></label></div></div><button type="button" class="icon two-step-delete" aria-label="Remove ${programs[program][0]} source" title="Remove source" data-sequence-remove data-remove-source>${actionIcon('trash-2')}</button><div class="sequence-moves" role="group" aria-label="Reorder ${programs[program][0]}"><button type="button" class="icon" data-sequence-move="up" aria-label="Move ${programs[program][0]} up" ${index === 0 ? 'disabled' : ''}>${actionIcon('arrow-up')}</button><button type="button" class="icon" data-sequence-move="down" aria-label="Move ${programs[program][0]} down" ${index === 1 ? 'disabled' : ''}>${actionIcon('arrow-down')}</button></div></li>`).join('')}</ol><button type="button" data-sequence-add>${actionIcon('plus')}Add Step</button><label class="check"><input type="checkbox" checked>Repeat sequence</label></section>`;
 }
 
 /** SequenceGuidePreview is a single sample-day track, not a channel lineup. */
@@ -40,11 +40,6 @@ function bindSequenceSection(section) {
 			row.remove();
 			update();
 		});
-		row.querySelector('select').onchange = event => {
-			const item = programs.find(item => item[0] === event.target.value);
-			row.querySelector('.sequence-identity strong').textContent = item[0];
-			row.querySelector('.sequence-identity .pill').textContent = item[2];
-		};
 	};
 	list.querySelectorAll('li').forEach(bind);
 	section.addEventListener('click', event => {

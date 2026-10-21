@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import FormDisclosure from './FormDisclosure.vue';
 import { computed, onMounted, ref, watch } from 'vue';
-import { BrainCircuit } from '@lucide/vue';
+import { BrainCircuit, ChevronDown } from '@lucide/vue';
 import { AI_WEB_SEARCH_DEFAULT_TIME_LIMIT_MINUTES, type AiProvider, type AiSettingsStatus,
 	type AiSettingsSave, type AiWebSearchTimeLimitMinutes } from '@moirai/shared';
 import { api } from '../api';
@@ -18,6 +19,7 @@ const providers: { id: AiProvider; label: string }[] = [
 ];
 const status = ref<AiSettingsStatus | null>(null);
 const loading = ref(true);
+const advancedOpen = ref(false);
 const saving = ref(false);
 const error = ref('');
 const selected = ref<AiProvider>('openai');
@@ -166,6 +168,19 @@ async function disable(): Promise<void> {
 	}
 }
 
+/** Keep the switch on the saved state until activation or disabling succeeds. */
+async function toggleEnabled(event: Event): Promise<void> {
+	const control = event.target as HTMLInputElement;
+	const enabled = control.checked;
+	control.checked = Boolean(status.value?.activeProvider);
+	if (enabled) {
+		await enable();
+	}
+	else {
+		await disable();
+	}
+}
+
 /** Explicitly delete the selected provider's saved credential. */
 async function forgetKey(): Promise<void> {
 	if (!status.value || saving.value) {
@@ -200,41 +215,48 @@ onMounted(() => void load());
 
 <template>
 	<form class="settings-tab-editor" novalidate @submit.prevent="save">
-		<section class="panel form-grid ai-settings-panel" aria-labelledby="ai-settings-heading">
-			<header class="settings-card-heading span-2">
-				<span class="settings-card-icon"><BrainCircuit :size="24" aria-hidden="true" /></span>
-				<div><div class="settings-card-title"><h2 id="ai-settings-heading">AI provider</h2><PageHelpButton label="AI provider" topic-id="settings.ai#ai-provider" /></div><p>Choose a provider and enter its API key. Provider charges and results vary by model.</p></div>
-			</header>
-			<LoadingState v-if="loading" class="span-2" label="Loading AI settings…" />
-			<div v-else-if="!status" class="span-2">
-				<p class="notice error" role="alert">{{ error }}</p>
-				<button type="button" class="button secondary" @click="load">Retry AI Settings</button>
-			</div>
-			<template v-else>
-				<p v-if="!status.activeProvider" class="span-2">AI is off. Saving a provider enables it.</p>
-				<label><span>Provider</span><select :value="selected" :disabled="saving" @change="selectProvider"><option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.label }}</option></select></label>
-				<label><span>API Key {{ selected === 'custom' ? '(optional)' : '' }}</span><input v-model="key" type="password" autocomplete="off" :disabled="saving" :placeholder="profile?.keyPlaceholder ?? 'Enter API Key'" /><small v-if="profile?.hasKey">A key is saved for this provider. Enter a new key to replace it.</small></label>
-				<p class="span-2">{{ modelOverride ? 'Custom model' : 'Recommended model' }}: <strong>{{ modelOverride || profile?.effectiveModel || 'Enter a model ID' }}</strong></p>
-				<details class="span-2 ai-settings-advanced">
-					<summary>Advanced</summary>
-					<div class="form-grid">
-						<label><span>Custom model ID</span><input v-model="modelOverride" :disabled="saving" placeholder="Use recommended model" /></label>
-						<template v-if="selected === 'custom'">
-							<label><span>Endpoint base URL</span><input v-model="baseUrl" type="url" :disabled="saving" placeholder="https://example.com/v1" /></label>
-							<label><span>API format</span><select v-model="protocol" :disabled="saving"><option value="chat-completions">Chat Completions</option><option value="anthropic-messages">Anthropic Messages</option></select></label>
-							<label v-if="protocol === 'chat-completions'"><span>JSON mode</span><select v-model="chatJsonMode" :disabled="saving"><option value="json_object">JSON object</option><option value="json_schema">JSON schema</option><option value="prompt_only">Prompt only</option></select></label>
-							<label v-if="plaintext" class="settings-toggle span-2"><input v-model="allowInsecureHttp" type="checkbox" :disabled="saving" />I understand that HTTP sends the prompt and API key without encryption.</label>
-						</template>
-						<label v-if="profile?.researchAvailable" class="settings-toggle span-2"><input v-model="webSearch" type="checkbox" :disabled="saving" /><span>Use web research when generating<small class="ai-settings-research-note">May take longer, but can verify uncertain matches for a more accurate selection.</small></span></label>
-						<label v-if="webSearch"><span>Web research time limit</span><select v-model.number="webSearchTimeLimitMinutes" :disabled="saving"><option :value="5">5 minutes</option><option :value="7">7 minutes</option><option :value="10">10 minutes</option><option :value="15">15 minutes</option></select><small>No new searches start after three minutes. This limit lets work already running finish.</small></label>
+		<section class="panel form-grid ai-settings-panel" data-disclosure-layout aria-labelledby="ai-settings-heading">
+			<FormDisclosure v-model:open="advancedOpen" plain class="span-2 form-grid ai-settings-advanced">
+				<template #header="{ expanded, contentId }">
+					<header class="settings-card-heading form-disclosure-trigger ai-settings-header span-2">
+						<span class="settings-card-icon"><BrainCircuit :size="24" aria-hidden="true" /></span>
+						<div><div class="settings-card-title"><h2 id="ai-settings-heading"><button type="button" class="settings-disclosure-title" :disabled="!status || loading" :aria-expanded="expanded" :aria-controls="contentId" @click="advancedOpen = !expanded">AI provider</button></h2><PageHelpButton label="AI provider" topic-id="settings.ai#ai-provider" /></div><p>Choose a provider and enter its API key. Provider charges and results vary by model.</p></div>
+						<label v-if="status && !loading" class="settings-enable ai-enable">
+							<input type="checkbox" role="switch" :checked="Boolean(status.activeProvider)" :disabled="saving || (!status.activeProvider && (dirty || !valid))" aria-label="Enable AI" @change="toggleEnabled" />
+							<span class="channel-enabled-track" aria-hidden="true" />
+							<span><strong>{{ status.activeProvider ? 'Enabled' : 'Disabled' }}</strong></span>
+						</label>
+						<button type="button" class="settings-disclosure-handle" :disabled="!status || loading" :aria-expanded="expanded" :aria-controls="contentId" aria-label="Toggle advanced AI settings" @click="advancedOpen = !expanded"><ChevronDown :size="20" aria-hidden="true" /></button>
+					</header>
+					<LoadingState v-if="loading" class="span-2" label="Loading AI settings…" />
+					<div v-else-if="!status" class="span-2">
+						<p class="notice error" role="alert">{{ error }}</p>
+						<button type="button" class="button secondary" @click="load">Retry AI Settings</button>
 					</div>
-				</details>
+					<template v-else>
+						<p v-if="!status.activeProvider" class="span-2">AI is off. Saving a provider enables it.</p>
+						<label><span>Provider</span><select :value="selected" :disabled="saving" @change="selectProvider"><option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.label }}</option></select></label>
+						<label><span>API Key {{ selected === 'custom' ? '(optional)' : '' }}</span><input v-model="key" type="password" autocomplete="off" :disabled="saving" :placeholder="profile?.keyPlaceholder ?? 'Enter API Key'" /><small v-if="profile?.hasKey">A key is saved for this provider. Enter a new key to replace it.</small></label>
+						<p class="span-2">{{ modelOverride ? 'Custom model' : 'Recommended model' }}: <strong>{{ modelOverride || profile?.effectiveModel || 'Enter a model ID' }}</strong></p>
+					</template>
+				</template>
+				<div v-if="status" class="form-grid">
+					<label><span>Custom model ID</span><input v-model="modelOverride" :disabled="saving" placeholder="Use recommended model" /></label>
+					<template v-if="selected === 'custom'">
+						<label><span>Endpoint base URL</span><input v-model="baseUrl" type="url" :disabled="saving" placeholder="https://example.com/v1" /></label>
+						<label><span>API format</span><select v-model="protocol" :disabled="saving"><option value="chat-completions">Chat Completions</option><option value="anthropic-messages">Anthropic Messages</option></select></label>
+						<label v-if="protocol === 'chat-completions'"><span>JSON mode</span><select v-model="chatJsonMode" :disabled="saving"><option value="json_object">JSON object</option><option value="json_schema">JSON schema</option><option value="prompt_only">Prompt only</option></select></label>
+						<label v-if="plaintext" class="settings-toggle span-2"><input v-model="allowInsecureHttp" type="checkbox" :disabled="saving" />I understand that HTTP sends the prompt and API key without encryption.</label>
+					</template>
+					<label v-if="profile?.researchAvailable" class="settings-toggle span-2"><input v-model="webSearch" type="checkbox" :disabled="saving" /><span>Use web research when generating<small class="ai-settings-research-note">May take longer, but can verify uncertain matches for a more accurate selection.</small></span></label>
+					<label v-if="webSearch"><span>Web research time limit</span><select v-model.number="webSearchTimeLimitMinutes" :disabled="saving"><option :value="5">5 minutes</option><option :value="7">7 minutes</option><option :value="10">10 minutes</option><option :value="15">15 minutes</option></select><small>No new searches start after three minutes. This limit lets work already running finish.</small></label>
+				</div>
+			</FormDisclosure>
+			<template v-if="status">
 				<p v-if="status.connectionWarning" class="notice warning span-2" role="status">{{ status.connectionWarning }}</p>
 				<p v-if="error" class="notice error span-2" role="alert">{{ error }}</p>
 				<div class="form-actions span-2 settings-actions">
 					<button v-if="profile?.hasKey" type="button" class="button secondary" :disabled="saving" @click="forgetKey">Forget key</button>
-					<button v-if="!status.activeProvider" type="button" class="button secondary" :disabled="saving || dirty || !valid" @click="enable">Enable AI</button>
-					<button v-if="status.activeProvider" type="button" class="button secondary" :disabled="saving" @click="disable">Disable AI</button>
 				</div>
 			</template>
 		</section>

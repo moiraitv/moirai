@@ -3,7 +3,7 @@ import { useChannelsStore } from '../../stores/channels';
 import { channelNumberSuggestions, channelGroupSuggestions } from '../../channel-identity-suggestions';
 import QuickStepActions from './QuickStepActions.vue';
 import { computed, ref } from 'vue';
-import { ImagePlus, Trash2 } from '@lucide/vue';
+import {ListChecks, ImagePlus, Trash2 } from '@lucide/vue';
 import {
 	CHANNEL_LOGO_MAX_BYTES,
 	CHANNEL_LOGO_MAX_DIMENSION,
@@ -107,7 +107,7 @@ function removeLogo(): void {
 		<p v-if="error" class="notice error">{{ error }}</p>
 		<QuickStepActions>
 			<button class="button secondary" type="button" :disabled="preparingLogo" @click="emit('back')">Back</button>
-			<button class="button" type="button" :disabled="preparingLogo || !valid" @click="emit('next')">Review Setup</button>
+			<button class="button" type="button" :disabled="preparingLogo || !valid" @click="emit('next')"><ListChecks :size="18" aria-hidden="true" />Review Setup</button>
 		</QuickStepActions>
 	</section>
 </template>

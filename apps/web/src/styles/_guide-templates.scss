@@ -20,17 +20,17 @@
 	flex-wrap: wrap;
 	gap: 0;
 	margin: 0;
-	padding-inline: .15rem 0;
+	padding-inline: 0.15rem 0;
 	border-bottom: 1px solid var(--line-bright);
 }
 
 .guide-template-tab {
 	position: relative;
-	padding: .55rem 1rem;
+	padding: 0.55rem 1rem;
 	margin: 0 0 -1px;
 	border: 1px solid transparent;
 	border-bottom: 0;
-	border-radius: .45rem .45rem 0 0;
+	border-radius: var(--radius-control) var(--radius-control) 0 0;
 	background: transparent;
 	color: var(--muted-strong);
 	font: inherit;
@@ -38,7 +38,7 @@
 
 	&[aria-selected='true'] {
 		border-color: var(--line-bright);
-		background: var(--panel);
+		background: var(--surface-gradient), var(--panel);
 		color: inherit;
 		z-index: 1;
 	}
@@ -46,12 +46,12 @@
 
 .guide-template-source-body {
 	display: grid;
-	gap: .75rem;
-	padding: .85rem;
+	gap: 0.75rem;
+	padding: 0.85rem;
 	border: 1px solid var(--line-bright);
 	border-top: 0;
-	border-radius: 0 0 .5rem .5rem;
-	background: var(--panel);
+	border-radius: 0 0 var(--radius-control) var(--radius-control);
+	background: var(--surface-gradient), var(--panel);
 
 	.credit-template-source-label {
 		margin-top: 0;
@@ -64,7 +64,7 @@
 	border-top: 1px solid var(--line);
 
 	> h3 {
-		margin: 0 0 .5rem;
+		margin: 0 0 0.5rem;
 		font-size: 1rem;
 		font-weight: 600;
 		line-height: 1.4;
@@ -81,7 +81,7 @@
 	min-width: 0;
 	min-height: 8rem;
 	border: 1px solid var(--line);
-	border-radius: .5rem;
+	border-radius: var(--radius-control);
 	overflow: hidden;
 
 	.guide-scroll {
@@ -115,7 +115,7 @@
 .guide-template-preview-refresh {
 	display: flex;
 	align-items: center;
-	gap: .65rem;
+	gap: 0.65rem;
 	color: #e8eef3;
 }
 
@@ -125,9 +125,9 @@
 	width: min(28rem, calc(100vw - 16px));
 	max-height: min(22rem, calc(100vh - 16px));
 	overflow: auto;
-	padding: .85rem 1rem 1rem;
+	padding: 0.85rem 1rem 1rem;
 	border: 1px solid var(--line-bright);
-	border-radius: 12px;
+	border-radius: var(--radius-panel);
 	background: #101e2c;
 	box-shadow: 0 8px 30px rgb(0 0 0 / 25%);
 
@@ -135,8 +135,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: .75rem;
-		margin-bottom: .65rem;
+		gap: 0.75rem;
+		margin-bottom: 0.65rem;
 	}
 
 	strong {
@@ -145,14 +145,14 @@
 
 	dl {
 		display: grid;
-		gap: .35rem 1rem;
+		gap: 0.35rem 1rem;
 		margin: 0;
 	}
 
 	dl > div {
 		display: grid;
 		grid-template-columns: minmax(9rem, max-content) minmax(0, 1fr);
-		gap: .35rem 1rem;
+		gap: 0.35rem 1rem;
 		align-items: start;
 	}
 
@@ -167,7 +167,7 @@
 	}
 
 	code {
-		font-size: .85em;
+		font-size: 0.85em;
 	}
 }
 
@@ -175,7 +175,7 @@
 	margin-block: 1rem;
 
 	> p {
-		margin: .65rem 0 0;
+		margin: 0.65rem 0 0;
 		color: var(--muted);
 	}
 }
@@ -184,7 +184,7 @@
 	display: flex;
 	align-items: flex-end;
 	flex-wrap: wrap;
-	gap: .75rem;
+	gap: 0.75rem;
 
 	label {
 		flex: 1 1 15rem;

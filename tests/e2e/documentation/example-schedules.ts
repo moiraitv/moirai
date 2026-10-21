@@ -33,7 +33,7 @@ test('captures movie and sitcom schedule recipes', { tag: '@docs-screenshot' }, 
 	});
 	await page.goto(`/schedules/programs/${shuffle}`);
 	await expect(page.getByRole('button', { name: /^Shuffle \(no repeats\)/ })).toHaveAttribute('aria-pressed', 'true');
-	await page.locator('summary').filter({ hasText: 'Browse media' }).click();
+	await page.locator('.plain-disclosure-trigger').filter({ hasText: 'Browse media' }).click();
 	await captureThrough(page, page.locator('.program-editor-main'), page.locator('.strategy-seed-field'), 'example-movie-shuffle.png');
 
 	// Each double-feature step owns a distinct curated pool and its shuffle progress.

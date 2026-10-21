@@ -6,10 +6,9 @@
 	grid-template-rows: auto minmax(0, 1fr) auto;
 	overflow: hidden;
 	border-color: #314a61;
-	border-radius: 18px;
+	border-radius: var(--radius-dialog);
 	background:
-		radial-gradient(circle at 70% 18%, rgba(26, 67, 94, 0.17), transparent 34rem),
-		#0a1724;
+		radial-gradient(circle at 70% 18%, rgba(26, 67, 94, 0.17), transparent 34rem), #0a1724;
 	box-shadow: 0 36px 110px rgba(0, 0, 0, 0.72);
 }
 
@@ -74,11 +73,11 @@
 }
 
 .filter-input input {
-	height: 42px;
-	min-height: 42px;
+	height: var(--control-height);
+	min-height: var(--control-height);
 	padding: 10px 48px 10px 18px;
 	border-color: #37516a;
-	border-radius: 11px;
+	border-radius: var(--radius-panel);
 	color: #f2f6f9;
 	background: rgba(5, 16, 27, 0.68);
 	font-size: 0.94rem;
@@ -240,7 +239,7 @@
 	gap: 0;
 	overflow-y: auto;
 	border: 1px solid #30485d;
-	border-radius: 15px;
+	border-radius: var(--radius-dialog);
 	background:
 		linear-gradient(
 			to right,
@@ -302,7 +301,7 @@
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	overflow: hidden;
 	border: 1px solid #3a5268;
-	border-radius: 7px;
+	border-radius: var(--radius-control);
 	background: rgba(5, 16, 27, 0.72);
 }
 
@@ -412,7 +411,7 @@
 
 .filter-modal-footer .filter-apply {
 	min-width: 174px;
-	background: linear-gradient(180deg, #228f74, #126650);
+	background: var(--surface-gradient), #126650;
 }
 
 .filter-duration-bound > legend {
@@ -425,7 +424,7 @@
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	border: 1px solid #37516a;
-	border-radius: 11px;
+	border-radius: var(--radius-panel);
 	background: rgba(5, 16, 27, 0.68);
 
 	&:focus-within {
@@ -448,7 +447,7 @@
 		min-height: 40px;
 		padding: 10px 22px 10px 10px;
 		border: 0;
-		border-radius: 10px;
+		border-radius: var(--radius-control);
 		background: transparent;
 		box-shadow: none;
 		text-align: center;
@@ -467,4 +466,24 @@
 
 .filter-rating-start {
 	grid-column: 1;
+}
+
+.genre-rule-split button:first-child > svg,
+.genre-rule-split button:first-child.active > svg {
+	color: var(--gold);
+}
+.genre-rule-split button.exclude > svg {
+	color: var(--danger);
+}
+.genre-rule-split button.active {
+	color: var(--color-text);
+	background: #146852;
+}
+.genre-rule-split button.exclude.active {
+	background: #80303d;
+}
+.filter-modal-footer .filter-apply {
+	color: var(--color-on-primary);
+	background: var(--button-surface-gradient), var(--color-primary);
+	box-shadow: none;
 }

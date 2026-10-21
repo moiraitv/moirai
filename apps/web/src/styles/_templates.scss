@@ -3,7 +3,6 @@
 	margin-bottom: 27px;
 }
 
-
 .templates-page .lede {
 	max-width: 720px;
 	font-size: 1rem;
@@ -11,20 +10,16 @@
 
 .templates-page .header-actions .button {
 	min-width: 174px;
-	min-height: 54px;
-	box-shadow:
-		inset 0 1px rgba(255, 255, 255, 0.12),
-		0 8px 24px rgba(10, 205, 157, 0.12);
+	min-height: var(--control-height);
+	box-shadow: none;
 }
 
 .templates-intro {
 	display: grid;
 	grid-template-columns: minmax(390px, 0.86fr) minmax(560px, 1.14fr);
 	border: 1px solid var(--line-bright);
-	border-radius: 12px;
-	background:
-		radial-gradient(circle at 8% 0%, rgba(21, 104, 91, 0.13), transparent 25rem),
-		linear-gradient(135deg, rgba(12, 27, 39, 0.98), rgba(11, 23, 34, 0.9));
+	border-radius: var(--radius-panel);
+	background: var(--surface-gradient), var(--panel);
 }
 
 .templates-intro-copy {
@@ -46,8 +41,8 @@
 	width: 58px;
 	height: 58px;
 	color: #4be8c0;
-	background: linear-gradient(145deg, #116557, #0a4139);
-	box-shadow: 0 0 28px rgba(22, 214, 164, 0.1);
+	background: var(--surface-gradient), #0a4139;
+	box-shadow: none;
 }
 
 .templates-intro h2 {
@@ -103,17 +98,17 @@
 	height: 53px;
 	margin-bottom: 12px;
 	color: #55e4bd;
-	background: linear-gradient(145deg, #116557, #0a4139);
+	background: var(--surface-gradient), #0a4139;
 }
 
 .template-benefit-icon.tone-blue {
 	color: #7bc7ff;
-	background: linear-gradient(145deg, #265f93, #17456d);
+	background: var(--surface-gradient), #17456d;
 }
 
 .template-benefit-icon.tone-purple {
 	color: #dda2ff;
-	background: linear-gradient(145deg, #75459a, #482c68);
+	background: var(--surface-gradient), #482c68;
 }
 
 .templates-benefit-grid h3 {
@@ -154,7 +149,7 @@
 	align-items: center;
 	gap: 11px;
 	border: 1px solid var(--line-bright);
-	border-radius: 7px;
+	border-radius: var(--radius-control);
 	color: #9dafbc;
 	background: #081522;
 }
@@ -212,8 +207,8 @@
 .templates-list-panel {
 	overflow: visible;
 	border: 1px solid var(--line);
-	border-radius: 11px;
-	background: linear-gradient(110deg, rgba(12, 28, 40, 0.96), rgba(8, 21, 31, 0.9));
+	border-radius: var(--radius-panel);
+	background: var(--surface-gradient), rgba(8, 21, 31, 0.9);
 }
 
 .template-row {
@@ -246,9 +241,9 @@
 	display: grid;
 	place-items: center;
 	border: 1px solid color-mix(in srgb, var(--program-color) 72%, #fff 8%);
-	border-radius: 7px;
+	border-radius: var(--radius-control);
 	color: #f4f8fa;
-	background: linear-gradient(145deg, var(--program-color), var(--program-color-dark));
+	background: var(--surface-gradient), var(--program-color-dark);
 	box-shadow: 0 0 18px var(--program-color-glow);
 }
 
@@ -287,8 +282,8 @@
 	display: flex;
 	gap: 2px;
 	overflow: hidden;
-	border-radius: 2px;
-	background: #06101a;
+	border-radius: var(--radius-small);
+	background: var(--bg);
 }
 
 .template-mini-track > span {
@@ -296,7 +291,7 @@
 	height: 100%;
 	flex: 0 0 auto;
 	border: 1px solid color-mix(in srgb, var(--program-color) 75%, #fff 10%);
-	background: linear-gradient(90deg, var(--program-color-dark), var(--program-color));
+	background: var(--surface-gradient), var(--program-color-dark);
 }
 
 .template-row-menu {
@@ -339,5 +334,5 @@
 .template-page-buttons button {
 	width: 38px;
 	height: 38px;
-	border-radius: 6px;
+	border-radius: var(--radius-control);
 }

@@ -7,7 +7,7 @@ contextual: true
 
 # Filler presets
 
-Open **Filler** below **Scheduling** to manage **Pre-Rolls**, **Mid-Rolls**, **Post-Rolls**, and **Tail Fillers**. A preset defines the amount and fitting behavior only. You choose the **Source Program** separately when assigning it.
+Open **Filler** in the sidebar, then choose the **Pre-Rolls**, **Mid-Rolls**, **Post-Rolls**, or **Tail Fillers** tab. A preset defines the amount and fitting behavior only. You choose the **Source Program** separately when assigning it.
 
 **Pre-Rolls** play before each primary item, **Post-Rolls** play after each primary item, and **Tail Fillers** run once after primary programming ends within the remaining slot time. **Mid-Rolls** insert breaks inside an item based on the [break conditions](#mid-roll-break-conditions).
 
@@ -24,6 +24,8 @@ Open **Filler** below **Scheduling** to manage **Pre-Rolls**, **Mid-Rolls**, **P
 - **Chapter title:** The name of the chapter ending at a point. A title condition must match that name exactly. Timed points have no chapter title.
 
 :::
+
+![Filler page with tabs for each filler position](/screenshots/filler-tabs.png)
 
 ## Create a preset
 
@@ -72,7 +74,7 @@ Rules can contain up to 100 conditions and groups, nested up to eight levels. Ea
 
 ## Assign filler
 
-In a template or channel schedule, the combined filler interface shows a 137-minute example movie with sample gaps before, during, and after the content. Select **Pre-Roll**, **Mid-Roll**, **Post-Roll**, or **Tail Filler** to highlight the corresponding location it refers to and show its controls. You can also select a gap directly. 
+In a template or channel schedule, the combined filler interface shows a 137-minute example movie with sample gaps before, during, and after the content. Select **Pre-Roll**, **Mid-Roll**, **Post-Roll**, or **Tail Filler** to highlight the corresponding location it refers to and show its controls. You can also select a gap directly.
 
 To activate a type of filler, check the selected type’s checkbox, then choose its **Preset** and **Source Program**. Unchecking it deactivates it. Each programmed slot can inherit, disable, or override each filler type independently. Template defaults take precedence over channel defaults.
 

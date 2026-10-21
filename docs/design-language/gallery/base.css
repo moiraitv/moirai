@@ -71,19 +71,22 @@ button:active,
 	background-color: var(--color-selected);
 }
 button.primary {
-	color: var(--color-on-accent);
-	background-color: var(--color-accent);
+	color: var(--color-on-primary);
+	background-color: var(--color-primary);
 	border-color: var(--color-accent);
+}
+button.primary .lucide {
+	filter: brightness(0) invert(1);
 }
 button.primary:hover,
 button.primary.is-hover {
-	background-color: var(--color-accent-hover);
-	border-color: var(--color-accent-hover);
+	background-color: var(--color-primary-hover);
+	border-color: var(--color-accent);
 }
 button.primary:active,
 button.primary.is-pressed {
-	background-color: var(--color-accent-pressed);
-	border-color: var(--color-accent-pressed);
+	background-color: var(--color-primary-pressed);
+	border-color: var(--color-accent);
 }
 button.ghost {
 	background-color: transparent;
@@ -316,7 +319,7 @@ input[aria-invalid='true'] {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: var(--space-2);
+	gap: 6px;
 	min-height: var(--control-height);
 }
 input[type='checkbox'],
@@ -327,6 +330,10 @@ input[type='radio'] {
 	accent-color: var(--color-accent);
 	flex: none;
 }
+input[type='checkbox'] {
+	width: var(--icon-small);
+	height: var(--icon-small);
+}
 input[type='range'] {
 	width: 100%;
 	accent-color: var(--color-accent);
@@ -334,7 +341,7 @@ input[type='range'] {
 .switch {
 	appearance: none;
 	width: 36px !important;
-	height: 22px !important;
+	height: 20px !important;
 	border-radius: var(--radius-pill);
 	background-color: var(--color-control);
 	position: relative;
@@ -347,15 +354,15 @@ input[type='range'] {
 	position: absolute;
 	left: 3px;
 	top: 3px;
-	width: 16px;
-	height: 16px;
+	width: 14px;
+	height: 14px;
 	border-radius: var(--radius-pill);
 	background-color: var(--color-on-accent);
 	transform: translateX(0);
 	transition: transform var(--motion-fast) var(--ease-feedback);
 }
 .switch:checked::after {
-	transform: translateX(14px);
+	transform: translateX(16px);
 }
 fieldset {
 	border: 0;
@@ -611,14 +618,6 @@ textarea {
 	gap: var(--space-4);
 }
 
-.settings-automatic-heading > button:first-child {
-	justify-content: space-between;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	text-align: left;
-}
-
 .settings-automatic-header strong,
 .settings-automatic-header small {
 	display: block;
@@ -671,16 +670,7 @@ textarea {
 	height: 24px;
 }
 
-.settings-automatic-heading > button:first-child {
-	gap: 14px;
-}
-
-.settings-automatic-heading > button > span:nth-child(2) {
-	flex: 1;
-}
-
-.settings-card-title,
-.settings-automatic-heading {
+.settings-card-title {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -697,10 +687,6 @@ textarea {
 	padding: 0;
 	border: 0;
 	background: transparent;
-}
-
-.settings-automatic-heading > button:first-child {
-	flex: 1;
 }
 
 /* Prominent labeled actions share a decorative glyph without a separate bezel. */

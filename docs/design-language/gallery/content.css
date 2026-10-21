@@ -600,11 +600,6 @@ progress {
 	margin-right: var(--space-2);
 }
 
-.sequence-identity {
-	justify-content: flex-start;
-	gap: var(--space-2);
-}
-
 [data-media-bulk] {
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr);

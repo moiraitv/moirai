@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormDisclosure from '../FormDisclosure.vue';
 import { computed, ref, watch } from 'vue';
 import type { CatalogProgramItemFilter, MediaGenreFacet } from '@moirai/shared';
 import { api } from '../../api';
@@ -58,9 +59,9 @@ watch(() => [expanded.value, props.libraryId], () => {
 </script>
 
 <template>
-	<details class="similarity-library-filters" @toggle="expanded = ($event.target as HTMLDetailsElement).open">
-		<summary><span>Additional filters <small>Optional</small></span><small>{{ summary }}</small></summary>
-		<div v-if="expanded" class="similarity-library-filters-content">
+	<FormDisclosure v-model:open="expanded" plain class="similarity-library-filters">
+		<template #summary><span>Additional filters <small>Optional</small></span><small>{{ summary }}</small></template>
+		<div class="similarity-library-filters-content">
 			<p v-if="!libraryId" class="muted">Choose a Source Program to configure filters.</p>
 			<template v-else>
 				<LibraryQueryFilter
@@ -71,5 +72,5 @@ watch(() => [expanded.value, props.libraryId], () => {
 				<button v-if="error" type="button" class="secondary" :disabled="loading" @click="loadGenres">Retry loading filters</button>
 			</template>
 		</div>
-	</details>
+	</FormDisclosure>
 </template>

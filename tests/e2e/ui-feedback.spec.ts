@@ -14,7 +14,7 @@ test('keeps copy failures visible and offers a dismissible success notification'
 		} });
 	});
 	await page.goto('/guide');
-	const copy = page.getByRole('button', { name: 'Copy URL', exact: true }).first();
+	const copy = page.getByRole('button', { name: 'Copy M3U playlist URL', exact: true }).first();
 	await expect(copy).toBeEnabled();
 	await copy.click();
 	const failure = page.getByRole('alert').filter({ hasText: /Unable to copy playlist URL/i });

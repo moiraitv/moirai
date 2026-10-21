@@ -6,12 +6,13 @@ import { useGuideDateRefresh } from '../composables/useGuideDateRefresh';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
+	Plus,
 	CalendarDays,
 	ChevronLeft,
 	ChevronRight,
 	Clock3,
-	Copy,
-	ExternalLink,
+	FileCode,
+	FileText,
 	RadioTower,
 } from '@lucide/vue';
 import GuideTimeline from '../components/GuideTimeline.vue';
@@ -171,11 +172,6 @@ async function showToday(): Promise<void> {
 	await guideRoute.remember();
 }
 
-/** Select a complete client URL when its read-only field receives focus. */
-function selectClientUrl(event: FocusEvent): void {
-	(event.currentTarget as HTMLInputElement).select();
-}
-
 /** Coalesce live scheduling and catalog changes into one guide refresh. */
 function scheduleRefresh(): void {
 	if (refreshTimer) {
@@ -230,54 +226,10 @@ onBeforeUnmount(() => {
 					This loopback URL will not work from a remote IPTV client. Configure
 					<code>MOIRAI_PUBLIC_URL</code> with a reachable address.
 				</p>
-				<div class="epg-url-fields">
-					<div class="epg-url-field">
-						<label for="channel-playlist-url">Channel playlist (M3U)</label>
-						<div class="epg-url-row">
-							<input
-								id="channel-playlist-url"
-								:value="m3uUrl"
-								readonly
-								@focus="selectClientUrl"
-							/>
-							<span class="epg-copy-control">
-								<button
-									class="button"
-									:disabled="!m3uUrl"
-									@click="copyClientUrl(m3uUrl, 'Playlist URL')"
-								>
-									<Copy :size="17" />Copy URL
-								</button>
-							</span>
-							<a class="button secondary" :href="m3uUrl" target="_blank" rel="noopener">
-								<ExternalLink :size="17" />Open
-							</a>
-						</div>
-					</div>
-					<div class="epg-url-field">
-						<label for="xmltv-epg-url">XMLTV guide</label>
-						<div class="epg-url-row">
-							<input
-								id="xmltv-epg-url"
-								:value="epgUrl"
-								readonly
-								@focus="selectClientUrl"
-							/>
-							<span class="epg-copy-control">
-								<button
-									class="button"
-									:disabled="!epgUrl"
-									@click="copyClientUrl(epgUrl, 'EPG URL')"
-								>
-									<Copy :size="17" />Copy URL
-								</button>
-							</span>
-							<a class="button secondary" :href="epgUrl" target="_blank" rel="noopener">
-								<ExternalLink :size="17" />Open
-							</a>
-						</div>
-					</div>
-				</div>
+			</div>
+			<div class="epg-feed-actions">
+				<button type="button" class="button secondary" :disabled="!m3uUrl" aria-label="Copy M3U playlist URL" @click="copyClientUrl(m3uUrl, 'Playlist URL')"><FileText :size="18" aria-hidden="true" />M3U</button>
+				<button type="button" class="button secondary" :disabled="!epgUrl" aria-label="Copy XMLTV guide URL" @click="copyClientUrl(epgUrl, 'EPG URL')"><FileCode :size="18" aria-hidden="true" />XMLTV</button>
 			</div>
 		</div>
 
@@ -337,10 +289,10 @@ onBeforeUnmount(() => {
 				description="Create a channel before connecting an IPTV client to the guide."
 			>
 				<template #icon><RadioTower :size="37" /></template>
-				<RouterLink class="button" to="/channels?new=1">Create Channel</RouterLink>
+				<RouterLink class="button" to="/channels?new=1"><Plus :size="18" aria-hidden="true" />Create Channel</RouterLink>
 			</ResourceEmptyState>
 		</div>
-		<p v-if="copyError" class="notice error" role="alert">{{ copyError }} <button type="button" class="button secondary" @click="copyError = ''">Dismiss</button></p>
+		<div v-if="copyError" class="notice error epg-copy-error" role="alert"><p>{{ copyError }}</p><span>M3U <code>{{ m3uUrl }}</code></span><span>XMLTV <code>{{ epgUrl }}</code></span><button type="button" class="button secondary" @click="copyError = ''">Dismiss</button></div>
 		<TransientToast v-if="copyMessage" :message="copyMessage" @close="copyMessage = ''" />
 	</section>
 </template>

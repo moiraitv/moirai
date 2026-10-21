@@ -2,12 +2,13 @@
 
 [Handbook](../README.md) · [Audit matrix](audit.md) · [Commands](iteration.md) · [Capture environment](../images/captures.json)
 
-## Current audit
+## Reference baseline audit (historical)
+
+These results describe the reference-only audit before application adoption. Current production and final consistency checks are recorded in [application adoption](application-adoption.md).
 
 Validated on 2026-10-19 using Playwright Chromium 151.0.7922.34. The
 [decision register](audit.md#deliberate-revisions-preserved) distinguishes explicit user revisions
-from the application's source baseline. The reversible 50% radius trial remains active; the base
-token table remains the normal-radius baseline.
+from the application's source baseline. At that time the reversible 50% radius trial was active. The smaller 2/4/6/8px scale has since been adopted permanently in the base tokens; the two before images remain historical evidence.
 
 - **27 standalone browser checks passed.** Coverage includes the actual shell destinations and
   independent group expansion, mobile navigation dismissal/focus, responsive Program inspection,
@@ -38,7 +39,7 @@ token table remains the normal-radius baseline.
   variants were regenerated with software rendering and reviewed for artwork, missing glyphs,
   clipping, alignment and reachable actions. Expanded library and Settings captures increase canvas
   height so fixed pagination/actions appear at the bottom; separate viewport captures remain 844px.
-  The capture manifest records environment, font digest and per-image hashes for 89 PNGs.
+  That capture manifest recorded environment, font digest and per-image hashes for 89 PNGs, including two historical radius comparisons. Current captures contain 87 active reference images; the historical comparisons are no longer regenerated.
 - **Byte comparison:** a repeat `capture.mjs --check` matched the index, all 15 desktop component
   boards, tooltip and contextual-menu images before stopping at the loaded-help drawer image. That
   image differed in **three pixels by at most one channel level**, with unchanged dimensions. Exact byte
@@ -46,8 +47,7 @@ token table remains the normal-radius baseline.
   strict run. The command preserves references and writes the mismatch under
   `test-results/design-language/`.
 - **Static checks:** targeted ESLint, Prettier, token generation and whitespace checks passed.
-  Production code, application interfaces, user-guide source/review state and the three exploratory
-  concepts remain unchanged.
+  At completion of the reference-only audit, production code, application interfaces, user-guide source/review state and the three exploratory concepts remained unchanged. Subsequent [application adoption](application-adoption.md) has its own production verification evidence.
 
 ## Prototype boundaries
 
@@ -66,5 +66,4 @@ application route in `data-app-path`; account/sign-out are presentation only. Se
 
 Browser checks use desktop Chromium with mobile viewport sizes. Physical touch hardware,
 Safari/Firefox native-control differences, screen-reader output, high-contrast modes, full browser
-zoom and a complete accessibility audit remain unverified. Production adoption needs application
-integration checks and the appropriate user-guide updates.
+zoom and a complete accessibility audit remain unverified. Production integration checks and user-guide updates are documented in [application adoption](application-adoption.md); they do not establish verification on additional browser engines or physical devices.

@@ -47,8 +47,16 @@ Run verification and capture after changes, then inspect every affected PNG at i
 Check that headings wrap deliberately, type is readable, actions remain reachable, and body scrolling
 does not move persistent editor actions. `--check` compares without overwriting existing PNGs.
 The capture script overwrites the named current files. Preserve a copy before an experiment; the
-radius trial keeps matched baseline captures in `experiments/radius-50/`.
+completed radius trial retains historical baseline captures in `experiments/radius-50/`. They are no longer regenerated or included in the current capture manifest.
 Do not treat successful byte generation as visual approval.
+
+## Change motion
+
+Update the [motion standard](motion.md) alongside any intentional timing or behavior change. Keep
+shared timing tokens synchronized with their production mappings. Exercise both normal and reduced
+motion in the owning application component, including focus, retained drafts, repeated toggles and
+moving neighbors. Gallery capture defaults to reduced motion, so recaptured PNGs cannot verify the
+transition. Record browser/device coverage and performance limits separately from appearance review.
 
 ## Revise a concept
 

@@ -75,9 +75,15 @@ for (const segmentsPerDay of [6, 48]) {
 			await expect(page.locator('.guide-programme-thumb')).toHaveCount(0);
 		}
 		const visibleCard = cards.filter({ visible: true }).first();
-		await visibleCard.focus();
-		await expect(visibleCard).toBeFocused();
-		await expect(visibleCard).not.toHaveCSS('box-shadow', 'none');
+		const identity = await visibleCard.evaluate(element => ({
+			row: element.closest<HTMLElement>('[data-guide-row]')!.dataset.guideRow,
+			name: element.getAttribute('aria-label')!,
+		}));
+		// Focusing can scroll the virtual window, so keep the selected listing's identity.
+		const focusedCard = page.locator(`[data-guide-row="${identity.row}"]`).getByRole('button', { name: identity.name, exact: true });
+		await focusedCard.focus();
+		await expect(focusedCard).toBeFocused();
+		await expect(focusedCard).not.toHaveCSS('box-shadow', 'none');
 		await page.keyboard.press('Escape');
 		await page.screenshot({ path: `test-results/guide-colors-${segmentsPerDay}.png` });
 	});

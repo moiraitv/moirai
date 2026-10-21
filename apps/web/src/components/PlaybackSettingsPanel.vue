@@ -15,6 +15,7 @@ import LoadingState from './LoadingState.vue';
 import FillerWarningSettings from './FillerWarningSettings.vue';
 import FallbackFillerEditor from './FallbackFillerEditor.vue';
 import FormDisclosure from './FormDisclosure.vue';
+import EngineDetailsPopover from './EngineDetailsPopover.vue';
 import StatusPill from './StatusPill.vue';
 import SettingsSaveFooter from './SettingsSaveFooter.vue';
 import PageHelpButton from './PageHelpButton.vue';
@@ -33,7 +34,6 @@ const saving = ref(false);
 const emit = defineEmits<{ dirty: [value: boolean]; saving: [value: boolean]; attention: [value: boolean]; saved: [message: string] }>();
 const warningOpen = ref(false);
 const fallbackOpen = ref(false);
-const engineOpen = ref(false);
 const settingsLoadError = ref('');
 const statusError = ref('');
 const statusLoading = ref(true);
@@ -315,8 +315,7 @@ const fallbackSummary = computed(() => fallbackLoading.value ? 'Loading…'
 			<LoadingState v-if="statusLoading" label="Loading playback status…" />
 			<div v-if="status" class="settings-status-title"><StatusPill :value="status.status" /><strong>{{ status.activeSessionCount }}/{{ status.maxActiveSessions }} streams active</strong><PageHelpButton label="Playback status" topic-id="settings.playback#playback-status" /></div>
 			<button type="button" class="button secondary" :disabled="refreshingStatus" @click="refreshStatus"><RefreshCw :size="17" />Refresh Status</button>
-			<button type="button" class="button secondary" :aria-expanded="engineOpen" aria-controls="settings-engine-details" @click="engineOpen = !engineOpen">Engine details<ChevronDown :size="17" /></button>
-			<div v-show="engineOpen" id="settings-engine-details" class="settings-engine-details"><template v-if="status"><span>{{ status.engineVersion }}</span><code>{{ status.contractRevision.slice(0, 12) }}</code></template></div>
+			<EngineDetailsPopover :version="status?.engineVersion" :revision="status?.contractRevision" />
 			<p v-if="status?.detail" class="notice warning">{{ status.detail }}</p>
 			<p v-if="statusError" class="notice error" role="alert">{{ statusError }}</p>
 		</div>

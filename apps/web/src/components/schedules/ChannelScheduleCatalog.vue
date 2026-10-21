@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
+	Plus,
 	CalendarClock,
 	CircleAlert,
 	CirclePlus,
@@ -294,7 +295,7 @@ onMounted(() => {
 				:heading-level="3"
 			>
 				<template #icon><TvMinimal :size="37" /></template>
-				<RouterLink class="button" to="/channels?new=1">Create Channel</RouterLink>
+				<RouterLink class="button" to="/channels?new=1"><Plus :size="18" aria-hidden="true" />Create Channel</RouterLink>
 			</ResourceEmptyState>
 			<ResourceEmptyState
 				v-else-if="filteredChannels.length === 0"

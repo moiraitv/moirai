@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, type Page } from '@playwright/test';
-import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY, type MediaBrowseResult } from '@moirai/shared';
 import { authenticateAdministrator } from '../authentication';
 import { registerProgramColors } from './capture';
 
@@ -212,15 +212,17 @@ export async function seedLibrary(page: Page, directory: string, throughUI = fal
 	}
 	await libraryLink.click();
 	await expect(page.getByRole('heading', { name: 'Evening Cinema' })).toBeVisible();
-	const mediaIds: string[] = [];
-	for (const fixture of mediaFixtures) {
-		const itemLink = page.getByRole('link', { name: new RegExp(fixture.title, 'u') }).first();
-		const itemId = (await itemLink.getAttribute('href'))?.split('/').at(-1);
-		if (!itemId) {
-			throw new Error(`Indexed media link for ${fixture.title} did not contain an id`);
+	// Resolve fixture identities independently of which virtualized cards fit in the viewport.
+	const catalogResponse = await page.request.get(`/api/v1/libraries/${libraryId}/media?pageSize=100`);
+	expect(catalogResponse.ok(), await catalogResponse.text()).toBe(true);
+	const catalog = await catalogResponse.json() as MediaBrowseResult;
+	const mediaIds = mediaFixtures.map(fixture => {
+		const item = catalog.entries.find(entry => entry.item?.title === fixture.title)?.item;
+		if (!item) {
+			throw new Error(`Indexed media for ${fixture.title} was absent from the fixture catalog`);
 		}
-		mediaIds.push(itemId);
-	}
+		return item.id;
+	});
 	return { libraryId, mediaIds, mediaRoot, requestHeaders };
 }
 

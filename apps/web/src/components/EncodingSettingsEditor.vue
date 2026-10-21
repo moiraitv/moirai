@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import FormDisclosure from './FormDisclosure.vue';
 import { Monitor, Volume2 } from '@lucide/vue';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useFieldValidation, numericInputAttributes } from '../field-validation';
 import { audioNormalizationSchema, videoNormalizationSchema, type ChannelCreate } from '@moirai/shared';
 
 const props = defineProps<{ disabled?: boolean; showDescriptions?: boolean; accelerationPredictionText?: string; accelerationDetail?: string | undefined }>();
 const audio = defineModel<ChannelCreate['audio']>('audio', { required: true });
 const video = defineModel<ChannelCreate['video']>('video', { required: true });
+const diagnosticsOpen = ref(false);
+watch(() => video.value.accel === 'automatic' && (props.accelerationPredictionText === 'None' || props.accelerationPredictionText === 'Undetermined'), value => {
+	diagnosticsOpen.value = value;
+}, { immediate: true });
 const emit = defineEmits<{ 'validation-change': [invalid: boolean] }>();
 const validation = useFieldValidation(() => {
 	const issues = [
@@ -97,12 +102,12 @@ const numericFields = {
 				<label v-if="video.accel === 'vaapi' || video.accel === 'qsv'"><span>VAAPI driver</span><select v-model="video.vaapiDriver"><option :value="null">Automatic</option><option value="ihd">iHD</option><option value="i965">i965</option><option value="radeonsi">radeonsi</option></select></label>
 			</div>
 		</fieldset>
-		<details class="acceleration-setup-details" :open="video.accel === 'automatic' && (accelerationPredictionText === 'None' || accelerationPredictionText === 'Undetermined')">
-			<summary>Hardware acceleration setup and diagnostics</summary>
+		<FormDisclosure v-model:open="diagnosticsOpen" plain class="acceleration-setup-details">
+			<template #summary>Hardware acceleration setup and diagnostics</template>
 			<p v-if="video.accel === 'automatic' && accelerationDetail" class="acceleration-diagnostic" role="status">{{ accelerationDetail }}</p>
 			<p v-else>Choose Automatic to check which encoders can use the hardware visible to Moirai for these video settings.</p>
 			<a href="/help/getting-started/docker.html#hardware-acceleration" target="_blank" rel="noopener">Device mapping and permissions guide</a>
-		</details>
+		</FormDisclosure>
 		<fieldset :disabled="disabled" class="encoding-settings-section" aria-label="Audio">
 			<legend><span class="encoding-profile-icon" aria-hidden="true"><Volume2 :size="26" /></span><span>Audio<small v-if="showDescriptions">Audio encoding and output settings</small></span></legend>
 			<div class="form-grid three">

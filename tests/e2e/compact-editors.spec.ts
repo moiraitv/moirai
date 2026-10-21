@@ -162,7 +162,7 @@ test('remembers program media browsing and contains selection drawers', async ({
 	await page.getByLabel('Source type').selectOption('collection');
 	await page.unroute('**/api/v1/scheduling/overview');
 	await expect(page.getByRole('searchbox', { name: 'Search source media' })).toBeVisible();
-	await page.locator('.source-browser-disclosure summary').click();
+	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
 	await page.getByRole('button', { name: 'Close program editor' }).click();
 
 	await page.goto(`/schedules/programs/${programId}`);
@@ -171,11 +171,11 @@ test('remembers program media browsing and contains selection drawers', async ({
 	await page.reload();
 	await expect(search).toBeHidden();
 	await expect(page.getByRole('button', { name: 'Review Selection' })).toBeEnabled();
-	await page.locator('.source-browser-disclosure summary').click();
+	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
 	await search.fill('Compact');
-	await page.locator('.source-browser-disclosure summary').click();
+	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
 	await expect(search).toBeHidden();
-	await page.locator('.source-browser-disclosure summary').click();
+	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
 	await expect(search).toHaveValue('Compact');
 
 	for (const viewport of [
@@ -259,7 +259,7 @@ test('keeps acceleration and two-step logo draft actions usable in the channel e
 	await remove.click();
 	const confirm = page.getByRole('button', { name: 'Confirm remove logo', exact: true });
 	await expect(confirm).toHaveText('');
-	await expect(confirm.locator('svg')).toHaveClass(/lucide-check/);
+	await expect(confirm.locator('svg:visible')).toHaveClass(/lucide-check/);
 	await page.keyboard.press('Escape');
 	await expect(remove).toBeVisible();
 	await remove.click();

@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { installGuideFixture } from './performance/guide-fixture';
 
-for (const width of [390, 1440]) {
-	test(`keeps suppressed issues discoverable with a long scan history at ${width}px`, async ({ page }) => {
+for (const width of [320, 390, 1440]) {
+	test(`keeps scan badges on one line and suppressed issues discoverable at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height: 900 });
 		await installGuideFixture(page, 1);
 		const id = '00000000-0000-4000-8000-000000000001';
@@ -34,6 +34,12 @@ for (const width of [390, 1440]) {
 		const history = page.getByRole('dialog', { name: 'Scan history', exact: true });
 		const button = history.getByRole('button', { name: 'Suppressed issues (82)' });
 		await expect(button).toBeInViewport();
+		const badgeLines = await history.locator('.status-pill').first().evaluate(element => {
+			const text = document.createRange();
+			text.selectNodeContents(element);
+			return text.getClientRects().length;
+		});
+		expect(badgeLines).toBe(1);
 		await page.screenshot({ path: `test-results/suppressed-history-${width}.png` });
 		await button.click();
 		const suppressed = page.getByRole('dialog', { name: 'Suppressed issues (82)', exact: true });

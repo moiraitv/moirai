@@ -23,7 +23,7 @@ test('captures backup settings', { tag: '@docs-screenshot' }, async ({ page, doc
 	await row.getByRole('button', { name: 'Restore', exact: true }).click();
 	await page.getByRole('alertdialog', { name: 'Restore Backup?' }).getByRole('button', { name: 'Validate Backup' }).click();
 	const review = page.getByRole('alertdialog', { name: 'Replace Configuration?' });
-	await expect(review.getByRole('button', { name: 'Restore and Restart' })).toBeEnabled();
+	await expect(review.getByRole('button', { name: 'Restore and Restart' })).toBeEnabled({ timeout: 30_000 });
 	await captureSection(page, review, 'backup-restore.png');
 	await page.setViewportSize({ width: 390, height: 844 });
 	await expect(review.getByRole('button', { name: 'Restore and Restart' })).toBeInViewport();

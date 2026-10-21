@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { ChevronRight } from '@lucide/vue';
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { captureDisclosureLayout, animateDisclosureLayout } from './form-disclosure-motion';
 
-const props = defineProps<{ open: boolean }>();
-const emit = defineEmits<{ 'update:open': [value: boolean] }>();
-const expanded = ref(props.open);
+defineProps<{ plain?: boolean }>();
+const open = defineModel<boolean>('open', { default: false });
+const expanded = ref(open.value);
 const visible = ref(expanded.value);
 const root = ref<HTMLElement>();
 const content = ref<HTMLElement>();
@@ -81,7 +82,7 @@ async function setExpanded(value: boolean): Promise<void> {
 	}
 }
 
-watch(() => props.open, (value) => {
+watch(open, (value) => {
 	void setExpanded(value);
 });
 onBeforeUnmount(() => {
@@ -93,11 +94,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div ref="root" class="form-disclosure" :class="{ 'is-open': expanded }">
+	<div ref="root" class="form-disclosure" :class="{ 'is-open': expanded, 'plain-disclosure': plain }">
 		<div ref="surface" class="form-disclosure-surface" aria-hidden="true" />
 		<slot name="header" :expanded="expanded" :content-id="contentId">
-			<button ref="trigger" class="form-disclosure-trigger" type="button" :aria-expanded="expanded" :aria-controls="contentId" @click="emit('update:open', !expanded)">
-				<slot name="summary" />
+			<button ref="trigger" :class="plain ? 'plain-disclosure-trigger' : 'form-disclosure-trigger'" type="button" :aria-expanded="expanded" :aria-controls="contentId" @click="open = !expanded">
+				<ChevronRight v-if="plain" class="plain-disclosure-marker" :size="14" aria-hidden="true" /><slot name="summary" />
 			</button>
 		</slot>
 		<div v-show="visible" :id="contentId" ref="content" class="form-disclosure-content" :inert="!expanded" :aria-hidden="!expanded">

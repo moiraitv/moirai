@@ -34,7 +34,7 @@
 
 .mid-roll-settings:disabled {
 	color: var(--muted);
-	background: var(--panel);
+	background: var(--surface-gradient), var(--panel);
 
 	legend,
 	label,
@@ -43,7 +43,7 @@
 	}
 
 	.predicate-node {
-		background: var(--panel);
+		background: var(--surface-gradient), var(--panel);
 	}
 
 	input,
@@ -51,7 +51,7 @@
 	button {
 		color: var(--muted);
 		border-color: var(--line);
-		background: var(--panel-2);
+		background: var(--surface-gradient), var(--panel-2);
 		cursor: not-allowed;
 		box-shadow: none;
 	}

@@ -10,8 +10,8 @@ state without implementing the application operation; consult the prototype boun
 | State         | Visual contract                                                              | Behavioral contract                                                                                                 |
 | ------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Default       | Semantic surface, text and boundary                                          | Native semantic element wherever practical                                                                          |
-| Hover         | Hover surface or accent-hover fill                                           | Never the only route to information or action                                                                       |
-| Pressed       | Selected surface or accent-pressed fill                                      | Temporary feedback for activation, not persistent selection                                                         |
+| Hover         | Hover surface or primary-hover fill                                          | Never the only route to information or action                                                                       |
+| Pressed       | Selected surface or primary-pressed fill                                     | Temporary feedback for activation, not persistent selection                                                         |
 | Focus visible | 2px accent ring, 3px offset                                                  | Keyboard-visible and unobscured; do not remove native focus without replacement                                     |
 | Selected      | Selected fill plus edge, check or active label                               | `aria-pressed`, checked state or explicit selection semantics appropriate to the component                          |
 | Disabled      | 0.48 opacity, retained meaning                                               | Native disabled; explain unmet prerequisites in visible help when non-obvious                                       |
@@ -46,8 +46,7 @@ a changed draft and two-step confirmation. Resource editors show Close when pris
 during conflicting work. Delete remains available for an existing standalone resource, including with
 unsaved or invalid edits, and requires a styled resource-specific modal.
 
-All editor dismissal routes use the same guard. Clean drafts close; dirty drafts open a safe-default
-discard confirmation. Cancelling preserves the draft and returns focus to its prior control. On
+All editor dismissal routes use the same owning guard. Clean drafts close. Production resource editors retain recoverable drafts locally and can close or reload without a prompt when retention succeeds. When retention fails or work cannot safely be recovered, use the existing Save/Discard/Cancel confirmation and persistent retention warning. Settings and other owners without recoverable drafts keep their own unsaved-change confirmation. The gallery keeps drafts only in memory, so its dirty editor always needs a confirmation. Cancelling preserves the draft and returns focus to its prior control. On
 presentation, focus enters the dialog. Modal content contains focus and makes the background inert.
 On dismissal, return focus to the opener, or a logical next resource if the opener was removed.
 A confirmation stacked over an editor closes before its parent and preserves the parent's focus.
@@ -79,19 +78,13 @@ license to make controls unreachable: scrolled captures show the remaining conte
 
 ## Motion and rendering
 
-| Motion                   | Token                     | Use                                                            |
-| ------------------------ | ------------------------- | -------------------------------------------------------------- |
-| Lightweight feedback     | 110ms, feedback easing    | Button fill, switch thumb; no layout changes                   |
-| Small state presentation | 170ms, feedback easing    | Quiet opacity change when useful                               |
-| Deliberate presentation  | 350ms, system ease-in-out | Dialog/drawer presentation or spatial transition               |
-| Reduced motion           | Effectively immediate     | No meaningful translation or scaling; focus behavior unchanged |
+Follow the [motion standard](motion.md) for timing tokens, synchronized disclosure/layout changes,
+overlays, focus, interrupted transitions, reduced motion and performance verification. Motion should
+clarify a change without delaying interaction. Use 110ms feedback, 170ms small state changes and
+350ms system ease-in-out for deliberate presentation; reuse the owning shared component.
 
-Do not animate constantly changing metrics or use motion just to decorate. If revealing a control
-moves substantial surrounding content, commit final layout once, measure displacement once and
-animate the inverse transform with the same timing as the presentation layer. Reconcile sticky and
-virtualized geometry after completion, not every frame. Direct layout animation is acceptable only
-when representative browser/device checks establish acceptable performance. This reference needs no
-moving large-layout transition; its dialog uses a small opacity/translation entrance only.
+The gallery's static captures and bounded native examples do not demonstrate the full production
+motion contract. Verify actual transitions in the application with normal and reduced motion.
 
 ## Prototype boundary
 

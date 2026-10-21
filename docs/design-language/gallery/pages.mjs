@@ -17,7 +17,7 @@ export function pageHelp(label) {
 
 /** Compose a page header and optional primary task. */
 function header(title, description, action = '', eyebrow = '') {
-	return `<header class="page-header"><div>${eyebrow ? `<span class="eyebrow">${eyebrow}</span>` : ''}<div class="current-title-help"><h1>${title}</h1>${['Settings', 'Status', 'Logs'].includes(title) ? '' : pageHelp(title, title === 'Programs' ? 'programs' : 'scheduling')}</div><p>${description}</p></div>${action ? `<button class="primary" data-reference-new-program data-app-path="/schedules/programs/new"><span class="action-glyph action-plus" aria-hidden="true"></span><span>${action}</span></button>` : ''}</header>`;
+	return `<header class="page-header"><div>${eyebrow ? `<span class="eyebrow">${eyebrow}</span>` : ''}<div class="current-title-help"><h1>${title}</h1>${title === 'Settings' ? '' : pageHelp(title)}</div><p>${description}</p></div>${action ? `<button class="primary" data-reference-new-program data-app-path="/schedules/programs/new"><span class="action-glyph action-plus" aria-hidden="true"></span><span>${action}</span></button>` : ''}</header>`;
 }
 
 /** Render grouped editor fields shared by the full layout and working dialog. */

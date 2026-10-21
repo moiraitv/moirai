@@ -30,13 +30,16 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 		</div>
 		<div class="program-sequence-panel">
 			<div v-for="(entry, index) in entries" :key="entry.id" class="sequence-entry">
-				<input :value="entry.count" type="number" inputmode="numeric" min="1" max="10000" @input="updateEntry(index, { count: Number(($event.target as HTMLInputElement).value) })" />
-				<span>×</span>
-				<select :value="entry.programId" @change="updateEntry(index, { programId: ($event.target as HTMLSelectElement).value })">
-					<option v-for="program in programs.filter((candidate) => candidate.id !== editingId)" :key="program.id" :value="program.id">{{ program.name }}</option>
-				</select>
-				<button type="button" class="icon-button" @click="emit('move', index, -1)"><ArrowUp :size="15" /></button>
-				<button type="button" class="icon-button" @click="emit('move', index, 1)"><ArrowDown :size="15" /></button>
+				<span class="sequence-entry-ordinal" :aria-label="`Step ${index + 1}`">{{ index + 1 }}</span>
+				<div class="sequence-entry-fields">
+					<div class="sequence-entry-selection">
+						<input :aria-label="`Step ${index + 1} count`" :value="entry.count" type="number" inputmode="numeric" min="1" max="10000" @input="updateEntry(index, { count: Number(($event.target as HTMLInputElement).value) })" />
+						<span>×</span>
+						<select :aria-label="`Step ${index + 1} Program`" :value="entry.programId" @change="updateEntry(index, { programId: ($event.target as HTMLSelectElement).value })">
+							<option v-for="candidate in programs.filter((candidate) => candidate.id !== editingId)" :key="candidate.id" :value="candidate.id">{{ candidate.name }}</option>
+						</select>
+					</div>
+				</div>
 				<TwoStepActionButton
 					class="icon-button danger-icon"
 					:label="`Remove sequence step ${index + 1}`"
@@ -45,6 +48,10 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 				>
 					<Trash2 :size="15" />
 				</TwoStepActionButton>
+				<div class="sequence-entry-order" role="group" :aria-label="`Order step ${index + 1}`">
+					<button type="button" class="icon-button" :disabled="index === 0" :aria-label="`Move step ${index + 1} up`" @click="emit('move', index, -1)"><ArrowUp :size="16" aria-hidden="true" /></button>
+					<button type="button" class="icon-button" :disabled="index === entries.length - 1" :aria-label="`Move step ${index + 1} down`" @click="emit('move', index, 1)"><ArrowDown :size="16" aria-hidden="true" /></button>
+				</div>
 			</div>
 			<button type="button" class="toolbar-button" @click="emit('add')"><Plus :size="16" />Add Step</button>
 			<label class="check">

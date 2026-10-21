@@ -10,7 +10,7 @@ The channel editor begins with Number, Name and Group, then schedule access, log
 
 Source owners: [ChannelsPage.vue](../../../apps/web/src/views/ChannelsPage.vue), [LibraryFields.vue](../../../apps/web/src/components/library/LibraryFields.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,7 +20,7 @@ Use a visible label, input boundary, current value, optional helper, and adjacen
 
 | Component           | Parameters                                                                   | Use and constraints                                                                                  |
 | ------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Text / URL / search | 42px minimum; 12px horizontal / 8px vertical inset; 8px radius               | 14/20px, text on canvas, 1px control border                                                          |
+| Text / URL / search | 42px minimum; 12px horizontal / 8px vertical inset; 4px radius               | 14/20px, text on canvas, 1px control border                                                          |
 | Number              | Same geometry, numeric type                                                  | Specify units and domain bounds nearby; validate semantics at trust boundary                         |
 | Textarea            | 96px minimum height; same insets                                             | Vertical resize, wrap authored paragraphs                                                            |
 | Select              | Same geometry; 16px trailing Lucide caret, 12px edge inset, 40px end padding | Small known set; visible label; preserve native keyboard support                                     |
@@ -28,7 +28,7 @@ Use a visible label, input boundary, current value, optional helper, and adjacen
 | Label / helper      | 14/22px 500 / 12/18px 400                                                    | 8px label gap; helper uses muted text                                                                |
 | Field group         | 16px field gap, 24px section gap                                             | 560px recommended max for a single text field                                                        |
 
-Every select uses the shared `.select-control` presentation in all layouts and specimens, including catalog filters, Settings and resource editors; Library sort uses its existing action menu. The native select remains the interactive control; the decorative caret ignores pointer events and is vertically centered. Native indicators return in forced-colors mode.
+Gallery selects use the shared `.select-control` presentation. Production native selects use the same trailing Lucide caret and inset through the feature stylesheet’s background image, preserving their native semantics without requiring a wrapper; Library sort uses its existing action menu. The native select remains the interactive control; the decorative caret ignores pointer events and is vertically centered. Native indicators return in forced-colors mode.
 
 ## States and validation
 

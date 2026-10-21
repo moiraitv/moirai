@@ -57,7 +57,16 @@ export const router = createRouter({
 		{ path: '/playback/encoding-profiles/:id', component: EncodingProfilesPage },
 		{ path: '/schedules/programs', component: ProgramsPage },
 		{ path: '/schedules/programs/:id', component: ProgramsPage },
-		{ path: '/settings', component: SettingsPage },
+		{
+			path: '/settings',
+			redirect: to => {
+				const query = { ...to.query };
+				const section = typeof query.tab === 'string' && ['playback', 'ai', 'backups'].includes(query.tab) ? query.tab : 'playback';
+				delete query.tab;
+				return { path: `/settings/${section}`, query, hash: to.hash };
+			},
+		},
+		{ path: '/settings/:section(playback|ai|backups)', component: SettingsPage },
 		{ path: '/account', component: AccountPage },
 		{ path: '/logs', component: LogsPage },
 		{ path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundPage },

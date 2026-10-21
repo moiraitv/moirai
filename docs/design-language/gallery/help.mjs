@@ -3,6 +3,7 @@ import { icon } from './fixtures.mjs';
 
 /** Existing help.ts and Settings section topic mappings, preserved in the local snapshot. */
 const topics = {
+	Status: 'operations.status', Logs: 'operations.status',
 	Programs: 'scheduling.programs', Libraries: 'libraries.browse', Channels: 'channels.manage',
 	'Channel Schedules': 'scheduling.channel-schedules', Guide: 'playback.guide',
 	'Playback capacity': 'settings.playback#playback-capacity', Filler: 'settings.playback#filler',

@@ -13,7 +13,7 @@ import { api } from '../api';
 import { errorMessage } from '../error-message';
 import { requestConfirmation } from '../confirmation';
 import { closeUnsavedEditor } from '../unsaved-editor';
-import PageHeader from '../components/PageHeader.vue';
+import ManagementPageHeader from '../components/ManagementPageHeader.vue';
 import LoadingState from '../components/LoadingState.vue';
 import ResourceEditorHeader from '../components/ResourceEditorHeader.vue';
 import ResourceEditorActionBar from '../components/ResourceEditorActionBar.vue';
@@ -234,7 +234,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value && r
 
 <template>
 	<div>
-		<PageHeader title="Encoding Profiles" description="Reuse audio and video settings across channels."><button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New Profile</button></PageHeader>
+		<ManagementPageHeader section="Playback" title="Encoding Profiles" description="Reuse audio and video settings across channels."><button class="button" type="button" :disabled="busy" @click="edit()"><Plus :size="20" aria-hidden="true" />New Profile</button></ManagementPageHeader>
 		<p v-if="error" class="notice error">{{ error }} <button type="button" class="button secondary" @click="load">Retry</button></p>
 		<LoadingState v-if="!loaded && !error" />
 		<section v-if="loaded" class="panel encoding-default-panel">

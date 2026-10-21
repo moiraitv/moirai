@@ -10,7 +10,7 @@ Preserve the current channel-editor grouping and the resource action bar: Delete
 
 Source owners: [ChannelsPage.vue](../../../apps/web/src/views/ChannelsPage.vue), [ResourceEditorActionBar.vue](../../../apps/web/src/components/ResourceEditorActionBar.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,7 +20,7 @@ A resource editor owns a saveable draft, captured baseline, validity, pending wo
 
 | Section | Standard                                                                               | Ownership                                              |
 | ------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Surface | 820px max width, 16px radius, control border, dialog shadow                            | Bounded to dynamic viewport                            |
+| Surface | 820px max width, 8px radius, control border, dialog shadow                             | Bounded to dynamic viewport                            |
 | Header  | 24px inset, 24/32px title, top-right 42px close                                        | Resource context, task name, optional description      |
 | Body    | 24px inset / section gaps, 16px field gaps                                             | Only this region scrolls                               |
 | Columns | Number / Name / Group identity row; feature-owned sections below; one column at ≤600px | Identity first, then behavior, then advanced choices   |
@@ -33,7 +33,7 @@ Capture the baseline when the editor opens or a save succeeds. Enable Reset only
 
 Reset first changes to a checkmark plus “Reset” in caution styling, with the accessible name “Confirm reset channel draft” and `aria-pressed="true"`; the second activation restores the baseline. Cancel arming with blur, Escape, outside interaction, another armed action or 5 seconds. Cancellation restores the original label and `aria-pressed="false"`. Reset restores select, numeric, text and checkbox values together.
 
-The close icon, backdrop dismissal and Escape all call the same guard. A clean draft closes directly. A dirty draft opens “Discard unsaved changes?”; Keep editing preserves all values and returns focus; Discard closes. Permanent Delete remains available with an invalid or dirty draft and opens its own resource-specific modal. On cancellation preserve the draft. On confirmation deletion discards the draft as part of removing the resource.
+The close icon, backdrop dismissal and Escape all call the same guard. A clean draft closes directly. Production editors preserve recoverable drafts locally; closing or reloading can proceed when that retention succeeds. Unsafe drafts follow the owning Save/Discard/Cancel confirmation flow, and a storage failure remains visible. Settings retains its existing unsaved-change guard. The in-memory gallery opens “Discard unsaved changes?” for a dirty draft; Keep editing preserves all values and returns focus, while Discard closes. Permanent Delete remains available with an invalid or dirty draft and opens its own resource-specific modal. On cancellation preserve the draft. On confirmation deletion discards the draft as part of removing the resource.
 
 ## Accessibility and edge behavior
 
@@ -79,4 +79,4 @@ The Channel editor preserves its source presentation: vertical Schedule label/ac
 picker with PNG/size guidance, framed Subtitles/Audio/Encoding fieldsets, and 48px circular disclosure
 icons beside title/subtitle text and a trailing chevron. Channel disclosure frames are distinct from
 bezel-free Settings heading icons. Policy cards have a compact 114px minimum; the Off fixture keeps
-selection rules hidden and Presentation open. The radius trial and shared subtle finishes still apply.
+selection rules hidden and Presentation open. The permanent corner scale and shared subtle finishes apply.

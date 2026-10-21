@@ -10,7 +10,7 @@ Preserve the catalog-virtualization contract: 170px minimum desktop tiles, 14px 
 
 Source owners: [LibraryMediaCard.vue](../../../apps/web/src/components/library/LibraryMediaCard.vue), [catalog-virtualization.ts](../../../apps/web/src/catalog-virtualization.ts).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -21,9 +21,9 @@ Let content artwork lead recognition while titles, type and duration remain read
 | Element           | Standard                                                               | Composition                                                                                                                      |
 | ----------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Media grid        | `--media-card-min` 170px; `--media-card-column-gap` 14px; row gap 13px | Fill available columns; two columns at ≤700px                                                                                    |
-| Card              | No outer inset; 12px clipping radius; 1px structural border            | Artwork reaches the frame edges; compact metadata beneath                                                                        |
+| Card              | No outer inset; 6px clipping radius; 1px structural border             | Artwork reaches the frame edges; compact metadata beneath                                                                        |
 | Poster            | 2:3 aspect                                                             | Preserve image proportions with `object-fit: contain`; no stretching                                                             |
-| Landscape preview | 16:9 aspect, 8px radius                                                | Dedicated landscape/player surface; compact carousel uses portrait artwork                                                       |
+| Landscape preview | 16:9 aspect, 4px radius                                                | Dedicated landscape/player surface; compact carousel uses portrait artwork                                                       |
 | Metadata area     | 8px vertical / 12px horizontal inset                                   | Title and supporting facts; 12/18px text                                                                                         |
 | Title             | 12/18px 600, one line                                                  | Ellipsis visually; preserve full text and accessible selection name                                                              |
 | Card affordance   | 25px visual frame, 2px border, 9px top/right inset; `--radius-control` | Normal: + in 42px target / 44px on phone. Bulk: full-card toggle with checkbox visual; selected card gets mint boundary and fill |
@@ -52,7 +52,7 @@ one item is selected. Cancel selection clears selection and restores normal brow
 The specimen shows both modes; each has a working toggle. The full library opens in normal mode.
 Its destination chooser and Select/Clear Page use local fixtures. Preserve the existing Add Selected and Add All actions in the full library. Group expansion, preview metadata,
 server persistence and source-owned selection-toolbar motion remain application behavior. The 25px
-frame and 9px inset follow the current card; the shared target size, colors and radius trial normalize
+frame and 9px inset follow the current card; the shared target size, colors and corner scale normalize
 its incidental styling. No shadow is added to the affordance.
 
 [Normal library](../images/layouts/library.png) · [Bulk selection](../images/layouts/library-bulk.png) ·
@@ -83,7 +83,7 @@ Source owners: [SimilarItemsPreview.vue](../../../apps/web/src/components/progra
 | Strip        | One non-wrapping horizontal row; 9px `--preview-card-gap`; local overflow and proximity scroll snap         |
 | Compact card | 112px `--preview-card-width`, no shrinking; 8px padding, 4px internal gap, 1px control boundary             |
 | Artwork      | 2:3 poster; contain without distortion; `--radius-small` inner corners                                      |
-| Card shape   | `--radius-control`: 8px baseline / 4px active trial; shared subtle surface gradient                         |
+| Card shape   | `--radius-control`: 4px; shared subtle surface gradient                                                     |
 | Identity     | Title and year below artwork; 12/18px reference text, title weight 600; ellipsis with full accessible title |
 | Focus        | 6px strip inset leaves room for the shared outline; focus on strip or item link                             |
 
@@ -128,4 +128,4 @@ All numeric values are CSS pixels at the default root size unless expressed in r
 
 The full library preserves LibraryPage's status icons and scan-history button, alphabet strip, sort
 menu, filter icon and adjacent bulk-selection icon, plus fixed pagination. It has no invented Browse
-selector, normal-mode count row or separate text selection control. See [the library layout recipe](../docs/layouts.md).
+selector, normal-mode count row or separate text selection control. The navigation strip and sort trigger share the same outer height: 42px normally, or 46px for coarse pointers and phone widths, retaining 44px letter targets inside the strip’s borders. See [the library layout recipe](../docs/layouts.md).

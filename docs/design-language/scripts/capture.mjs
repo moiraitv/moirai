@@ -138,17 +138,6 @@ try {
 		await page.goto(`${url}/?layout=${layout.id}`);
 		await ready(page);
 		await capture(page, `layouts/${layout.id}.png`);
-		if (['catalog', 'editor'].includes(layout.id)) {
-			// Compare radius values on the same source-backed composition, not an older layout.
-			const trial = page.locator('link[href="./gallery/radius-trial.css"]');
-			await trial.evaluate(link => {
-				link.disabled = true; 
-			});
-			await capture(page, `../experiments/radius-50/${layout.id}-before.png`);
-			await trial.evaluate(link => {
-				link.disabled = false; 
-			});
-		}
 		if (await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)) {
 			if (layout.id === 'library') {
 				await expandedCanvas(page, `layouts/${layout.id}-expanded.png`);

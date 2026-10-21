@@ -1816,7 +1816,8 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
   appearances and production jobs from Stars, preserving unknown or mixed acting roles as cast, with
   independently remembered More disclosures;
 - channel normalization and artwork;
-- a Playback group for reusable encoding profiles, XMLTV guide templates, and music video credit templates;
+- a Playback page with collection tabs for reusable encoding profiles, XMLTV guide templates, and music video credit templates;
+- a Filler page with collection tabs for Pre-Rolls, Mid-Rolls, Post-Rolls, and Tail Fillers;
 - guided Quick Setup for movie, show, and music video channels;
 - reusable Programs and daily Templates;
 - layered Channel Schedules;
@@ -1824,12 +1825,35 @@ Vue 3, Vite, Vue Router, and Pinia provide the management SPA. Major views inclu
 - administrator account and local fallback credential management;
 - playback, status, and log views.
 
+The web UI implements the [Moirai design language](design-language/README.md) through runtime semantic
+Sass tokens, a locally bundled licensed Inter font, restrained surface gradients, and consistent
+controls. Feature partials retain their layout ownership. The permanent corner scale is 2/4/6/8px for small/control/panel/dialog surfaces,
+with circular controls kept round. The standalone design
+reference stays outside builds and the Docker context. Inline two-step actions retain their original
+footprint while armed; permanent deletion and unsaved-draft dismissal retain modal confirmation.
+The Guide feed strip exposes labeled M3U/XMLTV copy buttons with transient success and persistent
+failure feedback, including selectable fallback URLs when copying fails.
+
+Filler and Playback each have one sidebar destination and route-backed collection tabs. These use
+ordinary links with current-page semantics and horizontal overflow on narrow screens. Existing
+collection and resource editor URLs, contextual help, draft retention, and navigation guards remain
+owned by their original views; switching collections does not mount inactive editors.
+
 Settings separates Playback, AI, and Backups with accessible in-place tabs. Hidden panels remain
-mounted to retain drafts and existing resource polling; tab indicators expose pending changes and
-failures. Playback readiness is a compact strip, while saved-value disclosures hide secondary filler,
-engine, and backup details. Playback capacity, filler, and viewing preferences use separate content
-groups. Settings card headings share the backup cards’ icon badge treatment, and the AI card omits
-its eyebrow. A single Automatic Backup disclosure exposes the policy fields and schedule/storage details,
+mounted to retain drafts and existing resource polling. Settings sections use `/settings/playback`,
+`/settings/ai`, and `/settings/backups`; `/settings` and older `tab` query links redirect while preserving
+unrelated query values and fragments. Guide Template editor tabs retain their validated `tab` query
+parameter. Section changes and browser history preserve mounted drafts; tab indicators expose pending
+changes and failures. Playback readiness is a compact strip. Saved-value disclosures hide secondary filler
+and backup details; Engine details opens a dismissible floating popup without expanding the status
+strip. Compact Advanced, help, diagnostics, Program browsing/filter, and template-output disclosures
+share the form disclosure transition, focus restoration, and reduced-motion behavior. Playback
+capacity, filler, and viewing preferences use separate content groups. Settings card
+headings use plain semantic icons without a bezel, and the AI card omits
+its eyebrow. Its Enable AI switch reflects saved activation independently from the Advanced
+disclosure, whose handle shares the provider header with the switch, matching Automatic Backup.
+The provider title also toggles optional fields; Provider and API Key stay visible and drafts persist. Failed activation
+changes preserve the saved switch state and show an inline error. A single Automatic Backup disclosure exposes the policy fields and schedule/storage details,
 with its enable switch and saved schedule summary available while collapsed. Each tab has a persistent
 Save/Reset footer. Playback saves all scalar fields in one request after publishing any staged fallback;
 partial success preserves the remaining draft for retry. Reset discards

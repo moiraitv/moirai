@@ -10,7 +10,7 @@ Channel Schedules is a channel-owned stack catalog with base / conditional assig
 
 Source owners: [ChannelScheduleCatalog.vue](../../../apps/web/src/components/schedules/ChannelScheduleCatalog.vue), [GuideTimeline.vue](../../../apps/web/src/components/GuideTimeline.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,12 +20,12 @@ Make time, channel identity and schedule precedence legible together. A guide co
 
 | Element           | Standard                                                           | Content                                                             |
 | ----------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| Timeline viewport | 12px radius, structural border; 680px minimum inner width          | Named keyboard-scrollable region on small screens                   |
+| Timeline viewport | 6px radius, structural border; 680px minimum inner width           | Named keyboard-scrollable region on small screens                   |
 | Time axis         | 12/18px muted, 12px vertical inset                                 | Time labels align to block boundaries; timezone nearby              |
 | Channel column    | 13.53rem channel column in Guide; 108px row minimum                | Number plus channel name                                            |
-| Program block     | 8px outer vertical gap, 4px horizontal gap; 12px inset; 8px radius | 14/22px 600 title and 12/18px time                                  |
+| Program block     | 8px outer vertical gap, 4px horizontal gap; 12px inset; 4px radius | 14/22px 600 title and 12/18px time                                  |
 | Block tones       | Info, purple, selected semantic pairs                              | Category label or layer text accompanies hue                        |
-| Schedule layer    | 16px inset, 16px gap, 8px radius, structural border                | Name, applicability, priority and edit action                       |
+| Schedule layer    | 16px inset, 16px gap, 4px radius, structural border                | Name, applicability, priority and edit action                       |
 | Override          | 3px purple leading edge and textual “Override” label               | Explain replacement, not merely active state                        |
 | Now marker        | 2px mint line with “Now” time label                                | Only use for actual current time, never animate with fake stability |
 

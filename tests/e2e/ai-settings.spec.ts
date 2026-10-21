@@ -16,12 +16,12 @@ test('offers web research for each provider and Custom Messages format', async (
 	await page.getByRole('tab', { name: /^AI/ }).click();
 	for (const provider of ['openai', 'anthropic', 'xai', 'openrouter']) {
 		await page.getByRole('combobox', { name: 'Provider' }).selectOption(provider);
-		await page.getByText('Advanced', { exact: true }).click();
+		await page.getByRole('button', { name: 'AI provider', exact: true }).click();
 		await expect(page.getByLabel('Use web research when generating')).toBeVisible();
-		await page.getByText('Advanced', { exact: true }).click();
+		await page.getByRole('button', { name: 'AI provider', exact: true }).click();
 	}
 	await page.getByRole('combobox', { name: 'Provider' }).selectOption('custom');
-	await page.getByText('Advanced', { exact: true }).click();
+	await page.getByRole('button', { name: 'AI provider', exact: true }).click();
 	await page.getByLabel('API format').selectOption('anthropic-messages');
 	await expect(page.getByLabel('Use web research when generating')).toBeVisible();
 	await page.getByLabel('Use web research when generating').check();
@@ -84,7 +84,7 @@ test('clears the draft after saving normalized Custom settings', async ({ page }
 	await page.goto('/settings');
 	await page.getByRole('tab', { name: /^AI/ }).click();
 	await page.getByRole('combobox', { name: 'Provider' }).selectOption('custom');
-	await page.getByText('Advanced', { exact: true }).click();
+	await page.getByRole('button', { name: 'AI provider', exact: true }).click();
 	await page.getByLabel('Custom model ID').fill('  local-model  ');
 	await page.getByLabel('Endpoint base URL').fill('https://example.test/v1/');
 	await page.getByRole('button', { name: 'Save AI Settings' }).click();
@@ -143,8 +143,75 @@ test('resets an invalid AI draft while off and re-enables a saved provider witho
 	await page.getByRole('button', { name: 'Confirm Reset AI settings draft', exact: true }).click();
 	await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('openai');
 	await expect(reset).toBeDisabled();
-	await page.getByRole('button', { name: 'Enable AI', exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Disable AI', exact: true })).toBeVisible();
+	const enabled = page.getByRole('switch', { name: 'Enable AI', exact: true });
+	await enabled.click();
+	await expect(enabled).toBeChecked();
+	await enabled.click();
+	await expect(enabled).not.toBeChecked();
+	await expect(page.getByText('A key is saved for this provider.')).toBeVisible();
+	await enabled.click();
+	await expect(enabled).toBeChecked();
 	await expect(save).toBeDisabled();
 	await expect(reset).toBeDisabled();
+});
+
+
+test('keeps the AI switch independent from Advanced and preserves saved state on failure', async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	let activeProvider: string | null = 'openai';
+	let fails = true;
+	await page.route('**/api/v1/ai/settings', async route => {
+		if (route.request().method() === 'PUT') {
+			if (fails) {
+				await route.fulfill({ status: 503, json: { message: 'AI settings unavailable' } });
+				return;
+			}
+			activeProvider = route.request().postDataJSON().activeProvider;
+		}
+		await route.fulfill({ json: { activeProvider, profiles: profiles.map(profile => ({ ...profile, hasKey: profile.provider === 'openai' })), connectionWarning: null } });
+	});
+	await page.goto('/settings/ai');
+	const enabled = page.getByRole('switch', { name: 'Enable AI', exact: true });
+	const handle = page.getByRole('button', { name: 'Toggle advanced AI settings', exact: true });
+	const header = page.locator('.ai-settings-header');
+	const model = page.getByRole('textbox', { name: 'Custom model ID', exact: true });
+	await expect(enabled).toBeChecked();
+	await enabled.click();
+	await expect(page.getByRole('alert').filter({ hasText: 'AI settings unavailable' })).toBeVisible();
+	await expect(enabled).toBeChecked();
+	await expect(handle).toHaveAttribute('aria-expanded', 'false');
+	await expect(header).toHaveCSS('border-bottom-width', '1px');
+	await expect(header).toHaveCSS('border-bottom-style', 'solid');
+	fails = false;
+	await enabled.click();
+	await expect(enabled).not.toBeChecked();
+	await expect(handle).toHaveAttribute('aria-expanded', 'false');
+	await handle.click();
+	await expect(header).toHaveCSS('border-bottom-width', '1px');
+	await model.fill('retained-advanced-draft');
+	await expect(enabled).toBeDisabled();
+	await handle.click();
+	await expect(model).toBeHidden();
+	await expect(header).toHaveCSS('border-bottom-width', '1px');
+	await handle.click();
+	await expect(model).toHaveValue('retained-advanced-draft');
+	for (const width of [1440, 390, 320]) {
+		await page.setViewportSize({ width, height: 844 });
+		await enabled.scrollIntoViewIfNeeded();
+		if (width < 600) {
+			const heading = await page.getByRole('heading', { name: 'AI provider', exact: true }).boundingBox();
+			const toggle = await enabled.locator('..').boundingBox();
+			expect(toggle!.height).toBeGreaterThanOrEqual(44);
+			expect(toggle!.y).toBeGreaterThan(heading!.y + heading!.height);
+		}
+		await page.screenshot({ path: `test-results/ai-switch-header-${width}.png` });
+		await handle.scrollIntoViewIfNeeded();
+		const row = await page.locator('.ai-settings-header').boundingBox();
+		const button = await handle.boundingBox();
+		expect(button!.x + button!.width).toBeCloseTo(row!.x + row!.width, 0);
+		expect(button!.width).toBeGreaterThanOrEqual(44);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+		await page.screenshot({ path: `test-results/ai-switch-handle-${width}.png` });
+	}
 });

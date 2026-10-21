@@ -10,7 +10,7 @@ Use the existing LoadingState, ResourceEmptyState and TransientToast ownership. 
 
 Source owners: [LoadingState.vue](../../../apps/web/src/components/LoadingState.vue), [ResourceEmptyState.vue](../../../apps/web/src/components/ResourceEmptyState.vue), [TransientToast.vue](../../../apps/web/src/components/TransientToast.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -18,13 +18,13 @@ Explain what is known, what is happening and what the user can do next. A collec
 
 ## Parameters and variants
 
-| Element           | Standard                                                                          | Use                                                                 |
-| ----------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Empty state       | 208px specimen minimum, 24px inset, 12px gaps, 12px radius, dashed control border | Short title, explanation and useful action; grow for content        |
-| Loading indicator | 24px spinner with visible status text                                             | Explicit loading label and `aria-busy`; no empty count              |
-| Banner            | 16px inset, 12px gap, 8px radius, 1px semantic boundary                           | Persistent errors, warnings and states requiring attention          |
-| Toast             | Same inset and radius, raised fill, control boundary, popover shadow              | Success only; 5-second read time; manual close                      |
-| Progress          | 8px visual track; visible numeric / textual status                                | Native progress semantics; determinate only when the total is known |
+| Element           | Standard                                                                         | Use                                                                 |
+| ----------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Empty state       | 208px specimen minimum, 24px inset, 12px gaps, 6px radius, dashed control border | Short title, explanation and useful action; grow for content        |
+| Loading indicator | 24px spinner with visible status text                                            | Explicit loading label and `aria-busy`; no empty count              |
+| Banner            | 16px inset, 12px gap, 4px radius, 1px semantic boundary                          | Persistent errors, warnings and states requiring attention          |
+| Toast             | Same inset and radius, raised fill, control boundary, popover shadow             | Success only; 5-second read time; manual close                      |
+| Progress          | 8px visual track; visible numeric / textual status                               | Native progress semantics; determinate only when the total is known |
 
 ## State and announcement rules
 

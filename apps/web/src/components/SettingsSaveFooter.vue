@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RefreshCw, Save } from '@lucide/vue';
+import { Save } from '@lucide/vue';
 import TwoStepActionButton from './TwoStepActionButton.vue';
 
 withDefaults(defineProps<{
@@ -22,11 +22,10 @@ const emit = defineEmits<{ reset: [] }>();
 				class="button secondary"
 				:label="`Reset ${label} settings draft`"
 				:confirm-label="`Confirm Reset ${label} settings draft`"
-				confirm-text="Confirm Reset"
 				tone="caution"
 				:disabled="busy || !ready || !dirty"
 				@confirm="emit('reset')"
-			><RefreshCw :size="17" />Reset</TwoStepActionButton>
+			>Reset</TwoStepActionButton>
 			<button type="submit" class="button" :aria-label="`Save ${label} Settings`" :disabled="busy || !ready || !dirty || !valid"><Save :size="17" />{{ saving ? savingLabel : 'Save' }}</button>
 		</div>
 	</footer>

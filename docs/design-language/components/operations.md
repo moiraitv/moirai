@@ -10,7 +10,7 @@ Keep real service readiness, channel/item identity, capacity and log severity se
 
 Source owners: [PlaybackNowPlaying.vue](../../../apps/web/src/components/PlaybackNowPlaying.vue), [DashboardPage.vue](../../../apps/web/src/views/DashboardPage.vue), [LogsPage.vue](../../../apps/web/src/views/LogsPage.vue).
 
-Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Numeric radii describe the baseline; the active half-radius trial remains a separate override.
+Apply [the current-UI mapping and reviewed unifications](../docs/current-ui.md) before the component parameters below. Radii use the permanent 2 / 4 / 6 / 8px scale for small / control / panel / dialog corners.
 
 ## Purpose and anatomy
 
@@ -20,7 +20,7 @@ Show real delivery state and resource pressure without implying that preparatory
 
 | Element           | Standard                                        | Content                                            |
 | ----------------- | ----------------------------------------------- | -------------------------------------------------- |
-| Now-playing panel | 24px inset, 16px gap, 12px radius               | Channel, on-air state, title, timing and progress  |
+| Now-playing panel | 24px inset, 16px gap, 6px radius                | Channel, on-air state, title, timing and progress  |
 | Resource metric   | 24/32px 600, tabular figures                    | Current / maximum and explicit unit                |
 | Progress          | 8px visual track, 12/18px supporting text       | Elapsed / remaining or completed / total           |
 | Readiness badge   | Shared success / warning / danger geometry      | Checking, Ready, Degraded or Unavailable with text |
@@ -52,3 +52,5 @@ files. The local example has two rows and no older cursor; it exercises filterin
 without claiming a live log connection. Sample network identifiers use documentation-only addresses.
 
 Status and Logs are separate product pages. Their shared component-family board is only a specimen index. Settings Engine details uses a floating tooltip-style display with Escape/outside dismissal and no card reflow.
+
+Saved-backup rows use a bezel-free 18px trash icon in a 42px desktop / 44px touch target, with danger color, subtle hover/pressed feedback and visible keyboard focus. The accessible label and tooltip identify the backup. Use the same control for unreadable archives; activation opens the existing permanent-deletion confirmation dialog rather than a two-step action. Source owner: [BackupSettingsPanel.vue](../../../apps/web/src/components/BackupSettingsPanel.vue). See the [Backups layout](../images/layouts/settings-backups.png).

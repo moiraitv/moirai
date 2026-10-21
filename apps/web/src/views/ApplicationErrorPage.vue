@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CircleAlert } from '@lucide/vue';
+import {RefreshCw, CircleAlert } from '@lucide/vue';
 import { useRouter } from 'vue-router';
 import { applicationError, clearApplicationError } from '../application-error';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
@@ -25,7 +25,7 @@ function reload(): void {
 			description="500 Internal Server Error"
 		>
 			<template #icon><CircleAlert :size="37" /></template>
-			<button class="button" type="button" @click="reload">Reload</button>
+			<button class="button" type="button" @click="reload"><RefreshCw :size="18" aria-hidden="true" />Reload</button>
 			<button class="button secondary" type="button" @click="goToStatus">Go to Status</button>
 			<template v-if="applicationError" #secondary>{{ applicationError }}</template>
 		</ResourceEmptyState>
