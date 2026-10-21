@@ -27,9 +27,9 @@ RUN case "$MOIRAI_SKIP_BUILD_CHECKS" in \
 
 FROM node:24.22.1-bookworm-slim AS node-runtime
 
-# ErsatzTV Next revision f6350a0ad9077290c0fbad7ea3feacaef71f0ca3. The
+# ErsatzTV Next v0.2.2 revision 4a0b59a66bef93b908e5eb2086847418492e2555. The
 # upstream image index is pinned to prevent an unnoticed engine change.
-FROM ghcr.io/ersatztv/next@sha256:050a18b8be4e10f7c0dd09168ecdd7b54f7d9be75926340e6b13c24ff75db75a AS runtime
+FROM ghcr.io/ersatztv/next@sha256:f0a975ae926a3640b0f024b210a2a1dc8850f8dfa974503db38578e4f3a291ba AS runtime
 USER root
 ENV NODE_ENV=production \
     HOME=/home/ersatztv \

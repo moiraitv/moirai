@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { channelCreateSchema } from '@moirai/shared';
 import {
 	ETV_CONTRACT_REVISION,
+	ETV_CHANNEL_VERSION,
 	ETV_PLAYOUT_VERSION,
 	toEtvChannelConfig,
 	toEtvPlayout,
@@ -21,6 +22,41 @@ function channel(): EtvCompatibleChannel {
 }
 
 describe('ErsatzTV adapter', () => {
+	it.each([
+		['aac', 'h264', 8],
+		[null, 'hevc', 10],
+		['ac3', null, null],
+		[null, null, null],
+	] as const)('adapts audio=%s video=%s bitDepth=%s without changing the draft', (audio, video, bitDepth) => {
+		const configured = channel();
+		configured.audio.format = audio;
+		configured.audio.normalizeLoudness = true;
+		configured.video.format = video;
+		configured.video.bitDepth = bitDepth;
+		const baseline = structuredClone(configured);
+
+		const document = toEtvChannelConfig(configured);
+		expect(document).toMatchObject({
+			version: ETV_CHANNEL_VERSION,
+			normalization: {
+				audio: {
+					mode: audio === null ? 'copy' : 'transcode',
+					format: audio ?? 'aac',
+					normalize_loudness: audio !== null,
+				},
+				video: {
+					mode: video === null ? 'copy' : 'transcode',
+					format: video ?? 'h264',
+					bit_depth: bitDepth ?? 8,
+				},
+			},
+		});
+		expect(document).not.toHaveProperty('normalization.audio.copy_formats');
+		expect(document).not.toHaveProperty('normalization.video.copy_formats');
+		expect(configured).toEqual(baseline);
+		expect(() => validateEtvDocument('channel', document)).not.toThrow();
+	});
+
 	it('supports local fallback video with an explicit silent audio track', () => {
 		const document = toEtvPlayout([{
 			type: 'local',

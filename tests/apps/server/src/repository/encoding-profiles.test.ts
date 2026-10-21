@@ -21,6 +21,28 @@ function draft(name = 'Shared HD') {
 	return encodingProfileCreateSchema.parse({ name, audio: { bitrateKbps: 256 }, video: { width: 1280, height: 720 } });
 }
 
+it('preserves persisted null formats and loudness preferences when adapting linked playback settings', async () => {
+	const repo = repository();
+	const input = encodingProfileCreateSchema.parse({
+		name: 'Legacy copy',
+		audio: { format: null, normalizeLoudness: true },
+		video: { format: null, bitDepth: null },
+	});
+	const { profile } = await repo.encodingProfiles.save(input);
+	const channel = await repo.createChannel(channelCreateSchema.parse({
+		number: '1', name: 'Copy', encodingProfileId: profile.id,
+	}));
+
+	expect(toEtvChannelConfig({ ...channel, video: { ...channel.video, accel: null } }))
+		.toMatchObject({ normalization: {
+			audio: { mode: 'copy', format: 'aac', normalize_loudness: false },
+			video: { mode: 'copy', format: 'h264', bit_depth: 8 },
+		} });
+	expect(await repo.getChannel(channel.id)).toEqual(channel);
+	expect((await repo.encodingProfiles.list()).find((entry) => entry.id === profile.id))
+		.toMatchObject({ audio: input.audio, video: input.video });
+});
+
 it('applies linked settings to channel reads and next output while preserving independent settings', async () => {
 	const repo = repository();
 	const { profile } = await repo.encodingProfiles.save(draft());

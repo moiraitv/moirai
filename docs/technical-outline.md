@@ -1611,11 +1611,19 @@ the gap is intentional dead air.
 ### ErsatzTV-Next integration
 
 Moirai owns channel configuration and maps it through a compatibility adapter pinned to ErsatzTV-Next
-revision `f6350a0ad9077290c0fbad7ea3feacaef71f0ca3`. The adapter retains only the channel and playout
+v0.2.2 revision `4a0b59a66bef93b908e5eb2086847418492e2555`. The adapter retains only the channel and playout
 schemas used by the integrated worker; vendored files retain upstream MIT attribution.
-Generated playout uses schema `0.0.5`; the worker also accepts existing `0.0.3` and `0.0.4` documents.
+Generated channel configuration uses schema `0.1.2` and playout uses schema `0.0.6`; the worker
+also accepts existing `0.0.3`, `0.0.4`, and `0.0.5` playout documents.
 Deploy the application and engine together. On rollback, stop workers and regenerate playout with
-the restored application before tuning because the previous engine rejects `0.0.5`.
+the restored application before tuning because the previous engine rejects `0.0.6`.
+
+The adapter emits explicit transcode mode for concrete audio/video formats. Existing null formats
+select copy mode with upstream default codec allowlists and AAC/H.264 transcode fallback for
+incompatible items. Copy-mode audio disables loudness normalization in worker configuration only;
+stored preferences remain unchanged. Null bit depth becomes 8 at the adapter boundary. No database
+migration or rescan is required. The engine includes subtitle cue timing, short-item timeline,
+separate-audio seeking, hardware pipeline, and child-process shutdown fixes.
 
 The worker probes HDR10 metadata from containers and, when needed, a bounded first-frame probe
 (with a five-second timeout). Existing settings gain QSV HDR10 tone mapping, legacy Intel capability
@@ -1754,6 +1762,10 @@ Native development resolves the channel engine in this order:
 3. The pinned `vendor/ersatztv-next` submodule build.
 4. `PATH`.
 
+Native worker builds require Rust 1.99.0, selected by the upstream `rust-toolchain.toml` when using
+rustup. The build script runs Cargo from the selected checkout so that toolchain selection applies.
+ErsatzTV FFmpeg `8.1.2-4` is bundled in the image and recommended for native playback.
+
 Useful commands are:
 
 ```sh
@@ -1770,7 +1782,7 @@ container to receive these fixes.
 
 The production image derives from the immutable official ErsatzTV-Next image digest recorded in the
 Dockerfile and builds the Node application around its `/app/ersatztv-channel` executable. The pinned
-upstream image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`; Moirai releases
+upstream image supports `linux/amd64` and `linux/arm64`; upstream dropped `linux/arm/v7`. Moirai releases
 continue to target `linux/amd64`. The development submodule is excluded from the
 Docker build context.
 

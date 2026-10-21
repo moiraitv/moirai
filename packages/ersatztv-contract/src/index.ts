@@ -8,6 +8,9 @@ import provenance from './provenance.json' with { type: 'json' };
 /** Upstream ErsatzTV revision represented by the bundled compatibility snapshot. */
 export const ETV_CONTRACT_REVISION = provenance.revision;
 
+/** Channel schema URI written into every generated worker configuration. */
+export const ETV_CHANNEL_VERSION = channelSchema.$id;
+
 /** ErsatzTV JSON document families consumed by integrated channel workers. */
 export type EtvDocumentKind = 'channel' | 'playout';
 
@@ -71,7 +74,8 @@ export type EtvCompatibleChannel = Omit<Channel, 'video'> & {
 };
 
 /**
- * Build and validate worker settings, with viewer-visible fallback diagnostics explicitly opt-in.
+ * Build versioned worker settings, preserving null-format copy intent without changing saved values.
+ * Fallback diagnostics remain opt-in, and copied audio bypasses incompatible loudness normalization.
  */
 export function toEtvChannelConfig(
 	channel: EtvCompatibleChannel,
@@ -79,6 +83,7 @@ export function toEtvChannelConfig(
 	showFallbackError = false,
 ): Record<string, unknown> {
 	const document = {
+		version: ETV_CHANNEL_VERSION,
 		fallback: { show_error: showFallbackError },
 		playout: {
 			folder: playoutFolder,
@@ -93,12 +98,13 @@ export function toEtvChannelConfig(
 		},
 		normalization: {
 			audio: {
-				format: channel.audio.format,
+				mode: channel.audio.format === null ? 'copy' : 'transcode',
+				format: channel.audio.format ?? 'aac',
 				bitrate_kbps: channel.audio.bitrateKbps,
 				buffer_kbps: channel.audio.bufferKbps,
 				channels: channel.audio.channels,
 				sample_rate_hz: channel.audio.sampleRateHz,
-				normalize_loudness: channel.audio.normalizeLoudness,
+				normalize_loudness: channel.audio.format !== null && channel.audio.normalizeLoudness,
 				loudness: channel.audio.loudness
 					? {
 						integrated_target: channel.audio.loudness.integratedTarget,
@@ -108,8 +114,9 @@ export function toEtvChannelConfig(
 					: null,
 			},
 			video: {
-				format: channel.video.format,
-				bit_depth: channel.video.bitDepth,
+				mode: channel.video.format === null ? 'copy' : 'transcode',
+				format: channel.video.format ?? 'h264',
+				bit_depth: channel.video.bitDepth ?? 8,
 				width: channel.video.width,
 				height: channel.video.height,
 				scaling_mode: channel.video.scalingMode,

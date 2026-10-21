@@ -1,6 +1,7 @@
 import { ETV_PLAYOUT_VERSION } from '@ersatztv-source/index.js';
-import { channelCreateSchema, type ScheduleGuide, type LiveEventInput } from '@moirai/shared';
+import { channelCreateSchema, type ScheduleGuide, type LiveEventInput, type TimelineSegment } from '@moirai/shared';
 import * as scheduleGuide from '@server/guide/schedule-guide.js';
+import * as mediaStreams from '@server/playback/audio-selection.js';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -426,10 +427,19 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	}
 });
 
-it.each(['0.0.3', '0.0.4'])('replaces %s playout through normal synchronization while preserving fallback content', async (version) => {
+it.each(['0.0.3', '0.0.4', '0.0.5'])('replaces %s playout while preserving media offsets, selected tracks, and fallback', async (version) => {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-upgrade-'));
 	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Upgrade' }), id: randomUUID(), createdAt: '', updatedAt: '' };
-	const guideValue: ScheduleGuide = { timeZone: 'UTC', startDate: '2026-09-13', requestedDays: 1, days: 1, segmentLimitApplied: false, channels: [] };
+	const segment = {
+		id: randomUUID(), channelId: channel.id, role: 'primary', title: 'Movie',
+		mediaItemId: randomUUID(), programId: null, playbackPath: '/media/movie.mkv',
+		start: '2026-09-13T12:00:00Z', finish: '2026-09-13T12:01:00Z',
+		sourceStartSeconds: 30, sourceFinishSeconds: 90,
+	} as TimelineSegment;
+	const guideValue = {
+		timeZone: 'UTC', startDate: '2026-09-13', requestedDays: 1, days: 1, segmentLimitApplied: false,
+		channels: [{ channelId: channel.id, preview: { segments: [segment] } }],
+	} as ScheduleGuide;
 	const synchronizer = new PlayoutSynchronizer(
 		{ getChannel: async () => channel, listPrograms: async () => [] } as unknown as Repository,
 		root,
@@ -441,7 +451,10 @@ it.each(['0.0.3', '0.0.4'])('replaces %s playout through normal synchronization 
 		loggerFixture(),
 	);
 	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue(guideValue);
-	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
+	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map([[segment.id, [{ streamIndex: 4 }]]]));
+	const streams = vi.spyOn(mediaStreams, 'prepareMediaStreams').mockResolvedValue({
+		audio: new Map([[segment.id, [2]]]), video: new Map([[segment.id, [0]]]),
+	});
 	try {
 		const folder = await synchronizer.syncChannel(channel.id);
 		const file = path.join(folder, (await readdir(folder)).find((name) => name.endsWith('.json'))!);
@@ -454,9 +467,15 @@ it.each(['0.0.3', '0.0.4'])('replaces %s playout through normal synchronization 
 		expect(updated.items.length).toBeGreaterThan(0);
 		expect(updated.items).toEqual(current.items);
 		expect(updated.items[0].source.path).toBe('/fallback/custom.mp4');
+		expect(updated.items.find((item: { source: { path: string } }) => item.source.path === segment.playbackPath))
+			.toMatchObject({
+				source: { in_point_ms: 30_000, out_point_ms: 90_000 },
+				tracks: { audio: { stream_index: 2 }, video: { stream_index: 0 }, subtitle: { stream_index: 4 } },
+			});
 	}
 	finally {
 		guide.mockRestore();
+		streams.mockRestore();
 		await rm(root, { recursive: true, force: true });
 	}
 }, 30_000);

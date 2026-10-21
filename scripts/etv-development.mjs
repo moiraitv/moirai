@@ -66,7 +66,7 @@ function setup() {
 	console.log(`ErsatzTV Next is ready at ${expectedRevision()}.`);
 }
 
-/** Build the standalone channel worker from the configured or pinned checkout. */
+/** Build from the selected checkout so rustup honors its pinned toolchain. */
 function build() {
 	const sourceRoot = path.resolve(process.env.ETV_NEXT_DIR?.trim() || submoduleRoot);
 	if (!existsSync(path.join(sourceRoot, 'Cargo.toml'))) {
@@ -84,6 +84,7 @@ function build() {
 			'-p',
 			'ersatztv-channel',
 		],
+		sourceRoot,
 	);
 }
 
