@@ -1,13 +1,13 @@
 import { eq, sql } from 'drizzle-orm';
 import type { AiCatalogItem } from '../ai/content-selection.js';
 import type { MoiraiDatabase } from '../db/index.js';
-import { mediaGroups, mediaItemGenres, mediaItems } from '../db/schema.js';
+import { mediaGroups, mediaItemAliases, mediaItemGenres, mediaItems } from '../db/schema.js';
 
 /** Keep local-only plot evidence small even when a source provides a long synopsis. */
 const AI_LOCAL_PLOT_LENGTH = 500;
 
 /** Read library identities, bounded local plot evidence, and hierarchy in two scoped queries. */
-export async function readAiCatalog(db: MoiraiDatabase, libraryId: string): Promise<AiCatalogItem[]> {
+export async function readAiCatalog(db: MoiraiDatabase, libraryId: string, excludedItemIds: string[] = []): Promise<AiCatalogItem[]> {
 	const rows = db.select({ id: mediaItems.id, title: mediaItems.title, year: mediaItems.year,
 		kind: mediaItems.kind, groupId: mediaItems.groupId, season: mediaItems.seasonNumber, episode: mediaItems.episodeNumber,
 		plot: sql<string | null>`substr(${mediaItems.plot}, 1, ${AI_LOCAL_PLOT_LENGTH})`,
@@ -26,6 +26,10 @@ export async function readAiCatalog(db: MoiraiDatabase, libraryId: string): Prom
 		}),
 		genres: sql<string>`(SELECT json_group_array(genre_name) FROM ${mediaItemGenres} WHERE item_id = ${mediaItems.id})`
 			.mapWith((value: string): string[] => JSON.parse(value)),
+		...(excludedItemIds.length ? { aliasIds: sql<string>`(SELECT json_group_array(${mediaItemAliases.aliasId})
+			FROM ${mediaItemAliases} WHERE ${mediaItemAliases.itemId} = ${mediaItems.id}
+			AND ${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(excludedItemIds)})))`
+			.mapWith((value: string): string[] => JSON.parse(value)) } : {}),
 	}).from(mediaItems).where(eq(mediaItems.libraryId, libraryId)).all();
 	const groups = new Map(db.select({ id: mediaGroups.id, parentId: mediaGroups.parentId,
 		title: mediaGroups.title, year: mediaGroups.year, kind: mediaGroups.kind,

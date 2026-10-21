@@ -59,6 +59,7 @@ export const screenshotNames = [
 	'program-sequence-guide.png',
 	'program-sequence-inspector.png',
 	'program-similarity-create.png',
+	'program-matches-review.png',
 	'program-theme-create.png',
 	'program-subtitles.png',
 	'program-subtitle-preview.png',

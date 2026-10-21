@@ -760,6 +760,10 @@
 		padding: 20px 14px 30px;
 	}
 
+	.similarity-settings {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
 	.program-source-panel,
 	.program-sequence-panel {
 		padding: 13px;

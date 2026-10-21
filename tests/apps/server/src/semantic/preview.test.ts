@@ -67,6 +67,15 @@ it('previews unsaved settings through HTTP and validates source compatibility an
 		expect(incompatible.statusCode).toBe(400);
 		const invalidQuantity = await app.inject({ method: 'POST', url: '/api/v1/programs/similarity-preview', payload: { ...config, quantity: 501 } });
 		expect(invalidQuantity.statusCode).toBe(400);
+		const review = await app.inject({ method: 'POST', url: '/api/v1/programs/semantic-matches', payload: { config, limit: 2 } });
+		expect(review.statusCode).toBe(200);
+		expect(review.json().total).toBe(f.ids.length - 1);
+		expect(review.json().items).toHaveLength(2);
+		const removed = review.json().items[0].id;
+		const filtered = await app.inject({ method: 'POST', url: '/api/v1/programs/semantic-matches', payload: { config: { ...config, excludedItemIds: [removed] } } });
+		expect(filtered.statusCode).toBe(200);
+		expect(filtered.json().items.map((item: { id: string }) => item.id)).not.toContain(removed);
+		expect(filtered.json().total).toBe(f.ids.length - 2);
 		expect(f.semantic.seeds()).toEqual([]);
 		expect(await f.repository.listPrograms()).toHaveLength(2);
 	}

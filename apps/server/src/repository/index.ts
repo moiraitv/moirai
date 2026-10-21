@@ -204,8 +204,8 @@ export class Repository extends LibraryRepository {
 	}
 
 	/** Load full-library identities for local discovery and retrieval, without paid-context truncation. */
-	async aiCatalog(libraryId: string) {
-		return readAiCatalog(this.database, libraryId);
+	async aiCatalog(libraryId: string, excludedItemIds: string[] = []) {
+		return readAiCatalog(this.database, libraryId, excludedItemIds);
 	}
 
 

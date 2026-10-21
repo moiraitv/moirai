@@ -12,8 +12,9 @@ export function semanticSource(config: Extract<ProgramConfig, { type: 'similarit
 	const kinds = new Set(catalog.media.filter((media) => ids.has(media.id)).map((media) => media.kind));
 	const query = libraryId && config.filter
 		? { ...config.filter, type: 'library-query' as const, libraryId, kinds: [] } : null;
+	const excluded = semanticRemovedIds(config, catalog);
 	const items = catalog.media.filter((media) => media.libraryId === libraryId
-		&& (config.type === 'theme' || kinds.has(media.kind)) && !ids.has(media.id)
+		&& (config.type === 'theme' || kinds.has(media.kind)) && !ids.has(media.id) && !excluded.has(media.id)
 		&& (!query || mediaMatchesLibraryQuery(media, query)));
 	const anchors = semanticAnchors(config, sourceIds, catalog);
 	return { valid, sourceIds, items, anchors,
@@ -28,4 +29,9 @@ export function semanticAnchors(config: Extract<ProgramConfig, { type: 'similari
 		return theme ? [theme] : [];
 	}
 	return sourceIds.flatMap((id) => catalog.semantic?.vectors[id] ? [catalog.semantic.vectors[id]!] : []);
+}
+
+/** Resolve removed identities through the same aliases used by committed set playback. */
+export function semanticRemovedIds(config: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>, catalog: SchedulingCatalog): Set<string> {
+	return new Set((config.excludedItemIds ?? []).map((id) => catalog.mediaAliases?.[id] ?? id));
 }

@@ -101,7 +101,8 @@ export class AiGenerations {
 		const existing = this.records.get(request.id);
 		if (existing) {
 			if (existing.owner !== owner || existing.request.libraryId !== request.libraryId || existing.request.prompt !== request.prompt
-				|| existing.request.maxResults !== request.maxResults) {
+				|| existing.request.maxResults !== request.maxResults
+				|| JSON.stringify(existing.request.excludedItemIds ?? []) !== JSON.stringify(request.excludedItemIds ?? [])) {
 				throw generationError('Generation identity is already in use.', 409);
 			}
 			return existing.value;

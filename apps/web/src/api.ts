@@ -284,6 +284,8 @@ export const api = {
 	deleteCreditTemplate: (id: string) => request<void>(`/api/v1/credit-templates/${id}`, { method: 'DELETE' }),
 	retrySimilarityEmbeddings: (body: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>) =>
 		request<{ queued: number }>('/api/v1/programs/similarity-retry', { method: 'POST', body: JSON.stringify(body) }),
+	semanticMatches: (body: import('@moirai/shared').SemanticMatchesRequest, signal?: AbortSignal) =>
+		request<import('@moirai/shared').SemanticMatchesResponse>('/api/v1/programs/semantic-matches', { method: 'POST', body: JSON.stringify(body), ...(signal ? { signal } : {}) }),
 	previewSimilarityProgram: (body: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>, signal?: AbortSignal) =>
 		request<SchedulingProgramStatus>('/api/v1/programs/similarity-preview', { method: 'POST', body: JSON.stringify(body), ...(signal ? { signal } : {}) }),
 	creditPreviewVideos: () => request<MediaItem[]>('/api/v1/credit-templates/preview-videos'),

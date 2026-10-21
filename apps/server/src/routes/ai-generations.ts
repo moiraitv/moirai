@@ -51,7 +51,8 @@ export function registerAiGenerationRoutes(app: FastifyInstance, dependencies: {
 					throw new AiSelectionError('Library not found.');
 				}
 				const result = await generateAiSelection(ai, body.prompt, library.typeKey, {
-					loadCatalog: () => repository.aiCatalog(body.libraryId),
+					loadCatalog: () => repository.aiCatalog(body.libraryId, body.excludedItemIds),
+					excludedItemIds: body.excludedItemIds,
 					loadVectors: (concepts, signal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, signal, requestEmbeddingWork),
 					...(!ai.webSearch ? { fastLocalReview: true } : {}),
 					requestOptions: productionAiRequestOptions(ai),

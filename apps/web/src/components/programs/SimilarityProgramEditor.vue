@@ -8,10 +8,14 @@ import TransientToast from '../TransientToast.vue';
 import SimilarityLibraryFilters from './SimilarityLibraryFilters.vue';
 import LibraryQueryFilter from '../library/LibraryQueryFilter.vue';
 import { emptyCatalogProgramItemFilter } from '../library/library-filter';
+import ProgramMatchesDrawer from './ProgramMatchesDrawer.vue';
 import SimilarItemsPreview from './SimilarItemsPreview.vue';
 import type { CatalogProgramItemFilter, MediaGenreFacet, SchedulingProgram, SchedulingProgramStatus } from '@moirai/shared';
 
 const props = defineProps<{ programs: SchedulingProgram[]; status?: SchedulingProgramStatus | undefined; readOnlySource?: boolean; type: 'similarity' | 'theme'; libraries: { id: string; name: string; typeKey: string }[]; genres: MediaGenreFacet[]; filtersLoading: boolean; filtersLoaded: boolean }>();
+const excludedItemIds = defineModel<string[]>('excludedItemIds', { required: true });
+const reviewOpen = ref(false);
+const reviewButton = ref<HTMLButtonElement>();
 const filter = defineModel<CatalogProgramItemFilter>('filter', { required: true });
 const theme = defineModel<string>('theme', { required: true });
 const libraryId = defineModel<string>('libraryId', { required: true });
@@ -32,7 +36,7 @@ const retryError = ref('');
 const retrying = ref(false);
 const retryNotice = ref('');
 const draftConfig = computed(() => semanticProgramConfigSchema.safeParse({ ...(props.type === 'theme' ? { type: 'theme', libraryId: libraryId.value, theme: theme.value, filter: filter.value } : { type: 'similarity', sourceProgramId: sourceProgramId.value, filter: filter.value }),
-	variety: variety.value, quantity: quantity.value, softPreferences: softPreferences.value,
+	excludedItemIds: excludedItemIds.value, variety: variety.value, quantity: quantity.value, softPreferences: softPreferences.value,
 	hardExclusions: hardExclusions.value, exclusionStrictness: exclusionStrictness.value }));
 const { preview, loading, error, refresh } = useSimilarityPreview(
 	() => draftConfig.value.success ? draftConfig.value.data : null,
@@ -45,7 +49,7 @@ watch(draftConfig, () => {
 /** Retry only failed embeddings for this draft, preserving ready vectors and active sets. */
 async function retryEmbeddings(): Promise<void> {
 	const config = semanticProgramConfigSchema.safeParse({ ...(props.type === 'theme' ? { type: 'theme', libraryId: libraryId.value, theme: theme.value, filter: filter.value } : { type: 'similarity', sourceProgramId: sourceProgramId.value, filter: filter.value }),
-		variety: variety.value, quantity: quantity.value, softPreferences: softPreferences.value,
+		excludedItemIds: excludedItemIds.value, variety: variety.value, quantity: quantity.value, softPreferences: softPreferences.value,
 		hardExclusions: hardExclusions.value, exclusionStrictness: exclusionStrictness.value });
 	if (!config.success || retrying.value) {
 		return;
@@ -109,17 +113,19 @@ async function retryEmbeddings(): Promise<void> {
 					<small>Number of items selected before a new set is generated.</small>
 				</label>
 			</div>
-			<label><span>Cohesion / Variety · {{ variety }}</span>
-				<input v-model.number="variety" type="range" min="0" max="100" step="1" aria-label="Cohesion / Variety" />
-				<span class="similarity-range-labels"><span>Cohesive</span><span>Varied</span></span>
-				<small>Stay tightly related to the source or theme or explore more varied but still related content.</small>
-			</label>
 		</div>
 		<div class="similarity-refinements">
-			<label><span>Preferences</span>
-				<textarea v-model="softPreferences" rows="3" maxlength="500" placeholder="e.g., Darker, slower-paced science fiction" aria-label="Preferences" />
-				<small>Favor these themes while keeping matches related to the source or theme.</small>
-			</label>
+			<div class="similarity-source-settings">
+				<label><span>Preferences</span>
+					<textarea v-model="softPreferences" rows="3" maxlength="500" placeholder="e.g., Darker, slower-paced science fiction" aria-label="Preferences" />
+					<small>Favor these themes while keeping matches related to the source or theme.</small>
+				</label>
+				<label><span>Cohesion / Variety · {{ variety }}</span>
+					<input v-model.number="variety" type="range" min="0" max="100" step="1" aria-label="Cohesion / Variety" />
+					<span class="similarity-range-labels"><span>Cohesive</span><span>Varied</span></span>
+					<small>Stay tightly related to the source or theme or explore more varied but still related content.</small>
+				</label>
+			</div>
 			<div class="similarity-source-settings">
 				<label><span>Exclusions</span>
 					<textarea v-model="exclusionText" rows="3" placeholder="e.g., superhero movies, romantic comedies" aria-label="Exclusions" />
@@ -137,6 +143,10 @@ async function retryEmbeddings(): Promise<void> {
 			:loading="!error && (loading || Boolean(preview?.previewPending))" :error="Boolean(error)"
 			:message="error || (loading ? 'Finding sample matches…' : preview?.health !== 'ready' ? preview?.sourceLabel : undefined)" />
 		<SimilarItemsPreview v-if="!loading && !error && hardExclusions.length && preview?.excludedPreviewItems" :items="preview.excludedPreviewItems" presentation="editor" heading="Excluded matches" empty-message="No ready candidates match the exclusion concepts at this strictness." />
+		<div class="similarity-review-actions">
+			<button ref="reviewButton" type="button" class="button secondary" :disabled="!draftConfig.success" @click="reviewOpen = true">Review matches</button>
+		</div>
+		<ProgramMatchesDrawer v-if="reviewOpen" v-model:excluded-item-ids="excludedItemIds" :config="draftConfig.success ? draftConfig.data : undefined" :library-id="type === 'theme' ? libraryId : sourceLibraryId" @close="reviewOpen = false; reviewButton?.focus()" />
 		<button v-if="(preview?.failedEmbeddingCount ?? 0) > 0" type="button" class="secondary" :disabled="loading || retrying" @click="retryEmbeddings">{{ retrying ? 'Queueing retry…' : 'Retry preparation' }}</button>
 		<p v-if="retryError" class="notice" role="alert">{{ retryError }}</p>
 		<TransientToast v-if="retryNotice" :message="retryNotice" @close="retryNotice = ''" />

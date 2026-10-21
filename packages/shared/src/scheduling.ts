@@ -9,6 +9,9 @@ export * from './mid-roll.js';
 export * from './ai-selection.js';
 import { audioPreferencesSchema } from './audio.js';
 import { z } from 'zod';
+import { excludedItemIdsSchema } from './item-exclusions.js';
+import { MAX_EXPLICIT_MEDIA_ITEMS } from './media-limits.js';
+export { MAX_EXPLICIT_MEDIA_ITEMS } from './media-limits.js';
 import { slotGuideSchema, type GuideEntry } from './guide.js';
 import { subtitlePreferencesSchema } from './subtitles.js';
 import type { MediaAvailability, SourceAvailability } from './index.js';
@@ -41,8 +44,6 @@ export const MAX_GUIDE_TIMELINE_SEGMENTS = 200_000;
 export const XMLTV_EPG_DAYS = 3;
 /** Default configured capacity for explicit media-item collections. */
 export const DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS = 5_000;
-/** Absolute contract ceiling for configured explicit media-item collections. */
-export const MAX_EXPLICIT_MEDIA_ITEMS = 25_000;
 /** Number of new items an existing program may accept without explicit confirmation. */
 export const PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD = 5;
 /** SHA-256 token binding a program-addition confirmation to its ordered item identifiers. */
@@ -82,7 +83,7 @@ export const selectionStrategySchema = z.discriminatedUnion('type', [
 /** Shared wire contract for selection strategy. */
 export type SelectionStrategy = z.infer<typeof selectionStrategySchema>;
 
-/** Validate one automatic or manually authored selected-media ordering. */
+/** Automatic ordering or a unique explicit order, including empty AI selections. */
 export const selectedMediaSortSchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('date-added'), direction: sortDirectionSchema }),
 	z.object({ type: z.literal('name'), direction: sortDirectionSchema }),
@@ -90,7 +91,7 @@ export const selectedMediaSortSchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('release-date'), direction: sortDirectionSchema }),
 	z.object({
 		type: z.literal('manual'),
-		itemIds: z.array(z.uuid()).min(1).max(MAX_EXPLICIT_MEDIA_ITEMS)
+		itemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS)
 			.refine((ids) => new Set(ids).size === ids.length, 'Manual media order must be unique'),
 	}),
 ]);
@@ -223,8 +224,10 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('ai'),
 		libraryId: z.uuid(),
+		excludedItemIds: excludedItemIdsSchema.optional(),
 		prompt: z.string().trim().min(1).max(2_000),
-		itemIds: selectedMediaItemIdsSchema,
+		itemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS)
+			.refine((ids) => new Set(ids).size === ids.length, 'Selected media must be unique'),
 		sort: selectedMediaSortSchema.default({ type: 'date-added', direction: 'asc' }),
 	}),
 	z.object({
@@ -282,6 +285,13 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 
 	if (source.type !== 'collection' && source.type !== 'ai') {
 		return;
+	}
+
+	if (source.type === 'ai') {
+		const excluded = new Set(source.excludedItemIds ?? []);
+		if (source.itemIds.some((id) => excluded.has(id))) {
+			context.addIssue({ code: 'custom', path: ['itemIds'], message: 'Selected items cannot also be removed' });
+		}
 	}
 
 	if (source.type === 'collection' && source.additionBatches) {
@@ -349,9 +359,10 @@ export const DEFAULT_SIMILARITY_VARIETY = 35;
 /** Default semantic exclusion breadth; higher values exclude more loosely related content. */
 export const DEFAULT_SEMANTIC_EXCLUSION_STRICTNESS = 50;
 
-/** Semantic source settings; changes apply only to the next generated set. */
+/** Matching settings apply to future sets; individual removals also skip committed entries. */
 export const similarityProgramConfigSchema = z.object({
 	type: z.literal('similarity'),
+	excludedItemIds: excludedItemIdsSchema.optional(),
 	sourceProgramId: z.uuid(),
 	filter: catalogProgramItemFilterSchema.optional(),
 	variety: z.number().int().min(0).max(100).default(DEFAULT_SIMILARITY_VARIETY),

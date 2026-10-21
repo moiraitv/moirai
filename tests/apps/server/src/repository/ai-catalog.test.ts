@@ -59,6 +59,14 @@ it('loads bounded local plot evidence with episode identities in two library-sco
 		const result = await readAiCatalog(database.db, libraryId);
 		expect(result).toEqual([{ id, title: 'Pilot', year: 2021, kind: 'episode', genres: [], rating: 8.2, plot: 'Private plot', keywords: ['space'], series: 'Series', seriesYear: 2020, season: 1, episode: 1 }]);
 		expect(prepare).toHaveBeenCalledTimes(2);
+		const { mediaItemAliases } = await import('@server/db/schema.js');
+		const aliasId = randomUUID();
+		database.db.insert(mediaItemAliases).values({ aliasId, libraryId, itemId: id }).run();
+		prepare.mockClear();
+		const withAliases = await readAiCatalog(database.db, libraryId, [aliasId]);
+		expect(withAliases).toHaveLength(1);
+		expect(withAliases[0]).toMatchObject({ id, aliasIds: [aliasId] });
+		expect(prepare).toHaveBeenCalledTimes(2);
 	}
 	finally {
 		database.close();

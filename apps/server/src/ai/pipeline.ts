@@ -81,6 +81,7 @@ export interface AiGenerationMetrics {
 /** Infrastructure required for a bounded generation, injectable for deterministic evaluation. */
 export interface AiGenerationDependencies {
 	loadCatalog: () => Promise<AiCatalogItem[]>;
+	excludedItemIds?: string[] | undefined;
 	loadVectors: (concepts: string[], signal: AbortSignal) => Promise<AiRetrievalVectors>;
 	fetchImpl?: typeof fetch;
 	/** Offline evaluations may override the production deadline. */
@@ -134,11 +135,13 @@ export async function generateAiSelection(
 	try {
 		// Load the scoped library before starting any provider work.
 		activity.onProgress?.('preparing');
-		const catalog = await dependencies.loadCatalog();
+		const excluded = new Set(dependencies.excludedItemIds ?? []);
+		const libraryCatalog = await dependencies.loadCatalog();
+		const catalog = libraryCatalog.filter((item) => !excluded.has(item.id) && !item.aliasIds?.some((id) => excluded.has(id)));
 		signal.throwIfAborted();
 		if (!catalog.length) {
 			return { itemIds: [], unmatched: [], catalogTruncated: false, coverage: {
-				libraryCount: 0, reviewedCount: 0, shortlistLimited: false, embeddingsAvailable: false, searchBudgetExhausted: false,
+				libraryCount: libraryCatalog.length, reviewedCount: 0, shortlistLimited: false, embeddingsAvailable: false, searchBudgetExhausted: false,
 			} };
 		}
 
@@ -294,10 +297,10 @@ export async function generateAiSelection(
 		if (selectedTiers) {
 			dependencies.onSelectionTiers?.(selectedTiers);
 		}
-		const mediaEmbeddingsAvailable = Object.keys(embeddings.vectors).length >= catalog.length;
+		const mediaEmbeddingsAvailable = catalog.every((item) => Boolean(embeddings.vectors[item.id]));
 		const queryEmbeddingsAvailable = embeddings.queries.length === discovery.concepts.length;
 		return { itemIds: [...itemIds], unmatched: [], catalogTruncated: reviewedCount < catalog.length, coverage: {
-			libraryCount: catalog.length, reviewedCount, shortlistLimited: reviewedCount < catalog.length,
+			libraryCount: libraryCatalog.length, reviewedCount, shortlistLimited: reviewedCount < catalog.length,
 			embeddingsAvailable: mediaEmbeddingsAvailable && queryEmbeddingsAvailable,
 			mediaEmbeddingsAvailable, queryEmbeddingsAvailable,
 			searchBudgetExhausted: ai.webSearch && metrics.toolCalls >= AI_WEB_SEARCH_MAX_TOOL_CALLS,

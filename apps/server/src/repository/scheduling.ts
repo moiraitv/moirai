@@ -370,10 +370,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	private async loadSchedulingCatalog(
 		scope: ReturnType<typeof schedulingCatalogScope>,
 	): Promise<SchedulingCatalog> {
-		const aliases = scope.itemIds.length > 0
+		const aliasItemIds = [...new Set([...scope.itemIds, ...scope.aliasItemIds ?? []])];
+		const aliases = aliasItemIds.length > 0
 			? await this.db.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
 				.from(mediaItemAliases)
-				.where(sql`${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(scope.itemIds)}))`)
+				.where(sql`${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(aliasItemIds)}))`)
 			: [];
 		const mediaAliases = Object.fromEntries(aliases.map((alias) => [alias.aliasId, alias.itemId]));
 		const scopedItemIds = scope.itemIds.map((id) => mediaAliases[id] ?? id);

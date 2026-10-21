@@ -21,6 +21,10 @@ it('avoids semantic reads for content-only roots and scopes nested similarity co
 		const unrelated = selectProgram(other.id, `${f.key}:other`, original.state, await f.context())!;
 		f.commit([...unrelated.state.values()]);
 		const programs = await f.repository.listPrograms();
+		const removedAlias = randomUUID();
+		f.database.sqlite.prepare('INSERT INTO media_item_aliases (alias_id, library_id, item_id) VALUES (?, ?, ?)').run(removedAlias, otherLibrary.id, unrelatedIds[0]!);
+		await f.repository.updateProgram(f.program.id, { config: { type: 'similarity', sourceProgramId: f.source.id, quantity: 3, variety: 35, excludedItemIds: [removedAlias] } });
+		const scopedPrograms = await f.repository.listPrograms();
 		const corpusReads = vi.spyOn(SemanticRepository.prototype, 'catalog');
 		const preferenceReads = vi.spyOn(SemanticPreferenceRepository.prototype, 'catalog');
 		try {
@@ -29,16 +33,17 @@ it('avoids semantic reads for content-only roots and scopes nested similarity co
 			expect(content.media.map((item) => item.id)).toEqual([f.ids[0]]);
 			expect(corpusReads).not.toHaveBeenCalled();
 			expect(preferenceReads).not.toHaveBeenCalled();
-			const catalog = await f.repository.getSchedulingCatalog(programs, (function* () {
+			const catalog = await f.repository.getSchedulingCatalog(scopedPrograms, (function* () {
 				yield sequence.id; 
 			})());
 			expect(Object.keys(catalog.semantic!.vectors).sort()).toEqual(f.ids.slice(0, 4).sort());
 			expect(catalog.semantic!.seeds.map((seed) => seed.programId)).toEqual([f.program.id]);
 			expect(catalog.semantic!.currentSets?.map((set) => set.programId)).toEqual([f.program.id]);
 			expect(catalog.media.some((item) => unrelatedIds.includes(item.id))).toBe(false);
+			expect(catalog.mediaAliases?.[removedAlias]).toBe(unrelatedIds[0]);
 			expect(corpusReads).toHaveBeenCalledTimes(1);
 			expect(preferenceReads).toHaveBeenCalledTimes(1);
-			await f.repository.getSchedulingCatalog(programs, [sequence.id]);
+			await f.repository.getSchedulingCatalog(scopedPrograms, [sequence.id]);
 			expect(corpusReads).toHaveBeenCalledTimes(1);
 			expect(preferenceReads).toHaveBeenCalledTimes(1);
 			await f.repository.updateProgram(f.program.id, { config: { type: 'similarity', sourceProgramId: f.source.id, quantity: 3, variety: 35, softPreferences: 'new draft concept' } });

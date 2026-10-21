@@ -123,8 +123,10 @@ The libraries overview presents each configured source as a full-width row with 
 most recently indexed items. One bounded query ranks preview items within every library, including
 temporarily unavailable media, without issuing a request per row. The library detail view browses 100
 catalog entries per page. Its settings dialog edits the library identity, scan and playback roots,
-scan cadence, watcher state, and scheduling enablement. Permanent removal stays collapsed until
-explicitly disclosed, requires exact-name confirmation, and removes Moirai's configuration and index
+scan cadence, watcher state, and scheduling enablement. After saving, the open editor retains the
+submitted source definition as its baseline while reconciliation keeps the accepted source
+authoritative. Permanent removal stays collapsed until explicitly disclosed, requires exact-name
+confirmation, and removes Moirai's configuration and index
 without changing source media files.
 
 Compact media-item cards expose a shared indexed-metadata preview on pointer hover, keyboard focus,
@@ -750,8 +752,36 @@ revision and warns about conflicting edits. Save remains blocked while a job is 
 selection review drawer with search and two-step draft exclusions. Review fetches indexed cards
 in one batch only when opened; loading failures expose retry without an empty-state claim.
 AI indexed-date ordering uses indexed timestamps in scheduling and status previews.
-Saving persists the remaining IDs, Reset restores the saved IDs, and regeneration replaces the
-edited set without retaining a separate exclusion list.
+AI, Similar Items, and Theme configurations retain a bounded, deduplicated `excludedItemIds`
+set (up to the explicit-media contract ceiling) in existing configuration JSON. Missing fields
+mean no removals; no database migration is required. Draft recovery and Reset include removals.
+AI generation filters removed IDs and absorbed multipart aliases before retrieval or paid review;
+retained-job identity includes the normalized removal set. Applying reconnected results also checks
+current draft removals. Embedding coverage checks the remaining eligible identities rather than
+full-library vector counts. Empty AI selections can be saved and report empty health; ordinary
+collections still require an item. Restoring an AI item allows later matching without reinserting
+it into the current frozen selection.
+Similar Items and Theme expose a paged, searchable matching-pool review through scheduling workers,
+using the same relevance pool as set generation without advancing seed state. Review is independent
+of Quantity and per-consumer committed sets. Manual removals filter new and active sets, including
+filler and catalog aliases; fully removed remaining sets may advance without modifying historical
+seed membership. Catalog alias scopes include saved removal references even without committed
+sets. Remaining-set counts resolve aliases and apply current removals without changing consumed
+history, so restoring an unconsumed item makes it count again. Other semantic refinements retain
+their existing future-set behavior.
+The review drawer separates Matches from manually Removed items, retains missing references for
+restoration, and applies changes through the parent program draft and existing save reconciliation.
+The semantic editor keeps Quantity in one column. Cohesion / Variety and Exclusion strictness align
+on a shared row beneath Preferences and Exclusions. Review matches sits at the right below the
+carousels with the standard section spacing.
+Matches and Removed use accessible tabs with active-panel labels and arrow, Home, and End navigation.
+The footer keeps secondary Done dismissal at the right and optional destructive Clear All at the left.
+Individual removals and restorations update the displayed page locally, preserving scroll position
+and adjusting page offsets without reloading the matching pool.
+Review requests retain the removal baseline captured when the scope opens or changes, so local
+removals filter an unchanged relevance pool before paging instead of admitting newly ranked entries.
+Starting a new search or returning from Removed captures the current removal list as a fresh baseline.
+Removals persist across prompt, theme, source, filter, and library edits until explicitly restored.
 The five-step result control requests a target of 50–250 confident matches, defaulting to 100;
 the server validates the choice, keeps modest overages (up to 20% or 25 items, whichever is
 smaller), and trims larger replies. Fewer suitable matches are accepted. Older requests without a

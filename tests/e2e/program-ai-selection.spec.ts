@@ -14,6 +14,7 @@ const program = {
 let jobs: Map<string, AiGeneration>;
 let starts: number;
 let requestedMaxResults: number | undefined;
+let requestedExclusions: string[];
 let cancelled: string[];
 let result: AiContentSelectionResponse | undefined;
 let saved: typeof program | undefined;
@@ -30,6 +31,7 @@ test.beforeEach(async ({ page }) => {
 	jobs = new Map();
 	starts = 0;
 	requestedMaxResults = undefined;
+	requestedExclusions = [];
 	cancelled = [];
 	result = undefined;
 	saved = undefined;
@@ -40,6 +42,7 @@ test.beforeEach(async ({ page }) => {
 		const body = route.request().postDataJSON();
 		starts += 1;
 		requestedMaxResults = body.maxResults;
+		requestedExclusions = body.excludedItemIds ?? [];
 		const job: AiGeneration = { id: body.id, startedAt: Date.now(), state: 'running', status: 'discovering' };
 		jobs.set(body.id, job);
 		if (result) {
@@ -103,7 +106,7 @@ test('restores a pending draft after reload and applies its completed job withou
 	await expect.poll(() => saved?.config.source.itemIds.length).toBe(6);
 	expect(saved?.config.source.prompt).toBe('Spaceship combat');
 	await page.goto(`/schedules/programs/${programId}`);
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
 });
 
 test('retains jobs when closing the editor and restores the result on reopening', async ({ page }) => {
@@ -151,7 +154,7 @@ test('reset cancels pending generation and restores saved fields across reload',
 	await page.reload();
 	await expect(page.getByLabel('Prompt', { exact: true })).toHaveValue('Original prompt');
 	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
 });
 
 test('restores incomplete new drafts and clears results when changing libraries', async ({ page }) => {
@@ -168,7 +171,7 @@ test('restores incomplete new drafts and clears results when changing libraries'
 	await expect(page.getByText('No matches. Adjust the prompt and try again.')).toBeHidden();
 	await page.getByLabel('Library', { exact: true }).selectOption(libraryIds[1]!);
 	await expect(page.getByText('6 selected', { exact: true })).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
 });
 
 test('expired jobs keep draft selections and require an explicit new generation', async ({ page }) => {
@@ -230,7 +233,8 @@ test('shows retained progress, elapsed time and compact coverage on mobile', asy
 	await expect(page.locator('.ai-selection-elapsed')).toContainText('95% estimated');
 	await page.reload();
 	await expect(page.locator('.ai-selection-elapsed')).toContainText('95% estimated');
-	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Generate', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.locator('.ai-selection-progress').scrollIntoViewIfNeeded();
 	const progressFitsButton = await page.locator('.ai-selection-progress').evaluate(progress => {
@@ -257,4 +261,37 @@ test('shows retained progress, elapsed time and compact coverage on mobile', asy
 	const fits = await page.locator('.ai-selection-feedback').evaluate(element => element.scrollWidth <= element.clientWidth);
 	expect(fits).toBe(true);
 	await page.screenshot({ path: '/tmp/moirai-ai-draft-mobile.png' });
+});
+
+
+test('retains removals through an empty save, restores future eligibility and filters regenerated results', async ({ page }) => {
+	result = { itemIds, unmatched: [], catalogTruncated: false };
+	await page.goto(`/schedules/programs/${programId}`);
+	await page.getByRole('button', { name: 'Generate', exact: true }).click();
+	await expect(page.getByText('6 selected', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Review results', exact: true }).click();
+	const drawer = page.getByRole('dialog', { name: 'Review results', exact: true });
+	await expect(drawer.locator('.selected-item-preview')).toHaveCount(itemIds.length);
+	await drawer.getByRole('button', { name: 'Clear All', exact: true }).click();
+	await drawer.getByRole('button', { name: 'Confirm Clear All', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Removed (6)', exact: true }).click();
+	await expect(drawer.locator('.selected-item-preview')).toHaveCount(6);
+	await drawer.getByRole('button', { name: 'Restore Result 1', exact: true }).click();
+	await expect(drawer.getByRole('tab', { name: 'Removed (5)', exact: true })).toBeVisible();
+	await drawer.getByRole('tab', { name: 'Matches', exact: true }).click();
+	await expect(drawer.getByText('0 selected', { exact: true })).toBeVisible();
+	await drawer.getByRole('button', { name: 'Done', exact: true }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect.poll(() => saved?.config.source.itemIds).toEqual([]);
+	expect(saved?.config.source).toMatchObject({ excludedItemIds: itemIds.slice(1) });
+	await page.reload();
+	await page.getByRole('button', { name: 'Review results', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Removed (5)', exact: true }).click();
+	await expect(drawer.locator('.selected-item-preview')).toHaveCount(5);
+	await drawer.press('Escape');
+	await expect(drawer).toBeHidden();
+	await expect(page.getByRole('button', { name: 'Review results', exact: true })).toBeFocused();
+	await page.getByRole('button', { name: 'Generate', exact: true }).click();
+	await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+	expect(requestedExclusions).toEqual(itemIds.slice(1));
 });

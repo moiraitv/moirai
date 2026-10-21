@@ -35,6 +35,10 @@ it('retains uncapped results for requests without a result target', async () => 
 	});
 	app.setValidatorCompiler(validatorCompiler);
 	app.setSerializerCompiler(responseSerializerCompiler);
+	app.setErrorHandler((error, request, reply) => {
+		const mapped = publicError(error, request.id);
+		reply.status(mapped.statusCode).send(mapped.body);
+	});
 	registerAiRoutes(app, {
 		config: loadConfig({ ai: { apiKey: 'test', baseUrl: 'https://ai.example.test/v1', model: 'test', webSearch: false } }),
 		repository: { getLibrary: async () => ({ id: libraryId, typeKey: 'movies' }),
@@ -55,6 +59,24 @@ it('retains uncapped results for requests without a result target', async () => 
 			expect(retained.json().state).toBe('completed');
 			expect(retained.json().result.itemIds).toHaveLength(catalog.length);
 		});
+		const excludedItemIds = [catalog[0]!.id, catalog[1]!.id];
+		const filtered = await app.inject({ method: 'POST', url: '/api/v1/ai/content-selection',
+			payload: { libraryId, prompt: 'Movies', excludedItemIds } });
+		expect(filtered.statusCode).toBe(200);
+		expect(filtered.json().itemIds).toHaveLength(catalog.length - excludedItemIds.length);
+		expect(filtered.json().itemIds).not.toEqual(expect.arrayContaining(excludedItemIds));
+		const filteredId = randomUUID();
+		expect((await app.inject({ method: 'POST', url: '/api/v1/ai/generations',
+			payload: { id: filteredId, libraryId, prompt: 'Movies', excludedItemIds } })).statusCode).toBe(202);
+		await vi.waitFor(async () => {
+			const retained = await app.inject({ method: 'GET', url: `/api/v1/ai/generations/${filteredId}` });
+			expect(retained.json().state).toBe('completed');
+			expect(retained.json().result.itemIds).toEqual(filtered.json().itemIds);
+		});
+		expect((await app.inject({ method: 'POST', url: '/api/v1/ai/generations',
+			payload: { id: filteredId, libraryId, prompt: 'Movies', excludedItemIds: [...excludedItemIds].reverse() } })).statusCode).toBe(202);
+		expect((await app.inject({ method: 'POST', url: '/api/v1/ai/generations',
+			payload: { id: filteredId, libraryId, prompt: 'Movies', excludedItemIds: [] } })).statusCode).toBe(409);
 	}
 	finally {
 		await app.close();

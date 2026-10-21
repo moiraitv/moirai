@@ -17,6 +17,8 @@ export const AI_DISCOVERY_ITEM_LIMIT = 100;
 /** Compact library identity plus local-only lexical metadata. */
 export interface AiCatalogItem {
 	id: string;
+	/** Compatibility identities needed to enforce removals after multipart reconciliation. */
+	aliasIds?: string[];
 	title: string;
 	year: number | null;
 	kind: string;

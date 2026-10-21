@@ -11,6 +11,7 @@ const maxResults = defineModel<AiResultCount>('maxResults', { required: true });
 /** Plain-language labels for the shared result-count steps. */
 const resultLabels = ['Few', 'Some', 'Moderate', 'Many', 'Most'] as const;
 const resultLabel = computed(() => resultLabels[AI_RESULT_COUNTS.indexOf(maxResults.value)] ?? 'Some');
+const excludedItemIds = defineModel<string[]>('excludedItemIds', { required: true });
 const itemIds = defineModel<string[]>('itemIds', { required: true });
 const generation = defineModel<string | null>('generation', { required: true });
 const sortType = defineModel<'date-added' | 'name' | 'release-date' | 'episode' | 'manual'>('sortType', { required: true });
@@ -71,7 +72,9 @@ function apply(value: AiGeneration): boolean {
 	}
 	if (value.state === 'completed' && value.result) {
 		completed.value = true;
-		itemIds.value = value.result.itemIds;
+		const excluded = new Set(excludedItemIds.value);
+		const selectedIds = value.result.itemIds.filter((id) => !excluded.has(id));
+		itemIds.value = selectedIds;
 		selectionPrompt.value = prompt.value.trim();
 		if (sortType.value === 'manual') {
 			sortType.value = 'date-added';
@@ -79,7 +82,7 @@ function apply(value: AiGeneration): boolean {
 		unmatched.value = value.result.unmatched;
 		catalogTruncated.value = value.result.catalogTruncated;
 		coverage.value = value.result.coverage;
-		failure.value = value.result.itemIds.length ? '' : 'No matches. Adjust the prompt and try again.';
+		failure.value = selectedIds.length ? '' : 'No matches. Adjust the prompt and try again.';
 	}
 	else {
 		failure.value = value.message ?? 'Generation failed. Try again.';
@@ -137,7 +140,7 @@ async function generate(): Promise<void> {
 	elapsed.value = 0;
 	activity.value = 'preparing';
 	try {
-		await api.startAiGeneration({ id, libraryId: props.libraryId, prompt: prompt.value.trim(), maxResults: maxResults.value });
+		await api.startAiGeneration({ id, libraryId: props.libraryId, prompt: prompt.value.trim(), maxResults: maxResults.value, excludedItemIds: excludedItemIds.value });
 		// The editor may have cancelled before this job existed; stop the job this response created.
 		if (disposed || generation.value !== id) {
 			void api.cancelAiGeneration(id).catch(() => {});

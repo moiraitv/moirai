@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import { expect } from '@playwright/test';
 import { test } from './documentation/fixture';
 import { authenticateAdministrator } from './authentication';
@@ -61,6 +63,58 @@ test('uses channel paths, preserves dirty drafts, and accepts old bookmarks', as
 	await page.goto('/channels?new=1');
 	await expect(page).toHaveURL('/channels/new');
 	await expect(page.getByRole('dialog', { name: 'Create Channel', exact: true })).toBeVisible();
+});
+
+test('preserves a pending library type and path through subsequent saves and reset', async ({ page, documentationServer }) => {
+	const headers = { 'x-moirai-csrf': await authenticateAdministrator(page) };
+	const originalRoot = path.join(documentationServer.directory, 'original-source');
+	const replacementRoot = path.join(documentationServer.directory, 'replacement-source');
+	await mkdir(originalRoot, { recursive: true });
+	await mkdir(replacementRoot, { recursive: true });
+	const created = await page.request.post('/api/v1/libraries', { headers, data: {
+		name: 'Pending source settings', typeKey: 'movies', sourceType: 'on-disk',
+		sourceConfig: { scanRoot: originalRoot, playbackRoot: null },
+		watcherEnabled: false, enabled: false,
+	} });
+	expect(created.ok(), await created.text()).toBe(true);
+	const library = await created.json();
+	await page.goto(`/libraries/${library.id}/settings`);
+	const dialog = page.getByRole('dialog').last();
+	await expect(dialog).toBeVisible();
+	const type = dialog.getByRole('combobox', { name: /^Type/ });
+	const scanRoot = dialog.getByLabel('Path Moirai scans', { exact: true });
+	const name = dialog.getByRole('textbox', { name: 'Name', exact: true });
+	const save = dialog.getByRole('button', { name: 'Save', exact: true });
+	await type.selectOption('other');
+	await scanRoot.fill(replacementRoot);
+	const firstSave = page.waitForResponse(response => response.url().endsWith(`/api/v1/libraries/${library.id}`)
+		&& response.request().method() === 'PATCH');
+	await save.click();
+	const staged = await (await firstSave).json();
+	expect(staged.typeKey).toBe('movies');
+	expect(staged.sourceConfig.scanRoot).toBe(originalRoot);
+	await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+	await expect(type).toHaveValue('other');
+	await expect(scanRoot).toHaveValue(replacementRoot);
+
+	await name.fill('Renamed pending source');
+	const secondSave = page.waitForResponse(response => response.url().endsWith(`/api/v1/libraries/${library.id}`)
+		&& response.request().method() === 'PATCH');
+	await save.click();
+	const saved = await secondSave;
+	expect(saved.ok(), await saved.text()).toBe(true);
+	expect(saved.request().postDataJSON()).toMatchObject({
+		name: 'Renamed pending source', typeKey: 'other',
+		sourceConfig: { scanRoot: replacementRoot, playbackRoot: null },
+	});
+	await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+	await scanRoot.fill(originalRoot);
+	await dialog.getByRole('button', { name: 'Reset', exact: true }).click();
+	await dialog.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+	await expect(scanRoot).toHaveValue(replacementRoot);
+	await expect(type).toHaveValue('other');
+	await expect(name).toHaveValue('Renamed pending source');
+	await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
 });
 
 test('restores library settings and retains changes between library routes', async ({ page, documentationServer }) => {

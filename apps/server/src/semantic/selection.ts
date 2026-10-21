@@ -1,6 +1,6 @@
 import { eligibleFiller, selectFillerCandidate } from '../scheduling/filler-cycle.js';
 import { selectOrderedCandidate } from '../scheduling/candidate-selection.js';
-import { semanticSource } from './source.js';
+import { semanticSource, semanticRemovedIds } from './source.js';
 import { passesSemanticExclusions, preferenceIssue } from './refinement.js';
 import type { SchedulableMedia, SchedulingCatalog, SelectionStateRecord, SimilaritySeed } from '@moirai/shared';
 import { MAX_MEDIA_DURATION_MILLISECONDS, SEMANTIC_HISTORY_LIMIT } from '@moirai/shared';
@@ -39,6 +39,7 @@ export function chooseSimilarity(
 		return null;
 	}
 	const config = program.config;
+	const removed = semanticRemovedIds(config, context.catalog);
 	const baseKey = semanticConsumerKey(consumer);
 	const key = baseKey.includes(':entry:') ? `${baseKey}:program:${programId}` : baseKey;
 	const record = state.get(key);
@@ -61,13 +62,14 @@ export function chooseSimilarity(
 	};
 
 	const deferredIds = context.fillerSelection ? prior?.fillerCycle?.remainingItemIds ?? [] : [];
-	const refillFiller = Boolean(context.fillerSelection && prior?.fillerCycle && !deferredIds.some(id => {
+	let refillFiller = Boolean(context.fillerSelection && prior?.fillerCycle && !deferredIds.some(id => {
 		const mediaId = context.catalog.mediaAliases?.[id] ?? id;
 		const media = context.catalog.mediaById?.get(mediaId) ?? context.catalog.media.find(item => item.id === mediaId);
-		return media && fillerSources.get(programId)!.has(media.id) && passesSemanticExclusions(media, config, context.catalog)
+		return media && !removed.has(media.id) && fillerSources.get(programId)!.has(media.id) && passesSemanticExclusions(media, config, context.catalog)
 			&& semanticMediaEligible(media, context.catalog) && eligibleFiller(media, context);
 	}));
-	if (!seed || refillFiller || seed.itemIds.every((id) => consumed.includes(id))) {
+	// Advance through immutable prepared sets when every remaining entry was manually removed.
+	while (!seed || refillFiller || seed.itemIds.every((id) => consumed.includes(id) || removed.has(context.catalog.mediaAliases?.[id] ?? id))) {
 		const generation = (seed?.generation ?? 0) + 1;
 		const previous = seed?.itemIds ?? [];
 		seed = corpus?.seeds.find((entry) => entry.consumerKey === key && entry.programId === programId && entry.generation === generation);
@@ -103,12 +105,14 @@ export function chooseSimilarity(
 		}
 		recentSeeds = previous.length ? [previous, ...recentSeeds].slice(0, SEMANTIC_HISTORY_LIMIT) : recentSeeds;
 		consumed = [];
+		refillFiller = false;
 	}
 
 	if (seed.itemIds.length < seed.config.quantity) {
 		report(`Current set contains ${seed.itemIds.length} related items; fewer than the requested quantity are available.`, false);
 	}
-	const remaining = context.fillerSelection ? [...new Set([...deferredIds, ...seed.itemIds])] : seed.itemIds.filter((id) => !consumed.includes(id));
+	const remaining = (context.fillerSelection ? [...new Set([...deferredIds, ...seed.itemIds])] : seed.itemIds.filter((id) => !consumed.includes(id)))
+		.filter((id) => !removed.has(context.catalog.mediaAliases?.[id] ?? id));
 	const playable = remaining.flatMap((id) => {
 		const mediaId = context.catalog.mediaAliases?.[id] ?? id;
 		const media = context.catalog.mediaById?.get(mediaId) ?? context.catalog.media.find((item) => item.id === mediaId);

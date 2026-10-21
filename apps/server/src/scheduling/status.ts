@@ -169,7 +169,7 @@ function contentStatus(
 		= source.type === 'group-collection'
 			? source.groupIds.filter((groupId) => !(groupId in catalog.groupParents)).length
 			: 0;
-	if ((source.type === 'collection' || source.type === 'ai') && matches.length === 0) {
+	if ((source.type === 'collection' || source.type === 'ai') && source.itemIds.length > 0 && matches.length === 0) {
 		missing = true;
 	}
 	if (source.type === 'group-collection' && missingGroupMembers === source.groupIds.length) {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { excludedItemIdsSchema } from './item-exclusions.js';
 
 /** Whether an OpenAI-compatible content model is configured on the server. */
 export const aiStatusSchema = z.object({ configured: z.boolean() });
@@ -66,6 +67,7 @@ export type AiResultCount = z.infer<typeof aiResultCountSchema>;
 /** Prompt and library used to freeze one AI content selection. */
 export const aiContentSelectionRequestSchema = z.object({
 	libraryId: z.uuid(),
+	excludedItemIds: excludedItemIdsSchema.optional(),
 	prompt: z.string().trim().min(1).max(2_000),
 	maxResults: aiResultCountSchema.optional(),
 });

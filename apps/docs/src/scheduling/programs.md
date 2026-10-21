@@ -79,7 +79,7 @@ Moirai combines local title, genre, and plot matching with model knowledge and o
 
 Each generation will cost API quota, including work performed before a failure or cancellation. While generating, the activity appears above the estimated percentage and elapsed time. The percentage follows preparation, review batches, and final refinement rather than elapsed time. After finishing, the selected count appears beside Generate with coverage such as **36 selected · 1,000 of 3,000 reviewed**. Warnings can identify any failures or limitations.
 
-Choose **Review results** to browse or search the full selection, including results from a saved AI Program. Use **Exclude** on an item, then confirm it to remove it from the draft. Choose **Done**, then **Save** to keep your exclusions. **Reset** restores the saved selection; generating again replaces the selection and may include previously excluded items.
+Choose **Review results** to browse or search the full selection, including results from a saved AI Program. Use **Exclude** on an item to remove it from the program permanently. Generating again will ensure explicitly removed items remain excluded. To allow a previously-removed item back into the Program, open the **Removed** tab and choose **Restore**; restoring does not add it to the current selection but allows a future generation to include it.
 
 AI drafts, including the name, prompt, requested result count, selection, exclusions, and playback preferences, are saved automatically in your current browser. Close the editor or reload the page, then reopen the same Program (or New Program) to continue. Generation keeps running while the page is closed; reopening reconnects without starting another paid request. Save is unavailable until generation finishes. Browser drafts do not sync between devices. If browser storage is unavailable, keep the page open and use Save.
 
@@ -123,7 +123,7 @@ Below Quantity, use either or both optional refinements:
 - **Preferences:** describe themes to favor, such as “darker, slower-paced science fiction.” This is a preference, not a guarantee.
 - **Exclusions:** enter comma-separated concepts to avoid, such as `superhero movies, romantic comedies`. Describe the concept itself rather than writing “no superhero movies.” Increase **Exclusion strictness** to exclude broader matches, or lower it to exclude only closer matches. This is approximate, so check **Excluded matches** alongside the remaining sample and adjust as needed.
 
-**Excluded matches** shows a sample of available candidates filtered out by your concepts and strictness. While Moirai prepares matches, the preview shows a loading message over dimmed cards. Changes do not affect existing active sets still finish unchanged and apply at the next schedule generation.
+**Excluded matches** shows a sample of available candidates filtered out by your concepts and strictness. While Moirai prepares matches, the preview shows a loading message over dimmed cards. Changes to these exclusion concepts apply to the next set; existing active sets finish unchanged. Individually removed items are skipped as soon as you save the Program.
 
 **Sample matches** in the editor update as you change the source, library filters, variety, quantity, or refinements. When there are fewer related matches than your requested Quantity, both previews show the available count and requested count. This count covers all related matches, not just the cards visible in the preview. These previews may differ from the set selected for a schedule.
 
@@ -131,13 +131,21 @@ New refinements are prepared between small batches of library items if it is act
 
 Each schedule use keeps its own set. The set and its order survive restarts, new library items, and edits. Changing source contents, library filters, variety, quantity, or refinements affects the next set. The current set finishes first, even for slots configured to restart daily. New sets prefer items absent from the last ten completed sets. When reuse is needed, items from the least recent set are preferred. Smaller libraries may reuse media or produce fewer matches.
 
-Items count as used when Moirai commits them to its schedule, so the displayed remaining count describes schedule preparation rather than what viewers have already watched. A temporarily unavailable or deleted remaining item keeps its place and prevents that set from finishing until the item is available again. Moirai shows a warning instead of silently replacing it.
+Items count as used when Moirai commits them to its schedule, so the displayed remaining count describes schedule preparation rather than what viewers have already watched. A temporarily unavailable or deleted remaining item keeps its place and prevents that set from finishing until the item is available again or you explicitly remove it. Moirai shows a warning instead of silently replacing it.
 
 Removing a channel's schedule clears its Similar Items sets and selection history. Assigning a schedule again starts fresh sets using the current Program settings; other channels keep their sets.
 
 Similarity runs locally on the server. Initial library preparation happens in the background; the Program shows preparation or failure status while waiting for usable matches. If Moirai cannot finish preparing matches, open the Program editor and choose **Retry preparation**. This retries only the failed preparation for relevant media and your current theme, preferences, and exclusions. Items already prepared and active sets stay unchanged. Both container and native builds bundle the model, so installing or running the built application needs no model download or outbound connection. See [configuration](/operations/configuration) for packaging details.
 
+Choose **Review matches** below the sample/excluded previews to search and browse every currently prepared match. Use **Exclude** and confirm to remove an item; find it in **Removed** and choose **Restore** to allow matching again. If preparation is still running, choose **Refresh** to see newly prepared matches.
+
+![Review all matching items and manage individual removals](/screenshots/program-matches-review.png)
+
+Removals and restorations stay in the draft until you save the Program. Saved removals apply to existing and future sets without interrupting playback underway. A set whose remaining items are all removed can advance to a new set. Removals remain until restored, even when you change the theme, source, filters, or library.
+
 ## Theme Programs
+
+Theme Programs also provide **Review matches**, with the same **Matches** and **Removed** tabs and save behavior described above.
 
 Choose **Theme** to find media matching a description. Select a **Target library**, use **Configure Filters** to choose which media can qualify, then enter a **Theme**, such as “space exploration and first contact” or “quiet mysteries in small towns.” Matches use the media’s titles, descriptions, and other metadata.
 

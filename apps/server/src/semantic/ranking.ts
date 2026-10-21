@@ -30,18 +30,21 @@ export interface SemanticSelection {
 	matchingCount: number;
 }
 
-/** Rank relevant candidates, preferring unseen and then least-recently selected sets. */
-export function rankSemanticSelection(
+/** Related candidates with a preference-adjusted relevance score for selection and review. */
+export interface SemanticPoolCandidate extends SemanticCandidate {
+	relevance: number;
+	redundancy: number;
+	anchorScore: number;
+}
+
+/** Resolve the full related pool without quantity limits or quadratic diversity selection. */
+export function semanticRelevancePool(
 	anchors: readonly number[][],
 	candidates: SemanticCandidate[],
-	quantity: number,
-	variety: number,
-	previous: readonly string[] = [],
 	preference?: readonly number[],
-	history: readonly (readonly string[])[] = [],
-): SemanticSelection {
-	if (anchors.length === 0 || candidates.length === 0) {
-		return { itemIds: [], matchingCount: 0 };
+): SemanticPoolCandidate[] {
+	if (!anchors.length || !candidates.length) {
+		return [];
 	}
 	const mean = anchors[0]!.map((_, index) =>
 		anchors.reduce((sum, anchor) => sum + anchor[index]!, 0) / anchors.length);
@@ -58,6 +61,23 @@ export function rankSemanticSelection(
 			candidate.relevance = 0.7 * candidate.relevance + 0.3 * dot(preference, candidate.vector);
 		}
 	}
+	return pool;
+}
+
+/** Rank relevant candidates, preferring unseen and then least-recently selected sets. */
+export function rankSemanticSelection(
+	anchors: readonly number[][],
+	candidates: SemanticCandidate[],
+	quantity: number,
+	variety: number,
+	previous: readonly string[] = [],
+	preference?: readonly number[],
+	history: readonly (readonly string[])[] = [],
+): SemanticSelection {
+	if (anchors.length === 0 || candidates.length === 0) {
+		return { itemIds: [], matchingCount: 0 };
+	}
+	const pool = semanticRelevancePool(anchors, candidates, preference);
 	const selected: typeof pool = [];
 	const used = new Set<string>();
 	const recency = new Map<string, number>();

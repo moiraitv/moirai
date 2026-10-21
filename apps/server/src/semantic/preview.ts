@@ -1,4 +1,4 @@
-import { semanticAnchors } from './source.js';
+import { semanticAnchors, semanticRemovedIds } from './source.js';
 import { passesSemanticExclusions, preferenceIssue, semanticExclusionScore, exclusionThreshold } from './refinement.js';
 import { PROGRAM_PREVIEW_ITEM_LIMIT, type ProgramConfig, type SchedulableMedia, type SchedulingCatalog, type SchedulingProgramPreviewItem } from '@moirai/shared';
 import { rankSemanticSelection } from './ranking.js';
@@ -23,7 +23,8 @@ export function semanticSample(
 	if (!corpus || preferenceIssue(config, catalog)) {
 		return { items: [], matchingCount: 0 };
 	}
-	eligible = eligible.filter((item) => passesSemanticExclusions(item, config, catalog));
+	const removed = semanticRemovedIds(config, catalog);
+	eligible = eligible.filter((item) => !removed.has(item.id) && passesSemanticExclusions(item, config, catalog));
 	const preference = corpus.preferences?.[config.softPreferences?.trim() ?? '']?.vector;
 	const key = JSON.stringify([catalog.cacheKey, config, preference, sourceIds, eligible.map((item) => item.id)]);
 	const cache = samples.get(corpus.vectors) ?? new Map<string, SemanticSample>();

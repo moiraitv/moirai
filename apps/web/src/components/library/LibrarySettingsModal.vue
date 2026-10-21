@@ -60,14 +60,16 @@ async function save(): Promise<void> {
 	saving.value = true;
 	error.value = '';
 	try {
-		const library = await api.updateLibrary(props.library.id, {
+		const submitted = libraryUpdateSchema.parse({
 			...form,
 			sourceConfig: form.sourceConfig
 				? { ...form.sourceConfig, playbackRoot: form.sourceConfig.playbackRoot || null }
 				: undefined,
 		});
+		const library = await api.updateLibrary(props.library.id, submitted);
 		retained.clear();
-		Object.assign(form, { name: library.name, sourceConfig: cloneContractValue(library.sourceConfig) });
+		// The returned source remains the accepted definition until reconciliation approves the replacement.
+		Object.assign(form, submitted, { name: library.name });
 		baseline = cloneContractValue(form);
 		originalSnapshot.value = JSON.stringify(baseline);
 		await retained.open(originalSnapshot.value, false);

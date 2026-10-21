@@ -206,6 +206,12 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await expect(page.getByLabel('Exclusion strictness', { exact: true })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Sample matches' }).getByRole('link').first()).toBeVisible();
 	await capture(page, 'program-similarity-create.png');
+	await page.getByRole('button', { name: 'Review matches', exact: true }).click();
+	const matchReview = page.getByRole('dialog', { name: 'Review matches', exact: true });
+	await expect(matchReview.locator('.selected-item-preview').first()).toBeVisible();
+	await capture(page, 'program-matches-review.png');
+	await matchReview.getByRole('button', { name: 'Done', exact: true }).click();
+	await expect(matchReview).toBeHidden();
 	await page.getByRole('button', { name: /^(?:Add|Save)$/u, exact: true }).click();
 	await page.getByRole('dialog').last().getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();

@@ -1,6 +1,8 @@
 export * from './all-filler-presets.js';
 export * from './filler-presets.js';
 export * from './ai-progress.js';
+export * from './item-exclusions.js';
+export * from './semantic-matches.js';
 export * from './ai-generation.js';
 export * from './audio.js';
 import { audioPreferencesSchema } from './audio.js';

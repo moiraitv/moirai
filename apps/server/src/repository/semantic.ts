@@ -1,3 +1,4 @@
+import { currentSemanticSets } from './semantic-set-status.js';
 import { SemanticPreferenceRepository } from './semantic-preferences.js';
 import { sql } from 'drizzle-orm';
 import type { SemanticCatalog, SimilaritySeed, SelectionStateRecord } from '@moirai/shared';
@@ -233,12 +234,7 @@ export class SemanticRepository {
 				inputs.delete(row.media_id);
 			}
 		}
-		const currentSets = (this.db.$client.prepare("SELECT s.value, c.name AS channelName FROM selection_states s JOIN channels c ON c.id=s.channel_id WHERE json_extract(s.value, '$.type')='similarity' AND (? IS NULL OR json_extract(s.value, '$.seed.programId') IN (SELECT value FROM json_each(?)))").all(scope ? JSON.stringify(scope.programIds) : null, scope ? JSON.stringify(scope.programIds) : null) as Array<{ value: string; channelName: string }>).map((row) => {
-			const value = JSON.parse(row.value) as Extract<SelectionStateRecord['value'], { type: 'similarity' }>;
-			return { channelName: row.channelName, programId: value.seed.programId, consumerKey: value.seed.consumerKey,
-				generation: value.seed.generation, total: value.seed.itemIds.length, requestedTotal: value.seed.config.quantity,
-				remaining: value.seed.itemIds.filter((id) => !value.consumedItemIds.includes(id)).length };
-		});
+		const currentSets = currentSemanticSets(this.db, scope?.programIds);
 		return { vectors, pendingItemIds: [...inputs.keys()], failedItemIds, seeds: this.seeds(scope?.programIds), currentSets,
 			...(preparationError ? { preparationError } : {}) };
 	}

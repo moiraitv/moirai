@@ -90,7 +90,8 @@ export function registerAiRoutes(
 			runLog.start();
 			try {
 				const result = await generateAiSelection(activeAi, body.prompt, libraryType, {
-					loadCatalog: () => repository.aiCatalog(body.libraryId),
+					loadCatalog: () => repository.aiCatalog(body.libraryId, body.excludedItemIds),
+					excludedItemIds: body.excludedItemIds,
 					loadVectors: (concepts, generationSignal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, generationSignal, requestEmbeddingWork),
 					...(!activeAi.webSearch ? { fastLocalReview: true } : {}),
 					requestOptions: productionAiRequestOptions(activeAi),

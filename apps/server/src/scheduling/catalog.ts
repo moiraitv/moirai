@@ -9,6 +9,8 @@ import type {
 /** Library, group, and item identifiers referenced by a set of programs. */
 export interface SchedulingCatalogScope {
 	itemIds: string[];
+	/** References needing identity resolution without loading their media. */
+	aliasItemIds?: string[];
 	groupIds: string[];
 	sourceLibraryIds: string[];
 	libraryIds: string[];
@@ -119,12 +121,17 @@ export function schedulingCatalogScope(
 ): SchedulingCatalogScope {
 	const byId = new Map(programs.map((program) => [program.id, program]));
 	const itemIds = new Set<string>();
+	const aliasItemIds = new Set<string>();
 	const groupIds = new Set<string>();
 	const libraryIds = new Set<string>();
 	const sourceLibraryIds = new Set<string>();
 	for (const program of reachableSchedulingPrograms(programs, rootProgramIds)) {
 		if (program.config.type === 'sequence') {
 			continue;
+		}
+
+		if (program.config.type === 'similarity' || program.config.type === 'theme') {
+			program.config.excludedItemIds?.forEach((id) => aliasItemIds.add(id));
 		}
 
 		if (program.config.type === 'similarity') {
@@ -164,6 +171,7 @@ export function schedulingCatalogScope(
 	}
 	return {
 		itemIds: [...itemIds].sort(),
+		...(aliasItemIds.size > 0 ? { aliasItemIds: [...aliasItemIds].sort() } : {}),
 		groupIds: [...groupIds].sort(),
 		sourceLibraryIds: [...sourceLibraryIds].sort(),
 		libraryIds: [...libraryIds].sort(),

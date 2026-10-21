@@ -1,3 +1,5 @@
+import { semanticMatchesRequestSchema, semanticMatchesResponseSchema, type SemanticMatchesRequest } from '@moirai/shared';
+import { semanticMatches } from '../semantic/matches.js';
 import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { timePhase, recordJobPhase } from './job-timing.js';
 import { Temporal } from '@js-temporal/polyfill';
@@ -24,6 +26,7 @@ import { refinementTexts } from '../semantic/refinement.js';
 /** Read jobs keep catalog data on their executing thread and return only public results. */
 export type SchedulingReadRequest
 	= | { kind: 'overview' }
+		| { kind: 'semantic-matches'; input: SemanticMatchesRequest }
 		| { kind: 'query'; input: QuickChannelQueryPreviewRequest }
 		| { kind: 'persisted'; id: string; input: { startDate?: string | undefined; days: number }; timeZone: string }
 		| { kind: 'template'; input: TimelineDraftPreview; timeZone: string }
@@ -59,6 +62,21 @@ export async function schedulingRead(repository: Repository, request: Scheduling
 		const value = await queryPreview(repository, request.input, completeRead);
 
 		return { body: serialize(value, quickChannelQueryPreviewResultSchema) };
+	}
+	if (request.kind === 'semantic-matches') {
+		const input = semanticMatchesRequestSchema.parse(request.input);
+		const programs = await repository.listPrograms();
+		const draft: SchedulingProgram = { id: '00000000-0000-4000-8000-000000000002', name: 'Match review',
+			config: input.config, createdAt: currentTimestamp(), updatedAt: currentTimestamp() };
+		// Resolve both original and new removals without expanding the media scope.
+		const catalogDraft = { ...draft, config: { ...input.config,
+			excludedItemIds: [...new Set([...input.config.excludedItemIds ?? [], ...input.additionalExcludedItemIds ?? []])] } };
+		const catalog = await repository.getSchedulingCatalog([...programs, catalogDraft], [draft.id]);
+		completeRead();
+		const value = timePhase('compute', () => semanticMatches(input, catalogDraft, programs, catalog));
+
+		return { body: serialize(value, semanticMatchesResponseSchema), preferences: refinementTexts(input.config)
+			.filter(text => catalog.semantic?.preferences?.[text]?.status === 'pending') };
 	}
 	if (request.kind === 'similarity') {
 		const programs = await repository.listPrograms();
