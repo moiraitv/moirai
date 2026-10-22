@@ -90,6 +90,7 @@ Most installations need only a few settings:
 | `MOIRAI_TIME_ZONE` | Your schedule's time zone, such as `America/New_York`. |
 | Storage mounts | Keep `/data` persistent and mount your media folders read-only. |
 | `MOIRAI_TRUST_PROXY` | If using a reverse proxy, set only the proxy's IP address or network. |
+| `MOIRAI_ALLOWED_ORIGINS` | Extra comma-separated browser origins allowed to manage Moirai, such as a Tailscale MagicDNS name or IP (`http://mediaserver.tail1234.ts.net:3000,http://100.101.102.103:3000`). Without this, sign-in and live updates fail from any address other than `MOIRAI_PUBLIC_URL`. Set `*` to allow any origin; writes still require the session's CSRF token, but other websites could open the live-events stream while you are signed in. |
 
 Add environment settings under `environment` in your Compose file. Putting a value in a host `.env` file alone does not pass it into the container; the Compose file must reference or load it. Run `docker compose up -d` after changing the configuration.
 

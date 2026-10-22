@@ -105,6 +105,7 @@ async function fixture(options: {
 	serveWeb?: boolean;
 	sessionAgeMs?: number;
 	trustedProxies?: string[];
+	allowedOrigins?: string[];
 	guideDays?: number;
 } = {}) {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-api-'));
@@ -126,6 +127,7 @@ async function fixture(options: {
 		...(options.managementUrl ? { managementUrl: options.managementUrl } : {}),
 		...(options.host ? { host: options.host } : {}),
 		...(options.trustedProxies ? { trustedProxies: options.trustedProxies } : {}),
+		...(options.allowedOrigins ? { allowedOrigins: options.allowedOrigins } : {}),
 		...(options.serveWeb ? { webDistDir } : {}),
 		playbackEnginePath: process.execPath,
 		ffprobePath: path.resolve('tests/fixtures/fake-ffprobe.mjs'),
@@ -305,6 +307,49 @@ describe('API', () => {
 			method: 'PUT',
 			url: '/api/v1/playback/settings',
 			headers: { origin: 'https://moirai.example.test:5173' },
+			payload: { maxActiveSessions: 5 },
+		});
+
+		expect(response.statusCode).toBe(200);
+	});
+
+	it('allows protected browser requests and WebSocket upgrades from an extra allowed origin', async () => {
+		const tailnet = 'http://mediaserver.tail1234.ts.net:3000';
+		const { app, rawApp, sessionToken } = await fixture({ host: '0.0.0.0', allowedOrigins: [tailnet] });
+		const write = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { origin: tailnet },
+			payload: { maxActiveSessions: 5 },
+		});
+		expect(write.statusCode).toBe(200);
+
+		const foreign = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { origin: 'http://100.64.0.99:3000' },
+			payload: { maxActiveSessions: 5 },
+		});
+		expect(foreign.statusCode).toBe(403);
+
+		const upgrade = await rawApp.inject({
+			url: '/api/v1/events',
+			headers: {
+				connection: 'upgrade',
+				upgrade: 'websocket',
+				origin: tailnet,
+				cookie: `moirai_session=${sessionToken}`,
+			},
+		});
+		expect(upgrade.statusCode).not.toBe(403);
+	});
+
+	it('allows any browser origin when allowed origins is a wildcard', async () => {
+		const { app } = await fixture({ host: '0.0.0.0', allowedOrigins: ['*'] });
+		const response = await app.inject({
+			method: 'PUT',
+			url: '/api/v1/playback/settings',
+			headers: { origin: 'http://100.64.0.99:3000' },
 			payload: { maxActiveSessions: 5 },
 		});
 

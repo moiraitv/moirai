@@ -31,6 +31,34 @@ const FRAME_ANCESTORS_POLICY = "frame-ancestors 'none'";
 /** Private cache policy applied to management and authentication-sensitive responses. */
 const PRIVATE_RESPONSE_CACHE_CONTROL = 'private, no-store';
 
+/**
+ * Mark cookies Secure for an HTTPS public origin, except on plain-HTTP requests that arrive through
+ * an explicitly allowed HTTP origin (such as a tailnet address). Browsers discard Secure cookies set
+ * over HTTP, which would otherwise make sign-in from that origin silently fail.
+ */
+function requestUsesHttps(reply: FastifyReply, config: AppConfig): boolean {
+	const publicIsHttps = new URL(config.publicUrl).protocol === 'https:';
+	const request = reply.request as FastifyRequest | undefined;
+	if (!publicIsHttps || !request || request.protocol === 'https') {
+		return publicIsHttps;
+	}
+
+	if (config.allowedOrigins.includes('*')) {
+		return false;
+	}
+
+	const requestOrigin = `http://${request.host}`;
+	return !config.allowedOrigins.some((origin) => {
+		try {
+			return new URL(origin).origin === new URL(requestOrigin).origin
+				&& origin.startsWith('http:');
+		}
+		catch {
+			return false;
+		}
+	});
+}
+
 /** Set one hardened administrator-session cookie after issuing or validating its bearer. */
 export function setAuthenticationSessionCookie(
 	reply: FastifyReply,
@@ -45,7 +73,7 @@ export function setAuthenticationSessionCookie(
 	reply.setCookie(AUTHENTICATION_COOKIE, token, {
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: new URL(config.publicUrl).protocol === 'https:',
+		secure: requestUsesHttps(reply, config),
 		path: '/',
 		maxAge: remainingSeconds,
 	});
@@ -56,7 +84,7 @@ export function clearAuthenticationSessionCookie(reply: FastifyReply, config: Ap
 	reply.clearCookie(AUTHENTICATION_COOKIE, {
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: new URL(config.publicUrl).protocol === 'https:',
+		secure: requestUsesHttps(reply, config),
 		path: '/',
 	});
 }
@@ -77,7 +105,12 @@ function csrfMatches(actual: string | undefined, expected: string): boolean {
 function allowedOrigin(origin: string, config: AppConfig): boolean {
 	try {
 		const parsed = new URL(origin);
-		if (parsed.origin === config.publicUrl || parsed.origin === config.managementUrl) {
+		if (
+			parsed.origin === config.publicUrl
+			|| parsed.origin === config.managementUrl
+			|| config.allowedOrigins.includes('*')
+			|| config.allowedOrigins.includes(parsed.origin)
+		) {
 			return true;
 		}
 

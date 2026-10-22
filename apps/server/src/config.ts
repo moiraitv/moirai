@@ -24,6 +24,8 @@ export interface AppConfig {
 	trustedProxies: string[];
 	publicUrl: string;
 	managementUrl: string;
+	/** Extra browser origins (for example Tailscale MagicDNS or LAN addresses) allowed to manage Moirai. */
+	allowedOrigins: string[];
 	debug: boolean;
 	logLevel: string;
 	logDir: string;
@@ -245,6 +247,22 @@ export function resolveManagementUrl(value: string | undefined, publicUrl: strin
 	return resolved;
 }
 
+/** Parse comma-separated extra browser origins permitted to send state-changing management requests. */
+export function resolveAllowedOrigins(value?: string): string[] {
+	if (!value?.trim()) {
+		return [];
+	}
+
+	const entries = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+	// "*" lets the administrator opt out of origin restrictions; the CSRF token still guards writes.
+	if (entries.includes('*')) {
+		return ['*'];
+	}
+
+	const origins = entries.map((entry) => resolveHttpOrigin(entry, 'MOIRAI_ALLOWED_ORIGINS'));
+	return [...new Set(origins)];
+}
+
 /** Flag URL hosts that cannot be reached by a separate IPTV client. */
 export function publicUrlStatus(value: string): PublicUrlStatus {
 	const hostname = new URL(value).hostname.toLowerCase();
@@ -311,6 +329,8 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 			?? resolveTrustedProxies(process.env.MOIRAI_TRUST_PROXY),
 		publicUrl,
 		managementUrl,
+		allowedOrigins: overrides.allowedOrigins
+			?? resolveAllowedOrigins(process.env.MOIRAI_ALLOWED_ORIGINS),
 		debug: overrides.debug ?? debugFromEnvironment(process.env.MOIRAI_DEBUG),
 		logLevel: overrides.logLevel ?? process.env.MOIRAI_LOG_LEVEL ?? 'info',
 		dataDir,
