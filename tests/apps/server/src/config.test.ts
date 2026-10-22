@@ -8,6 +8,7 @@ import {
 	resolveManagementUrl,
 	resolvePublicUrl,
 	resolveTrustedProxies,
+	resolveAllowedOrigins,
 	publicUrlStatus,
 	resolveTimeZone,
 } from '@server/config.js';
@@ -226,5 +227,13 @@ describe('AI setup in Settings', () => {
 		vi.stubEnv('MOIRAI_AI_MODEL', 'old-model');
 		vi.stubEnv('MOIRAI_AI_WEB_SEARCH', 'true');
 		expect(loadConfig().ai).toBeNull();
+	});
+
+	it('parses extra allowed browser origins and rejects paths', () => {
+		expect(resolveAllowedOrigins(undefined)).toEqual([]);
+		expect(resolveAllowedOrigins(' http://host.tail1234.ts.net:3000/ , http://100.64.1.2:3000,http://100.64.1.2:3000'))
+			.toEqual(['http://host.tail1234.ts.net:3000', 'http://100.64.1.2:3000']);
+		expect(() => resolveAllowedOrigins('http://host.example/path')).toThrow(/MOIRAI_ALLOWED_ORIGINS/);
+		expect(resolveAllowedOrigins('http://a.example, *')).toEqual(['*']);
 	});
 });
