@@ -80,6 +80,7 @@ describe('channel external contracts', () => {
 
 	it('bounds the configurable concurrent playback capacity', () => {
 		expect(playbackSettingsSchema.parse({})).toEqual({
+			audioPreferences: {},
 			maxActiveSessions: 4,
 			viewingPreferencesEnabled: true,
 			fillerShortfallWarningThresholdPercent: 80,
