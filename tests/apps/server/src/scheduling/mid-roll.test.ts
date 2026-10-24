@@ -12,6 +12,7 @@ import { BUILTIN_MID_ROLL_PRESETS, defaultMidRollConfig, MAX_MID_ROLL_POINTS, SE
 	type SchedulingProgram } from '@moirai/shared';
 import { TimelineMaterializationLimitError, generateTimelineDetailed, type GenerateTimelineInput } from '@server/scheduling/engine.js';
 import { projectGuideEntries } from '@server/guide/projection.js';
+import { Temporal } from '@js-temporal/polyfill';
 
 const uuid = (value: number): string =>
 	`00000000-0000-4000-8000-${value.toString().padStart(12, '0')}`;
@@ -173,6 +174,95 @@ function primaryAiring(options: GenerateTimelineInput) {
 	const first = result.segments.find(segment => segment.role === 'primary');
 	return { result, spans: result.segments.filter(segment => segment.airing?.id === first?.airing?.id && segment.role !== 'dead-air') };
 }
+
+describe('millisecond airing boundaries', () => {
+	it.each(['pre', 'mid', 'post', 'all'] as const)('preserves exact fits and real truncation with %s rolls', stage => {
+		for (const [timeZone, startDate] of [['UTC', '2026-01-05'], ['America/Los_Angeles', '2026-03-08'], ['America/Los_Angeles', '2026-11-01']] as const) {
+			const primary = contentProgram(10, 1);
+			const filler = contentProgram(11, 2);
+			const daily = template([{ programId: primary.id, startSeconds: 0,
+				boundary: { policy: 'finish-left', maxDriftSeconds: 0, fallback: 'favor-right' } }]);
+			const assignment = { programId: filler.id, presetId: uuid(901) };
+			if (stage === 'pre' || stage === 'all') {
+				daily.defaultPreRoll = assignment;
+			}
+			if (stage === 'post' || stage === 'all') {
+				daily.defaultPostRoll = assignment;
+			}
+			if (stage === 'mid' || stage === 'all') {
+				daily.defaultMidRoll = assignment;
+			}
+			const end = Temporal.PlainDate.from(startDate).add({ days: 1 }).toZonedDateTime(timeZone).toInstant();
+			const expectedMilliseconds = 10_002 + (stage === 'all' ? 3 : 1) * 30_100;
+			const options = input([primary, filler], [media(1, 10.002, { chapters: [{ startSeconds: 0, finishSeconds: 5.001, title: 'Break' }] }), media(2, 30.1)], daily, {
+				timeZone, startDate, initialCursor: end.subtract({ milliseconds: expectedMilliseconds }).toString(),
+			});
+			options.catalog.fillerPresets = { [assignment.presetId]: { budget: { type: 'count', count: 1 } } };
+			options.catalog.midRollPresets = { [assignment.presetId]: { fallbackIntervalSeconds: 600,
+				predicate: { type: 'always', negated: false }, budget: { type: 'count', count: 1 } } };
+
+			const result = generateTimelineDetailed(options);
+			expect(result.segments.some(segment => segment.role === 'dead-air')).toBe(false);
+			expect(Date.parse(result.segments.at(-1)!.finish)).toBe(end.epochMilliseconds);
+			expect(result.segments.every(segment => !segment.truncated && !segment.airing?.truncated)).toBe(true);
+			const entries = projectGuideEntries(options.channelId, result.segments, result.guideOccurrences, [daily], options.initialCursor!, end.toString());
+			expect(entries.every(entry => !entry.truncated)).toBe(true);
+			const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Exact' }), id: options.channelId,
+				createdAt: options.schedule.createdAt, updatedAt: options.schedule.updatedAt };
+			const files = buildEtvPlayoutFiles([channel], { timeZone, startDate, requestedDays: 1, days: 1,
+				segmentLimitApplied: false, channels: [{ channelId: options.channelId, preview: result }] });
+			expect(files.size).toBe(1);
+			for (const content of files.values()) {
+				const document = JSON.parse(content);
+				expect(document.items).toHaveLength(result.segments.length);
+				expect(Date.parse(document.items.at(-1).finish)).toBe(end.epochMilliseconds);
+				const sourceDurations = new Map(options.catalog.media.map(item => [item.playbackPath, Math.round(item.durationSeconds! * 1_000)]));
+				expect(document.items.reduce((sum: number, item: { source: { path: string; in_point_ms?: number; out_point_ms?: number } }) =>
+					sum + (item.source.out_point_ms ?? sourceDurations.get(item.source.path)!) - (item.source.in_point_ms ?? 0), 0)).toBe(expectedMilliseconds);
+			}
+
+			// A genuine one-millisecond shortage must reject the whole speculative airing.
+			options.initialCursor = end.subtract({ milliseconds: expectedMilliseconds - 1 }).toString();
+			const rejected = generateTimelineDetailed(options);
+			expect(rejected.segments.every(segment => segment.role === 'dead-air')).toBe(true);
+			expect(rejected.proposedState).toEqual([]);
+
+			// Truncation may cut post-roll without falsely claiming primary content was cut.
+			daily.slots[0]!.startEligibility = { type: 'allow-truncate' };
+			const truncated = generateTimelineDetailed(options);
+			expect(truncated.segments.at(-1)!.truncated).toBe(true);
+			expect(truncated.segments.find(segment => segment.role === 'primary')!.airing!.truncated).toBe(stage !== 'post' && stage !== 'all');
+		}
+	});
+
+	it('persists exact tail budgets at unfinished segments and resumes serialized checkpoints', () => {
+		const primary = contentProgram(10, 1);
+		const filler = contentProgram(11, 2);
+		const daily = template([{ programId: primary.id, startSeconds: 0 }]);
+		const options = input([primary, filler], [media(1, SECONDS_PER_SCHEDULING_DAY), media(2, 0.001)], daily, {
+			initialCursor: '2026-01-05T23:59:59.993Z',
+		});
+		options.schedule.defaultTailFiller = { programId: filler.id, presetId: uuid(901), policy: 'next-fit-only' };
+		options.catalog.fillerPresets = { [uuid(901)]: { budget: { type: 'duration', seconds: 1, policy: 'next-fit-only' } } };
+		const full = generateTimelineDetailed(options);
+		expect(full.segments).toHaveLength(7);
+		expect(full.stateTransitions.map(transition => transition.continuation?.fillerProgress?.remaining))
+			.toEqual([0.999, 0.998, 0.997, 0.996, 0.995, 0.994, undefined]);
+		expect(full.stateTransitions.at(-1)!.continuation).toBeNull();
+		const state = new Map();
+		for (const transition of full.stateTransitions.slice(0, 3)) {
+			for (const record of transition.stateDelta) {
+				state.set(record.consumerKey, record);
+			}
+		}
+		options.state = JSON.parse(JSON.stringify([...state.values()]));
+		options.initialCursor = full.segments[2]!.finish;
+		options.initialContinuation = JSON.parse(JSON.stringify(full.stateTransitions[2]!.continuation));
+		const resumed = generateTimelineDetailed(options);
+		expect(resumed.segments).toEqual(full.segments.slice(3));
+		expect(resumed.stateTransitions.map(transition => transition.continuation?.fillerProgress?.remaining)).toEqual([0.996, 0.995, 0.994, undefined]);
+	});
+});
 
 describe('mid-roll airing expansion', () => {
 	it('continues sequential default breaks without skipping or truncating the next item', () => {

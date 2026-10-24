@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import type { TimelineSegment } from '@moirai/shared';
+import { durationMilliseconds } from '@moirai/shared';
 
 /** Return exact millisecond-backed elapsed seconds between two absolute instants. */
 export function durationBetween(start: Temporal.Instant, finish: Temporal.Instant): number {
@@ -9,7 +10,7 @@ export function durationBetween(start: Temporal.Instant, finish: Temporal.Instan
 
 /** Advance an instant by an elapsed duration while preserving millisecond precision. */
 export function plusSeconds(start: Temporal.Instant, seconds: number): Temporal.Instant {
-	return start.add({ milliseconds: Math.round(seconds * 1_000) });
+	return start.add({ milliseconds: durationMilliseconds(seconds) });
 }
 
 /** Create a repeatable identifier for one materialized timeline segment. */
@@ -40,4 +41,3 @@ export function segment(
 		finish,
 	};
 }
-

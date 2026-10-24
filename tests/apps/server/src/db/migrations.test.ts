@@ -3,10 +3,14 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import os from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { channelCreateSchema } from '@moirai/shared';
 import { createDatabase } from '@server/db/index.js';
 import { Repository } from '@server/repository/index.js';
-import { materializeScheduleGuide } from '@server/guide/schedule-guide.js';
+import { materializeScheduleGuide, readCommittedChannelScheduleGuide } from '@server/guide/schedule-guide.js';
+import { buildEtvPlayoutFiles } from '@server/playback/playout-output.js';
+import { applyPendingMigrations } from '@server/db/migrations.js';
+import { TimelineMaterializer } from '@server/scheduling/timeline-materializer.js';
 
 interface MigrationJournalEntry {
 	idx: number;
@@ -23,7 +27,7 @@ interface MigrationJournal {
 }
 
 type SqliteDatabase = InstanceType<typeof Database>;
-type DatabaseStep = (sqlite: SqliteDatabase) => void;
+type DatabaseStep = (sqlite: SqliteDatabase, database: ReturnType<typeof createDatabase>) => void | Promise<void>;
 type VerifyStep = (sqlite: SqliteDatabase, database: ReturnType<typeof createDatabase>) => void | Promise<void>;
 
 const migrationsDir = path.resolve('drizzle');
@@ -81,7 +85,7 @@ async function upgradeFrom(
 		expect(migrationMarkers(priorDatabase.sqlite)).toEqual(
 			journal.entries.slice(0, prefix.prior.idx + 1).map((entry) => entry.when),
 		);
-		seed(priorDatabase.sqlite);
+		await seed(priorDatabase.sqlite, priorDatabase);
 		priorDatabase.close();
 		priorDatabase = undefined;
 
@@ -957,4 +961,193 @@ it.each([false, true])('repairs duplicated legacy channel filler without changin
 			consumer_key: 'filler:channel:template:slot:source', value: '{"type":"sequential","nextIndex":4,"lastItemId":"old"}',
 		});
 	}, worker);
+});
+
+it.each([false, true])('repairs only elapsed subsecond prefixes without changing committed playlists or cursors (worker=%s)', async worker => {
+	const start = '2020-08-23T00:00:00Z';
+	const finish = '2020-08-24T00:00:00Z';
+	const cases = [
+		{ id: 'damaged', start, first: '2020-08-23T00:00:00.71Z', repair: true },
+		{ id: 'one-ms', start, first: '2020-08-23T00:00:00.001Z', repair: true },
+		{ id: 'last-ms', start, first: '2020-08-22T17:00:00.999-07:00', repair: true },
+		{ id: 'healthy', start, first: '2020-08-22T23:59:59.9Z', repair: false },
+		{ id: 'equal', start, first: '2020-08-23T00:00:00.000Z', repair: false },
+		{ id: 'one-second', start, first: '2020-08-23T00:00:01Z', repair: false },
+		{ id: 'cross-second', start: '2020-08-23T00:00:00.8Z', first: '2020-08-23T00:00:01.1Z', repair: false },
+		{ id: 'future', start: '2099-08-23T00:00:00Z', first: '2099-08-23T00:00:00.71Z', repair: false },
+		{ id: 'empty', start, first: null, repair: false },
+	];
+	let originalSegments: unknown[];
+	let originalStates: unknown[];
+	let originalSchedules: unknown[];
+	let originalStatuses: Array<Record<string, unknown>>;
+	await upgradeFrom('0041_filler_compatibility_and_guide_indexes', sqlite => {
+		sqlite.prepare("INSERT INTO schedule_templates (id, name) VALUES ('00000000-0000-4000-8000-000000000001', 'Daily')").run();
+		for (const [index, entry] of cases.entries()) {
+			const channelConfig = channelCreateSchema.parse({ number: String(index + 1), name: entry.id });
+			sqlite.prepare('INSERT INTO channels (id, number, name, config) VALUES (?, ?, ?, ?)')
+				.run(entry.id, channelConfig.number, entry.id, JSON.stringify(channelConfig));
+			sqlite.prepare("INSERT INTO channel_schedules (channel_id, default_template_id, config) VALUES (?, '00000000-0000-4000-8000-000000000001', ?)")
+				.run(entry.id, JSON.stringify({ defaultTemplateId: '00000000-0000-4000-8000-000000000001', defaultFiller: null, layers: [], generationSeed: '00000000-0000-4000-8000-000000000002' }));
+			const state = { consumerKey: entry.id, configFingerprint: 'unchanged',
+				value: { type: 'shuffle', cycle: 7, cycleItemIds: ['earlier', 'next'], remainingItemIds: ['next'], lastItemId: 'earlier' }, updatedAt: start };
+			sqlite.prepare('INSERT INTO selection_states (consumer_key, channel_id, config_fingerprint, value, updated_at) VALUES (?, ?, ?, ?, ?)')
+				.run(entry.id, entry.id, state.configFingerprint, JSON.stringify(state.value), start);
+			sqlite.prepare(`INSERT INTO timeline_materializations
+				(channel_id, revision, status, window_start, window_end, continuation_at, input_fingerprint,
+				base_state, issues, guide_occurrences, committed_at, pending_since, apply_after, created_at, updated_at)
+				VALUES (?, 7, 'pending', ?, ?, ?, 'unchanged', ?, '[]', '[]', ?, ?, ?, ?, ?)`)
+				.run(
+					entry.id,
+					entry.start,
+					entry.id === 'future' ? '2099-08-24T00:00:00Z' : finish,
+					finish,
+					JSON.stringify([state]),
+					start,
+					start,
+					finish,
+					start,
+					start,
+				);
+			if (entry.first) {
+				sqlite.prepare(`INSERT INTO materialized_timeline_segments
+					(id, channel_id, template_id, slot_id, role, title, playback_path, starts_at, finishes_at,
+					source_start_seconds, source_finish_seconds, truncated, media_snapshot, state_delta, continuation)
+					VALUES (?, ?, '00000000-0000-4000-8000-000000000001', 'slot', 'primary', 'Keep this clip', '/media/clip.mp4', ?, ?, 0, 86400, 0, ?, ?, ?)`)
+					.run(
+						`${entry.id}-clip`,
+						entry.id,
+						entry.first,
+						entry.id === 'future' ? '2099-08-24T00:00:00Z' : finish,
+						JSON.stringify({ title: 'Captured title' }),
+						JSON.stringify([state]),
+						JSON.stringify({ at: finish }),
+					);
+			}
+		}
+		originalSegments = sqlite.prepare('SELECT * FROM materialized_timeline_segments ORDER BY id').all();
+		originalStates = sqlite.prepare('SELECT * FROM selection_states ORDER BY consumer_key').all();
+		originalSchedules = sqlite.prepare('SELECT * FROM channel_schedules ORDER BY channel_id').all();
+		originalStatuses = sqlite.prepare('SELECT * FROM timeline_materializations ORDER BY channel_id').all() as Array<Record<string, unknown>>;
+	}, async (sqlite, database) => {
+		const repairs = sqlite.prepare("SELECT * FROM materialized_timeline_segments WHERE role = 'dead-air' ORDER BY channel_id").all() as Array<Record<string, unknown>>;
+		expect(repairs.map(row => row.channel_id)).toEqual(cases.filter(entry => entry.repair).map(entry => entry.id).sort());
+		for (const repair of repairs) {
+			const entry = cases.find(entry => entry.id === repair.channel_id)!;
+			expect(repair).toMatchObject({ starts_at: entry.start, finishes_at: entry.first, media_item_id: null,
+				playback_path: null, media_snapshot: null, airing: null, continuation: null, state_delta: '[]' });
+			expect(repair.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+		}
+		expect(sqlite.prepare("SELECT * FROM materialized_timeline_segments WHERE role = 'primary' ORDER BY id").all()).toEqual(originalSegments);
+		expect(sqlite.prepare('SELECT * FROM selection_states ORDER BY consumer_key').all()).toEqual(originalStates);
+		expect(sqlite.prepare('SELECT * FROM channel_schedules ORDER BY channel_id').all()).toEqual(originalSchedules);
+		for (const original of originalStatuses) {
+			const status = sqlite.prepare('SELECT * FROM timeline_materializations WHERE channel_id = ?').get(original.channel_id) as Record<string, unknown>;
+			if (cases.find(entry => entry.id === original.channel_id)!.repair) {
+				expect(status).toEqual({ ...original, revision: 8, updated_at: expect.any(String) });
+			}
+			else {
+				expect(status).toEqual(original);
+			}
+		}
+
+		// Recovery must satisfy the actual guide and validated playout consumers after restart.
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2020-08-23T12:00:00Z'));
+		try {
+			const repository = new Repository(database.db);
+			const guide = await readCommittedChannelScheduleGuide(repository, 'UTC', 'damaged', '2020-08-23', 1);
+			const channel = (await repository.getChannel('damaged'))!;
+			const files = buildEtvPlayoutFiles([channel], guide, new Map([['damaged', {
+				path: '/media/fallback.mp4', durationMilliseconds: 30_000, hasAudio: true,
+			}]]));
+			expect(files.size).toBe(1);
+			const document = JSON.parse([...files.values()][0]!);
+			expect(Date.parse(document.items[0].finish) - Date.parse(document.items[0].start)).toBe(710);
+			expect(document.items[1].id).toContain('damaged-clip');
+		}
+		finally {
+			vi.useRealTimers();
+		}
+
+		const after = sqlite.prepare('SELECT * FROM materialized_timeline_segments ORDER BY id').all();
+		const statuses = sqlite.prepare('SELECT * FROM timeline_materializations ORDER BY channel_id').all();
+		applyPendingMigrations(sqlite, migrationsDir);
+		expect(sqlite.prepare('SELECT * FROM materialized_timeline_segments ORDER BY id').all()).toEqual(after);
+		expect(sqlite.prepare('SELECT * FROM timeline_materializations ORDER BY channel_id').all()).toEqual(statuses);
+	}, worker);
+});
+
+it.each([
+	{ health: 'failed', worker: false },
+	{ health: 'failed', worker: true },
+	{ health: 'pending', worker: false },
+	{ health: 'pending', worker: true },
+] as const)('preserves $health timeline recovery through upgrade and startup (worker=$worker)', async ({ health, worker }) => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2020-08-23T12:00:00Z'));
+	let channelId: string;
+	let checkpoint: NonNullable<Awaited<ReturnType<Repository['getTimelineMaterialization']>>>;
+	try {
+		await upgradeFrom('0041_filler_compatibility_and_guide_indexes', async (sqlite, database) => {
+			const repository = new Repository(database.db);
+			const library = await repository.createLibrary({
+				name: 'Unmeasured library', typeKey: 'movies', sourceType: 'on-disk',
+				sourceConfig: { scanRoot: '/migration-fixture', playbackRoot: null }, scanIntervalMinutes: 15,
+				watcherEnabled: false, enabled: true,
+			});
+			insertMediaItem(sqlite, 'unmeasured', library.id);
+			const program = await repository.createProgram({
+				name: 'Unmeasured films', config: {
+					type: 'content', source: { type: 'library-query', libraryId: library.id, kinds: ['movie'], genres: [] },
+					strategy: { type: 'sequential' },
+				},
+			});
+			const channel = await repository.createChannel(channelCreateSchema.parse({ number: '1', name: 'Recovery' }));
+			channelId = channel.id;
+			await repository.setChannelSchedule(channelId, { defaultTemplateId: null, defaultProgramId: program.id, layers: [], defaultFiller: null });
+			await new TimelineMaterializer(repository, { publish() {} }, 'UTC', undefined, undefined, 1).runNow();
+			const original = (await repository.getTimelineMaterialization(channelId))!;
+			expect(original.health).toBe('ready');
+			expect(original.issues.some(issue => issue.code === 'media-duration-missing')).toBe(true);
+
+			// Reproduce the retained prefix damage before the older process stopped.
+			sqlite.prepare('UPDATE materialized_timeline_segments SET starts_at = ? WHERE channel_id = ? AND starts_at = ?')
+				.run('2020-08-23T00:00:00.71Z', channelId, original.windowStart);
+			vi.setSystemTime(new Date('2020-08-23T12:30:00Z'));
+			if (health === 'failed') {
+				repository.markTimelineFailed(channelId, 'Interrupted generation', new Date().toISOString());
+			}
+			else {
+				if (program.config.type !== 'content') {
+					throw new Error('Expected a content program fixture');
+				}
+				await repository.updateProgram(program.id, { config: { ...program.config, strategy: { type: 'shuffle', seed: 'pending-edit' } } });
+				await new TimelineMaterializer(repository, { publish() {} }, 'UTC', undefined, undefined, 1).runNow();
+			}
+			checkpoint = (await repository.getTimelineMaterialization(channelId))!;
+			expect(checkpoint.health).toBe(health);
+			vi.setSystemTime(new Date('2020-08-23T13:00:00Z'));
+		}, async (_sqlite, database) => {
+			const repository = new Repository(database.db);
+			const migrated = (await repository.getTimelineMaterialization(channelId))!;
+			await new TimelineMaterializer(repository, { publish() {} }, 'UTC', undefined, undefined, 1).runNow();
+			const resumed = (await repository.getTimelineMaterialization(channelId))!;
+			if (health === 'failed') {
+				expect(resumed.health).toBe('ready');
+			}
+			else {
+				expect(resumed).toEqual({ ...checkpoint, revision: checkpoint.revision! + 1 });
+			}
+
+			const guide = await readCommittedChannelScheduleGuide(repository, 'UTC', channelId, '2020-08-23', 1, 1);
+			expect(guide.channels[0]?.preview.segments[0]).toMatchObject({
+				role: 'dead-air', start: checkpoint.windowStart, finish: '2020-08-23T00:00:00.71Z',
+			});
+			expect(migrated).toEqual({ ...checkpoint, revision: checkpoint.revision! + 1 });
+		}, worker);
+	}
+	finally {
+		vi.useRealTimers();
+	}
 });

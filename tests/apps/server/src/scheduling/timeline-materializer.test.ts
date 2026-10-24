@@ -128,8 +128,8 @@ function fixture() {
 				segments.filter(
 					(entry) =>
 						(!requestedChannel || entry.segment.channelId === requestedChannel)
-						&& entry.segment.finish > start
-						&& entry.segment.start < finish,
+						&& Date.parse(entry.segment.finish) > Date.parse(start)
+						&& Date.parse(entry.segment.start) < Date.parse(finish),
 				),
 		),
 		listOccupiedMediaIntervals: vi.fn(
@@ -137,8 +137,8 @@ function fixture() {
 				segments
 					.filter((entry) =>
 						Boolean(entry.segment.mediaItemId)
-						&& entry.segment.finish > start
-						&& entry.segment.start < finish)
+						&& Date.parse(entry.segment.finish) > Date.parse(start)
+						&& Date.parse(entry.segment.start) < Date.parse(finish))
 					.map((entry) => ({
 						channelId: entry.segment.channelId,
 						mediaItemId: entry.segment.mediaItemId!,
@@ -170,8 +170,8 @@ function fixture() {
 				...segments.filter(
 					(entry) =>
 						entry.segment.channelId !== commit.channelId
-						|| (entry.segment.finish <= commit.replaceFrom
-							&& entry.segment.finish > commit.windowStart),
+						|| (Date.parse(entry.segment.finish) <= Date.parse(commit.replaceFrom)
+							&& Date.parse(entry.segment.finish) > Date.parse(commit.windowStart)),
 				),
 				...commit.segments,
 			];
@@ -909,6 +909,26 @@ describe('durable timeline materializer', () => {
 		expect(
 			test.segments().some((entry) => entry.segment.start === active.segment.finish),
 		).toBe(true);
+	});
+
+	it('preserves the current item across a fractional-second apply boundary', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-08-22T07:00:00Z'));
+		const test = fixture();
+		test.catalog.media[0]!.durationSeconds = 3_600.71;
+		const materializer = new TimelineMaterializer(test.repository, test.events, 'America/Los_Angeles');
+		await materializer.runNow();
+		const active = test.segments()[0]!;
+		expect(active.segment.finish).toBe('2026-08-22T08:00:00.71Z');
+		vi.setSystemTime(new Date('2026-08-22T07:59:59.001Z'));
+		test.changeStrategy();
+		await materializer.runNow(true);
+		await materializer.applyNow(test.channelId);
+
+		expect(test.segments().some(entry => entry.segment.id === active.segment.id)).toBe(true);
+		const replacement = vi.mocked(test.repository.commitMaterializedTimeline).mock.calls.at(-1)![0];
+		expect(Date.parse(replacement.replaceFrom)).toBe(Date.parse(active.segment.finish));
+		expect(replacement.segments[0]?.segment.start).toBe(active.segment.finish);
 	});
 
 	it('rebuilds unlocked future rows after a healthy catalog deletion', async () => {

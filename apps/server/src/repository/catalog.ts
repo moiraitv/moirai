@@ -17,6 +17,7 @@ import type { MoiraiDatabase } from '../db/index.js';
 import { mediaItemGenres, mediaItems } from '../db/schema.js';
 import { addSourceMatch, escapeLike, ftsMatchQuery, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
+import { timestampBoundaryMilliseconds } from '@moirai/shared';
 import type {
 	MediaBrowseQuery,
 	MediaFileOwner,
@@ -156,11 +157,11 @@ export class MediaCatalogRepository {
 		}
 		if (query.addedFrom) {
 			conditions.push('i.date_added_at >= ?');
-			conditionParams.push(query.addedFrom);
+			conditionParams.push(new Date(timestampBoundaryMilliseconds(query.addedFrom)).toISOString());
 		}
 		if (query.addedBefore) {
 			conditions.push('i.date_added_at < ?');
-			conditionParams.push(query.addedBefore);
+			conditionParams.push(new Date(timestampBoundaryMilliseconds(query.addedBefore)).toISOString());
 		}
 
 		// Combine primary and membership requirements using the same positive matching mode.

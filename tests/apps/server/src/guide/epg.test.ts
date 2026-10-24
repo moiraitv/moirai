@@ -101,6 +101,22 @@ function guide(channelId: string, mediaId: string): ScheduleGuide {
 }
 
 describe('XMLTV EPG', () => {
+	it('exports an elapsed subsecond prefix before the following media listing', async () => {
+		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Midnight' }),
+			id: randomUUID(), createdAt: '2026-11-01T07:00:00Z', updatedAt: '2026-11-01T07:00:00Z' };
+		const source = catalog();
+		const output = guide(channel.id, source.media[0]!.id);
+		const spans = output.channels[0]!.preview.segments;
+		spans[0]!.start = '2026-11-01T07:00:00.71Z';
+		spans[1]!.start = '2026-11-01T07:00:00Z';
+		spans[1]!.finish = spans[0]!.start;
+
+		const xml = await buildXmltv([channel], output, source, 'https://moirai.example.test', builtinXmltv);
+		const programmes = new XMLParser().parse(xml).tv.programme;
+		expect(programmes.map((programme: { category: string | string[] }) => programme.category))
+			.toEqual(['No programming', ['Series', 'Science Fiction']]);
+	});
+
 	it.each([
 		['movie', 'Movie', false],
 		['episode', 'Series', false],

@@ -5,6 +5,7 @@ import type {
 } from '@moirai/shared';
 import { musicTextMatches } from '../media/music-search.js';
 import { normalizeSearchText } from '../scanner/catalog-metadata.js';
+import { compareInstants, timestampBoundaryMilliseconds } from '@moirai/shared';
 
 /** Persisted dynamic library-query source accepted by content programs. */
 type LibraryQuerySource = Extract<
@@ -104,11 +105,11 @@ export function mediaMatchesLibraryQuery(
 		return false;
 	}
 	if (source.addedFrom && (!media.dateAddedAt
-		|| Date.parse(media.dateAddedAt) < Date.parse(source.addedFrom))) {
+		|| Date.parse(media.dateAddedAt) < timestampBoundaryMilliseconds(source.addedFrom))) {
 		return false;
 	}
 	if (source.addedBefore && (!media.dateAddedAt
-		|| Date.parse(media.dateAddedAt) >= Date.parse(source.addedBefore))) {
+		|| Date.parse(media.dateAddedAt) >= timestampBoundaryMilliseconds(source.addedBefore))) {
 		return false;
 	}
 	const genreMatches = [
@@ -180,7 +181,7 @@ function compareOptionalDates(
 		return left === right ? 0 : left ? -1 : 1;
 	}
 
-	return left.localeCompare(right) * (direction === 'asc' ? 1 : -1);
+	return compareInstants(left, right) * (direction === 'asc' ? 1 : -1);
 }
 
 /** Order dynamic query matches for previews and sequential playback. */

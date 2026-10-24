@@ -1,3 +1,4 @@
+import { instantMilliseconds } from './instant.js';
 import type { AnyFillerPresetCreate, FillerAssignment, FillerKind } from '@moirai/shared';
 import type { MidRollConfig } from '@moirai/shared';
 import { sql } from 'drizzle-orm';
@@ -627,12 +628,12 @@ export const materializedTimelineSegments = sqliteTable(
 		continuation: text('continuation', { mode: 'json' }).$type<TimelineContinuation | null>(),
 	},
 	(table) => [
-		index('materialized_segments_channel_start_idx').on(table.channelId, table.startsAt),
-		index('materialized_segments_channel_finish_idx').on(table.channelId, table.finishesAt),
-		index('materialized_segments_start_idx').on(table.startsAt, table.channelId),
+		index('materialized_segments_channel_start_idx').on(table.channelId, instantMilliseconds(table.startsAt)),
+		index('materialized_segments_channel_finish_idx').on(table.channelId, instantMilliseconds(table.finishesAt)),
+		index('materialized_segments_start_idx').on(instantMilliseconds(table.startsAt), table.channelId),
 		index('materialized_segments_airing_id_idx').on(sql`json_extract(${table.airing}, '$.id')`),
 		index('materialized_segments_channel_airing_id_idx').on(table.channelId, sql`json_extract(${table.airing}, '$.id')`),
-		index('materialized_segments_channel_airing_finish_idx').on(table.channelId, sql`coalesce(json_extract(${table.airing}, '$.finish'), ${table.finishesAt})`),
+		index('materialized_segments_channel_airing_finish_idx').on(table.channelId, instantMilliseconds(sql`coalesce(json_extract(${table.airing}, '$.finish'), ${table.finishesAt})`)),
 	],
 );
 

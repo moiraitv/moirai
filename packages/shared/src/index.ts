@@ -23,6 +23,7 @@ export * from './scheduling.js';
 export * from './template-defaults.js';
 export * from './guide.js';
 export * from './normalization.js';
+export * from './time.js';
 export * from './catalog.js';
 export * from './catalog-sort.js';
 export * from './availability.js';

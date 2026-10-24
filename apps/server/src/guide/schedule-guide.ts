@@ -2,7 +2,7 @@ import { guideProgramNames } from './preview.js';
 import { projectGuideEntries } from './projection.js';
 import { recoverGuideOccurrences } from './occurrences.js';
 import type { ScheduleGuide, SchedulingCatalog, TimelinePreview } from '@moirai/shared';
-import { MAX_GUIDE_TIMELINE_SEGMENTS, XMLTV_EPG_DAYS } from '@moirai/shared';
+import { compareInstants, MAX_GUIDE_TIMELINE_SEGMENTS, XMLTV_EPG_DAYS } from '@moirai/shared';
 import { Temporal } from '@js-temporal/polyfill';
 import type { Repository } from '../repository/index.js';
 import type { MaterializedSegmentRecord } from '../repository/contracts.js';
@@ -75,7 +75,7 @@ function coversRange(
 ): boolean {
 	let coveredUntil = Temporal.Instant.from(rangeStart);
 	const requestedEnd = Temporal.Instant.from(rangeEnd);
-	for (const segment of [...segments].sort((left, right) => left.start.localeCompare(right.start))) {
+	for (const segment of [...segments].sort((left, right) => compareInstants(left.start, right.start))) {
 		const start = Temporal.Instant.from(segment.start);
 		const finish = Temporal.Instant.from(segment.finish);
 		if (Temporal.Instant.compare(finish, coveredUntil) <= 0) {
@@ -133,7 +133,7 @@ export function boundedGuideWindow(
 	return {
 		days,
 		endDate,
-		rows: rows.filter((row) => (row.segment.airing?.start ?? row.segment.start) < rangeEnd),
+		rows: rows.filter((row) => Date.parse(row.segment.airing?.start ?? row.segment.start) < Date.parse(rangeEnd)),
 		segmentLimitApplied: true,
 	};
 }
@@ -304,7 +304,7 @@ export async function readCommittedScheduleGuide(
 		.filter((status) => schedules.some((schedule) => schedule.channelId === status.channelId))
 		.map((status) => status.committedAt)
 		.filter((value): value is string => Boolean(value))
-		.sort()
+		.sort((left, right) => compareInstants(left, right))
 		.at(0);
 
 	// Reject the guide when any scheduled channel lacks complete healthy coverage.

@@ -2,7 +2,8 @@ import { Temporal } from '@js-temporal/polyfill';
 import type { ScheduleTemplate, ScheduleSlot, SelectionStateRecord, TimelineSegment } from '@moirai/shared';
 import type { AiringPlan, AiringSpan } from './mid-roll.js';
 import { changedStateRecords, type SelectionResult } from './selection.js';
-import { durationBetween, plusSeconds, segment, stableSegmentId } from './timeline-segment.js';
+import { segment, stableSegmentId } from './timeline-segment.js';
+import { durationMilliseconds, spanDurationMilliseconds } from '@moirai/shared';
 
 /** Owned cursor state and output sink receiving only accepted airing spans. */
 export interface AiringCommitContext {
@@ -31,12 +32,12 @@ export function commitAiring(
 			let elapsed = 0;
 			let primaryFinish = 0;
 			for (const span of spans) {
-				elapsed += span.sourceFinishSeconds - span.sourceStartSeconds;
+				elapsed += spanDurationMilliseconds(span.sourceStartSeconds, span.sourceFinishSeconds);
 				if (span.role === 'primary') {
 					primaryFinish = elapsed;
 				}
 			}
-			return durationBetween(start, finish) < primaryFinish;
+			return finish.epochMilliseconds - start.epochMilliseconds < primaryFinish;
 		})() } : null;
 	let spanStart = start;
 	let committedPrimary = false;
@@ -45,14 +46,14 @@ export function commitAiring(
 		if (Temporal.Instant.compare(spanStart, finish) >= 0) {
 			break;
 		}
-		const naturalEnd = plusSeconds(spanStart, span.sourceFinishSeconds - span.sourceStartSeconds);
+		const naturalEnd = spanStart.add({ milliseconds: spanDurationMilliseconds(span.sourceStartSeconds, span.sourceFinishSeconds) });
 		const spanEnd = Temporal.Instant.compare(naturalEnd, finish) > 0 ? finish : naturalEnd;
 		const entry = segment({ channelId: context.channelId, templateId: template.id, slotId: slot.id,
 			scheduleLayerId: layerId, role: span.role, fillerStage: span.fillerStage, programId: span.programId, mediaItemId: span.media.id,
 			title: span.media.title, playbackPath: span.media.playbackPath,
 			playbackParts: span.media.playbackParts ?? [{ playbackPath: span.media.playbackPath, durationSeconds: span.media.durationSeconds! }],
 			start: spanStart, finish: spanEnd, sourceStartSeconds: span.sourceStartSeconds,
-			sourceFinishSeconds: span.sourceStartSeconds + durationBetween(spanStart, spanEnd),
+			sourceFinishSeconds: (durationMilliseconds(span.sourceStartSeconds) + (spanEnd.epochMilliseconds - spanStart.epochMilliseconds)) / 1_000,
 			truncated: span.truncated || Temporal.Instant.compare(spanEnd, naturalEnd) < 0, airing,
 			programAncestry: span.role === 'primary' ? selected.programAncestry : span.programAncestry,
 			sequenceEntryPath: span.role === 'primary' ? selected.sequenceEntryPath : span.sequenceEntryPath,

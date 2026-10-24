@@ -160,3 +160,37 @@ it('lists split primary airings once with full bounds while retaining individual
 		expect.objectContaining({ startsAt: at(24), finishesAt: at(25) }),
 	]);
 });
+
+it('compares current and upcoming airing bounds at integer millisecond precision', () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	try {
+		const { db, addItem } = fixture();
+		const item = addItem('Subsecond showings');
+		const channel = randomUUID(), template = randomUUID();
+		db.insert(channels).values({ id: channel, number: '4', name: 'Cinema', config: {} as never }).run();
+		db.insert(scheduleTemplates).values({ id: template, name: 'Day' }).run();
+		db.insert(channelSchedules).values({ channelId: channel, defaultTemplateId: template, config: {} as never }).run();
+		const start = '2026-08-23T00:00:00Z';
+		const boundary = '2026-08-23T00:00:00.71Z';
+		const finish = '2026-08-23T00:00:01.000Z';
+		db.insert(timelineMaterializations).values({ channelId: channel, status: 'ready', windowStart: start, windowEnd: finish,
+			continuationAt: finish, inputFingerprint: 'committed', baseState: [], issues: [], committedAt: start }).run();
+		const current = randomUUID(), upcoming = randomUUID();
+		for (const [id, from, to] of [[current, start, boundary], [upcoming, boundary, finish],
+			[randomUUID(), '2026-08-23T00:00:01Z', '2026-08-23T00:00:02Z'],
+			[randomUUID(), '2026-08-22T23:59:59Z', '2026-08-23T00:00:00.000Z']] as const) {
+			db.insert(materializedTimelineSegments).values({
+				id, channelId: channel, templateId: template, slotId: randomUUID(), mediaItemId: item,
+				role: 'primary', title: 'Clip', startsAt: from, finishesAt: to, sourceStartSeconds: 0, truncated: false, stateDelta: [],
+				...(id === current ? { airing: { id: randomUUID(), primarySegmentId: id, start: from, finish: to, truncated: false } } : {}),
+			}).run();
+		}
+		expect(mediaAirings(db, item, 1, 20)).toMatchObject({ total: 2, items: [{ id: current }, { id: upcoming }] });
+		vi.setSystemTime(new Date('2026-08-22T17:00:00.710-07:00'));
+		expect(mediaAirings(db, item, 1, 20)).toMatchObject({ total: 1, items: [{ id: upcoming }] });
+	}
+	finally {
+		vi.useRealTimers();
+	}
+});

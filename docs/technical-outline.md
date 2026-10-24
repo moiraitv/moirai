@@ -698,6 +698,11 @@ recursive selection, dynamic programs, similarity candidate filters, and Quick S
 queries and in-memory scheduling apply the same rules, without additional per-item queries. Existing
 saved filters omit the bounds and remain unrestricted without migration.
 
+Indexed-date filters normalize accepted UTC and offset timestamps to canonical UTC bounds before SQL
+comparison. Shared boundary math rounds finer-than-millisecond bounds upward, preserving inclusive
+starts and exclusive ends against millisecond catalog records. Browsing, recursive selection, and
+in-memory scheduling use the same boundaries without extra queries or replacing the catalog index.
+
 Recursive Add All selection applies the same search and filters as browsing. Music-video Artist
 and Album filters are shared by Library, Programs, and Quick Setup and evaluated against the same
 credits and hierarchy labels in SQL and scheduling. Music matching shares Unicode lowercase
@@ -1299,6 +1304,20 @@ stores:
 - bounded media metadata snapshots;
 - per-segment selection-state transitions;
 - the continuation cursor at the end of the window.
+
+Timeline range reads, ordering, replacement, and cleanup compare integer epoch milliseconds rather
+than timestamp text. Matching SQLite expression indexes preserve indexed access without rewriting
+stored timestamp strings. The upgrade repairs elapsed prefix gaps shorter than one second when the
+first retained segment begins within the window-start second, recording the missing interval as dead
+air. Failed checkpoints with retained committed coverage are eligible for the same repair. Retained
+media, selection state, shuffle seeds, and pending changes remain intact; the repaired timeline receives
+a new revision while retaining its configuration commit timestamp.
+
+Shared time helpers define millisecond duration conversion, source-span subtraction, instant
+comparison, and timestamp filter boundaries. Filler budgets, accumulated pre/mid/post-roll durations,
+candidate fitting, cross-channel overlap, truncation flags, and serialized tail continuation use
+integer milliseconds internally. Public duration fields and saved continuation shapes remain in
+seconds; fitting policies, authored limits, and selection-state ownership remain unchanged.
 
 The Channels list confirms a full reset through the channel materialization regeneration endpoint.
 The materializer serializes the reset with active generation, clears only that channel’s timeline,

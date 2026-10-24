@@ -1,5 +1,6 @@
 import type { SchedulableMedia } from '@moirai/shared';
 import { hasSelectionCollision, selectionDuration, type SelectionContext, type SelectionFitMode } from './selection.js';
+import { durationMilliseconds } from '@moirai/shared';
 
 /** Select in authored order, or retain the longest fit, without expanding unused candidates. */
 export function selectOrderedCandidate(
@@ -11,6 +12,7 @@ export function selectOrderedCandidate(
 	avoidItemId: string | null = null,
 ): SchedulableMedia | null {
 	const bestFit = fitSeconds !== null && fitMode === 'best-fit';
+	const fitMilliseconds = fitSeconds === null ? null : durationMilliseconds(fitSeconds);
 	let hasNonCollision = false;
 	let preferred: SchedulableMedia | null = null;
 	let repeated: SchedulableMedia | null = null;
@@ -29,13 +31,13 @@ export function selectOrderedCandidate(
 		if (strictFirst && !bestFit) {
 			fallback ??= media;
 			if (!collision) {
-				return fitSeconds === null || selectionDuration(media, context) <= fitSeconds ? media : null;
+				return fitMilliseconds === null || durationMilliseconds(selectionDuration(media, context)) <= fitMilliseconds ? media : null;
 			}
 			continue;
 		}
 
-		const duration = fitSeconds === null ? 0 : selectionDuration(media, context);
-		if (fitSeconds !== null && duration > fitSeconds) {
+		const duration = fitMilliseconds === null ? 0 : durationMilliseconds(selectionDuration(media, context));
+		if (fitMilliseconds !== null && duration > fitMilliseconds) {
 			continue;
 		}
 		const repeat = media.id === avoidItemId;
@@ -63,7 +65,7 @@ export function selectOrderedCandidate(
 	}
 
 	if (strictFirst && !bestFit) {
-		return fallback && (fitSeconds === null || selectionDuration(fallback, context) <= fitSeconds) ? fallback : null;
+		return fallback && (fitMilliseconds === null || durationMilliseconds(selectionDuration(fallback, context)) <= fitMilliseconds) ? fallback : null;
 	}
 	return hasNonCollision ? preferred ?? repeated : fallback ?? fallbackRepeated;
 }

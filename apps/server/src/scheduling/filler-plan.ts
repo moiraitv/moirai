@@ -5,6 +5,7 @@ import { TimelineMaterializationLimitError } from './limits.js';
 import { changedStateRecords, selectProgram, type SelectionContext } from './selection.js';
 import type { AiringSpan } from './mid-roll.js';
 import { assertFillerProgram } from './validation.js';
+import { durationMilliseconds } from '@moirai/shared';
 
 /** Sample a reproducible quantity without consuming state during candidate evaluation. */
 export function randomFillerCount(minimum: number, maximum: number, identity: string): number {
@@ -76,7 +77,8 @@ export function planFiller(
 	context.candidateIndexes ??= new WeakMap();
 	let state = sourceState;
 	const spans: AiringSpan[] = [];
-	let durationSeconds = 0;
+	let elapsedMilliseconds = 0;
+	const availableMilliseconds = durationMilliseconds(available);
 	const stageStartMilliseconds = Date.parse(context.selectionStart);
 	const remaining = { ...(progress ?? fillerProgress(budget, context.selectionStart, timeZone, identity, available)) };
 	const policy = 'policy' in budget ? budget.policy : 'next-fit-only';
@@ -87,34 +89,36 @@ export function planFiller(
 		remaining.fullBudgetSeconds = fullBudgetSeconds;
 	}
 	const initialProgress = { ...remaining };
-	while (remaining.remaining > 0 && durationSeconds < available) {
-		const capacity = Math.min(available - durationSeconds, remaining.unit === 'seconds' ? remaining.remaining : available);
+	let remainingQuantity = remaining.unit === 'seconds' ? durationMilliseconds(remaining.remaining) : remaining.remaining;
+	while (remainingQuantity > 0 && elapsedMilliseconds < availableMilliseconds) {
+		const capacityMilliseconds = Math.min(availableMilliseconds - elapsedMilliseconds, remaining.unit === 'seconds' ? remainingQuantity : availableMilliseconds);
 		const selectionContext = { ...context, mediaDuration: undefined, fillerSelection: { fullBudgetSeconds, allowTruncation },
-			selectionStart: new Date(stageStartMilliseconds + Math.round(durationSeconds * 1_000)).toISOString() };
-		let selected = selectProgram(programId, consumerKey, state, selectionContext, capacity, 'first-fit-arbitrary');
+			selectionStart: new Date(stageStartMilliseconds + elapsedMilliseconds).toISOString() };
+		let selected = selectProgram(programId, consumerKey, state, selectionContext, capacityMilliseconds / 1_000, 'first-fit-arbitrary');
 		if (!selected && allowTruncation) {
 			selected = selectProgram(programId, consumerKey, state, selectionContext);
 		}
 		if (!selected) {
 			break;
 		}
-		const naturalDuration = selected.media.durationSeconds!;
-		if (naturalDuration > capacity && (remaining.unit === 'count' || policy === 'next-fit-only' || policy === 'best-fit-only')) {
+		const naturalMilliseconds = durationMilliseconds(selected.media.durationSeconds!);
+		if (naturalMilliseconds > capacityMilliseconds && (remaining.unit === 'count' || policy === 'next-fit-only' || policy === 'best-fit-only')) {
 			break;
 		}
 		if (spans.length >= maxSpans) {
 			throw new TimelineMaterializationLimitError(MAX_TIMELINE_SEGMENTS);
 		}
-		const played = Math.round(Math.min(naturalDuration, capacity) * 1_000) / 1_000;
-		if (played <= 0) {
+		const playedMilliseconds = Math.min(naturalMilliseconds, capacityMilliseconds);
+		if (playedMilliseconds <= 0) {
 			break;
 		}
 		spans.push({ media: selected.media, role: 'filler', programId, programAncestry: selected.programAncestry,
-			sequenceEntryPath: selected.sequenceEntryPath, sourceStartSeconds: 0, sourceFinishSeconds: played,
-			truncated: played < naturalDuration, stateDelta: changedStateRecords(state, selected.state) });
+			sequenceEntryPath: selected.sequenceEntryPath, sourceStartSeconds: 0, sourceFinishSeconds: playedMilliseconds / 1_000,
+			truncated: playedMilliseconds < naturalMilliseconds, stateDelta: changedStateRecords(state, selected.state) });
 		state = selected.state;
-		durationSeconds += played;
-		remaining.remaining = Math.max(0, remaining.unit === 'count' ? remaining.remaining - 1 : Math.round((remaining.remaining - played) * 1_000) / 1_000);
+		elapsedMilliseconds += playedMilliseconds;
+		remainingQuantity = Math.max(0, remainingQuantity - (remaining.unit === 'count' ? 1 : playedMilliseconds));
 	}
-	return { spans, state, durationSeconds, initialProgress, progress: remaining };
+	remaining.remaining = remaining.unit === 'seconds' ? remainingQuantity / 1_000 : remainingQuantity;
+	return { spans, state, durationSeconds: elapsedMilliseconds / 1_000, initialProgress, progress: remaining };
 }

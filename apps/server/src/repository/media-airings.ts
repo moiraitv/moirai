@@ -1,3 +1,4 @@
+import { instantMilliseconds } from '../db/instant.js';
 import { sql } from 'drizzle-orm';
 import type { MediaAirings } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
@@ -21,12 +22,14 @@ export function mediaAirings(db: MoiraiDatabase, id: string, page: number, pageS
 			WHERE (s.media_item_id = ${id} OR s.media_item_id IN (
 				SELECT alias_id FROM media_item_aliases WHERE item_id = ${id}
 			)) AND (s.airing IS NULL OR s.role <> 'primary' OR s.id = json_extract(s.airing, '$.primarySegmentId'))
-			AND julianday(${finishesAt}) > julianday(${now})
-			AND t.window_start < t.window_end AND ${startsAt} < t.window_end AND ${finishesAt} > t.window_start`;
+			AND ${instantMilliseconds(finishesAt)} > ${Date.parse(now)}
+			AND ${instantMilliseconds(sql`t.window_start`)} < ${instantMilliseconds(sql`t.window_end`)}
+			AND ${instantMilliseconds(startsAt)} < ${instantMilliseconds(sql`t.window_end`)}
+			AND ${instantMilliseconds(finishesAt)} > ${instantMilliseconds(sql`t.window_start`)}`;
 		const total = tx.get<{ total: number }>(sql`SELECT count(*) AS total ${occurrences}`)!.total;
 		const items = tx.all<MediaAirings['items'][number]>(sql`SELECT s.id, c.id AS channelId,
 			c.name AS channelName, c.number AS channelNumber, ${startsAt} AS startsAt, ${finishesAt} AS finishesAt
-			${occurrences} ORDER BY ${startsAt}, c.number, c.id, s.id LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`);
+			${occurrences} ORDER BY ${instantMilliseconds(startsAt)}, c.number, c.id, s.id LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`);
 		return { items, total };
 	});
 }

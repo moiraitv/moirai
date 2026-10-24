@@ -5,6 +5,7 @@ import { StaleSemanticDecisionError } from '../repository/semantic.js';
 import { Temporal } from '@js-temporal/polyfill';
 import {
 	XMLTV_EPG_DAYS,
+	compareInstants,
 	type ChannelSchedule,
 	type LiveEvent,
 	type ScheduleTemplate,
@@ -46,7 +47,7 @@ function stateAfter(
 ): SelectionStateRecord[] {
 	const state = new Map(initial.map((record) => [record.consumerKey, structuredClone(record)]));
 	for (const record of segments) {
-		if (record.segment.start >= cutoff) {
+		if (Date.parse(record.segment.start) >= Date.parse(cutoff)) {
 			break;
 		}
 
@@ -111,7 +112,7 @@ function canRecoverEmptyTimeline(
 		return false;
 	}
 
-	const remaining = existing.filter((record) => Date.parse(record.segment.finish) > Date.parse(now));
+	const remaining = existing.filter((record) => compareInstants(record.segment.finish, now) > 0);
 	if (remaining.length === 0 || remaining.some((record) => record.segment.role !== 'dead-air')) {
 		return false;
 	}
@@ -138,7 +139,7 @@ function canRecoverEmptyTimeline(
 			],
 		),
 	];
-	return authored.every((resource) => Date.parse(resource.updatedAt) <= Date.parse(current.committedAt));
+	return authored.every((resource) => compareInstants(resource.updatedAt, current.committedAt) <= 0);
 }
 
 /** Convert an instant to the configured scheduling calendar date. */
@@ -518,9 +519,11 @@ export class TimelineMaterializer {
 				replaceFrom = current.applyAfter;
 				const active = existing.find(
 					({ segment }) =>
-						(segment.start < replaceFrom || (segment.airing && segment.start === replaceFrom && segment.airing.start < replaceFrom))
-						&& segment.finish > replaceFrom
-						&& segment.role !== 'dead-air',
+						(Date.parse(segment.start) < Date.parse(replaceFrom)
+							|| (segment.airing && Date.parse(segment.start) === Date.parse(replaceFrom)
+								&& Date.parse(segment.airing.start) < Date.parse(replaceFrom)))
+							&& Date.parse(segment.finish) > Date.parse(replaceFrom)
+							&& segment.role !== 'dead-air',
 				);
 				if (active) {
 					replaceFrom = active.segment.airing?.finish ?? active.segment.finish;
@@ -534,9 +537,11 @@ export class TimelineMaterializer {
 						: desiredStart;
 				const active = existing.find(
 					({ segment }) =>
-						(segment.start < replaceFrom || (segment.airing && segment.start === replaceFrom && segment.airing.start < replaceFrom))
-						&& segment.finish > replaceFrom
-						&& segment.role !== 'dead-air',
+						(Date.parse(segment.start) < Date.parse(replaceFrom)
+							|| (segment.airing && Date.parse(segment.start) === Date.parse(replaceFrom)
+								&& Date.parse(segment.airing.start) < Date.parse(replaceFrom)))
+							&& Date.parse(segment.finish) > Date.parse(replaceFrom)
+							&& segment.role !== 'dead-air',
 				);
 				if (active) {
 					replaceFrom = active.segment.airing?.finish ?? active.segment.finish;
@@ -558,7 +563,7 @@ export class TimelineMaterializer {
 			baseState = persistentState(initialState);
 		}
 
-		if (replaceFrom >= desiredEnd) {
+		if (compareInstants(replaceFrom, desiredEnd) >= 0) {
 			return null;
 		}
 
@@ -615,7 +620,7 @@ export class TimelineMaterializer {
 		);
 		const media = new Map(catalog.media.map((item) => [item.id, item]));
 		const segments: MaterializedSegmentRecord[] = generated.segments
-			.filter((segment) => (segment.airing?.start ?? segment.start) < desiredEnd)
+			.filter((segment) => compareInstants(segment.airing?.start ?? segment.start, desiredEnd) < 0)
 			.map((segment) => ({
 				segment,
 				mediaSnapshot: segment.mediaItemId
@@ -666,7 +671,7 @@ export class TimelineMaterializer {
 		);
 		for (let index = occupiedMedia.length - 1; index >= 0; index -= 1) {
 			const entry = occupiedMedia[index]!;
-			if (entry.channelId === schedule.channelId && entry.finish > replaceFrom) {
+			if (entry.channelId === schedule.channelId && compareInstants(entry.finish, replaceFrom) > 0) {
 				occupiedMedia.splice(index, 1);
 			}
 		}

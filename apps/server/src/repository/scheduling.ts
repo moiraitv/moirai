@@ -1,3 +1,4 @@
+import { instantMilliseconds } from '../db/instant.js';
 import { FillerPresetRepository } from './filler-presets.js';
 import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { createHash } from 'node:crypto';
@@ -810,8 +811,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				eq(mediaItems.kind, 'music-video'),
 			))
 			.where(and(
-				lte(materializedTimelineSegments.startsAt, at),
-				gt(materializedTimelineSegments.finishesAt, at),
+				lte(instantMilliseconds(materializedTimelineSegments.startsAt), Date.parse(at)),
+				gt(instantMilliseconds(materializedTimelineSegments.finishesAt), Date.parse(at)),
 			));
 		return rows.map((row) => {
 			const record = materializedSegmentRecord(row.segment);
@@ -836,8 +837,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			})
 			.from(materializedTimelineSegments)
 			.where(and(
-				gt(materializedTimelineSegments.finishesAt, rangeStart),
-				lt(materializedTimelineSegments.startsAt, rangeEnd),
+				gt(instantMilliseconds(materializedTimelineSegments.finishesAt), Date.parse(rangeStart)),
+				lt(instantMilliseconds(materializedTimelineSegments.startsAt), Date.parse(rangeEnd)),
 				isNotNull(materializedTimelineSegments.mediaItemId),
 			));
 		return rows
@@ -857,8 +858,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		channelId?: string,
 	): Promise<MaterializedSegmentRecord[]> {
 		const range = and(
-			gt(materializedTimelineSegments.finishesAt, rangeStart),
-			lt(materializedTimelineSegments.startsAt, rangeEnd),
+			gt(instantMilliseconds(materializedTimelineSegments.finishesAt), Date.parse(rangeStart)),
+			lt(instantMilliseconds(materializedTimelineSegments.startsAt), Date.parse(rangeEnd)),
 			channelId ? eq(materializedTimelineSegments.channelId, channelId) : undefined,
 		);
 		const rows = await this.db
@@ -871,7 +872,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			.where(range)
 			.orderBy(
 				asc(materializedTimelineSegments.channelId),
-				asc(materializedTimelineSegments.startsAt),
+				asc(instantMilliseconds(materializedTimelineSegments.startsAt)),
 			);
 		return rows.map(materializedSegmentRecord);
 	}
@@ -893,10 +894,10 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			id: materializedTimelineSegments.id,
 			airingId: airingId.as('airing_id'),
 		}).from(materializedTimelineSegments).where(and(
-			gt(materializedTimelineSegments.finishesAt, rangeStart),
-			lt(materializedTimelineSegments.startsAt, rangeEnd),
+			gt(instantMilliseconds(materializedTimelineSegments.finishesAt), Date.parse(rangeStart)),
+			lt(instantMilliseconds(materializedTimelineSegments.startsAt), Date.parse(rangeEnd)),
 			channelIds?.length ? inArray(materializedTimelineSegments.channelId, channelIds) : undefined,
-		)).orderBy(asc(materializedTimelineSegments.startsAt), asc(materializedTimelineSegments.channelId)).limit(limit));
+		)).orderBy(asc(instantMilliseconds(materializedTimelineSegments.startsAt)), asc(materializedTimelineSegments.channelId)).limit(limit));
 		const matchedIds = this.db.select({ id: window.id }).from(window).union(this.db.select({
 			id: materializedTimelineSegments.id,
 		}).from(materializedTimelineSegments).where(and(
@@ -909,7 +910,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			.from(materializedTimelineSegments)
 			.where(inArray(materializedTimelineSegments.id, matchedIds))
 			.orderBy(
-				asc(materializedTimelineSegments.startsAt),
+				asc(instantMilliseconds(materializedTimelineSegments.startsAt)),
 				asc(materializedTimelineSegments.channelId),
 			);
 		await yieldToEventLoop();
@@ -1001,7 +1002,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				.where(
 					and(
 						eq(materializedTimelineSegments.channelId, input.channelId),
-						gt(materializedTimelineSegments.finishesAt, input.replaceFrom),
+						gt(instantMilliseconds(materializedTimelineSegments.finishesAt), Date.parse(input.replaceFrom)),
 					),
 				)
 				.run();
@@ -1009,7 +1010,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				.where(
 					and(
 						eq(materializedTimelineSegments.channelId, input.channelId),
-						sql`coalesce(json_extract(${materializedTimelineSegments.airing}, '$.finish'), ${materializedTimelineSegments.finishesAt}) <= ${input.windowStart}`,
+						lte(instantMilliseconds(sql`coalesce(json_extract(${materializedTimelineSegments.airing}, '$.finish'), ${materializedTimelineSegments.finishesAt})`), Date.parse(input.windowStart)),
 					),
 				)
 				.run();

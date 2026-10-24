@@ -2,7 +2,8 @@ import { expect, it } from 'vitest';
 import type { FillerBudget, SchedulableMedia, SchedulingProgram, SelectionStateRecord } from '@moirai/shared';
 import { planFiller } from '@server/scheduling/filler-plan.js';
 import { indexSchedulingCatalog } from '@server/scheduling/catalog.js';
-import { indexOccupiedMedia, selectProgram, type SelectionContext } from '@server/scheduling/selection.js';
+import { hasSelectionCollision, indexOccupiedMedia, selectProgram, type SelectionContext } from '@server/scheduling/selection.js';
+import { selectOrderedCandidate } from '@server/scheduling/candidate-selection.js';
 
 function fixture(durations = [200, 30, 40], strategy: 'sequential' | 'shuffle' | 'random' | 'weighted-random' = 'sequential') {
 	const media: SchedulableMedia[] = durations.map((durationSeconds, index) => ({
@@ -34,6 +35,87 @@ function fixture(durations = [200, 30, 40], strategy: 'sequential' | 'shuffle' |
 		},
 	};
 }
+
+it.each(['next-fit-only', 'best-fit-only', 'next-truncate', 'best-fit-or-truncate'] as const)('fills millisecond-exact windows with %s across budgets and selection strategies', policy => {
+	for (const strategy of ['sequential', 'shuffle', 'random', 'weighted-random'] as const) {
+		for (const budget of [
+			{ type: 'duration', seconds: 60, policy }, { type: 'remaining', policy },
+			{ type: 'count', count: 2 }, { type: 'random-count', minimum: 2, maximum: 2 },
+		] satisfies FillerBudget[]) {
+			const f = fixture([32.002, 27.998], strategy);
+			const result = planFiller(f.program.id, budget, f.state, f.context, 'tail', 'UTC', 'exact', 60);
+			expect(new Set(result.spans.map(span => span.media.id))).toEqual(new Set(f.media.map(item => item.id)));
+			expect(result.durationSeconds).toBe(60);
+			expect(result.progress.remaining).toBe(0);
+			expect(result.spans.every(span => !span.truncated)).toBe(true);
+			expect(result.state.get('tail')!.value.fillerCycle!.remainingItemIds).toEqual([]);
+		}
+	}
+});
+
+it.each(['next-fit-only', 'best-fit-only', 'next-truncate', 'best-fit-or-truncate'] as const)('respects one-millisecond shortages with %s and preserves unplayed state', policy => {
+	const f = fixture([32.002, 27.998]);
+	const result = planFiller(f.program.id, { type: 'remaining', policy }, f.state, f.context, 'tail', 'UTC', 'short', 59.999);
+	const truncate = policy === 'next-truncate' || policy === 'best-fit-or-truncate';
+	expect(result.durationSeconds).toBe(truncate ? 59.999 : 32.002);
+	expect(result.spans.map(span => span.truncated)).toEqual(truncate ? [false, true] : [false]);
+	expect(result.state.get('tail')!.value.fillerCycle!.remainingItemIds).toEqual(truncate ? [] : ['item-1']);
+});
+
+it('keeps fractional budgets exact after serialized continuation and repeated accumulation', () => {
+	const f = fixture([0.001]);
+	const budget = { type: 'duration', seconds: 1, policy: 'next-fit-only' } as const;
+	const first = planFiller(f.program.id, budget, f.state, f.context, 'tail', 'UTC', 'continue', 0.102);
+	expect(first.durationSeconds).toBe(0.102);
+	expect(first.progress.remaining).toBe(0.898);
+	const later = planFiller(
+		f.program.id,
+		budget,
+		new Map(JSON.parse(JSON.stringify([...first.state]))),
+		f.context,
+		'tail',
+		'UTC',
+		'continue',
+		0.898,
+		JSON.parse(JSON.stringify(first.progress)),
+	);
+	expect(later.durationSeconds).toBe(0.898);
+	expect(later.progress.remaining).toBe(0);
+	expect(later.spans.every(span => !span.truncated)).toBe(true);
+});
+
+it.each(['first-fit-arbitrary', 'best-fit'] as const)('uses exact millisecond limits for %s primary and fallback candidates', mode => {
+	for (const strictFirst of [false, true]) {
+		for (const collision of [false, true]) {
+			const f = fixture([40.102]);
+			f.context.mediaDuration = () => 30.1 + 10.002;
+			if (collision) {
+				f.context.occupiedMedia = [{ mediaItemId: f.media[0]!.id, start: f.context.selectionStart, finish: '2026-01-01T01:00:00Z' }];
+			}
+			for (const avoidItemId of [null, f.media[0]!.id]) {
+				expect(selectOrderedCandidate(f.media, f.context, 40.101, mode, strictFirst, avoidItemId)).toBeNull();
+				expect(selectOrderedCandidate(f.media, f.context, 40.102, mode, strictFirst, avoidItemId)).toBe(f.media[0]);
+				expect(selectOrderedCandidate(f.media, f.context, 40.103, mode, strictFirst, avoidItemId)).toBe(f.media[0]);
+			}
+		}
+	}
+});
+
+it.each([false, true])('keeps touching occupancy boundaries exclusive with indexed=%s', indexed => {
+	for (const selectionStart of ['1970-01-01T00:00:00Z', '2026-01-01T01:00:00+01:00']) {
+		const f = fixture([40.102]);
+		f.context.selectionStart = selectionStart;
+		f.context.mediaDuration = () => 30.1 + 10.002;
+		for (const offset of [-1, 0, 1]) {
+			const start = Date.parse(selectionStart) + 40_102 + offset;
+			f.context.occupiedMedia = [{ mediaItemId: f.media[0]!.id, start: new Date(start).toISOString(), finish: new Date(start + 1).toISOString() }];
+			if (indexed) {
+				f.context.occupiedMediaIndex = indexOccupiedMedia(f.context.occupiedMedia);
+			}
+			expect(hasSelectionCollision(f.media[0]!, f.context)).toBe(offset < 0);
+		}
+	}
+});
 
 it.each(['sequential', 'shuffle', 'random', 'weighted-random'] as const)('consumes %s filler without replacement and retains oversized positions across cycles', strategy => {
 	const f = fixture([200, 30, 30], strategy);

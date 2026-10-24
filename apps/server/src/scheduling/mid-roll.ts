@@ -5,6 +5,7 @@ import { MAX_TIMELINE_SEGMENTS, MAX_MID_ROLL_POINTS, matchesMidRollPredicate, ty
 	type SelectionStateRecord } from '@moirai/shared';
 import { addIssue, type SelectionContext } from './selection.js';
 import type { RecordedTimelineIssue } from './timeline-issues.js';
+import { durationMilliseconds, spanDurationMilliseconds } from '@moirai/shared';
 
 /** One source span and only the cursor changes caused by this span's selection. */
 export interface AiringSpan {
@@ -29,10 +30,10 @@ export interface AiringPlan {
 
 /** Choose natural interior boundaries, or timed points when no usable chapters exist. */
 function breakPoints(media: SchedulableMedia, interval: number): Array<{ point: number; title: string }> {
-	const duration = media.durationSeconds!;
+	const duration = durationMilliseconds(media.durationSeconds!) / 1_000;
 	const chapters = new Map<number, string>();
 	for (const chapter of media.chapters ?? []) {
-		const point = Math.round(chapter.finishSeconds * 1_000) / 1_000;
+		const point = durationMilliseconds(chapter.finishSeconds) / 1_000;
 		if (Number.isFinite(point) && point > 0 && point < duration) {
 			chapters.set(point, chapter.title);
 		}
@@ -64,13 +65,13 @@ export function planAiring(
 		issues: [], issueKeys: new Set(), issueIndex: new Map(), blockedPrograms: new Set(sourceContext.blockedPrograms) };
 	let state = sourceState;
 	const spans: AiringSpan[] = [];
-	let durationSeconds = 0;
+	let elapsedMilliseconds = 0;
 	const appendPrimary = (start: number, finish: number): void => {
 		if (finish > start) {
 			const previous = spans.at(-1);
 			if (previous?.role === 'primary' && previous.sourceFinishSeconds === start) {
 				previous.sourceFinishSeconds = finish;
-				durationSeconds += finish - start;
+				elapsedMilliseconds += spanDurationMilliseconds(start, finish);
 				return;
 			}
 			if (spans.length >= MAX_TIMELINE_SEGMENTS) {
@@ -78,7 +79,7 @@ export function planAiring(
 			}
 			spans.push({ media, role: 'primary', programId: primaryProgramId, sourceStartSeconds: start,
 				sourceFinishSeconds: finish, truncated: false, stateDelta: [] });
-			durationSeconds += finish - start;
+			elapsedMilliseconds += spanDurationMilliseconds(start, finish);
 		}
 	};
 	const points = config ? breakPoints(media, config.fallbackIntervalSeconds) : [];
@@ -95,8 +96,8 @@ export function planAiring(
 	for (const [index, { point, title }] of points.entries()) {
 		const match = matchesMidRollPredicate(config!.predicate, { total_points: points.length, matched_points: matchedPoints,
 			total_duration: media.durationSeconds!, total_progress: point / media.durationSeconds!,
-			remaining_duration: media.durationSeconds! - point, point, num: index + 1,
-			last_mid_filler: point - lastPoint, title });
+			remaining_duration: spanDurationMilliseconds(point, media.durationSeconds!) / 1_000, point, num: index + 1,
+			last_mid_filler: spanDurationMilliseconds(lastPoint, point) / 1_000, title });
 		if (match) {
 			accepted.push(point);
 			matchedPoints += 1;
@@ -106,7 +107,7 @@ export function planAiring(
 
 	// Expand each stage at its actual clock position using isolated selection state.
 	const insert = (settings: FillerSettings & { programId: string }, key: string, point: string, stage: NonNullable<AiringSpan['fillerStage']>): void => {
-		const start = new Date(Date.parse(sourceContext.selectionStart) + Math.round(durationSeconds * 1_000)).toISOString();
+		const start = new Date(Date.parse(sourceContext.selectionStart) + elapsedMilliseconds).toISOString();
 		const result = planFiller(
 			settings.programId,
 			settings.budget,
@@ -124,7 +125,7 @@ export function planAiring(
 			spans.push(span);
 		}
 		state = result.state;
-		durationSeconds += result.durationSeconds;
+		elapsedMilliseconds += durationMilliseconds(result.durationSeconds);
 		if (fillerBudgetShortfall(result.initialProgress, result.progress, context.fillerShortfallWarningThresholdPercent)) {
 			addIssue(context, { code: 'mid-roll-shortfall', message: 'Filler could not supply the requested break budget. Content resumes immediately.',
 				programId: settings.programId, mediaItemId: media.id,
@@ -144,5 +145,5 @@ export function planAiring(
 	if (rolls.post) {
 		insert(rolls.post, rolls.post.consumerKey, 'post', 'post-roll');
 	}
-	return { spans, durationSeconds, issues: context.issues };
+	return { spans, durationSeconds: elapsedMilliseconds / 1_000, issues: context.issues };
 }

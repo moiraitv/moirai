@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import {
 	XMLTV_EPG_DAYS,
+	compareInstants,
 	effectiveChannelTvgId,
 	type Channel,
 	type GuideEntry,
@@ -135,7 +136,7 @@ async function renderChannelListings(
 	const segments = configuredSegments?.length
 		? [...configuredSegments]
 		: [noProgrammingSegment(channel.id, guide.startDate, guide.days, guide.timeZone)];
-	segments.sort((left, right) => left.start.localeCompare(right.start));
+	segments.sort((left, right) => compareInstants(left.start, right.start));
 	const byId = new Map(segments.map((segment) => [segment.id, segment]));
 	const contextChannel = channelContext(channel, publicUrl, id);
 	const listings: Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }> = [];

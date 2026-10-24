@@ -105,6 +105,19 @@ function repositoryFixture(
 }
 
 describe('readCommittedScheduleGuide', () => {
+	it('accepts continuous subsecond coverage despite mixed timestamp precision and input order', async () => {
+		const configured = schedule();
+		const boundary = '2026-08-23T00:00:00.71Z';
+		const spans = [segment(configured.channelId, boundary, RANGE_END), segment(configured.channelId, RANGE_START, boundary)];
+		const repository = repositoryFixture([configured], spans, [{ channelId: configured.channelId, health: 'ready', committedAt: RANGE_START }]);
+		const status = (await repository.listTimelineMaterializations())[0]!;
+		repository.getChannelSchedule = vi.fn().mockResolvedValue(configured);
+		repository.getTimelineMaterialization = vi.fn().mockResolvedValue(status);
+
+		await expect(readCommittedScheduleGuide(repository, 'UTC', START_DATE, 1)).resolves.toMatchObject({ guide: { days: 1 } });
+		await expect(readCommittedChannelScheduleGuide(repository, 'UTC', configured.channelId, START_DATE, 1)).resolves.toMatchObject({ days: 1 });
+	});
+
 	it('includes current source names for committed items without changing their playback data', async () => {
 		const channel = schedule();
 		const item = { ...segment(channel.channelId), role: 'primary' as const, programId: randomUUID() };

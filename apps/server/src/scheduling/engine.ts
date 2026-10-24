@@ -5,6 +5,7 @@ export { TimelineMaterializationLimitError } from './limits.js';
 import { planAiring, type AiringPlan } from './mid-roll.js';
 import { durationBetween, plusSeconds, segment } from './timeline-segment.js';
 import { commitAiring } from './airing-commit.js';
+import { durationMilliseconds, spanDurationMilliseconds } from '@moirai/shared';
 import { resolveAiringFiller, resolveTailFiller } from './filler-assignment.js';
 import { Temporal } from '@js-temporal/polyfill';
 import type {
@@ -403,8 +404,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					: slot.startEligibility.type === 'allow-truncate'
 						|| (eligibleForOverrun && boundary.fallback === 'truncate-left');
 				const firstPrimaryIndex = plan?.spans.findIndex(span => span.role === 'primary') ?? 0;
-				const preDuration = plan?.spans.slice(0, firstPrimaryIndex).reduce((seconds, span) => seconds + span.sourceFinishSeconds - span.sourceStartSeconds, 0) ?? 0;
-				if (!finishLeft && truncate && preDuration >= durationBetween(cursor, nominalEnd)) {
+				const preDurationMilliseconds = plan?.spans.slice(0, firstPrimaryIndex).reduce((milliseconds, span) => milliseconds + spanDurationMilliseconds(span.sourceStartSeconds, span.sourceFinishSeconds), 0) ?? 0;
+				if (!finishLeft && truncate && preDurationMilliseconds >= nominalEnd.epochMilliseconds - cursor.epochMilliseconds) {
 					boundaryRejection = { code: 'boundary-start-rejected', message: 'Pre-roll would consume the entire remaining slot without primary content.',
 						programId: slot.programId, mediaItemId: selected.media.id, scheduleLayerId: boundaryLayerId };
 					break;
@@ -497,7 +498,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 						break;
 					}
 					const finish = plusSeconds(cursor, span.sourceFinishSeconds);
-					progress.remaining -= progress.unit === 'count' ? 1 : span.sourceFinishSeconds;
+					progress.remaining = progress.unit === 'count' ? progress.remaining - 1
+						: Math.max(0, durationMilliseconds(progress.remaining) - durationMilliseconds(span.sourceFinishSeconds)) / 1_000;
 					activeContinuation!.fillerProgress = { ...progress };
 					appendSegment(segment({ role: 'filler', fillerStage: stage.phase, channelId: input.channelId, scheduleLayerId: layerId, templateId: template.id,
 						slotId: slot.id, programId: span.programId, mediaItemId: span.media.id, title: span.media.title,

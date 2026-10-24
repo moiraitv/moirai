@@ -145,8 +145,8 @@ it('retains the primary guide anchor across midnight while an inserted break is 
 		const prepare = vi.spyOn(database.sqlite, 'prepare');
 		const rows = await repository.listMaterializedTimelineSegmentsForGuide(midnight, breakEnd, 1, [channel.id]);
 		const query = prepare.mock.calls.find(([query]) => query.includes('guide_window'))![0];
-		const plans = database.sqlite.prepare(`EXPLAIN QUERY PLAN ${query}`).all(midnight, breakEnd, channel.id, 1, channel.id) as Array<{ detail: string }>;
-		expect(plans.some(plan => plan.detail.includes('materialized_segments_channel_start_idx') && plan.detail.includes('starts_at<?'))).toBe(true);
+		const plans = database.sqlite.prepare(`EXPLAIN QUERY PLAN ${query}`).all(Date.parse(midnight), Date.parse(breakEnd), channel.id, 1, channel.id) as Array<{ detail: string }>;
+		expect(plans.some(plan => plan.detail.includes('materialized_segments_channel_start_idx') && plan.detail.includes('<expr><?'))).toBe(true);
 		expect(plans.some(plan => plan.detail.includes('materialized_segments_channel_airing_id_idx') && plan.detail.includes('<expr>=?'))).toBe(true);
 		prepare.mockRestore();
 		expect(rows.map(row => row.segment.id)).toEqual(segments.map(row => row.segment.id));

@@ -2,11 +2,12 @@ import type { FillerCycle, SchedulableMedia, SelectionStateRecord } from '@moira
 import { candidateIndex } from './candidate-index.js';
 import { selectOrderedCandidate } from './candidate-selection.js';
 import type { SelectionContext } from './selection.js';
+import { durationMilliseconds } from '@moirai/shared';
 
 /** Determine whole-stage eligibility independently of its smaller remaining gap. */
 export function eligibleFiller(media: SchedulableMedia, context: SelectionContext): boolean {
 	return Boolean(context.fillerSelection?.allowTruncation)
-		|| media.durationSeconds! <= context.fillerSelection!.fullBudgetSeconds;
+		|| durationMilliseconds(media.durationSeconds!) <= durationMilliseconds(context.fillerSelection!.fullBudgetSeconds);
 }
 
 /** Preserve deferred positions while appending new eligible cycles without duplicate identities. */

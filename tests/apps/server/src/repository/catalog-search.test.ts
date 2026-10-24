@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
 import { Repository, type DiscoveredGroup, type DiscoveredItem } from '@server/repository/index.js';
 import { withCatalogSearchDefer } from '@server/repository/catalog-search-sql.js';
+import { mediaMatchesLibraryQuery } from '@server/scheduling/content-query.js';
 
 const databases: Array<ReturnType<typeof createDatabase>> = [];
 
@@ -273,6 +274,49 @@ it('filters exact playback durations consistently in catalog counts and recursiv
 		expect(selection.itemIds).toEqual(expected);
 		expect(selection.matchedItemCount).toBe(expected.length);
 	}
+});
+
+it.each(['1969-12-31T23:59:59.000Z', '2026-08-23T00:00:00.000Z'])('shares exact added-date boundaries around %s across browsing, recursive selection, and scheduling', async base => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	databases.push(database);
+	const repository = new Repository(database.db);
+	const library = await repository.createLibrary({ name: 'Dates', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' }, scanIntervalMinutes: 15, watcherEnabled: false, enabled: true });
+	const group = show(crypto.randomUUID(), 'Show');
+	const milliseconds = Date.parse(base);
+	const items = [-1, 0, 1, 999, 1000].map(offset => ({
+		...episode(group.id, `Episode ${offset}`), fileModifiedAt: new Date(milliseconds + offset).toISOString(),
+	}));
+	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [group], items, [], true);
+	const prefix = base.slice(0, -5);
+	const positiveOffset = new Date(milliseconds + 3_600_000).toISOString().replace('Z', '+01:00');
+	const negativeOffset = new Date(milliseconds - 3_600_000).toISOString().replace('Z', '-01:00');
+	for (const [bound, boundary] of [
+		[base, milliseconds], [`${prefix}Z`, milliseconds], [`${prefix}.0Z`, milliseconds],
+		[`${prefix}.000000000000Z`, milliseconds], [positiveOffset, milliseconds], [negativeOffset, milliseconds],
+		[positiveOffset.replace('.000', '.0001'), milliseconds + 1], [negativeOffset.replace('.000', '.0001'), milliseconds + 1],
+		[`${prefix}.0001Z`, milliseconds + 1], [`${prefix}.0000000000001Z`, milliseconds + 1],
+		[`${prefix}.999999999Z`, milliseconds + 1000],
+	] as const) {
+		for (const field of ['addedFrom', 'addedBefore'] as const) {
+			const query = catalogProgramItemQuerySchema.parse({ [field]: bound });
+			const expected = items.filter(item => field === 'addedFrom'
+				? Date.parse(item.fileModifiedAt) >= boundary : Date.parse(item.fileModifiedAt) < boundary).map(item => item.id).sort();
+			const browsed = await repository.browseMedia(library.id, { ...query, page: 1, pageSize: 100 });
+			expect(browsed.items.map(item => item.id).sort(), `${field} ${bound}`).toEqual(expected);
+			expect(browsed.pagination.totalEntries).toBe(expected.length);
+			const selection = repository.resolveProgramItemSelection(library.id, { ...query, parentId: group.id });
+			expect(selection.itemIds.sort()).toEqual(expected);
+			expect(selection.matchedItemCount).toBe(expected.length);
+			const source = { ...query, type: 'library-query' as const, libraryId: library.id, kinds: [], sort: { type: 'name' as const, direction: 'asc' as const } };
+			const scheduled = items.filter(item => mediaMatchesLibraryQuery({ ...item, libraryId: library.id,
+				durationSeconds: 1800, dateAddedAt: item.fileModifiedAt, genres: [], genreNames: [], artworkUrl: null,
+				availability: 'available' }, source));
+			expect(scheduled.map(item => item.id).sort()).toEqual(expected);
+		}
+	}
+	const plan = database.sqlite.prepare('EXPLAIN QUERY PLAN SELECT id FROM media_items WHERE library_id = ? AND date_added_at >= ? AND date_added_at < ?')
+		.all(library.id, '2026-08-23T00:00:00.000Z', '2026-08-24T00:00:00.000Z');
+	expect(JSON.stringify(plan)).toContain('media_items_library_added_idx');
 });
 
 it('resolves show hierarchy in browsed and searched picker items before episode ordering', async () => {

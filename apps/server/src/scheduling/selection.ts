@@ -1,4 +1,5 @@
 import { candidateIndex } from './candidate-index.js';
+import { durationMilliseconds } from '@moirai/shared';
 import { assertFillerProgram } from './validation.js';
 import { selectFillerCandidate } from './filler-cycle.js';
 import { selectOrderedCandidate } from './candidate-selection.js';
@@ -115,12 +116,12 @@ export function hasSelectionCollision(media: SchedulableMedia, context: Selectio
 		}
 		const start = Date.parse(context.selectionStart);
 		return intervals.some(occupied =>
-			start < occupied.finish && start + selectionDuration(media, context) * 1_000 > occupied.start);
+			start < occupied.finish && start + durationMilliseconds(selectionDuration(media, context)) > occupied.start);
 	}
 	const start = Date.parse(context.selectionStart);
 	return context.occupiedMedia.some(occupied => occupied.mediaItemId === media.id
 		&& start < Date.parse(occupied.finish)
-		&& start + selectionDuration(media, context) * 1_000 > Date.parse(occupied.start));
+		&& start + durationMilliseconds(selectionDuration(media, context)) > Date.parse(occupied.start));
 }
 
 /** Return the show ancestor that shares preference across episodes. */
@@ -181,7 +182,7 @@ function usableDurationSeconds(value: number | null): value is number {
 		return false;
 	}
 
-	const milliseconds = Math.round(value * 1_000);
+	const milliseconds = durationMilliseconds(value);
 	return Number.isSafeInteger(milliseconds) && milliseconds <= MAX_MEDIA_DURATION_MILLISECONDS;
 }
 

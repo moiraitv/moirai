@@ -3,7 +3,7 @@ import { selectOrderedCandidate } from '../scheduling/candidate-selection.js';
 import { semanticSource, semanticRemovedIds } from './source.js';
 import { passesSemanticExclusions, preferenceIssue } from './refinement.js';
 import type { SchedulableMedia, SchedulingCatalog, SelectionStateRecord, SimilaritySeed } from '@moirai/shared';
-import { MAX_MEDIA_DURATION_MILLISECONDS, SEMANTIC_HISTORY_LIMIT } from '@moirai/shared';
+import { durationMilliseconds, MAX_MEDIA_DURATION_MILLISECONDS, SEMANTIC_HISTORY_LIMIT } from '@moirai/shared';
 import { addIssue, type SelectionContext, type SelectionFitMode } from '../scheduling/selection.js';
 import { rankSemanticCandidates } from './ranking.js';
 
@@ -22,7 +22,7 @@ export function semanticMediaEligible(media: SchedulableMedia, catalog: Scheduli
 		&& ['none', 'complete'].includes(media.multipartStatus ?? 'none')
 		&& media.durationSeconds !== null && Number.isFinite(media.durationSeconds)
 		&& media.durationSeconds > 0
-		&& media.durationSeconds * 1_000 <= MAX_MEDIA_DURATION_MILLISECONDS;
+		&& durationMilliseconds(media.durationSeconds) <= MAX_MEDIA_DURATION_MILLISECONDS;
 }
 
 /** Propose one seed consumption without mutating persisted decisions or the caller's state. */
