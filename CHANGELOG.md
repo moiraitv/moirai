@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 - 2026-10-24
+
+### Fixes
+
+- Fixed timestamp comparisons that could leave a gap of less than one second at midnight and prevent channel playback. Upgrading fills affected historical gaps with dead air while preserving committed playlists, shuffle progress, and pending schedule changes.
+- Clips and airings that exactly fit the available time now play in full, including pre-roll, mid-roll, post-roll, and tail filler. Fractional durations remain accurate when scheduling resumes from saved progress.
+- Complete airings are no longer incorrectly marked as truncated in the Guide.
+- Indexed-date filters now return consistent results across library browsing, recursive selection, and library-query Programs for equivalent timestamps and timezone offsets.
+
 ## 0.7.0 - 2026-10-21
 
 ### New
