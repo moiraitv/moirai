@@ -129,7 +129,7 @@ Below Quantity, use either or both optional refinements:
 
 New refinements are prepared between small batches of library items if it is actively scanning, so they can become ready while library preparation is still running.
 
-Each schedule use keeps its own set. The set and its order survive restarts, new library items, and edits. Changing source contents, library filters, variety, quantity, or refinements affects the next set. The current set finishes first, even for slots configured to restart daily. New sets prefer items absent from the last ten completed sets. When reuse is needed, items from the least recent set are preferred. Smaller libraries may reuse media or produce fewer matches.
+Each schedule use keeps its own set. The set and its order survive restarts, new library items, and edits. Changing source contents, library filters, variety, quantity, or refinements affects the next set. The current set normally finishes first, even for slots configured to restart daily. With [simultaneous duplicate avoidance](/scheduling/channel-schedules#simultaneous-duplicates) enabled, primary programming can end a set early when every remaining item is playable but conflicts with another channel and the next set provides a suitable alternative. Unplayed items are not carried forward, but remain eligible for future sets. New sets prefer items absent from the previous ten sets. When reuse is needed, items from the least recent set are preferred. Smaller libraries may reuse media or produce fewer matches.
 
 Items count as used when Moirai commits them to its schedule, so the displayed remaining count describes schedule preparation rather than what viewers have already watched. A temporarily unavailable or deleted remaining item keeps its place and prevents that set from finishing until the item is available again or you explicitly remove it. Moirai shows a warning instead of silently replacing it.
 
@@ -155,7 +155,7 @@ Filters use the same rules as filters elsewhere and are applied before theme mat
 
 Use **Quantity**, **Cohesion / Variety**, **Preferences**, and **Exclusions** just as you would for Similar Items. Review **Sample matches** and **Excluded matches** as you refine the theme.
 
-Each schedule use keeps its own set and finishes it before selecting another. Changes to the theme, target library, library filters, quantity, or refinements apply to the next set. The same preparation status, retry controls, and rotation behavior described below apply to Theme Programs. If a scan corrects a media runtime, the schedule refreshes its future timings at the next daily boundary.
+Each schedule use keeps its own set and normally finishes it before selecting another, with the same early change for simultaneous duplicates described above. Changes to the theme, target library, library filters, quantity, or refinements apply to the next set. The same preparation status, retry controls, and rotation behavior described below apply to Theme Programs. If a scan corrects a media runtime, the schedule refreshes its future timings at the next daily boundary.
 
 ## Sequence Programs
 

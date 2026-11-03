@@ -973,8 +973,8 @@ scoped catalog cache.
 
 Deterministic MMR blends centroid and maximum-anchor relevance equally, with variety lowering the
 relevance weight from 1 to 0.55. A fixed 0.15 relevance band and positive anchor similarity constrain
-exploration. New sets prefer candidates absent from the last ten completed sets, then the least-recent set
-represented in that bounded history before applying MMR. History travels in optional timeline cursor
+exploration. New sets prefer candidates absent from the last ten completed or retired sets, then the
+least-recent set represented in that bounded history before applying MMR. History travels in optional timeline cursor
 state, survives pruning/restarts, and defaults to empty for older cursors. Replayed seed decisions
 remain unchanged. Relevance maxima use reductions rather than argument spreading for large pools.
 Optional soft preferences use the same local worker and a model-keyed SQLite prompt cache. Within
@@ -1044,9 +1044,14 @@ The optional channel schedule setting `avoidCrossChannelDuplicates` defaults to 
 and can disable avoidance for that channel without removing its occupancy from other channels.
 The setting persists in schedule JSON without a database migration. Policy and effective-setting
 fingerprints stage updates at the normal daily boundary without resetting selection state.
-The check covers primary and filler selection, rotates channel priority by day, and falls back to
-normal selection rather than creating dead air when every candidate conflicts. Already committed
-guide entries are never rewritten solely to remove a collision.
+The check covers primary and filler selection and rotates channel priority by day. When all remaining
+primary Similar Items or Theme members are playable but collide, selection tries one subsequent set.
+It retires the old remainder without carrying it forward only if the new set provides a noncolliding
+item that fits; retired membership remains in bounded set history and can recur in future sets.
+Unavailable members, ordinary fit rejection, and filler do not trigger early rollover. A failed,
+unprepared, or wholly colliding next set retains the original selection fallback without advancing to
+a new persisted set or leaking speculative warnings. Already committed guide entries are never
+rewritten solely to remove a collision.
 
 The Programs catalog is searchable and filterable by content, sequence, similarity, or theme type.
 Content definitions distinguish AI selections from explicit items, groups, and library queries.

@@ -5,8 +5,8 @@ import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates } from './direct-program-templates.js';
 
-/** Stage the order-preserving collision policy for timelines committed by earlier versions. */
-const DUPLICATE_AVOIDANCE_POLICY_VERSION = 2;
+/** Stage semantic batch rollover and order-preserving collision policy at the daily boundary. */
+const DUPLICATE_AVOIDANCE_POLICY_VERSION = 3;
 
 /** Immutable catalog projection shared by channels with identical source scopes. */
 interface FingerprintCatalogScope {

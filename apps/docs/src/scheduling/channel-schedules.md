@@ -56,6 +56,8 @@ Directly-assigned Programs default to a playback progress setting of **Continue 
 
 By default, channels will avoid selecting simultaneous duplicates when content appears on multiple channels. Shuffle, Random, Weighted random, Similar Items, and Theme programs prefer another item when the same episode or movie is already scheduled on another channel at an overlapping time. 
 
+For Similar Items and Theme programs, if every remaining item in the current set is playable but conflicts with another channel, Moirai tries the next set early. If it finds a non-conflicting item that fits, it ends the old set and leaves its unplayed items behind; those items remain eligible for future sets. Moirai tries only one new set per selection. If that set is not ready or cannot provide a suitable item, it keeps the original duplicate rather than interrupting playback. This early change applies to primary programming; filler keeps its existing rotation.
+
 Change this behavior by selecting the base in the schedule edit or and opening **Advanced scheduling**. **Avoid simultaneous duplicates on other channels** controls it. Turn the setting off to let this channel select items without considering simultaneous playback on other channels. This setting does not change a program's shuffle cycle or its rules for immediate repeats.
 
 ![Advanced scheduling with simultaneous duplicate avoidance enabled](/screenshots/channel-schedule-advanced.png)

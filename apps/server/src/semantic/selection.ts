@@ -4,7 +4,7 @@ import { semanticSource, semanticRemovedIds } from './source.js';
 import { passesSemanticExclusions, preferenceIssue } from './refinement.js';
 import type { SchedulableMedia, SchedulingCatalog, SelectionStateRecord, SimilaritySeed } from '@moirai/shared';
 import { durationMilliseconds, MAX_MEDIA_DURATION_MILLISECONDS, SEMANTIC_HISTORY_LIMIT } from '@moirai/shared';
-import { addIssue, type SelectionContext, type SelectionFitMode } from '../scheduling/selection.js';
+import { addIssue, hasSelectionCollision, type SelectionContext, type SelectionFitMode } from '../scheduling/selection.js';
 import { rankSemanticCandidates } from './ranking.js';
 
 /** Keep semantic seed progress across daily occurrence cursors, including nested sequences. */
@@ -33,6 +33,19 @@ export function chooseSimilarity(
 	context: SelectionContext,
 	fitSeconds: number | null,
 	fitMode: SelectionFitMode = 'best-fit',
+): SchedulableMedia | null {
+	return chooseSimilarityFromSet(programId, consumer, state, context, fitSeconds, fitMode, true);
+}
+
+/** Select from immutable semantic sets, allowing at most one early collision rollover per pick. */
+function chooseSimilarityFromSet(
+	programId: string,
+	consumer: string,
+	state: Map<string, SelectionStateRecord>,
+	context: SelectionContext,
+	fitSeconds: number | null,
+	fitMode: SelectionFitMode,
+	advanceOnCollision: boolean,
 ): SchedulableMedia | null {
 	const program = context.programs.get(programId)!;
 	if (program.config.type !== 'similarity' && program.config.type !== 'theme') {
@@ -122,6 +135,27 @@ export function chooseSimilarity(
 	if (playable.length < remaining.length) {
 		report('Some remaining items in the current set are unavailable. The set will wait for them.', playable.length === 0);
 	}
+
+	// Try only the next batch; unavailable media, fit rejection, and filler retain their rules.
+	if (advanceOnCollision && !context.fillerSelection && playable.length > 0 && playable.length === remaining.length
+		&& playable.every(entry => hasSelectionCollision(entry.media, context))) {
+		const nextState = new Map(state);
+		// Exhaust only the speculative cursor; failed rollover must preserve the original batch.
+		nextState.set(key, { consumerKey: key, configFingerprint: 'similarity-v1', updatedAt: context.now,
+			value: { type: 'similarity', seed, recentSeeds, consumedItemIds: seed.itemIds,
+				...(prior?.fillerCycle ? { fillerCycle: prior.fillerCycle } : {}) } });
+		const nextContext: SelectionContext = { ...context, issues: [], issueKeys: new Set(), issueIndex: new Map(),
+			blockedPrograms: new Set(context.blockedPrograms), fitRejectionCount: 0 };
+		const next = chooseSimilarityFromSet(programId, consumer, nextState, nextContext, fitSeconds, fitMode, false);
+		if (next && !hasSelectionCollision(next, context)) {
+			for (const issue of nextContext.issues) {
+				addIssue(context, issue);
+			}
+			state.set(key, nextState.get(key)!);
+			return next;
+		}
+	}
+
 	// Keep filler membership separate from semantic seed consumption and preserve ranked ordering.
 	const proposed: SelectionStateRecord = { consumerKey: key, configFingerprint: 'similarity-v1', updatedAt: context.now,
 		value: { type: 'similarity', seed, recentSeeds, consumedItemIds: consumed,
