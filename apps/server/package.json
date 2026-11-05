@@ -15,7 +15,7 @@
     "@fastify/formbody": "^8.0.2",
     "@fastify/multipart": "^10.1.1",
     "@fastify/sensible": "^6.0.3",
-    "@fastify/static": "^10.1.3",
+    "@fastify/static": "^10.1.10",
     "@fastify/swagger": "^9.8.1",
     "@fastify/websocket": "^11.3.0",
     "@huggingface/transformers": "3.8.1",

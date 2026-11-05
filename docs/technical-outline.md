@@ -1899,6 +1899,9 @@ image libraries while retaining ONNX runtime support for Intel macOS development
 ONNX Runtime 1.21.0 uses global-agent 4.1.3 for its installer, and js-yaml 3.15.2 uses
 argparse 2.0.1, whose legacy API supports the YAML CLI. These scoped overrides remove the
 unpatched sprintf-js dependency without changing the model runtime or gray-matter's YAML API.
+The server uses Fastify Static 10.1.10 or newer in its 10.x line to resolve a patched glob release.
+TypeScript ESLint's parser uses a scoped minimatch 11.0.4 override for the glob-pattern denial of
+service fix. Remove this override when TypeScript ESLint depends on a patched minimatch range.
 
 ## API and web application
 
