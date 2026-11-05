@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 /** Always build this checkout rather than relying on the caller's working directory. */
@@ -14,8 +14,41 @@ const usage = `Usage: npm run build:docker -- [options]
 Compilation and dependency installation still run when checks are skipped.
 `;
 
+/** Recognize explicit disk exhaustion in Docker and build-step errors. */
+const diskSpaceError = /\bENOSPC\b|no space left on device/i;
+
+/** Stream Docker's logs and summarize disk exhaustion after a failed build. */
+function runDockerBuild(tag, platform, skipChecks) {
+	return new Promise((resolve, reject) => {
+		const docker = spawn('docker', [
+			'build', '--tag', tag, '--platform', platform,
+			'--build-arg', `MOIRAI_SKIP_BUILD_CHECKS=${skipChecks}`, '.',
+		], { cwd: root, stdio: ['inherit', 'pipe', 'pipe'] });
+		let outOfSpace = false;
+
+		for (const [output, destination] of [[docker.stdout, process.stdout], [docker.stderr, process.stderr]]) {
+			let tail = '';
+			output.setEncoding('utf8');
+			output.on('data', (chunk) => {
+				const text = tail + chunk;
+				outOfSpace ||= diskSpaceError.test(text);
+				tail = text.slice(-'no space left on device'.length);
+			});
+			output.pipe(destination, { end: false });
+		}
+
+		docker.once('error', reject);
+		docker.once('close', (status) => {
+			if (status !== 0 && outOfSpace) {
+				console.error('\nDocker build ran out of disk space. Check builder storage with "docker system df" and free up space before retrying.');
+			}
+			resolve(status ?? 1);
+		});
+	});
+}
+
 /** Validate explicit options before invoking Docker, preserving arguments without a shell. */
-function build() {
+async function build() {
 	const args = process.argv.slice(2);
 	let tag = 'moirai:local';
 	let platform = 'linux/amd64';
@@ -46,18 +79,11 @@ function build() {
 		}
 	}
 
-	const result = spawnSync('docker', [
-		'build', '--tag', tag, '--platform', platform,
-		'--build-arg', `MOIRAI_SKIP_BUILD_CHECKS=${skipChecks}`, '.',
-	], { cwd: root, stdio: 'inherit' });
-	if (result.error) {
-		throw result.error;
-	}
-	return result.status ?? 1;
+	return runDockerBuild(tag, platform, skipChecks);
 }
 
 try {
-	process.exitCode = build();
+	process.exitCode = await build();
 }
 catch (error) {
 	console.error(error.message);

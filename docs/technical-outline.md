@@ -1888,6 +1888,7 @@ The npm audit covers runtime, development, and optional dependencies and fails o
 vulnerability, including low severity, or an unsuccessful audit request. Docker uses this same gate;
 production builds require access to the npm advisory service.
 The local `build:docker` script defaults to these gates and a `moirai:local` image for `linux/amd64`.
+It streams Docker output and highlights explicit disk-space errors after a failed build.
 An explicit `--skip-build-checks` sets the build-stage-only `MOIRAI_SKIP_BUILD_CHECKS=true` argument,
 running the ordinary build without audit or approval checks. Dependency installation and compilation
 remain required; approval records and dependencies are unchanged. Release workflows retain the gated

@@ -18,7 +18,9 @@ function fixture() {
 	writeFileSync(join(directory, 'docker'), `#!${process.execPath}
 import { writeFileSync } from 'node:fs';
 writeFileSync(process.env.MOIRAI_BUILD_LOG, JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd() }));
-process.exit(Number(process.env.MOIRAI_BUILD_EXIT ?? 0));
+process.stdout.write(process.env.MOIRAI_BUILD_STDOUT ?? '');
+process.stderr.write(process.env.MOIRAI_BUILD_STDERR ?? '');
+process.exitCode = Number(process.env.MOIRAI_BUILD_EXIT ?? 0);
 `, { mode: 0o755 });
 	const env = { ...process.env, PATH: `${directory}:${process.env.PATH}`, MOIRAI_BUILD_LOG: log };
 	return { directory, log, env };
@@ -36,13 +38,31 @@ it('builds the checkout with gates enabled by default, independent of the workin
 
 it('passes the explicit bypass and custom image options as separate arguments and propagates failures', () => {
 	const f = fixture();
+	const buildError = 'error during build: compilation failed\n';
 	const result = spawnSync(process.execPath, [script, '--skip-build-checks', '--tag', 'moirai:test', '--platform', 'linux/amd64'], {
-		env: { ...f.env, MOIRAI_BUILD_EXIT: '7' }, encoding: 'utf8',
+		env: { ...f.env, MOIRAI_BUILD_EXIT: '7', MOIRAI_BUILD_STDERR: buildError }, encoding: 'utf8',
 	});
 	expect(result.status).toBe(7);
+	expect(result.stderr).toBe(buildError);
 	expect(JSON.parse(readFileSync(f.log, 'utf8')).args).toEqual([
 		'build', '--tag', 'moirai:test', '--platform', 'linux/amd64', '--build-arg', 'MOIRAI_SKIP_BUILD_CHECKS=true', '.',
 	]);
+});
+
+it.each([
+	['stdout', "[vite:prepare-out-dir] ENOSPC: mkdir '/app/apps/web/dist'\n"],
+	['stderr', 'failed to solve: write /app/node_modules: no space left on device\n'],
+])('highlights disk exhaustion reported on Docker %s and preserves the failure status', (stream, buildError) => {
+	const f = fixture();
+	const outputKey = `MOIRAI_BUILD_${stream.toUpperCase()}`;
+	const result = spawnSync(process.execPath, [script], {
+		env: { ...f.env, MOIRAI_BUILD_EXIT: '7', [outputKey]: buildError }, encoding: 'utf8',
+	});
+
+	expect(result.status).toBe(7);
+	expect(result[stream]).toMatch(buildError);
+	expect(result.stderr).toContain('Docker build ran out of disk space');
+	expect(result.stderr).toContain('docker system df');
 });
 
 it.each([['--unknown'], ['--tag'], ['--platform', '--skip-build-checks']])('rejects malformed options before starting Docker: %s', (...args) => {
