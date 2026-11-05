@@ -10,7 +10,7 @@ export const BACKUP_TABLES = [
 	'channels', 'scheduling_programs', 'schedule_templates', 'schedule_slots', 'schedule_boundaries',
 	'channel_schedules', 'channel_schedule_layers', 'selection_states', 'settings', 'credit_templates',
 	'encoding_profiles', 'guide_templates', 'ignored_media_issues', 'media_tail_assessments', 'filler_presets', 'mid_roll_presets',
-	'similarity_seeds', 'similarity_seed_items',
+	'similarity_seeds', 'similarity_seed_items', 'graphics_presets', 'graphics_assets',
 ] as const;
 /** Schema-level archive identity, independent of application version. */
 export const manifestSchema = backupInfoSchema.omit({ size: true }).extend({
@@ -29,6 +29,7 @@ export function assetRoots(config: BackupPaths): Record<string, string> {
 		'channel-logos': config.channelLogoDir,
 		'guide-artwork': path.join(config.dataDir, 'guide-artwork'),
 		'fallback-fillers': config.fallbackFillerDir,
+		'graphics-assets': path.join(config.dataDir, 'graphics', 'assets'),
 	};
 }
 /** Accept only durable records and managed current assets, never arbitrary filesystem paths. */
@@ -40,6 +41,10 @@ export function allowedEntry(name: string): boolean {
 	const parts = name.split('/');
 	if (parts.length === 2 && ['channel-logos', 'guide-artwork'].includes(parts[0]!)) {
 		return parts[1]!.endsWith('.png') && z.uuid().safeParse(parts[1]!.slice(0, -4)).success;
+	}
+	if (parts.length === 2 && parts[0] === 'graphics-assets') {
+		const match = /^([^/]+)\.(png|apng|jpeg|gif|webp|mp4|webm|ttf|otf)$/.exec(parts[1]!);
+		return Boolean(match && z.uuid().safeParse(match[1]).success);
 	}
 	if (parts[0] !== 'fallback-fillers') {
 		return false;

@@ -86,7 +86,7 @@ test('protects library creation and each independent Settings draft on navigatio
 	await expect(page).toHaveURL(/\/libraries\/new$/u);
 	await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unsaved library');
 	await page.goBack();
-	await page.getByRole('button', { name: 'Discard Changes', exact: true }).click();
+	await page.getByRole('button', { name: 'Discard', exact: true }).click();
 	await expect(page).toHaveURL(/\/libraries$/u);
 	for (const section of ['capacity', 'preferences']) {
 		await page.goto('/settings');

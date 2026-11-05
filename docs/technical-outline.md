@@ -1404,7 +1404,8 @@ reaches the action from its badge, a second Tab continues to the next guide cont
 to the badge, and Escape closes it and restores badge focus.
 
 Configuration changes remain pending until the next local midnight by default. The schedule editor
-can instead apply them after the currently playing item. Healthy catalog changes rebuild only unlocked
+can instead apply them after the currently playing item. Expired committed timelines rebuild immediately
+from the retained tail or the start of the current local day. Healthy catalog changes rebuild only unlocked
 future output. A failure retains the last good timeline and exposes a failed status rather than
 committing a partial replacement.
 Timeline segments and selection cursors are inserted in bounded batches within the same transaction,
@@ -1546,7 +1547,7 @@ Channels keeps the compact logo-above-number cell.
 On Channels, the edit button covers the full channel cell while warning badges remain independently
 interactive; keyboard focus outlines the complete edit target.
 The shared guide expands to its full row height and scrolls vertically with the page, while
-retaining horizontal timeline scrolling. Programme nodes are mounted only for the scrolled elapsed-time
+retaining horizontal timeline scrolling. Guide entry nodes are mounted only for the scrolled elapsed-time
 window plus two hours of overscan, including the initial mount. Large lineups mount only nearby
 channel and family rows, with measured heights and eight rows of vertical overscan on each side. Small embedded
 previews retain all their rows. Focused rows remain mounted, and keyboard navigation reveals the next
@@ -1618,7 +1619,7 @@ channel, explicit no-programming intervals, bounded metadata snapshots, episode 
 artwork where available. Each channel uses its assigned Liquid guide template, or the saved default
 when none is assigned. Templates have a built-in read-only Standard XMLTV layout and per-type
 sources for channel, episode, movie, music video, other, filler, no-programming, and block listings.
-The built-in movie and episode layouts emit `Movie` and `Series` programme categories respectively,
+The built-in movie and episode layouts emit `Movie` and `Series` listing categories respectively,
 alongside media genres, for client content-type classification. Saved custom sources remain authored;
 blank tabs inherit the current built-in layout.
 Published XMLTV is minified after a successful render. The Guide timeline uses the same per-channel
@@ -1646,12 +1647,11 @@ the gap is intentional dead air.
 ### ErsatzTV-Next integration
 
 Moirai owns channel configuration and maps it through a compatibility adapter pinned to ErsatzTV-Next
-v0.2.2 revision `4a0b59a66bef93b908e5eb2086847418492e2555`. The adapter retains only the channel and playout
+v0.2.3 revision `54c6cb9ec03b7bd259144896c625c06fda09b3d0`. The adapter retains only the channel and playout
 schemas used by the integrated worker; vendored files retain upstream MIT attribution.
-Generated channel configuration uses schema `0.1.2` and playout uses schema `0.0.6`; the worker
-also accepts existing `0.0.3`, `0.0.4`, and `0.0.5` playout documents.
+Generated channel configuration uses schema `0.1.2` and playout uses schema `0.0.7`. Next v0.2.3 also accepts playout schemas `0.0.0` through `0.0.6`.
 Deploy the application and engine together. On rollback, stop workers and regenerate playout with
-the restored application before tuning because the previous engine rejects `0.0.6`.
+the restored application before tuning because the previous engine rejects `0.0.7`.
 
 The adapter emits explicit transcode mode for concrete audio/video formats. Existing null formats
 select copy mode with upstream default codec allowlists and AAC/H.264 transcode fallback for
@@ -1697,6 +1697,57 @@ The adapter produces validated, non-overlapping playout documents for each local
 - expands multipart logical items into sequential physical playout entries;
 - expresses truncation and resumed fragments with millisecond offsets;
 - replaces every remaining uncovered interval with channel, global, or bundled fallback video.
+
+### Channel graphics
+
+Channel graphics are the base of an ordered assignment stack. Schedules, Templates, Programs,
+slots, and Filler presets can inherit, add, replace, or clear that stack. These assignment editors
+use the shared animated form disclosure and load the preset list on demand. Committed segments supply
+Template, slot, Program ancestry, and Filler preset identity. Filler resolves its own source Program
+and can render text from filler-specific assignments. New committed windows retain filler provenance;
+older windows gain it at their normal scheduling refresh boundary.
+
+Graphics presets store versioned YAML with ordered media, shape, text, and clock layers. Live clocks
+use bounded, signed loopback alpha streams positioned as Next canvas regions. They advance from the
+scheduled item time plus the playback offset. Shapes support solid and two-stop linear fills and are
+rasterized to transparent snapshots. Moirai resolves optional rotation, shape skew, and attachment bounds
+before playout, retaining Next media-layer ordering and timing. Transformed animated assets are
+prepared as lossless alpha video loops capped at 128 MiB each. Layers that do not need resolved placement retain the native media path. The
+collection shows a sample channel layout for each preset. When a card comes into view, it uses the isolated Next preview
+process to render a six-second silent MP4 with native fades. The server caches up to 32 clips keyed
+by preset source. Gallery fallbacks use still frames for GIF and APNG overlays. The preset editor supports renaming in the titlebar and keeps the scrubbable
+preview within the dialog. The visual layer list shows the frontmost layer first and preserves
+back-to-front draw order in YAML. The list footer adds, removes, and duplicates layers. A duplicate
+gets a new ID and sits just above the original. The list and settings have separate scroll areas
+within the parameters column. The inspector groups layer-specific fields ahead of layout and timing.
+The preview and parameters stack on narrow screens. Visual mode and
+the full-width YAML editor share a draft. Existing channels opt in through a nullable preset
+assignment. Managed files resolve by stable ID and protected examples use named layers and bundled
+artwork. Text templates use bounded Liquid with channel, media, and adjacent primary airing
+metadata, including up to eight upcoming primary airings. Airing titles and subtitles use the
+channel’s EPG item renderer. Raw clip and airing fields use committed catalog snapshots, with a
+batched catalog fallback for missing snapshots. The preparation worker scopes label work to text
+overlays and their lookahead, with budget-limited rendering and retries through normal playout
+synchronization. Guide template and channel assignment changes invalidate prepared playout.
+Generated transparent images and managed media are published as native Next graphics layers on
+committed playout items. The preparation worker batches referenced presets and assets for the
+committed window. Percentage overlays on source-sized channels are rasterized against the
+selected source track dimensions. Content timing is scoped to the engine item, while wall timing
+uses the broadcast clock. Image and video overlays also apply during authored filler rolls. Missing
+or over-budget graphics produce a preparation warning while the underlying content remains
+playable. Scaled overlays must fit the configured output frame, and video and APNG uploads must pass bounded
+decoding before they can be assigned. APNG uploads are identified by their animation control chunk
+even when named with a PNG extension. Font uploads and restores use Fontconfig to verify character
+coverage. Custom text uses a disposable renderer with file-specific family aliases and a five-second process limit.
+Timed fades require a positive duration. Preview samples opacity at the selected timestamp and can
+show wall-clock layers outside their scheduled times. Live playout uses the pinned engine’s native fades, which can jump when a pipeline starts mid-ramp. Playout uses
+immutable snapshots so retiring a managed original cannot invalidate a published item. Each channel
+retains up to 512 snapshots. It reclaims expired snapshots at the worker’s completed playout cursor
+and removes unreferenced files when idle. In-flight work is shared across passes, and completed
+snapshots that miss publication remain available until reuse or eviction under the channel cap. The preview
+runs a short disposable Next channel with a sample backdrop, optional committed channel metadata
+and video-track selection, and temporary graphics files. The authenticated editable-preview context
+uses the same committed position resolver and exposes path-free Liquid values without running Next.
 
 Playback fallback is separate from authored schedule filler. A channel-specific managed upload wins
 over the global managed upload, which wins over Moirai's immutable bundled `dead-air.mp4`. Each
@@ -1803,7 +1854,7 @@ Native development resolves the channel engine in this order:
 
 Native worker builds require Rust 1.99.0, selected by the upstream `rust-toolchain.toml` when using
 rustup. The build script runs Cargo from the selected checkout so that toolchain selection applies.
-ErsatzTV FFmpeg `8.1.2-4` is bundled in the image and recommended for native playback.
+ErsatzTV FFmpeg `8.1.2-5` is bundled in the image and recommended for native playback.
 
 Useful commands are:
 
@@ -2067,6 +2118,12 @@ The Vue application maps management routes to stable topic IDs and presents rest
 Markdown in an accessible modal drawer. The public `/help/contextual-help.json` manifest contains the
 matching full-page path and review state. Vite development serves the generated manifest and source
 screenshots directly from the docs workspace.
+
+The development coordinator builds and bundles the full guide at startup and watches authored guide,
+theme, review, and helper inputs for debounced, serialized rebuilds. Generated manifests, review
+assets, and build output are excluded from watching. Guide failures leave the application running
+and retry after the next input change; API-only development skips this work. Refresh full pages or
+reopen contextual help after a completed build. Guide builds do not approve review digests.
 
 Filler administration routes share the `filler.presets` help topic, including mid-roll chapter and
 break conditions.

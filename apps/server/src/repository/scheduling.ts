@@ -9,6 +9,7 @@ import { SemanticRepository, StaleSemanticDecisionError } from './semantic.js';
 import { and, asc, eq, gt, inArray, isNotNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import type {
 	ChannelTimelineMaterializationStatus,
+	TimelineSegment,
 	SchedulableMedia,
 	SchedulingCatalog,
 	SchedulingProgram,
@@ -104,6 +105,7 @@ const timelineSegmentColumns = {
 	slotId: materializedTimelineSegments.slotId,
 	programId: materializedTimelineSegments.programId,
 	programAncestry: materializedTimelineSegments.programAncestry,
+	fillerPresetId: materializedTimelineSegments.fillerPresetId,
 	mediaItemId: materializedTimelineSegments.mediaItemId,
 	title: materializedTimelineSegments.title,
 	playbackPath: materializedTimelineSegments.playbackPath,
@@ -139,6 +141,7 @@ function materializedSegmentRecord(
 		keyof typeof guideListSegmentColumns
 	> & {
 		programAncestry?: typeof materializedTimelineSegments.$inferSelect['programAncestry'];
+		fillerPresetId?: string | null;
 		playbackPath?: typeof materializedTimelineSegments.$inferSelect['playbackPath'];
 		playbackParts?: typeof materializedTimelineSegments.$inferSelect['playbackParts'];
 		sourceStartSeconds?: typeof materializedTimelineSegments.$inferSelect['sourceStartSeconds'];
@@ -159,6 +162,7 @@ function materializedSegmentRecord(
 			slotId: row.slotId,
 			programId: row.programId,
 			programAncestry: row.programAncestry,
+			fillerPresetId: row.fillerPresetId ?? undefined,
 			mediaItemId: row.mediaItemId,
 			title: row.title,
 			playbackPath: row.playbackPath ?? null,
@@ -877,6 +881,27 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		return rows.map(materializedSegmentRecord);
 	}
 
+	/** Recover primary airing anchors outside the current playout window. */
+	async listTimelinePrimaryAnchors(channelId: string, segmentIds: string[]): Promise<TimelineSegment[]> {
+		const rows = await this.db.select(guideListSegmentColumns).from(materializedTimelineSegments).where(and(
+			eq(materializedTimelineSegments.channelId, channelId),
+			eq(materializedTimelineSegments.role, 'primary'),
+			sql`${materializedTimelineSegments.id} in (select value from json_each(${JSON.stringify(segmentIds)}))`,
+		));
+		return rows.map(row => materializedSegmentRecord(row).segment);
+	}
+
+	/** Read the committed metadata for only the segments that need guide labels or raw fields. */
+	async timelineMediaSnapshots(segmentIds: string[]): Promise<Map<string, SchedulableMedia>> {
+		const rows = await this.db.select({
+			id: materializedTimelineSegments.id,
+			media: materializedTimelineSegments.mediaSnapshot,
+		}).from(materializedTimelineSegments).where(sql`${materializedTimelineSegments.id} in (
+			select value from json_each(${JSON.stringify(segmentIds)})
+		)`);
+		return new Map(rows.flatMap(row => row.media ? [[row.id, row.media as SchedulableMedia]] : []));
+	}
+
 	/** Bound intersecting spans in one indexed query, retaining complete companion airings for guides. */
 	async listMaterializedTimelineSegmentsForGuide(
 		rangeStart: string,
@@ -1033,6 +1058,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 							playbackParts: segment.playbackParts,
 							airing: segment.airing ?? null,
 							programAncestry: segment.programAncestry ?? [],
+							fillerPresetId: segment.fillerPresetId ?? null,
 							startsAt: segment.start,
 							finishesAt: segment.finish,
 							sourceStartSeconds: segment.sourceStartSeconds,

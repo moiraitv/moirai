@@ -1,3 +1,4 @@
+import { registerGraphicsRoutes } from './graphics.js';
 import { registerBackupRoutes } from './backups.js';
 import type { BackupService } from '../backup/service.js';
 import { registerGuideArtworkRoutes } from './guide-artwork.js';
@@ -78,6 +79,7 @@ export function registerHttpRoutes(
 	registerGuideArtworkRoutes(app, dependencies);
 	registerEncodingProfileRoutes(app, dependencies);
 	registerFillerPresetRoutes(app, dependencies);
+	registerGraphicsRoutes(app, dependencies);
 	registerMidRollPresetRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
 	registerCatalogRoutes(app, dependencies);

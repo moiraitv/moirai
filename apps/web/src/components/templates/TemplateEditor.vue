@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GraphicsAssignmentEditor from '../graphics/GraphicsAssignmentEditor.vue';
 import { z } from 'zod';
 import { useResourceDraft } from '../../composables/useResourceDraft';
 import TailFillerEditor from '../schedules/TailFillerEditor.vue';
@@ -189,6 +190,7 @@ const previewDraftFingerprint = computed(() => {
 		defaultMidRoll: draft.value.defaultMidRoll,
 		defaultPreRoll: draft.value.defaultPreRoll,
 		defaultPostRoll: draft.value.defaultPostRoll,
+		graphicsAssignment: draft.value.graphicsAssignment,
 		slots: draft.value.slots,
 		boundaries: draft.value.boundaries,
 	});
@@ -638,6 +640,7 @@ function templatePayload(): ScheduleTemplateCreate | null {
 		defaultMidRoll: draft.value.defaultMidRoll,
 		defaultPreRoll: draft.value.defaultPreRoll,
 		defaultPostRoll: draft.value.defaultPostRoll,
+		graphicsAssignment: draft.value.graphicsAssignment,
 		slots: draft.value.slots,
 		boundaries: draft.value.boundaries,
 	};
@@ -1183,6 +1186,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value && retained.unsaf
 												>
 											</div>
 										</fieldset>
+										<GraphicsAssignmentEditor v-if="selectedSlot.programId" v-model="selectedSlot.graphicsAssignment" description="Applies only when content plays in this slot." @update:model-value="markChanged" />
 										<FillerAssignmentsEditor v-if="selectedSlot.programId" heading="Slot filler" :assignments="{ 'pre-roll': draft.defaultPreRoll, 'mid-roll': draft.defaultMidRoll, 'post-roll': draft.defaultPostRoll, tail: draft.defaultFiller }" :overrides="{ 'pre-roll': selectedSlot.preRoll, 'mid-roll': selectedSlot.midRoll, 'post-roll': selectedSlot.postRoll, tail: selectedSlot.filler }">
 											<template #pre-roll><SlotFillerEditor v-model="selectedSlot.preRoll" kind="pre-roll" heading="Slot pre-roll" :programs="programs" @update:model-value="markChanged" @edit-program="editProgram" /></template>
 											<template #mid-roll><SlotFillerEditor
@@ -1202,6 +1206,7 @@ useDraftProtection(() => editing.value && hasPendingSave.value && retained.unsaf
 									<template #post-roll><FillerAssignmentEditor v-model="draft.defaultPostRoll" kind="post-roll" :programs="programs" heading="Template default post-roll" eyebrow="Template behavior" @update:model-value="markChanged" @edit-program="editProgram" /></template>
 									<template #tail><TailFillerEditor v-model="draft.defaultFiller" :programs="programs" heading="Template default tail filler" eyebrow="Template behavior" @update:model-value="markChanged" @edit-program="editProgram" /></template>
 								</FillerAssignmentsEditor>
+								<GraphicsAssignmentEditor v-model="draft.graphicsAssignment" description="Applies when this Template is active." @update:model-value="markChanged" />
 
 							</ResourceUsage>
 						</div>

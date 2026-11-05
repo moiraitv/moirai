@@ -15,6 +15,7 @@ import {
 	LayoutGrid,
 	Library,
 	ListVideo,
+	Layers,
 	LogOut,
 	Menu,
 	Settings,
@@ -299,6 +300,7 @@ onUnmounted(() => {
 				</div>
 
 				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/filler/') }" :aria-current="route.path.startsWith('/filler/') ? 'page' : undefined" to="/filler"><ListVideo :size="18" /><span>Filler</span></RouterLink>
+				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/graphics/') }" :aria-current="route.path.startsWith('/graphics/') ? 'page' : undefined" to="/graphics"><Layers :size="18" /><span>Graphics</span></RouterLink>
 				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/playback/') }" :aria-current="route.path.startsWith('/playback/') ? 'page' : undefined" to="/playback"><TvMinimalPlay :size="18" /><span>Playback</span></RouterLink>
 				<RouterLink class="nav-link" :class="{ 'router-link-exact-active': route.path.startsWith('/settings/') }" :aria-current="route.path.startsWith('/settings/') ? 'page' : undefined" to="/settings"
 				><Settings :size="18" /><span>Settings</span></RouterLink

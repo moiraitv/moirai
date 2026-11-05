@@ -84,6 +84,20 @@ async function captureAssets(root: string, namespace: string, staging: string, p
 		}
 	}
 }
+/** Capture only graphics assets still registered in the archived database. */
+async function captureGraphicsAssets(root: string, staging: string): Promise<void> {
+	const records = await readFile(path.join(staging, 'tables', 'graphics_assets.ndjson'), 'utf8');
+	const target = path.join(staging, 'graphics-assets');
+	for (const line of records.split('\n').filter(Boolean)) {
+		const { id, format } = JSON.parse(line);
+		const name = `${id}.${format}`;
+		if (!allowedEntry(`graphics-assets/${name}`) || !(await lstat(path.join(root, name))).isFile()) {
+			throw new Error('An archived graphics asset is unavailable or invalid');
+		}
+		await mkdir(target, { recursive: true });
+		await copyFile(path.join(root, name), path.join(target, name));
+	}
+}
 /** Enumerate private captured files for manifest checksums and ZIP streaming. */
 async function stagedFiles(root: string, prefix = ''): Promise<string[]> {
 	const result: string[] = [];
@@ -109,7 +123,14 @@ export async function createArchive(
 ): Promise<BackupInfo> {
 	const data = await exportTables(config, staging);
 	for (const [namespace, root] of Object.entries(assetRoots(config))) {
-		await captureAssets(root, namespace, staging);
+		if (namespace === 'graphics-assets') {
+			if (data.tables.includes('graphics_assets')) {
+				await captureGraphicsAssets(root, staging);
+			}
+		}
+		else {
+			await captureAssets(root, namespace, staging);
+		}
 	}
 	try {
 		const ai = backupAiPreferences(JSON.parse(await readFile(path.join(config.dataDir, 'ai-settings.json'), 'utf8')));

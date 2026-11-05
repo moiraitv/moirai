@@ -1,3 +1,4 @@
+import { renderGuideListing } from './listing.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { itemGuideEntry } from './projection.js';
 import { createHash } from 'node:crypto';
@@ -25,14 +26,9 @@ import {
 	channelContext,
 	compileGuideTemplate,
 	flattenLiquidPreviewValues,
-	listingTitle,
-	mediaItemContext,
 	minifyXmltv,
-	programmeContext,
-	programmeKind,
 	renderChannelFragment,
-	renderProgrammeFragment,
-	xmlChildText,
+	xmlProgrammeText,
 	xmltvTimestamp,
 	type CompiledGuideTemplate,
 	type GuideTemplateWarn,
@@ -142,40 +138,11 @@ async function renderChannelListings(
 	const listings: Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }> = [];
 	for (const entry of channelGuide?.entries ?? segments.filter(segment => !segment.airing || segment.id === segment.airing.primarySegmentId).map(itemGuideEntry)) {
 		const segment = entry.segmentId ? byId.get(entry.segmentId) : undefined;
-		const timedSegment = segment
-			? { ...segment, start: entry.start, finish: entry.finish }
-			: undefined;
-		const media = timedSegment?.mediaItemId ? mediaById.get(timedSegment.mediaItemId) : undefined;
-		const kind = programmeKind(entry, timedSegment, media);
-		if (kind !== 'block' && !timedSegment) {
-			continue;
+		const media = segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
+		const rendered = await renderGuideListing(entry, segment, media, catalog, contextChannel, guide.timeZone, publicUrl, compiled, renderOptions);
+		if (rendered) {
+			listings.push({ entry, ...rendered });
 		}
-
-		const start = timedSegment?.start ?? entry.start;
-		const finish = timedSegment?.finish ?? entry.finish;
-		const context = programmeContext({
-			kind,
-			title: listingTitle(kind, entry, timedSegment, media, catalog),
-			start,
-			finish,
-			timeZone: guide.timeZone,
-			channel: contextChannel,
-			item: mediaItemContext(media, catalog, publicUrl),
-			slot: {
-				start,
-				finish,
-				role: timedSegment?.role ?? entry.role,
-				title: timedSegment?.title ?? entry.title,
-				program_id: timedSegment?.programId ?? entry.programId,
-				truncated: timedSegment?.truncated ?? entry.truncated,
-			},
-			block: kind === 'block'
-				? { title: entry.title, description: entry.description,
-					artwork_url: entry.posterUrl ? new URL(entry.posterUrl, `${publicUrl}/`).href : null }
-				: null,
-		});
-		const xml = await renderProgrammeFragment(compiled, kind, context, renderOptions);
-		listings.push({ entry, xml, context });
 	}
 
 	return listings;
@@ -275,11 +242,12 @@ function listingArtwork(media?: SchedulableMedia): {
 
 /** Copy XMLTV title and description onto a guide listing without mutating the source entry. */
 function presentedEntry(entry: GuideEntry, xml: string, media?: SchedulableMedia): GuideEntry {
+	const { title, subtitle, description } = xmlProgrammeText(xml);
 	return {
 		...entry,
-		title: xmlChildText(xml, 'title') || entry.title,
-		subtitle: xmlChildText(xml, 'sub-title'),
-		description: xmlChildText(xml, 'desc') || entry.description,
+		title: title || entry.title,
+		subtitle,
+		description: description || entry.description,
 		...(entry.kind === 'block' ? {} : listingArtwork(media)),
 	};
 }
@@ -346,10 +314,11 @@ export async function presentGuideListings(
 					}
 
 					const media = mediaForSegment(segment);
+					const { title, subtitle } = xmlProgrammeText(listing.xml);
 					return {
 						...segment,
-						title: xmlChildText(listing.xml, 'title') || segment.title,
-						subtitle: xmlChildText(listing.xml, 'sub-title'),
+						title: title || segment.title,
+						subtitle,
 						...listingArtwork(media),
 					};
 				}),

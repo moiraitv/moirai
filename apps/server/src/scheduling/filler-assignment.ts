@@ -1,7 +1,7 @@
 import type { ChannelSchedule, FillerConfig, FillerAssignment, FillerSettings, ResolvedMidRollConfig, ScheduleSlot, ScheduleTemplate, SchedulingCatalog } from '@moirai/shared';
 
 /** One resolved introduction or closing with an independently scoped source cursor. */
-export type AiringFillerStage = FillerSettings & { programId: string; consumerKey: string };
+export type AiringFillerStage = FillerSettings & { programId: string; consumerKey: string; presetId: string };
 
 /** Effective pre/mid/post behavior for one programmed slot. */
 export interface ResolvedAiringFiller {
@@ -25,7 +25,7 @@ export function resolveAiringFiller(
 	if (assignment && !settings) {
 		throw new Error('Selected mid-roll preset is unavailable');
 	}
-	const midRoll = assignment && settings ? { ...settings, programId: assignment.programId } : null;
+	const midRoll = assignment && settings ? { ...settings, programId: assignment.programId, presetId: assignment.presetId } : null;
 	const resolve = (config: FillerAssignment | null | undefined, kind: 'pre-roll' | 'post-roll'): AiringFillerStage | undefined => {
 		if (!config) {
 			return undefined;
@@ -34,7 +34,7 @@ export function resolveAiringFiller(
 		if (!preset) {
 			throw new Error('Selected filler preset is unavailable');
 		}
-		return { ...preset, programId: config.programId, consumerKey: key(kind, config.programId) };
+		return { ...preset, programId: config.programId, presetId: config.presetId, consumerKey: key(kind, config.programId) };
 	};
 	const pre = slot.preRoll?.mode === 'disabled' ? null : slot.preRoll?.mode === 'configured'
 		? slot.preRoll.config : template.defaultPreRoll ?? schedule.defaultPreRoll;

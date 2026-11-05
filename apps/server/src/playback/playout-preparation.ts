@@ -1,3 +1,4 @@
+import { graphicsPreparationBudget, preparePlayoutGraphicsLabels, type PlayoutGraphics } from '../graphics/segments.js';
 import { timeAsyncPhase, timePhase } from '../scheduling/job-timing.js';
 import type { AudioPreferences, Channel, ScheduleGuide, SchedulingProgram } from '@moirai/shared';
 import type { Repository } from '../repository/index.js';
@@ -14,6 +15,9 @@ export type PlayoutReadRequest = {
 	timeZone: string;
 	startDate: string;
 	days: number;
+	publicUrl?: string;
+	live?: boolean;
+	priority?: Int32Array<SharedArrayBuffer>;
 	fallback?: PlayoutFallback;
 	subtitles?: PreparedSubtitles;
 };
@@ -23,6 +27,7 @@ export interface PlayoutPreparation {
 	channel: Channel;
 	guide: ScheduleGuide;
 	programs: SubtitleProgram[];
+	graphics?: PlayoutGraphics;
 }
 
 /** Keep one coherent playout snapshot per executing worker, discarded on authoritative invalidation. */
@@ -85,6 +90,15 @@ export class PlayoutPreparationReader {
 		const assetPrograms = programs.filter(program => referenced.has(program.id)).map(program => ({
 			id: program.id, config: program.config.subtitlePreferences ? { subtitlePreferences: program.config.subtitlePreferences } : {},
 		}));
-		return { channel, guide: compact, programs: assetPrograms };
+		const segments = guide.channels[0]?.preview.segments ?? [];
+		const graphics = await timeAsyncPhase('read', () => preparePlayoutGraphicsLabels(
+			this.repository,
+			channel,
+			segments,
+			request.timeZone,
+			request.publicUrl ?? 'http://localhost',
+			() => graphicsPreparationBudget[request.live || (request.priority && Atomics.load(request.priority, 0)) ? 'live' : 'background'],
+		));
+		return { channel, guide: compact, programs: assetPrograms, ...(graphics ? { graphics } : {}) };
 	}
 }

@@ -628,6 +628,14 @@ legend {
 	margin-bottom: 1rem;
 }
 
+.channel-graphics-disclosure {
+	margin-block: 1rem;
+}
+
+.channel-graphics-selector {
+	padding: 1rem;
+}
+
 .channel-guide-template-disclosure {
 	margin-block: 1rem;
 
@@ -770,7 +778,8 @@ legend {
 }
 
 .channel-editor-modal .encoding-profile-selector-row,
-.channel-editor-modal .guide-template-selector-row {
+.channel-editor-modal .guide-template-selector-row,
+.channel-editor-modal .channel-graphics-selector-row {
 	select,
 	.button {
 		height: var(--control-height);

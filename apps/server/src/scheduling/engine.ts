@@ -501,7 +501,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					progress.remaining = progress.unit === 'count' ? progress.remaining - 1
 						: Math.max(0, durationMilliseconds(progress.remaining) - durationMilliseconds(span.sourceFinishSeconds)) / 1_000;
 					activeContinuation!.fillerProgress = { ...progress };
-					appendSegment(segment({ role: 'filler', fillerStage: stage.phase, channelId: input.channelId, scheduleLayerId: layerId, templateId: template.id,
+					appendSegment(segment({ role: 'filler', fillerStage: stage.phase, fillerPresetId: stage.phase === 'tail' ? stage.config.presetId : undefined, channelId: input.channelId, scheduleLayerId: layerId, templateId: template.id,
 						slotId: slot.id, programId: span.programId, mediaItemId: span.media.id, title: span.media.title,
 						playbackPath: span.media.playbackPath, playbackParts: span.media.playbackParts ?? [{ playbackPath: span.media.playbackPath, durationSeconds: span.media.durationSeconds! }],
 						start: cursor, finish, sourceStartSeconds: 0, sourceFinishSeconds: span.sourceFinishSeconds,

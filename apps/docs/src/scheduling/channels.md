@@ -190,3 +190,9 @@ Save the Channel and test a video with a known matching subtitle track. Check th
 Pending Channel edits, selected logos and crop settings, and selected fallback videos are retained automatically in this browser. Choose **Add** to create a new Channel or **Save** to commit changes. **Reset**, once confirmed, restores the latest saved values. **Delete Channel** permanently removes the ![](/icons/tv-minimal.svg) Channel after confirmation; it is not a way to discard edits.
 
 After saving, check the ![](/icons/calendar-days.svg) Guide and test live playback in the client you intend to use. Profile settings control output; the assigned ![](/icons/tv-minimal-play.svg) Channel Schedule still determines what plays and when.
+
+## Add a graphics preset
+
+Open **On-screen graphics** in the channel editor, choose a **Graphics preset**, and save the channel to show its watermarks or other overlays. Choose **No graphics** to remove the assignment. **Manage Graphics** opens the presets and examples. See [Channel graphics](/playback/graphics) to create your own preset.
+
+![Channel Graphics setting with the preset selector and Manage Graphics link](/screenshots/channel-editor-graphics.png)

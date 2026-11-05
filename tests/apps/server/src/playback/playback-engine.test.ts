@@ -1,5 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { channelCreateSchema, type Channel } from '@moirai/shared';
@@ -12,6 +13,36 @@ import type { HardwareAccelerationResolver } from '@server/playback/hardware-acc
 import { PlaybackEngine } from '@server/playback/playback-engine.js';
 import { PlayoutSynchronizer } from '@server/playback/playout-synchronizer.js';
 import type { Repository } from '@server/repository/index.js';
+
+it('redacts signed clock URLs split across worker writes', () => {
+	const stdout = new PassThrough();
+	const stderr = new PassThrough();
+	const stdin = new PassThrough();
+	const info = vi.fn();
+	const engine = new PlaybackEngine(
+		{} as Repository,
+		{} as PlayoutSynchronizer,
+		{ publish: vi.fn() },
+		{ info } as unknown as FastifyBaseLogger,
+		{} as HardwareAccelerationResolver,
+		'/engine',
+		'/playout',
+		'http://localhost',
+		1000,
+		1000,
+	);
+	const internals = engine as unknown as { logChildOutput(session: unknown): void };
+	internals.logChildOutput({ child: { stdout, stderr, stdin }, channel: { id: 'test', number: '1' } });
+	stdout.write('ffmpeg http://127.0.0.1:5000/cl');
+	stdout.write('ock/testSecret.');
+	stdout.write('signature\nworker ready\n');
+	stderr.write('x'.repeat(17 * 1024));
+	stderr.write('untrusted-tail\n');
+	expect(info.mock.calls.map(call => call[1])).toEqual([
+		'ffmpeg http://127.0.0.1:5000/clock/[redacted]',
+		'worker ready',
+	]);
+});
 
 describe('playback engine fallback changes', () => {
 	it('requests live preparation once for concurrent tunes to the same channel', async () => {

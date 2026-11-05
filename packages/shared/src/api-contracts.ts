@@ -367,6 +367,7 @@ export const timelineSegmentSchema = z.object({
 	sequenceEntryPath: z.array(z.uuid()).optional(),
 	id: idSchema,
 	role: z.enum(['primary', 'filler', 'dead-air']),
+	fillerPresetId: idSchema.optional(),
 	fillerStage: z.enum(['pre-roll', 'mid-roll', 'post-roll', 'tail', 'fallback']).optional(),
 	channelId: idSchema,
 	scheduleLayerId: idSchema.nullable(),

@@ -1,3 +1,4 @@
+import { graphicsAssignmentSchema } from './graphics.js';
 import { z } from 'zod';
 import { fillerSettingsSchema } from './filler-presets.js';
 import { DEFAULT_MID_ROLL_PREDICATE, midRollPredicateSchema } from './mid-roll-predicate.js';
@@ -37,6 +38,7 @@ export const midRollSettingsSchema = fillerSettingsSchema.safeExtend({
 export type MidRollSettings = z.infer<typeof midRollSettingsSchema>;
 /** Validate a named reusable preset. */
 export const midRollPresetCreateSchema = midRollSettingsSchema.safeExtend({
+	graphicsAssignment: graphicsAssignmentSchema.optional(),
 	name: z.string().trim().min(1).max(120), description: z.string().trim().max(500).default(''),
 });
 /** Editable preset fields. */
@@ -52,7 +54,7 @@ export const midRollConfigSchema = z.object({ programId: z.uuid(), presetId: z.u
 /** One authored assignment. */
 export type MidRollConfig = z.infer<typeof midRollConfigSchema>;
 /** Effective settings used for one source item. */
-export type ResolvedMidRollConfig = MidRollSettings & { programId: string };
+export type ResolvedMidRollConfig = MidRollSettings & { programId: string; presetId?: string };
 /** Protected examples available without creating a custom resource. */
 export const BUILTIN_MID_ROLL_PRESETS: Array<MidRollPresetCreate & { id: string }> = [
 	{ id: 'a39c0000-0000-4000-8000-000000000001', name: 'Two-minute breaks',

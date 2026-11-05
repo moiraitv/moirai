@@ -1,3 +1,8 @@
+import type { GraphicsClock } from '../graphics/clock.js';
+import { GraphicsSnapshots, type GraphicsSnapshotRetries } from '../graphics/snapshots.js';
+import { graphicsPreparationBudget, preparePlayoutGraphicsLabels } from '../graphics/segments.js';
+import { graphicsFolder } from '../graphics/assets.js';
+import { decorateGraphics } from '../graphics/playout.js';
 import type { PlayoutPreparation } from './playout-preparation.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { prepareMediaStreams, type PreparedMediaStreams } from './audio-selection.js';
@@ -52,8 +57,16 @@ export class PlayoutSynchronizer {
 	private running = false;
 	/** Subtitle rendering and persistent per-channel preparation issues. */
 	readonly subtitles: SubtitleAssets;
+	/** Optional loopback renderer used when publishing live clock layers. */
+	graphicsClock: GraphicsClock | undefined;
+	/** Graphics preparation warnings by channel. */
+	readonly graphicsIssues = new Map<string, string>();
 	/** Query worker ownership before collecting obsolete assets. */
 	consumerActive: (channelId: string) => boolean = () => false;
+	/** Latest completed timeline cursor from the current worker, when observable. */
+	consumerProgress: (channelId: string) => number | undefined = () => undefined;
+	private readonly graphicsLeases = new Map<string, Map<string, number>>();
+	private readonly graphicsRetries = new Map<string, GraphicsSnapshotRetries>();
 	/** Stop a worker using an incompatible subtitle mode before publishing replacement playout. */
 	beforeSubtitleModeChange: (id: string, mode: Channel['subtitleMode']) => Promise<void> = async () => {};
 
@@ -68,6 +81,9 @@ export class PlayoutSynchronizer {
 		private readonly logger: FastifyBaseLogger,
 		private readonly workers?: SchedulingWorkerPool,
 		private readonly guideDays = XMLTV_EPG_DAYS,
+		private readonly graphicsRoot = graphicsFolder(root),
+		private readonly graphicsFfprobe = 'ffprobe',
+		private readonly publicUrl = 'http://localhost',
 	) {
 		this.subtitles = new SubtitleAssets(root, repository);
 	}
@@ -130,9 +146,22 @@ export class PlayoutSynchronizer {
 
 	/** Synchronize affected channels after authoritative schedule or presentation changes. */
 	handleEvent(event: LiveEvent): void {
-		if ((event.type === 'scheduling.changed' && event.data.entity === 'credit-template')
-			|| (event.type === 'playback.changed' && event.data.reason === 'settings-changed')) {
+		if ((event.type === 'scheduling.changed' && (event.data.entity === 'credit-template'
+			|| (event.data.entity === 'guide-template' && event.data.change === 'updated')))
+		|| (event.type === 'playback.changed' && event.data.reason === 'settings-changed')) {
 			void this.syncAll().catch(() => undefined);
+		}
+		else if (event.type === 'scheduling.changed' && event.data.entity === 'assignment' && event.data.id) {
+			void this.syncChannel(event.data.id).catch(() => undefined);
+		}
+		else if (event.type === 'scheduling.changed' && event.data.change === 'updated' && event.data.id
+			&& (event.data.entity === 'program' || event.data.entity === 'template'
+				|| event.data.entity === 'filler-preset' || event.data.entity === 'mid-roll-preset')) {
+			const { entity, id } = event.data;
+			const scope = entity === 'program' || entity === 'template' ? entity : 'filler';
+			for (const channelId of this.repository.graphics.channelsUsingScope(scope, id)) {
+				void this.syncChannel(channelId).catch(() => undefined);
+			}
 		}
 		else if (event.type === 'timeline.changed' && event.data.status === 'ready') {
 			void this.syncChannel(event.data.channelId).catch(() => undefined);
@@ -162,6 +191,9 @@ export class PlayoutSynchronizer {
 		}
 		this.failures.delete(channelId);
 		this.subtitles.issues.delete(channelId);
+		this.graphicsIssues.delete(channelId);
+		this.graphicsLeases.delete(channelId);
+		this.graphicsRetries.delete(channelId);
 		this.subtitleModes.delete(channelId);
 		await rm(this.channelFolder(channelId), { recursive: true, force: true });
 	}
@@ -296,10 +328,11 @@ export class PlayoutSynchronizer {
 		// Publish tomorrow before midnight even when the public guide contains only today.
 		const playoutDays = Math.max(2, this.guideDays);
 		const publicationRevision = this.workers?.playoutRevision(channelId);
+		const labelRevision = this.workers?.playoutRevision(channelId, true);
 		const preparation = this.workers?.databaseBacked
 			? await readCommittedGuideAfterMaterializing(
 				async () => this.workers!.playoutRead({ kind: 'playout-preparation', channelId,
-					timeZone: this.timeZone, startDate, days: playoutDays }, this.liveChannels.has(channelId)) as Promise<PlayoutPreparation>,
+					timeZone: this.timeZone, startDate, days: playoutDays, publicUrl: this.publicUrl }, this.liveChannels.has(channelId)) as Promise<PlayoutPreparation>,
 				this.ensureMaterialized,
 			)
 			: null;
@@ -322,18 +355,42 @@ export class PlayoutSynchronizer {
 		const selections = await this.subtitles.prepare(channel, guide, programs);
 		const streams = preparation ? undefined : await Promise.all([sourcePrograms!, this.repository.getPlaybackSettings()])
 			.then(([items, settings]) => prepareMediaStreams(this.repository, channel, guide, items, settings.audioPreferences)).catch(() => ({ audio: new Map(), video: new Map() }));
+		const graphics = preparation ? preparation.graphics : await this.localGraphics(channel, guide);
 		const subtitleMode = selections.subtitleMode ?? this.subtitleMode(channel);
+		/** Detect channel or guide edits before publishing a prepared snapshot. */
+		const inputsChanged = (): boolean => publicationRevision !== this.workers?.playoutRevision(channelId)
+			|| Boolean(graphics?.contexts && labelRevision !== this.workers?.playoutRevision(channelId, true));
 		return this.withChannelConfiguration(channelId, async () => {
 			const files = preparation
 				? await this.workers!.playoutRead({ kind: 'playout-documents', channelId,
 					timeZone: this.timeZone, startDate, days: playoutDays, fallback, subtitles: selections }, this.liveChannels.has(channelId)) as Map<string, string>
 				: null;
-			if (preparation && publicationRevision !== this.workers!.playoutRevision(channelId)) {
+			if (inputsChanged()) {
 				this.pending.add(channelId);
 				return resolvedFolder;
 			}
 			await this.beforeSubtitleModeChange(channelId, subtitleMode);
-			const generated = await this.channelFiles(channel, guide, fallback, selections, streams, files ?? undefined);
+			if (!graphics) {
+				this.graphicsRetries.delete(channelId);
+			}
+			if (graphics || this.graphicsLeases.has(channelId)) {
+				await this.reclaimCompletedGraphics(channelId, resolvedFolder).catch(error => {
+					this.logger.warn({ error, channelId }, 'Expired graphics cleanup failed; will retry during reconciliation');
+				});
+			}
+			const { files: generated, usedGraphics } = await this.channelFiles(channel, guide, fallback, selections, streams, files ?? undefined, graphics);
+			if (inputsChanged()) {
+				this.pending.add(channelId);
+				return resolvedFolder;
+			}
+			// Register leases before the first atomic rename, even if later publication fails.
+			if (usedGraphics.size) {
+				const leases = this.graphicsLeases.get(channelId) ?? new Map<string, number>();
+				for (const [file, finish] of usedGraphics) {
+					leases.set(file, Math.max(leases.get(file) ?? 0, finish));
+				}
+				this.graphicsLeases.set(channelId, leases);
+			}
 			const publicationStarted = performance.now();
 
 			for (const [filename, content] of generated) {
@@ -354,6 +411,11 @@ export class PlayoutSynchronizer {
 				const temporary = `${destination}.tmp-${randomUUID()}`;
 				try {
 					await writeFile(temporary, content, { mode: 0o644 });
+					if (inputsChanged()) {
+						await unlink(temporary);
+						this.pending.add(channelId);
+						return resolvedFolder;
+					}
 					await rename(temporary, destination);
 				}
 				catch (error) {
@@ -384,10 +446,65 @@ export class PlayoutSynchronizer {
 					this.logger.warn({ error, channelId }, 'Optional subtitle cleanup failed; will retry during reconciliation');
 				}
 			}
+			if (!this.consumerActive(channelId)) {
+				try {
+					const snapshots = await GraphicsSnapshots.open(path.join(resolvedFolder, 'graphics'));
+					if (!this.consumerActive(channelId)) {
+						const retries = this.graphicsRetries.get(channelId);
+						await snapshots.prune(new Set([...usedGraphics.keys(), ...retries?.pending.keys() ?? [], ...retries?.warmed ?? []]));
+						if (usedGraphics.size) {
+							this.graphicsLeases.set(channelId, usedGraphics);
+						}
+						else {
+							this.graphicsLeases.delete(channelId);
+						}
+					}
+				}
+				catch (error) {
+					this.logger.warn({ error, channelId }, 'Optional graphics cleanup failed; will retry during reconciliation');
+				}
+			}
 			this.subtitleModes.set(channelId, subtitleMode);
 			this.logger.debug({ operation: 'playout.publish', durationMs: Math.round(performance.now() - publicationStarted) }, 'Operation completed');
 			return resolvedFolder;
 		});
+	}
+
+	/** Prune unleased files and leases the current worker has finished consuming. */
+	private async reclaimCompletedGraphics(channelId: string, folder: string): Promise<void> {
+		const cursor = this.consumerProgress(channelId);
+		const leases = this.graphicsLeases.get(channelId);
+		// Publication registers paths before its first rename. A starting worker waits for this
+		// pass before loading playout, so files carried across a restart have no consumer yet.
+		const retained = new Set<string>();
+		for (const [file, finish] of leases ?? []) {
+			if (cursor === undefined || finish > cursor) {
+				retained.add(file);
+			}
+		}
+		const snapshots = await GraphicsSnapshots.open(path.join(folder, 'graphics'));
+		const retries = this.graphicsRetries.get(channelId);
+		const keep = new Set([...retained, ...retries?.pending.keys() ?? [], ...retries?.warmed ?? []]);
+
+		await snapshots.prune(keep);
+		for (const file of leases?.keys() ?? []) {
+			if (!retained.has(file)) {
+				leases!.delete(file);
+			}
+		}
+	}
+
+	/** Resolve graphics from the local committed guide when no preparation worker is configured. */
+	private localGraphics(channel: Channel, guide: Awaited<ReturnType<typeof readCommittedChannelScheduleGuide>>): Promise<PlayoutPreparation['graphics']> {
+		const committed = guide.channels?.[0]?.preview.segments ?? [];
+		return preparePlayoutGraphicsLabels(
+			this.repository,
+			channel,
+			committed,
+			this.timeZone,
+			this.publicUrl,
+			() => graphicsPreparationBudget[this.liveChannels.has(channel.id) ? 'live' : 'background'],
+		);
 	}
 
 	/** Build validated daily files from the generated channel playout paths. */
@@ -398,11 +515,50 @@ export class PlayoutSynchronizer {
 		subtitles?: PreparedSubtitles,
 		streams?: PreparedMediaStreams,
 		preparedFiles?: Map<string, string>,
-	): Promise<Map<string, string>> {
+		graphics?: PlayoutPreparation['graphics'],
+	): Promise<{ files: Map<string, string>; usedGraphics: Map<string, number> }> {
+		let usedGraphics = new Map<string, number>();
 		const files = new Map<string, string>();
 		const input: Parameters<typeof buildEtvPlayoutFiles> = [[channel], guide,
 			new Map([[channel.id, fallback]]), subtitles, streams?.audio, streams?.video];
-		const generated = preparedFiles ?? (this.workers ? await this.workers.playout(input, this.liveChannels.has(channel.id)) : buildEtvPlayoutFiles(...input));
+		let generated = preparedFiles ?? (this.workers ? await this.workers.playout(input, this.liveChannels.has(channel.id)) : buildEtvPlayoutFiles(...input));
+		if (graphics) {
+			try {
+				const retries = this.graphicsRetries.get(channel.id) ?? { pending: new Map(), warmed: new Set() };
+				this.graphicsRetries.set(channel.id, retries);
+				const snapshots = await GraphicsSnapshots.open(path.join(this.channelFolder(channel.id), 'graphics'), retries);
+				const result = await decorateGraphics(
+					this.graphicsRoot,
+					graphics.presets,
+					channel,
+					graphics.segments,
+					generated,
+					() => this.liveChannels.has(channel.id),
+					snapshots,
+					this.graphicsFfprobe,
+					this.timeZone,
+					this.graphicsClock,
+					graphics.contexts,
+				);
+				generated = result.files;
+				usedGraphics = result.used;
+				for (const file of usedGraphics.keys()) {
+					retries.warmed.delete(path.basename(file));
+				}
+				if (result.issue) {
+					this.graphicsIssues.set(channel.id, result.issue);
+				}
+				else {
+					this.graphicsIssues.delete(channel.id);
+				}
+			}
+			catch {
+				this.graphicsIssues.set(channel.id, 'Graphics could not be prepared. Check the assigned preset.');
+			}
+		}
+		else {
+			this.graphicsIssues.delete(channel.id);
+		}
 		for (const [relativePath, content] of generated) {
 			const filename = path.posix.basename(relativePath);
 			if (!PLAYOUT_FILENAME.test(filename)) {
@@ -411,6 +567,6 @@ export class PlayoutSynchronizer {
 
 			files.set(filename, content);
 		}
-		return files;
+		return { files, usedGraphics };
 	}
 }

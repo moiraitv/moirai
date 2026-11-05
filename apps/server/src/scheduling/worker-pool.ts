@@ -140,6 +140,7 @@ export class SchedulingWorkerPool {
 	private localReader: DatabaseJobReader | null = null;
 	private readRevision = 0;
 	private sharedPlayoutRevision = 0;
+	private guideTemplateRevision = 0;
 	private readonly channelPlayoutRevisions = new Map<string, number>();
 	private interactiveStreak = 0;
 	private readonly previews = new Map<string, SharedRead<PreviewResults[PreviewRequest['kind']]>>();
@@ -151,9 +152,15 @@ export class SchedulingWorkerPool {
 		if (event?.type === 'timeline.changed' || event?.type === 'channel.changed') {
 			this.channelPlayoutRevisions.set(event.data.channelId, this.readRevision);
 		}
+		else if (event?.type === 'scheduling.changed' && event.data.entity === 'assignment' && event.data.id) {
+			this.channelPlayoutRevisions.set(event.data.id, this.readRevision);
+		}
+		else if (event?.type === 'scheduling.changed' && event.data.entity === 'guide-template' && event.data.change === 'updated') {
+			this.guideTemplateRevision = this.readRevision;
+		}
 		else if (!event || (event.type === 'library.changed' && event.data.change !== 'watcher-status' && event.data.change !== 'change-detected')
 			|| (event.type === 'scan.changed' && event.data.affectsProgramming)
-			|| (event.type === 'scheduling.changed' && (event.data.entity === 'program' || event.data.entity === 'credit-template'))
+			|| (event.type === 'scheduling.changed' && (['program', 'credit-template', 'template', 'filler-preset', 'mid-roll-preset'].includes(event.data.entity)))
 			|| (event.type === 'playback.changed' && event.data.reason === 'settings-changed')) {
 			// Shared media facts and rendering preferences can affect existing committed playback.
 			this.sharedPlayoutRevision = this.readRevision;
@@ -161,8 +168,8 @@ export class SchedulingWorkerPool {
 	}
 
 	/** Validate publication against this channel and shared playback inputs, excluding read-only progress. */
-	playoutRevision(channelId: string): string {
-		return `${this.sharedPlayoutRevision}:${this.channelPlayoutRevisions.get(channelId) ?? 0}`;
+	playoutRevision(channelId: string, withGuideLabels = false): string {
+		return `${this.sharedPlayoutRevision}:${this.channelPlayoutRevisions.get(channelId) ?? 0}:${withGuideLabels ? this.guideTemplateRevision : 0}`;
 	}
 
 	/** File-backed databases can be read independently without transferring their catalogs. */
@@ -275,18 +282,27 @@ export class SchedulingWorkerPool {
 	/** Prepare compact asset requests off-thread; live tunes use priority and reserved admission. */
 	async playoutRead(request: PlayoutReadRequest, live = false): Promise<PlayoutPreparation | Map<string, string>> {
 		if (!this.databaseBacked) {
-			return new PlayoutPreparationReader(this.previewContext!.repository).read(request);
+			return new PlayoutPreparationReader(this.previewContext!.repository).read({ ...request, live });
 		}
 		return this.enqueue({ kind: 'playout-read', input: { request, revision: this.preparationRevision } }, undefined, {}, live);
 	}
 
-	/** Promote a queued periodic preparation when a viewer tunes to its channel. */
+	/** Promote queued work and shorten optional label preparation already running for a live tune. */
 	promotePlayout(channelId: string): void {
 		for (const job of this.queue) {
 			if ((job.task.kind === 'playout-read' && job.task.input.request.channelId === channelId)
 				|| (job.task.kind === 'playout' && job.task.input[0].some(channel => channel.id === channelId))) {
 				job.live = true;
 				job.background = false;
+			}
+		}
+		for (const { job } of this.slots) {
+			if (job?.task.kind !== 'playout-read' || job.task.input.request.channelId !== channelId) {
+				continue;
+			}
+			const { priority } = job.task.input.request;
+			if (priority) {
+				Atomics.store(priority, 0, 1);
 			}
 		}
 		this.dispatch();
@@ -482,6 +498,14 @@ export class SchedulingWorkerPool {
 			job.finish = this.previewContext?.responsiveness?.begin(`worker.${job.task.kind}`);
 			this.interactiveStreak = job.background ? 0 : this.interactiveStreak + 1;
 			slot.job = job;
+			if (job.task.kind === 'playout-read') {
+				const request = job.task.input.request;
+				job.task.input.request = {
+					...request, live: job.live,
+					...(request.kind === 'playout-preparation' && !job.live
+						? { priority: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)) } : {}),
+				};
+			}
 			if (job.task.kind === 'read' || job.task.kind === 'materialize' || job.task.kind === 'playout-read' || job.task.kind === 'playout') {
 				slot.worker.postMessage({ id: job.id, kind: job.task.kind, input: job.task.input });
 				continue;

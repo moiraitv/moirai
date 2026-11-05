@@ -108,8 +108,8 @@ export async function requestUnsavedChanges(
 		key: options.key,
 		title: options.title ?? 'Save Changes?',
 		message: options.message,
-		confirmLabel: options.saveLabel ?? 'Save Changes',
-		alternateLabel: 'Discard Changes',
+		confirmLabel: options.saveLabel ?? 'Save',
+		alternateLabel: 'Discard',
 		alternateDestructive: true,
 	});
 

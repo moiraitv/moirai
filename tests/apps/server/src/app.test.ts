@@ -1,8 +1,12 @@
 import { GUIDE_ARTWORK_GRACE_MS } from '@server/artwork/guide-artwork-store.js';
 import { discoverOnDisk } from '@server/scanner/on-disk.js';
+import { GRAPHICS_UPLOAD_LIMIT } from '@server/graphics/assets.js';
+import * as graphicsAssets from '@server/graphics/assets.js';
 import { orderSelectedMedia } from '@moirai/shared';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
+import { ChildProcess } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { mkdir, mkdtemp, rm, writeFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -2065,6 +2069,122 @@ describe('API', () => {
 		expect(removed.json().logo).toBeNull();
 		expect((await app.inject({ url: `/api/v1/channels/${created.id}/logo` })).statusCode).toBe(404);
 	}, 15_000);
+
+	it('reports graphics preview failures with safe stage diagnostics', async () => {
+		const { app, rawApp } = await fixture();
+		const log = vi.fn();
+		rawApp.addHook('onRequest', async request => {
+			request.log.warn = log;
+		});
+		await app.ready();
+		const run = vi.spyOn(graphicsAssets, 'runGraphicsProcess');
+		const privateDetail = '/private/media/preview.mp4';
+		const url = '/api/v1/graphics/preview';
+		const render = () => app.inject({ method: 'POST', url, payload: { yaml: 'version: 1\nlayers: []', elapsedMs: 5000 } });
+		try {
+			for (const [details, reason, status] of [
+				[{ code: 'ENOENT' }, 'missing_engine', 503],
+				[{ stderr: `unsupported schema version ${privateDetail}` }, 'incompatible_engine', 503],
+				[{ killed: true, signal: 'SIGTERM' }, 'timeout', 503],
+				[{ stderr: privateDetail }, 'unexpected', 422],
+			] as const) {
+				run.mockRejectedValueOnce(Object.assign(new Error(privateDetail), details));
+				const result = await render();
+				expect(result.statusCode).toBe(status);
+				expect(result.json()).toMatchObject({ code: `graphics_preview_${reason}`, requestId: expect.any(String) });
+				expect(result.body).not.toContain(privateDetail);
+				expect(log).toHaveBeenCalledWith({ stage: 'next', reason }, 'Graphics preview failed');
+				if (reason === 'unexpected') {
+					expect(result.json().message).toContain(result.json().requestId);
+				}
+			}
+			expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);
+
+			let finish!: () => void;
+			const waiting = new Promise<void>(resolve => {
+				finish = resolve;
+			});
+			const processResult = waiting.then(() => ({ stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) }));
+			run.mockReturnValueOnce(Object.assign(processResult, { child: new ChildProcess() }));
+			const pending = render();
+			try {
+				await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(5));
+				const busy = await render();
+				expect(busy.statusCode).toBe(503);
+				expect(busy.headers['retry-after']).toBe('1');
+				expect(busy.json()).toMatchObject({ code: 'graphics_preview_busy' });
+			}
+			finally {
+				finish();
+				const result = await pending;
+				expect(result.statusCode).toBe(422);
+				expect(result.json()).toMatchObject({ code: 'graphics_preview_no_frame' });
+			}
+		}
+		finally {
+			run.mockRestore();
+		}
+	});
+
+	it('returns a payload limit error for oversized graphics uploads and accepts the next upload', async () => {
+		const { app } = await fixture();
+		const oversized = await app.inject({
+			method: 'POST',
+			url: '/api/v1/graphics/assets',
+			...multipartVideo('oversized.png', Buffer.alloc(GRAPHICS_UPLOAD_LIMIT + 1)),
+		});
+		expect(oversized.statusCode).toBe(413);
+		expect(oversized.json()).toMatchObject({ code: 'payload_too_large' });
+
+		const uploaded = await app.inject({
+			method: 'POST',
+			url: '/api/v1/graphics/assets',
+			...multipartVideo('logo.png', transparentPng),
+		});
+		expect(uploaded.statusCode).toBe(201);
+	});
+
+	it.each(['file', 'field'] as const)('rejects an extra graphics upload %s even when it arrives after the first file', async (extra) => {
+		const { app } = await fixture();
+		const boundary = 'graphics-upload-test';
+		const fileHeader = Buffer.from('Content-Disposition: form-data; name="file"; filename="logo.png"\r\nContent-Type: image/png\r\n\r\n');
+		const first = Buffer.concat([Buffer.from(`--${boundary}\r\n`), fileHeader, transparentPng, Buffer.from(`\r\n--${boundary}\r\n`)]);
+		const next = extra === 'file'
+			? Buffer.concat([fileHeader, transparentPng])
+			: Buffer.from('Content-Disposition: form-data; name="extra"\r\n\r\nvalue');
+		const last = Buffer.concat([next, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+		const url = '/api/v1/graphics/assets';
+		const before = (await app.inject({ url })).json();
+
+		const split = Readable.from((async function* () {
+			yield first;
+			await new Promise<void>(resolve => setImmediate(resolve));
+			yield last;
+		})());
+		for (const payload of [Buffer.concat([first, last]), split]) {
+			const response = await app.inject({
+				method: 'POST', url, payload,
+				headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+			});
+			expect(response.statusCode).toBe(400);
+		}
+		expect((await app.inject({ url })).json()).toEqual(before);
+	});
+
+	it('reports unavailable storage for an otherwise valid graphics upload', async () => {
+		const { app, root } = await fixture();
+		await app.ready();
+		const graphics = path.join(root, 'graphics');
+		await mkdir(graphics, { recursive: true });
+		await writeFile(path.join(graphics, 'assets'), '');
+
+		const response = await app.inject({
+			method: 'POST', url: '/api/v1/graphics/assets',
+			...multipartVideo('logo.png', transparentPng),
+		});
+		expect(response.statusCode).toBe(503);
+		expect(response.json()).toMatchObject({ code: 'storage_unavailable' });
+	});
 
 	it('uploads, inherits, previews, and removes managed playback fallback fillers', async () => {
 		const { app } = await fixture();

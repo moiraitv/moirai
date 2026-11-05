@@ -34,7 +34,7 @@ test('closes created and edited templates and channel schedules, retaining faile
 	await expect(templateEditor.getByLabel('Template name')).toHaveValue('Edited and closed');
 	await templateEditor.getByLabel('Template name').fill('Saved through close');
 	await templateEditor.getByRole('button', { name: 'Close template editor' }).click();
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Save Changes', exact: true }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(templateEditor).toBeHidden();
 
 	const response = await page.request.post('/api/v1/channels', { headers, data: { number: '985', name: 'Schedule close test' } });

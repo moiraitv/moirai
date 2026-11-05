@@ -932,6 +932,10 @@
 	overflow: auto;
 }
 
+.template-workspace .resource-usage-main > .graphics-assignment {
+	margin-block-start: 0;
+}
+
 .scheduling-workspace-content > .template-toolbar,
 .scheduling-workspace-content > .channel-schedule-toolbar {
 	border-width: 0 0 1px;

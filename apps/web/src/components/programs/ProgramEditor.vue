@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { GraphicsAssignment } from '@moirai/shared';
+import GraphicsAssignmentEditor from '../graphics/GraphicsAssignmentEditor.vue';
 import ProgramMatchesDrawer from './ProgramMatchesDrawer.vue';
 import ProgramAiSource from './ProgramAiSource.vue';
 import { useProgramDraft } from './program-draft';
@@ -220,6 +222,7 @@ const libraryQueryKinds = computed(() => {
 });
 const form = reactive({
 	subtitlePreferences: {} as SubtitlePreferences,
+	graphicsAssignment: undefined as GraphicsAssignment | undefined,
 	audioPreferences: {} as AudioPreferences,
 	name: '',
 	type: 'content' as 'content' | 'sequence' | 'similarity' | 'theme',
@@ -269,6 +272,7 @@ function resetForm(program?: SchedulingProgram): void {
 	selectedOrderChosen.value = false;
 	form.name = program?.name ?? '';
 	form.audioPreferences = cloneContractValue(program?.config.audioPreferences ?? {});
+	form.graphicsAssignment = program?.config.graphicsAssignment;
 	form.subtitlePreferences = cloneContractValue(program?.config.subtitlePreferences ?? {});
 	form.type = program?.config.type ?? 'content';
 	form.excludedItemIds = program?.config.type === 'similarity' || program?.config.type === 'theme' ? [...program.config.excludedItemIds ?? []] : [];
@@ -789,13 +793,13 @@ function payload(): ProgramCreate {
 	if (form.type === 'similarity' || form.type === 'theme') {
 		return { name: form.name, config: { ...(form.type === 'theme' ? { type: 'theme', libraryId: form.libraryId, theme: form.theme, filter: form.filter } as const : { type: 'similarity', sourceProgramId: form.sourceProgramId, filter: form.filter } as const),
 			excludedItemIds: form.excludedItemIds, variety: form.variety, quantity: form.quantity, softPreferences: form.softPreferences,
-			hardExclusions: form.exclusionText.split(',').map((text) => text.trim()).filter(Boolean), exclusionStrictness: form.exclusionStrictness, subtitlePreferences: form.subtitlePreferences,
+			hardExclusions: form.exclusionText.split(',').map((text) => text.trim()).filter(Boolean), exclusionStrictness: form.exclusionStrictness, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences,
 			audioPreferences: form.audioPreferences } };
 	}
 	if (form.type === 'sequence') {
 		return {
 			name: form.name,
-			config: { type: 'sequence', ordering: sequenceOrdering(), entries: form.entries, repeat: form.repeat, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences },
+			config: { type: 'sequence', ordering: sequenceOrdering(), entries: form.entries, repeat: form.repeat, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences },
 		};
 	}
 
@@ -849,7 +853,7 @@ function payload(): ProgramCreate {
 								sort: form.querySort,
 								itemLimit: form.queryItemLimit,
 							} as const);
-	return { name: form.name, config: { type: 'content', source, strategy, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
+	return { name: form.name, config: { type: 'content', source, strategy, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
 }
 const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	program: () => programs.value.find((candidate) => candidate.id === editingId.value),
@@ -1211,6 +1215,7 @@ watch(() => [form.type, form.sourceType], () => {
 							<SequenceOrderingEditor v-if="form.type === 'sequence'" v-model="form.sequenceOrdering" v-model:seed="form.seed" />
 							<SequenceGuidePreview v-if="form.type === 'sequence'" :config="payload().config" :program-id="editingId ?? undefined" :program-names="previewProgramNames" />
 							<ProgramPlaybackPreferences v-model:open="subtitlesOpen" v-model:audio="form.audioPreferences" v-model:subtitles="form.subtitlePreferences" :program-id="editingId" :reset-revision="draftRevision" :step="form.type === 'content' || form.type === 'sequence' ? 3 : 2" @validation-change="subtitlesInvalid = $event" />
+							<GraphicsAssignmentEditor v-model="form.graphicsAssignment" description="These graphics follow this Program wherever it plays." />
 						</div>
 					</div></ResourceUsage>
 				</div>

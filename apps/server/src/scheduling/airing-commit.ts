@@ -49,7 +49,7 @@ export function commitAiring(
 		const naturalEnd = spanStart.add({ milliseconds: spanDurationMilliseconds(span.sourceStartSeconds, span.sourceFinishSeconds) });
 		const spanEnd = Temporal.Instant.compare(naturalEnd, finish) > 0 ? finish : naturalEnd;
 		const entry = segment({ channelId: context.channelId, templateId: template.id, slotId: slot.id,
-			scheduleLayerId: layerId, role: span.role, fillerStage: span.fillerStage, programId: span.programId, mediaItemId: span.media.id,
+			scheduleLayerId: layerId, role: span.role, fillerStage: span.fillerStage, fillerPresetId: span.fillerPresetId, programId: span.programId, mediaItemId: span.media.id,
 			title: span.media.title, playbackPath: span.media.playbackPath,
 			playbackParts: span.media.playbackParts ?? [{ playbackPath: span.media.playbackPath, durationSeconds: span.media.durationSeconds! }],
 			start: spanStart, finish: spanEnd, sourceStartSeconds: span.sourceStartSeconds,

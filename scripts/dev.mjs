@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
 import { watch } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { apiCrashRestartDelay } from './restart-backoff.mjs';
+import { watchDocumentation } from './dev-docs.mjs';
 
-/** Repository root containing both managed development processes. */
+/** Repository root containing the managed API, UI, and guide builds. */
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Server workspace watched and built by the coordinator. */
 const serverRoot = path.join(repositoryRoot, 'apps/server');
@@ -49,6 +51,7 @@ function developmentManagementUrl() {
 
 let apiChild;
 let webChild;
+let docsChild;
 let restartTimer;
 let apiCrashRestartTimer;
 let apiStableTimer;
@@ -164,6 +167,39 @@ async function stopApi(force = false) {
 async function buildApi() {
 	buildNumber += 1;
 	await import(`${serverBuild}?developmentBuild=${buildNumber}`);
+}
+
+/** Rebuild the guide in isolation so documentation edits never restart the API or Vite. */
+async function buildDocumentation() {
+	console.log('[dev] Building user guide.');
+	const commands = [
+		['--import', 'tsx', 'scripts/user-docs.ts', 'manifest'],
+		['node_modules/vitepress/bin/vitepress.js', 'build', 'apps/docs'],
+		['--import', 'tsx', 'scripts/user-docs.ts', 'bundle'],
+	];
+	for (const args of commands) {
+		if (shuttingDown) {
+			return;
+		}
+
+		await new Promise((resolve, reject) => {
+			const child = spawn(process.execPath, args, { cwd: repositoryRoot, stdio: 'inherit' });
+			docsChild = child;
+			child.once('error', reject);
+			child.once('exit', (code, signal) => {
+				if (docsChild === child) {
+					docsChild = undefined;
+				}
+				if (code === 0) {
+					resolve();
+				}
+				else {
+					reject(new Error(`Guide build exited with ${signal ? `signal ${signal}` : `code ${code}`}.`));
+				}
+			});
+		});
+	}
+	console.log('[dev] User guide ready; refresh /help/ to see changes.');
 }
 
 /** Start web and acquire resources for the dev tool. */
@@ -282,7 +318,10 @@ const watchers = watchRoots.map((root) => {
 	return watcher;
 });
 
-/** Stop both development servers and exit with the supplied status code. */
+/** Full guide builds are unnecessary for API-only development. */
+const documentation = serverOnly ? undefined : watchDocumentation(repositoryRoot, buildDocumentation);
+
+/** Stop development servers, watchers, and guide builds before exiting. */
 async function shutdown(exitCode) {
 	if (shuttingDown) {
 		return;
@@ -295,18 +334,26 @@ async function shutdown(exitCode) {
 	for (const watcher of watchers) {
 		watcher.close();
 	}
+	const docsClosed = documentation?.close();
 
 	await operation;
-	await Promise.all([stopApi(true), stopChild(webChild, 'web server')]);
+	await Promise.all([stopApi(true), stopChild(webChild, 'web server'), stopChild(docsChild, 'guide builder')]);
+	await docsClosed;
 	process.exitCode = exitCode;
 }
 
 process.once('SIGINT', () => void shutdown(0));
 process.once('SIGTERM', () => void shutdown(0));
 try {
+	// Register static help serving even on a clean checkout or a failed first guide build.
+	if (!serverOnly) {
+		await mkdir(path.join(webRoot, 'dist'), { recursive: true });
+	}
+
 	await buildApi();
 	if (!shuttingDown) {
 		const apiReady = await startApi();
+		await documentation?.ready;
 		if (apiReady) {
 			ensureWebStarted();
 		}

@@ -10,7 +10,7 @@ Run the commands below from the root of the checkout or worktree you want to tes
 
 ### Initial setup
 
-Use Node.js 24.22.1 or newer within the Node 24 LTS line, as specified by `.nvmrc` and `package.json`. Install FFmpeg so `ffprobe` is available on `PATH`. For live playback, install Rust 1.99.0 through rustup and build the pinned ErsatzTV Next v0.2.2 worker. The build runs from the upstream checkout so rustup selects its pinned toolchain. ErsatzTV FFmpeg `8.1.2-4` is recommended for native playback and is bundled in the production image:
+Use Node.js 24.22.1 or newer within the Node 24 LTS line, as specified by `.nvmrc` and `package.json`. Install FFmpeg so `ffprobe` is available on `PATH`. For live playback, install Rust 1.99.0 through rustup and build the pinned ErsatzTV Next v0.2.3 worker. The build runs from the upstream checkout so rustup selects its pinned toolchain. ErsatzTV FFmpeg `8.1.2-5` is recommended for native playback and is bundled in the production image:
 
 ```sh
 nvm use
@@ -36,6 +36,8 @@ npm run dev
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The coordinator starts the API on port 3000, then Vite on port 5173. Vite provides frontend hot updates and proxies API requests; server and shared-source changes trigger API rebuilds and restarts. Stop the coordinator with Ctrl+C to stop the instance.
+
+The coordinator also builds the bundled guide at startup and rebuilds it after changes to guide pages, screenshots, theme, review data, or documentation helpers. Wait for `User guide ready` in the terminal, then refresh `/help/` or reopen in-app help. Guide failures are reported without stopping the application; fixing a guide input triggers another build. API-only development with `--server-only` skips guide builds.
 
 On a fresh data directory, initialize administrator access in the browser using a local account or a configured Logto provider. Keep the instance bound to loopback until setup is complete. See the [configuration reference](apps/docs/src/operations/configuration.md) for remote-host settings and [Logto setup](apps/docs/src/getting-started/access.md#set-up-logto) for provider configuration.
 

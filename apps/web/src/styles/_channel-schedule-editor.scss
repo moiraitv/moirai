@@ -182,6 +182,10 @@
 	background: var(--surface-gradient), var(--program-color-dark);
 }
 
+.base-inspector > :is(.filler-assignments, .graphics-assignment) {
+	margin-block-start: var(--space-4);
+}
+
 .channel-filler-settings {
 	grid-template-columns: minmax(0, 1fr);
 }

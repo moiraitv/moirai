@@ -278,7 +278,7 @@ describe('mid-roll airing expansion', () => {
 		expect(filler.map(span => span.mediaItemId)).toEqual([uuid(2), uuid(3)]);
 		expect(filler.map(span => (Date.parse(span.finish) - Date.parse(span.start)) / 1_000)).toEqual([70, 60]);
 		expect(filler.every(span => !span.truncated)).toBe(true);
-		expect(filler.every(span => span.fillerStage === 'mid-roll')).toBe(true);
+		expect(filler.every(span => span.fillerStage === 'mid-roll' && span.fillerPresetId === assignment.presetId)).toBe(true);
 	});
 	it('keeps expansion bounded with large primary and filler pools and future channel occupancy', () => {
 		const options = fixture(1_230);
@@ -546,6 +546,7 @@ it('groups introductions and closings around each primary item and preserves dis
 	const spans = result.segments.slice(0, 3);
 	expect(spans.map(span => span.role)).toEqual(['filler', 'primary', 'filler']);
 	expect(spans.map(span => span.fillerStage)).toEqual(['pre-roll', undefined, 'post-roll']);
+	expect(spans.map(span => span.fillerPresetId)).toEqual([preId, undefined, postId]);
 	expect(spans[0]!.airing?.primarySegmentId).toBe(spans[1]!.id);
 	expect(new Set(spans.map(span => span.airing?.id)).size).toBe(1);
 	expect(result.proposedState.map(record => record.consumerKey)).toEqual(expect.arrayContaining([

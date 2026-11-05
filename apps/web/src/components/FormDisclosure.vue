@@ -60,7 +60,10 @@ async function setExpanded(value: boolean): Promise<void> {
 	}
 
 	const styles = getComputedStyle(root.value);
-	const timing = { duration: parseFloat(styles.getPropertyValue('--motion-system')) || 350,
+	// The production CSS optimizer can express this token in seconds.
+	const duration = styles.getPropertyValue('--motion-system').trim();
+	const durationMs = parseFloat(duration) * (duration.endsWith('ms') ? 1 : 1_000);
+	const timing = { duration: durationMs || 350,
 		easing: styles.getPropertyValue('--motion-system-ease').trim() || 'ease-in-out' };
 	animations = animateDisclosureLayout(before, timing);
 	animations.push(content.value.animate([

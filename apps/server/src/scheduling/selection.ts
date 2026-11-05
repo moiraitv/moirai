@@ -630,7 +630,8 @@ function stateFingerprints(program: SchedulingProgram, context: SelectionContext
 		return cached;
 	}
 
-	const config = program.config;
+	const { graphicsAssignment: _graphics, ...config } = program.config;
+	void _graphics;
 	const compatible = config.type === 'sequence' ? normalizeSequenceOrdering(config)
 		: config.type === 'content' && config.source.type === 'library-query' ? config : legacySetSelectionStateConfig(config);
 	const fingerprints = { fingerprint: stableJsonFingerprint(selectionStateConfig(config)),

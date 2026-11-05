@@ -13,6 +13,7 @@ await build({
 		'embedding-worker': path.join(directory, 'src/semantic/worker.ts'),
 		'auth-reset': path.join(directory, 'src/auth-reset.ts'),
 		main: path.join(directory, 'src/main.ts'),
+		'graphics-font-worker': path.join(directory, 'src/graphics/font-worker.ts'),
 		'credit-worker': path.join(directory, 'src/playback/credit-worker.ts'),
 		'writer.worker': path.join(directory, 'src/repository/writer.worker.ts'),
 		'backup-worker': path.join(directory, 'src/backup/worker.ts'),
@@ -44,4 +45,7 @@ await mkdir(assetOutput, { recursive: true });
 await Promise.all([
 	cp(path.join(directory, 'assets', 'dead-air.mp4'), path.join(assetOutput, 'dead-air.mp4')),
 	cp(path.join(directory, 'assets', 'dead-air.json'), path.join(assetOutput, 'dead-air.json')),
+	cp(path.join(directory, 'assets', 'graphics-preview.jpg'), path.join(assetOutput, 'graphics-preview.jpg')),
+	cp(path.join(directory, 'assets', 'graphics-watermark.png'), path.join(assetOutput, 'graphics-watermark.png')),
+	cp(path.join(directory, 'assets', 'graphics-corner-bug.gif'), path.join(assetOutput, 'graphics-corner-bug.gif')),
 ]);

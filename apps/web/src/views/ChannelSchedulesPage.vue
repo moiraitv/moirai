@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GraphicsAssignmentEditor from '../components/graphics/GraphicsAssignmentEditor.vue';
 import { z } from 'zod';
 import { useResourceDraft } from '../composables/useResourceDraft';
 import TailFillerEditor from '../components/schedules/TailFillerEditor.vue';
@@ -1200,6 +1201,7 @@ useDraftProtection(() => editing.value && scheduleNeedsSave.value && retained.un
 											<template #post-roll><FillerAssignmentEditor v-model="draft.defaultPostRoll" kind="post-roll" :programs="programs" heading="Channel default post-roll" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
 											<template #tail><TailFillerEditor v-model="draft.defaultTailFiller" :programs="programs" heading="Channel default tail filler" eyebrow="Channel behavior" @edit-program="quickEditingProgramId = $event" /></template>
 										</FillerAssignmentsEditor>
+										<GraphicsAssignmentEditor v-model="draft.graphicsAssignment" description="Sets the graphics for this schedule, including its conditional assignments." />
 										<ChannelSchedulingSettings v-model="draft.avoidCrossChannelDuplicates" :disabled="saving || deleting" />
 										<ChannelFillerEditor v-model="draft.defaultFiller" :programs="programs" @edit-program="quickEditingProgramId = $event" />
 									</section>

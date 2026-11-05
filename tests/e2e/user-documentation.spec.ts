@@ -180,10 +180,14 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await expect(page.locator('.sequence-entry')).toHaveCount(3);
 	await page.locator('.sequence-entry input').last().blur();
 	await page.mouse.move(0, 0);
+	const sequenceEditor = page.getByRole('dialog', { name: 'Create Program' });
+	for (const name of ['Reset', 'Add']) {
+		await expect(sequenceEditor.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
+	}
 	await page.setViewportSize({ width: 1440, height: 1600 });
 	await expect(page.locator('.sequence-guide-segment').first()).toBeAttached();
 	await expect(page.locator('.sequence-guide-preview').getByRole('status')).toHaveCount(0);
-	await captureThrough(page, page.locator('.program-editor-section').filter({ has: page.locator('.sequence-entry') }), page.locator('.program-playback-state'), 'program-sequence-create.png');
+	await captureThrough(page, sequenceEditor.locator('.sequence-editor-section'), sequenceEditor.locator('.strategy-card-grid'), 'program-sequence-create.png');
 	await expect(page.getByRole('button', { name: /^Ordered Play/ })).toHaveAttribute('aria-pressed', 'true');
 	await page.getByRole('button', { name: /^Shuffled blocks/ }).click();
 	await page.getByRole('textbox', { name: 'Stable seed' }).fill('cartoon-demo');
@@ -717,6 +721,10 @@ test('captures channel settings and operations', { tag: '@docs-screenshot' }, as
 	await expect(enabledSwitch).not.toBeFocused();
 	await capture(page, 'channel-editor.png');
 	await captureSection(page, broadcastEditor.locator('.channel-logo-editor'), 'channel-editor-logo.png');
+	await broadcastEditor.getByRole('button', { name: /On-screen graphics Show watermarks/ }).click();
+	await expect(broadcastEditor.getByRole('combobox', { name: 'Graphics preset' })).toBeEnabled();
+	await captureSection(page, broadcastEditor.locator('.channel-graphics-disclosure'), 'channel-editor-graphics.png');
+	await broadcastEditor.getByRole('button', { name: /On-screen graphics Show watermarks/ }).click();
 	await broadcastEditor.getByRole('button', { name: /Channel fallback override/ }).click();
 	await captureSection(page, broadcastEditor.locator('.channel-fallback-disclosure'), 'channel-editor-fallback.png');
 	await broadcastEditor.getByRole('button', { name: /Guide template override/ }).click();
@@ -1126,13 +1134,13 @@ test('protects program drafts when closing the editor', async ({ page, documenta
 		}
 	});
 	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
-	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
+	await confirmation.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(editor.getByText('Save temporarily unavailable', { exact: true })).toBeVisible();
 	await expect(name).toHaveValue('Pending program name');
 	await page.unroute(`**/api/v1/programs/${program.id}`);
 
 	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
-	await confirmation.getByRole('button', { name: 'Save Changes', exact: true }).click();
+	await confirmation.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs$/u);
 	const overview = await (await page.request.get('/api/v1/scheduling/overview')).json();
 	expect(overview.programs.find((entry: { id: string }) => entry.id === program.id).name).toBe('Pending program name');
@@ -1140,7 +1148,7 @@ test('protects program drafts when closing the editor', async ({ page, documenta
 	await page.goto(`/schedules/programs/${program.id}`);
 	await name.fill('Discarded program name');
 	await editor.getByRole('button', { name: 'Close program editor', exact: true }).click();
-	await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
+	await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
 	await expect(page).toHaveURL(/\/schedules\/programs$/u);
 	await page.goto(`/schedules/programs/${program.id}`);
 	await expect(name).toHaveValue('Pending program name');
@@ -2017,4 +2025,45 @@ test('subtitle rules remain usable when language names or credit templates fail 
 	await expect(editor).toBeHidden();
 	const channels = await (await page.request.get('/api/v1/channels')).json();
 	expect(channels.find((entry: { id: string }) => entry.id === channel.id).subtitlePreferences.language).toBe('fre');
+});
+
+test('captures the Graphics preset editor', { tag: '@docs-screenshot' }, async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await authenticateAdministrator(page);
+	await page.goto('/graphics');
+	const example = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Now Playing & Up Next', exact: true }) });
+	await expect(example.locator('.graphics-canvas')).toContainText('Mountain Rescue');
+	await capture(page, 'graphics-presets.png');
+	await example.getByRole('button', { name: 'Duplicate' }).click();
+	const editor = page.getByRole('dialog');
+	await editor.getByRole('slider', { name: /Elapsed time/ }).evaluate((slider: HTMLInputElement) => {
+		slider.value = '6000';
+		slider.dispatchEvent(new Event('input', { bubbles: true }));
+	});
+	await expect(editor.getByRole('slider', { name: 'Elapsed time (6.0 s)' })).toBeVisible();
+	await capture(page, 'graphics-editor.png');
+});
+
+test('captures on-screen graphics assignments', { tag: '@docs-screenshot' }, async ({ page }) => {
+	const csrf = await authenticateAdministrator(page);
+	const created = await page.request.post('/api/v1/channels', {
+		headers: { 'x-moirai-csrf': csrf },
+		data: { number: '42', name: 'Sample TV' },
+	});
+	expect(created.ok()).toBe(true);
+	const channel = await created.json();
+	await page.goto(`/channels/${channel.id}`);
+	const editor = page.getByRole('dialog');
+	await editor.getByRole('button', { name: /On-screen graphics Show watermarks/ }).click();
+	await expect(editor.getByRole('combobox', { name: 'Graphics preset' })).toBeEnabled();
+	await captureSection(page, editor.locator('.channel-graphics-disclosure'), 'channel-editor-graphics.png');
+
+	await page.goto('/filler/pre-rolls/new');
+	await editor.getByRole('button', { name: 'On-screen graphics', exact: true }).click();
+	const mode = editor.getByRole('combobox', { name: 'Graphics assignment' });
+	await expect(mode.getByRole('option', { name: 'Add to inherited graphics' })).toBeEnabled();
+	await mode.selectOption('add');
+	const preset = editor.getByRole('combobox', { name: 'Graphics preset' });
+	await preset.selectOption({ label: 'Animated Corner Bug' });
+	await captureSection(page, editor.locator('.graphics-assignment'), 'filler-graphics-assignment.png');
 });

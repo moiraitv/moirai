@@ -1,3 +1,4 @@
+import type { GraphicsPreset } from '@moirai/shared';
 import { loadWorkerGuide, GuideWorkerError, clearWorkerGuide } from './guide-worker';
 import type { AnyFillerPreset, AnyFillerPresetCreate, FillerKind } from '@moirai/shared';
 import type { MidRollPreset, MidRollPresetCreate } from '@moirai/shared';
@@ -263,6 +264,8 @@ async function uploadFallbackFiller(url: string, file: File): Promise<FallbackFi
 
 /** Module-level api value for api. */
 export const api = {
+	graphicsPresets: () => request<GraphicsPreset[]>('/api/v1/graphics/presets'),
+	channelGraphicsIssue: (id: string) => request<{ issue: string | null }>(`/api/v1/channels/${id}/graphics-issue`),
 	mediaAirings: (id: string, page = 1) => request<MediaAirings>(`/api/v1/media/${id}/airings?page=${page}&pageSize=20`),
 	resourceUsage: (kind: ResourceUsageKind, id: string, page = 1) => request<ResourceUsage>(`/api/v1/resource-usage/${kind}/${id}?page=${page}&pageSize=50`),
 	setDefaultEncodingProfile: (id: string) => request<EncodingProfile>(`/api/v1/encoding-profiles/${id}/default`, { method: 'PUT' }),

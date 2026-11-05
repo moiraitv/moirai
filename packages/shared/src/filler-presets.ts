@@ -1,3 +1,4 @@
+import { graphicsAssignmentSchema } from './graphics.js';
 import { z } from 'zod';
 import { fillerSelectionPolicySchema, type FillerSelectionPolicy } from './filler.js';
 
@@ -27,6 +28,7 @@ export const fillerSettingsSchema = z.object({ budget: fillerBudgetSchema }).sup
 export type FillerSettings = z.infer<typeof fillerSettingsSchema>;
 /** Named settings for pre/post-roll and tail, with kind-specific budget validation. */
 export const fillerPresetCreateSchema = fillerSettingsSchema.safeExtend({
+	graphicsAssignment: graphicsAssignmentSchema.optional(),
 	kind: fillerKindSchema.exclude(['mid-roll']), name: z.string().trim().min(1).max(120), description: z.string().trim().max(500).default(''),
 }).superRefine((value, context) => {
 	if (value.kind !== 'tail' && value.budget.type === 'remaining') {

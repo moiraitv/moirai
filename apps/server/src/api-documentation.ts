@@ -146,6 +146,7 @@ export async function createOpenApiDocument(): Promise<ApiDescriptionDocument> {
 				{ name: 'Schedule previews', description: 'Non-persistent duration-aware materialization.' },
 				{ name: 'Scheduling', description: 'Combined scheduling configuration and health.' },
 				{ name: 'Guide', description: 'Committed timeline and guide data.' },
+				{ name: 'Graphics', description: 'Managed channel overlays, assets, and playback previews.' },
 				{ name: 'Playback', description: 'Integrated playback engine management.' },
 				{ name: 'IPTV delivery', description: 'XMLTV, M3U, HLS, caption, and segment delivery.' },
 			],

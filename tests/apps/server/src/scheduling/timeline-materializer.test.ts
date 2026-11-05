@@ -1169,6 +1169,31 @@ it('skips deferred channels before catalog, occupancy, and state-bearing segment
 	expect(test.repository.getSelectionState).not.toHaveBeenCalled();
 });
 
+it.each([false, true])('recovers expired coverage before midnight with an existing deferral of %s', async (deferred) => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	const original = test.materialization()!;
+
+	vi.setSystemTime(new Date(Date.parse(original.continuationAt) + 36 * 60 * 60 * 1000));
+	const today = new Date().toISOString().slice(0, 10);
+	const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	test.template.updatedAt = new Date().toISOString();
+	if (deferred) {
+		test.repository.markTimelinePending([test.channelId], `${tomorrow}T00:00:00Z`, new Date().toISOString());
+	}
+	test.repository.listMaterializationCheckpoints = vi.fn(async () => [test.materialization()!]);
+	vi.clearAllMocks();
+
+	await materializer.runNow(true);
+	expect(test.repository.markTimelinePending).not.toHaveBeenCalled();
+	expect(test.materialization()).toMatchObject({ health: 'ready', applyAfter: null, windowStart: `${today}T00:00:00Z` });
+	expect(test.segments()[0]?.segment.start).toBe(`${today}T00:00:00Z`);
+	expect(test.segments().some(({ segment }) => Date.parse(segment.start) <= Date.now() && Date.parse(segment.finish) > Date.now())).toBe(true);
+});
+
 it('does not reconstruct state-bearing spans for unchanged channels with complete coverage', async () => {
 	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));

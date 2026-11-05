@@ -1,3 +1,4 @@
+import { GraphicsRepository } from './graphics.js';
 import { FillerPresetRepository } from './filler-presets.js';
 import { templatePlaybackInput } from '../scheduling/template-playback.js';
 import { stableJsonFingerprint } from '../stable-json.js';
@@ -125,7 +126,10 @@ export class SchedulingConfigurationRepository {
 			throw new ResourceIdentityConflictError('program');
 		}
 
-		await this.db.insert(schedulingPrograms).values({ ...program, nameKey });
+		this.db.transaction(tx => {
+			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
+			tx.insert(schedulingPrograms).values({ ...program, nameKey }).run();
+		});
 		return program;
 	}
 
@@ -285,10 +289,12 @@ export class SchedulingConfigurationRepository {
 			throw new ResourceIdentityConflictError('program');
 		}
 
-		await this.db
-			.update(schedulingPrograms)
-			.set({ name: updated.name, nameKey, config: updated.config, updatedAt: updated.updatedAt })
-			.where(eq(schedulingPrograms.id, id));
+		this.db.transaction(tx => {
+			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
+			tx.update(schedulingPrograms)
+				.set({ name: updated.name, nameKey, config: updated.config, updatedAt: updated.updatedAt })
+				.where(eq(schedulingPrograms.id, id)).run();
+		});
 		return updated;
 	}
 
@@ -528,6 +534,7 @@ export class SchedulingConfigurationRepository {
 			defaultMidRoll: template.defaultMidRoll ?? null,
 			defaultPreRoll: template.defaultPreRoll ?? null,
 			defaultPostRoll: template.defaultPostRoll ?? null,
+			graphicsAssignment: template.graphicsAssignment ?? undefined,
 			slots: slots
 				.filter((slot) => slot.templateId === template.id)
 				.map((slot) => ({
@@ -540,6 +547,7 @@ export class SchedulingConfigurationRepository {
 					midRoll: slot.midRoll ?? { mode: 'inherit' },
 					preRoll: slot.preRoll ?? { mode: 'inherit' },
 					postRoll: slot.postRoll ?? { mode: 'inherit' },
+					graphicsAssignment: slot.graphicsAssignment ?? undefined,
 					guide: slot.guide,
 				})),
 			boundaries: boundaries
@@ -590,6 +598,7 @@ export class SchedulingConfigurationRepository {
 			defaultMidRoll: template.defaultMidRoll ?? null,
 			defaultPreRoll: template.defaultPreRoll ?? null,
 			defaultPostRoll: template.defaultPostRoll ?? null,
+			graphicsAssignment: template.graphicsAssignment ?? undefined,
 			slots: slots.map((slot) => ({
 				id: slot.id,
 				startSeconds: slot.startSeconds,
@@ -600,6 +609,7 @@ export class SchedulingConfigurationRepository {
 				midRoll: slot.midRoll ?? { mode: 'inherit' },
 				preRoll: slot.preRoll ?? { mode: 'inherit' },
 				postRoll: slot.postRoll ?? { mode: 'inherit' },
+				graphicsAssignment: slot.graphicsAssignment ?? undefined,
 				guide: slot.guide,
 			})),
 			boundaries: boundaries.map((boundary) => ({
@@ -633,6 +643,7 @@ export class SchedulingConfigurationRepository {
 		}
 
 		this.db.transaction((tx) => {
+			new GraphicsRepository(tx).validateAssignments([input.graphicsAssignment, ...input.slots.map(slot => slot.graphicsAssignment)]);
 			tx.insert(scheduleTemplates)
 				.values({
 					id,
@@ -643,6 +654,7 @@ export class SchedulingConfigurationRepository {
 					defaultMidRoll: input.defaultMidRoll ?? null,
 					defaultPreRoll: input.defaultPreRoll ?? null,
 					defaultPostRoll: input.defaultPostRoll ?? null,
+					graphicsAssignment: input.graphicsAssignment ?? null,
 					createdAt: timestamp,
 					updatedAt: timestamp,
 				})
@@ -682,6 +694,7 @@ export class SchedulingConfigurationRepository {
 			defaultMidRoll: current.defaultMidRoll ?? null,
 			defaultPreRoll: current.defaultPreRoll ?? null,
 			defaultPostRoll: current.defaultPostRoll ?? null,
+			graphicsAssignment: current.graphicsAssignment ?? undefined,
 			slots: current.slots,
 			boundaries: current.boundaries,
 		};
@@ -703,6 +716,7 @@ export class SchedulingConfigurationRepository {
 		const guideOnly = stableJsonFingerprint(templatePlaybackInput(currentInput))
 			=== stableJsonFingerprint(templatePlaybackInput(updated));
 		this.db.transaction((tx) => {
+			new GraphicsRepository(tx).validateAssignments([updated.graphicsAssignment, ...updated.slots.map(slot => slot.graphicsAssignment)]);
 			tx.update(scheduleTemplates)
 				.set({
 					name: updated.name,
@@ -713,6 +727,7 @@ export class SchedulingConfigurationRepository {
 					defaultMidRoll: updated.defaultMidRoll ?? null,
 					defaultPreRoll: updated.defaultPreRoll ?? null,
 					defaultPostRoll: updated.defaultPostRoll ?? null,
+					graphicsAssignment: updated.graphicsAssignment ?? null,
 					updatedAt,
 				})
 				.where(eq(scheduleTemplates.id, id))
@@ -856,6 +871,7 @@ export class SchedulingConfigurationRepository {
 		config = { ...config, generationSeed: current?.generationSeed };
 		const timestamp = currentTimestamp();
 		this.db.transaction((tx) => {
+			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
 			tx.insert(channelSchedules)
 				.values({
 					channelId,
@@ -1012,6 +1028,7 @@ export class SchedulingConfigurationRepository {
 					defaultMidRoll: current?.defaultMidRoll ?? null,
 					defaultPreRoll: current?.defaultPreRoll ?? null,
 					defaultPostRoll: current?.defaultPostRoll ?? null,
+					graphicsAssignment: current?.graphicsAssignment,
 					defaultTailFiller: current?.defaultTailFiller ?? null,
 				};
 				tx.insert(channelSchedules)

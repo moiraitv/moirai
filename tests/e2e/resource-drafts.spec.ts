@@ -119,7 +119,7 @@ test('protects pending changes with a prompt only when browser storage fails', a
 	await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(editor.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Keep this editor open');
 	await editor.locator('.resource-editor-close').click();
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Discard Changes', exact: true }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Discard', exact: true }).click();
 	await expect(editor).toHaveCount(0);
 });
 
@@ -155,7 +155,7 @@ test('finishes the requested history navigation after saving with failed browser
 		const saved = page.waitForResponse(response => response.request().method() === 'POST'
 			&& response.status() === 201 && !response.url().includes('preview'));
 		const navigation = page.goBack();
-		await page.getByRole('alertdialog').getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await page.getByRole('alertdialog').getByRole('button', { name: 'Save', exact: true }).click();
 		await saved;
 		await navigation;
 		await expect(page).toHaveURL(base);

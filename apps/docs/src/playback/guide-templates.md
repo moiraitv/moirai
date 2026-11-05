@@ -1,13 +1,13 @@
 ---
 id: playback.guide-templates
 title: Guide templates
-description: Control how channels and programmes appear in the published XMLTV guide.
+description: Control how channels and listings appear in the published XMLTV guide.
 contextual: true
 ---
 
 # Guide templates
 
-Open **Playback** in the sidebar and choose the **Guide Templates** tab to manage reusable XMLTV layouts. Each template has a tab for the channel listing and for each `programme` type: Episode, Movie, Music Video, Other, Filler, No programming, and Block.
+Open **Playback** in the sidebar and choose the **Guide Templates** tab to manage reusable XMLTV layouts. Each template has a tab for the channel listing and for each listing type: Episode, Movie, Music Video, Other, Filler, No programming, and Block.
 
 ![Guide template cards with the built-in Standard XMLTV layout](/screenshots/guide-templates.png)
 

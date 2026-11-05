@@ -1,3 +1,5 @@
+import { SchedulingValidationError } from '../scheduling/validation.js';
+import { GraphicsRepository } from './graphics.js';
 import { applyDefaultEncodingProfile, applyEncodingProfile } from './encoding-profiles.js';
 import { validateGuideTemplateReference } from './guide-templates.js';
 import { validateCreditReference } from './subtitle-validation.js';
@@ -9,6 +11,13 @@ import type { MoiraiDatabase } from '../db/index.js';
 import { channels } from '../db/schema.js';
 import { ResourceIdentityConflictError } from './resource-identity.js';
 import { currentTimestamp } from '../time.js';
+
+/** Validate opt-in graphics assignments at the same boundary as channel persistence. */
+function validateGraphicsReference(db: MoiraiDatabase, id: string | null | undefined): void {
+	if (id && !new GraphicsRepository(db).get(id)) {
+		throw new SchedulingValidationError('Graphics preset does not exist');
+	}
+}
 
 /**
  * Own persisted channel identity, presentation, normalization, and logo references. This repository
@@ -51,6 +60,7 @@ export class ChannelRepository {
 
 	/** Create a channel with its stable Moirai XMLTV identifier. */
 	async createChannel(input: ChannelCreate, useDefaultProfile = false): Promise<Channel> {
+		validateGraphicsReference(this.db, input.graphicsPresetId);
 		validateCreditReference(this.db, input.subtitlePreferences);
 		validateGuideTemplateReference(this.db, input);
 		const timestamp = currentTimestamp();
@@ -97,6 +107,7 @@ export class ChannelRepository {
 		void _createdAt;
 		void _updatedAt;
 		const config = { ...currentConfig, ...input } as ChannelCreate;
+		validateGraphicsReference(this.db, input.graphicsPresetId);
 		if (input.subtitlePreferences !== undefined) {
 			validateCreditReference(this.db, input.subtitlePreferences);
 		}

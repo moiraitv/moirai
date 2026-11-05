@@ -131,7 +131,7 @@ test('keeps the guided preset editor usable at a narrow viewport', async ({ page
 	await page.keyboard.press('Escape');
 	const confirmation = page.getByRole('alertdialog');
 	await expect(confirmation).toBeVisible();
-	await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
+	await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
 	await expect(editor).toBeHidden();
 });
 

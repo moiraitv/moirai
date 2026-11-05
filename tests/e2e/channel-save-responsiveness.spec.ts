@@ -59,7 +59,7 @@ for (const { asset, navigating } of [{ asset: 'fallback', navigating: false }, {
 			await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 			if (navigating) {
 				await page.goBack();
-				await page.getByRole('alertdialog').getByRole('button', { name: 'Save Changes', exact: true }).click();
+				await page.getByRole('alertdialog').getByRole('button', { name: 'Save', exact: true }).click();
 			}
 			else {
 				await editor.getByRole('button', { name: 'Save', exact: true }).click();

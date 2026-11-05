@@ -131,7 +131,7 @@ Hover over a guide block to see a zoomed timeline of its actual items, centered 
 
 Pending schedule edits are retained automatically in this browser. **Add** creates a new schedule and **Save** commits changes to an existing one. **Reset** discards pending changes after confirmation and restores the latest saved schedule.
 
-Saved changes normally become active at the next local midnight, protecting programming that has already been committed. When offered, **Apply after current item** brings a change forward without cutting the item viewers are currently watching.
+Saved changes normally become active at the next local midnight, protecting programming that has already been committed. If the committed schedule has expired, Moirai rebuilds it immediately. When offered, **Apply after current item** brings a change forward without cutting the item viewers are currently watching.
 
 ![Layered schedule preview showing filler ticks and their compact legend](/screenshots/channel-filler-preview.png)
 

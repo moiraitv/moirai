@@ -2,15 +2,18 @@ import { EventEmitter } from 'node:events';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Repository } from '@server/repository/index.js';
 import type { MoiraiDatabase } from '@server/db/index.js';
+import type { PlayoutReadRequest } from '@server/playback/playout-preparation.js';
 
-const workers = vi.hoisted(() => [] as Array<EventEmitter & { messages: Array<{ id: number; kind: string }>; postMessage: (message: { id: number; kind: string }) => void; terminate: () => Promise<number> }>);
+type WorkerMessage = { id: number; kind: string; input?: { request?: PlayoutReadRequest } };
+
+const workers = vi.hoisted(() => [] as Array<EventEmitter & { messages: Array<WorkerMessage>; postMessage: (message: WorkerMessage) => void; terminate: () => Promise<number> }>);
 vi.mock('node:worker_threads', () => ({ Worker: class extends EventEmitter {
-	messages: Array<{ id: number; kind: string }> = [];
+	messages: Array<WorkerMessage> = [];
 	constructor() {
 		super();
 		workers.push(this);
 	}
-	postMessage(message: { id: number; kind: string }) {
+	postMessage(message: WorkerMessage) {
 		this.messages.push(message);
 	}
 	async terminate() {
@@ -89,6 +92,28 @@ it('promotes existing queued periodic work onto the reserved worker without dupl
 		owner.promotePlayout('channel');
 		expect(workers[1]!.messages).toHaveLength(1);
 		expect(workers[1]!.messages[0]?.kind).toBe('playout-read');
+	}
+	finally {
+		await owner.close();
+		await settled;
+	}
+});
+
+it('updates the priority seen by a running preparation without issuing another job', async () => {
+	const owner = pool(1);
+	const request = { kind: 'playout-preparation' as const, channelId: 'channel', timeZone: 'UTC', startDate: '2026-10-02', days: 3 };
+	const periodic = owner.playoutRead(request);
+	const settled = Promise.allSettled([periodic]);
+	try {
+		const message = structuredClone(workers[0]!.messages[0]!);
+		const priority = message.input?.request?.priority;
+		expect(priority).toBeDefined();
+		expect(Atomics.load(priority!, 0)).toBe(0);
+		owner.promotePlayout('another channel');
+		expect(Atomics.load(priority!, 0)).toBe(0);
+		owner.promotePlayout(request.channelId);
+		expect(Atomics.load(priority!, 0)).toBe(1);
+		expect(workers[0]!.messages).toHaveLength(1);
 	}
 	finally {
 		await owner.close();

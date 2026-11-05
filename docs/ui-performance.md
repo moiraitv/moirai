@@ -4,7 +4,7 @@ The pass targets browser main-thread work, starting with Guide/Channels navigati
 
 ## Before and after
 
-The standard guide contains 20 channels, 48 half-hour programmes per channel per day, and seven days (6,720 segments). Warm navigation values are medians of three switches in each direction. Each measurement also waits for the fresh seven-day response.
+The standard guide contains 20 channels, 48 half-hour airings per channel per day, and seven days (6,720 segments). Warm navigation values are medians of three switches in each direction. Each measurement also waits for the fresh seven-day response.
 
 | Measurement | Before | After |
 | --- | ---: | ---: |

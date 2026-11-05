@@ -2215,7 +2215,7 @@ describe('schedule timeline engine', () => {
 	});
 });
 
-it('captures nested program ancestry without changing selection state for subtitle-only changes', () => {
+it('captures nested program ancestry without changing selection state for presentation edits', () => {
 	const leaf = contentProgram(10, [1, 2]);
 	const sequence = program(12, { type: 'sequence', entries: [{ id: uuid(401), programId: leaf.id, count: 1 }], repeat: true });
 	const daily = template([{ programId: sequence.id, startSeconds: 0 }]);
@@ -2223,12 +2223,13 @@ it('captures nested program ancestry without changing selection state for subtit
 	const before = generateTimeline(initial);
 	expect(before.segments.filter((entry) => entry.role === 'primary').every((entry) => JSON.stringify(entry.programAncestry) === JSON.stringify([sequence.id, leaf.id]))).toBe(true);
 	leaf.config.subtitlePreferences = { language: 'en', policy: 'forced' };
+	leaf.config.graphicsAssignment = { mode: 'add', presetId: uuid(601) };
 	const after = generateTimeline(initial);
 	expect(after.proposedState).toEqual(before.proposedState);
 	expect(primaryTitles(after)).toEqual(primaryTitles(before));
 });
 
-it.each([1, 2])('preserves sequence progress after subtitle edits with entry count %i', (count) => {
+it.each([1, 2])('preserves sequence progress after presentation edits with entry count %i', (count) => {
 	const a = contentProgram(10, 1);
 	const b = contentProgram(11, 2);
 	const sequence = program(12, { type: 'sequence', repeat: false, entries: [
@@ -2243,6 +2244,7 @@ it.each([1, 2])('preserves sequence progress after subtitle edits with entry cou
 		const continued = { ...fixture, startDate: `2026-01-${String(5 + day).padStart(2, '0')}`, state: result.proposedState };
 		const baseline = generateTimeline(continued);
 		sequence.config.subtitlePreferences = { language: day % 2 ? 'en' : 'fr', policy: 'forced' };
+		sequence.config.graphicsAssignment = { mode: 'add', presetId: uuid(601 + day) };
 		result = generateTimeline(continued);
 		expect(primaryTitles(result)).toEqual(primaryTitles(baseline));
 		expect(result.proposedState).toEqual(baseline.proposedState);

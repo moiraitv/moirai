@@ -1,3 +1,5 @@
+import { openGraphicsClock } from './graphics/clock.js';
+import { graphicsFolder, reconcileGraphicsStorage } from './graphics/assets.js';
 import { BackupService } from './backup/service.js';
 import path from 'node:path';
 import { GuideArtworkStore } from './artwork/guide-artwork-store.js';
@@ -188,6 +190,9 @@ export async function buildApp(
 		logs.logger as FastifyBaseLogger,
 		schedulingWorkers,
 		config.guideDays,
+		graphicsFolder(config.dataDir),
+		config.ffprobePath,
+		config.publicUrl,
 	);
 	const hardwareAcceleration = new HardwareAccelerationResolver(
 		logs.logger as FastifyBaseLogger,
@@ -326,6 +331,13 @@ export async function buildApp(
 		}
 		embeddings.start();
 		timelineMaterializer.start();
+		await reconcileGraphicsStorage(graphicsFolder(config.dataDir), repository.graphics.assets()).catch(error => {
+			logs.logger.warn({ err: error }, 'Graphics storage reconciliation failed');
+		});
+		playout.graphicsClock = await openGraphicsClock(config.timeZone).catch(error => {
+			logs.logger.warn({ err: error }, 'Graphics clock renderer unavailable');
+			return undefined;
+		});
 		playout.start();
 		await playback.start();
 		maintenance.start();
@@ -344,6 +356,7 @@ export async function buildApp(
 		unsubscribePlayback();
 		await playback.close();
 		await playout.close();
+		await playout.graphicsClock?.close();
 		await timelineMaterializer.close();
 		await schedulingWorkers.close();
 		await maintenance.close();

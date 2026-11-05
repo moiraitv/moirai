@@ -11,6 +11,7 @@ import { durationMilliseconds, spanDurationMilliseconds } from '@moirai/shared';
 export interface AiringSpan {
 	media: SchedulableMedia;
 	role: 'primary' | 'filler';
+	fillerPresetId?: string | undefined;
 	fillerStage?: 'pre-roll' | 'mid-roll' | 'post-roll' | undefined;
 	programId: string;
 	programAncestry?: string[] | undefined;
@@ -59,7 +60,7 @@ export function planAiring(
 	sourceContext: SelectionContext,
 	fillerConsumerKey: string,
 	timeZone = 'UTC',
-	rolls: { pre?: FillerSettings & { programId: string; consumerKey: string }; post?: FillerSettings & { programId: string; consumerKey: string }; seed?: string } = {},
+	rolls: { pre?: FillerSettings & { programId: string; consumerKey: string; presetId?: string }; post?: FillerSettings & { programId: string; consumerKey: string; presetId?: string }; seed?: string } = {},
 ): AiringPlan {
 	const context: SelectionContext = { ...sourceContext, mediaDuration: undefined,
 		issues: [], issueKeys: new Set(), issueIndex: new Map(), blockedPrograms: new Set(sourceContext.blockedPrograms) };
@@ -106,7 +107,7 @@ export function planAiring(
 	}
 
 	// Expand each stage at its actual clock position using isolated selection state.
-	const insert = (settings: FillerSettings & { programId: string }, key: string, point: string, stage: NonNullable<AiringSpan['fillerStage']>): void => {
+	const insert = (settings: FillerSettings & { programId: string; presetId?: string }, key: string, point: string, stage: NonNullable<AiringSpan['fillerStage']>): void => {
 		const start = new Date(Date.parse(sourceContext.selectionStart) + elapsedMilliseconds).toISOString();
 		const result = planFiller(
 			settings.programId,
@@ -122,6 +123,7 @@ export function planAiring(
 		);
 		for (const span of result.spans) {
 			span.fillerStage = stage;
+			span.fillerPresetId = settings.presetId;
 			spans.push(span);
 		}
 		state = result.state;

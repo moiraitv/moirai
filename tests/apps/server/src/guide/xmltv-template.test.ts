@@ -4,6 +4,7 @@ import {
 	compileGuideTemplate,
 	escapeXmlText,
 	flattenLiquidPreviewValues,
+	renderProgrammeFragment,
 	validateGuideTemplateSources,
 } from '@server/guide/xmltv-template.js';
 
@@ -37,4 +38,15 @@ it('escapes interpolated XML and rejects invalid Liquid on preview validation', 
 		{ name: 'item.plot', value: 'null' },
 		{ name: 'item.genre_names', value: 'Drama' },
 	]));
+});
+
+
+it('stops a guide fragment when its playout deadline changes during rendering', async () => {
+	const sources = { ...BUILTIN_GUIDE_TEMPLATE.sources,
+		other: '<programme>{% for value in (1..20) %}<title>{{ value }}</title>{% endfor %}</programme>' };
+	const compiled = compileGuideTemplate(sources, { fallback: false });
+	let checks = 0;
+	await expect(renderProgrammeFragment(compiled, 'other', {}, {
+		fallback: true, remainingMs: () => ++checks < 5 ? 2000 : 0,
+	})).rejects.toThrow(/guide label preparation deadline reached/i);
 });

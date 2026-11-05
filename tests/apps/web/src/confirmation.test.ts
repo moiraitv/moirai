@@ -54,8 +54,8 @@ describe('application confirmations', () => {
 			message: 'Save this program before closing?',
 		});
 		expect(activeConfirmation.value).toMatchObject({
-			confirmLabel: 'Save Changes',
-			alternateLabel: 'Discard Changes',
+			confirmLabel: 'Save',
+			alternateLabel: 'Discard',
 			alternateDestructive: true,
 		});
 		settleConfirmation('confirm');

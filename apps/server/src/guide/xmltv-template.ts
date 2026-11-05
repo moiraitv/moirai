@@ -1,4 +1,6 @@
-import { Liquid, type Template } from 'liquidjs';
+import { Context, type Template } from 'liquidjs';
+import { XMLParser } from 'fast-xml-parser';
+import { createBoundedLiquid } from '../liquid-template.js';
 import {
 	BUILTIN_GUIDE_TEMPLATE,
 	GUIDE_TEMPLATE_SOURCE_KEYS,
@@ -52,20 +54,55 @@ export function escapeXmlText(value: unknown): string {
 		.replaceAll("'", '&apos;');
 }
 
-/** Read the first matching element's text, reversing XML interpolation escapes. */
-export function xmlChildText(xml: string, name: string): string {
-	const match = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'u').exec(xml);
-	if (!match) {
+/** Keep XML text and CDATA distinct without expanding declarations or custom entities. */
+const programmeParser = new XMLParser({
+	preserveOrder: true, cdataPropName: '#cdata', processEntities: false, parseTagValue: false, trimValues: false,
+});
+
+/** A node from the XML parser's ordered representation. */
+type XmlNode = { [name: string]: XmlNode[] | string | undefined };
+
+/** Decode standard XML references in one pass so an escaped reference stays literal. */
+function decodeXmlText(text: string): string {
+	return text.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);/gu, (entity, name: string) => {
+		if (!name.startsWith('#')) {
+			return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[name] ?? entity;
+		}
+
+		const point = name.startsWith('#x') ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
+		const valid = point === 9 || point === 10 || point === 13 || (point >= 0x20 && point <= 0xD7FF)
+			|| (point >= 0xE000 && point <= 0xFFFD) || (point >= 0x10000 && point <= 0x10FFFF);
+		return valid ? String.fromCodePoint(point) : entity;
+	});
+}
+
+/** Extract the text of the first matching child, preserving literal CDATA and label whitespace. */
+function programmeChildText(children: XmlNode[], name: string): string {
+	const nodes = children.find(child => Object.hasOwn(child, name))?.[name];
+	if (!Array.isArray(nodes)) {
 		return '';
 	}
 
-	return match[1]!
-		.replaceAll('&lt;', '<')
-		.replaceAll('&gt;', '>')
-		.replaceAll('&quot;', '"')
-		.replaceAll('&apos;', "'")
-		.replaceAll('&amp;', '&')
-		.trim();
+	return nodes.map(node => {
+		const text = node['#text'];
+		const cdata = node['#cdata'];
+		return typeof text === 'string' ? decodeXmlText(text) : Array.isArray(cdata) ? cdata[0]?.['#text'] ?? '' : '';
+	}).join('').trim();
+}
+
+/** Read plain-text labels consistently for the guide UI and on-screen graphics. */
+export function xmlProgrammeText(xml: string): { title: string; subtitle: string; description: string } {
+	try {
+		const nodes = programmeParser.parse(xml) as XmlNode[];
+		const programme = nodes.find(node => Array.isArray(node.programme))?.programme as XmlNode[] | undefined ?? [];
+		return {
+			title: programmeChildText(programme, 'title'), subtitle: programmeChildText(programme, 'sub-title'),
+			description: programmeChildText(programme, 'desc'),
+		};
+	}
+	catch {
+		return { title: '', subtitle: '', description: '' };
+	}
 }
 
 /** Collapse insignificant whitespace between tags without changing text content. */
@@ -73,33 +110,14 @@ export function minifyXmltv(xml: string): string {
 	return `${xml.replace(/>\s+</gu, '><').trim()}\n`;
 }
 
-/** Create a bounded Liquid engine without filesystem tags or host objects. */
-function createEngine(): Liquid {
-	const engine = new Liquid({
-		strictVariables: true,
-		strictFilters: true,
-		lenientIf: true,
-		ownPropertyOnly: true,
-		parseLimit: MAX_GUIDE_TEMPLATE_SOURCE_LENGTH,
-		renderLimit: 500,
-		memoryLimit: 1_048_576,
-		outputEscape: escapeXmlText,
-	});
-	for (const tag of ['include', 'render', 'layout']) {
-		engine.registerTag(tag, {
-			parse() {
-				throw new Error('File-loading template tags are disabled');
-			},
-			render() {
-				return '';
-			},
-		});
-	}
-
-	return engine;
-}
-
-const engine = createEngine();
+/** Bounded Liquid runtime for authored XMLTV fragments. */
+const engine = createBoundedLiquid({
+	strictVariables: true,
+	parseLimit: MAX_GUIDE_TEMPLATE_SOURCE_LENGTH,
+	renderLimit: 500,
+	memoryLimit: 1_048_576,
+	outputEscape: escapeXmlText,
+});
 
 /** Parse one tab, falling back to the built-in source when live XMLTV cannot use the authored source. */
 function parseKind(
@@ -450,18 +468,43 @@ function normalizeFragment(value: string): string {
 	return value.replace(/^\n+/u, '').replace(/\s+$/u, '');
 }
 
+/** Per-fragment fallback policy and optional deadline for time-sensitive consumers. */
+export interface GuideRenderOptions {
+	fallback: boolean;
+	warn?: GuideTemplateWarn;
+	remainingMs?: () => number;
+}
+
+/** Check the current playout deadline during rendering, including promotion on another thread. */
+function guideRenderScope(values: Record<string, unknown>, remainingMs?: () => number): object {
+	if (!remainingMs) {
+		return values;
+	}
+
+	const scope = new Context(values, engine.options, {}, { liquid: engine });
+	const limiter = scope.renderLimit;
+	const check = limiter.check.bind(limiter);
+	limiter.check = elapsed => {
+		if (remainingMs() <= 0) {
+			throw new Error('Guide label preparation deadline reached');
+		}
+		check(elapsed);
+	};
+	return scope;
+}
+
 /** Render one compiled tab and trim surrounding blank lines. */
 async function renderTab(
 	compiled: CompiledGuideTemplate,
 	key: GuideTemplateSourceKey,
 	context: Record<string, unknown>,
-	options: { fallback: boolean; warn?: GuideTemplateWarn },
+	options: GuideRenderOptions,
 ): Promise<string> {
 	try {
-		return normalizeFragment(String(await engine.render(compiled.templates[key], context)));
+		return normalizeFragment(String(await engine.render(compiled.templates[key], guideRenderScope(context, options.remainingMs))));
 	}
 	catch (cause) {
-		if (!options.fallback) {
+		if (!options.fallback || (options.remainingMs && options.remainingMs() <= 0)) {
 			throw cause instanceof Error ? cause : new Error(String(cause));
 		}
 
@@ -470,7 +513,7 @@ async function renderTab(
 			error: cause instanceof Error ? cause.message : String(cause),
 		});
 		const builtin = engine.parse(BUILTIN_GUIDE_TEMPLATE.sources[key]);
-		return normalizeFragment(String(await engine.render(builtin, context)));
+		return normalizeFragment(String(await engine.render(builtin, guideRenderScope(context, options.remainingMs))));
 	}
 }
 
@@ -478,7 +521,7 @@ async function renderTab(
 export async function renderChannelFragment(
 	compiled: CompiledGuideTemplate,
 	context: Record<string, unknown>,
-	options: { fallback: boolean; warn?: GuideTemplateWarn } = { fallback: false },
+	options: GuideRenderOptions = { fallback: false },
 ): Promise<string> {
 	return renderTab(compiled, 'channel', context, options);
 }
@@ -488,7 +531,7 @@ export async function renderProgrammeFragment(
 	compiled: CompiledGuideTemplate,
 	kind: GuideProgrammeKind,
 	context: Record<string, unknown>,
-	options: { fallback: boolean; warn?: GuideTemplateWarn } = { fallback: false },
+	options: GuideRenderOptions = { fallback: false },
 ): Promise<string> {
 	return renderTab(compiled, kind, context, options);
 }

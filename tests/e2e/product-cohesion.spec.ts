@@ -167,7 +167,7 @@ for (const dirtyOwner of ['template', 'channel schedule'] as const) {
 			await expect(schedule.getByRole('combobox', { name: 'Fitting Behavior', exact: true })).toHaveValue('next-fit-only');
 		}
 		await editor.getByRole('link', { name: 'Other channel', exact: true }).click();
-		await confirmation.getByRole('button', { name: 'Discard Changes', exact: true }).click();
+		await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
 		await expect(page).toHaveURL(new RegExp(`/schedules/channels/${other.id}$`));
 		await expect(editor).toHaveCount(0);
 		await expect(schedule.getByRole('heading', { name: 'Other channel', exact: true })).toBeVisible();

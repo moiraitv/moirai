@@ -228,15 +228,17 @@ export function inputFingerprint(
 	}
 
 	const scope = context.scope(catalog, libraryIds, itemIds, groupIds);
+	const fillerPresetIds = referencedMidRollPresetIds(selectedTemplates, [schedule]);
 
 	// Hash stable authored inputs and catalog eligibility data together.
 	return context.fingerprint({
 		duplicateAvoidancePolicy: DUPLICATE_AVOIDANCE_POLICY_VERSION,
+		...(fillerPresetIds.length ? { fillerProvenance: 1 } : {}),
 		schedule: { ...schedule, avoidCrossChannelDuplicates: schedule.avoidCrossChannelDuplicates ?? true },
 		templates: selectedTemplates.map(template => context.playback(template)),
 		programs: selectedPrograms,
 		catalog: {
-			midRollPresets: Object.fromEntries(referencedMidRollPresetIds(selectedTemplates, [schedule])
+			midRollPresets: Object.fromEntries(fillerPresetIds
 				.map(id => [id, catalog.fillerPresets?.[id] ?? catalog.midRollPresets?.[id]])),
 			semantic: semanticSchedulingFingerprint(schedule.channelId, selectedPrograms, catalog),
 			...scope,

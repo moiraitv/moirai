@@ -21,6 +21,9 @@ import { nextBackupRun } from '@server/backup/schedule.js';
 import { prepareUpgradeBackup, recordStartedVersion } from '@server/backup/upgrade.js';
 import { stageRestore, resumeRestore } from '@server/backup/restore.js';
 import { readMigrationJournal } from '@server/db/migrations.js';
+import { graphicsFolder, storeGraphicsAsset } from '@server/graphics/assets.js';
+import { exampleGraphicsAssets } from '@server/graphics/examples.js';
+import { publicError } from '@server/routes/public-errors.js';
 import { assetRoots, BACKUP_TABLES } from '@server/backup/format.js';
 import { backupFilename, UPGRADE_BACKUP_RETENTION, channelCreateSchema, scheduleTemplateCreateSchema, managedChannelLogoUri } from '@moirai/shared';
 
@@ -88,6 +91,117 @@ it('reports validation stages from the worker in processing order', async () => 
 	}
 	finally {
 		value.database.sqlite.close();
+	}
+});
+
+it('rejects a graphics backup whose stored key bypasses canonical name uniqueness', async () => {
+	const value = await fixture();
+	try {
+		const insert = value.database.sqlite.prepare('INSERT INTO graphics_presets (id, name, name_key, yaml) VALUES (?, ?, ?, ?)');
+		insert.run(randomUUID(), 'Logo', 'logo', 'version: 1\nlayers: []');
+		insert.run(randomUUID(), 'LOGO', 'unrelated-key', 'version: 1\nlayers: []');
+		const archive = await exportFixture(value);
+		const staging = path.join(value.root, 'invalid-graphics');
+		const imported = await extractArchive(path.join(value.config.backupDir, backupFilename(archive)), staging);
+		await expect(prepareDatabase(value.config, staging, imported)).rejects.toMatchObject({ code: 'backup_invalid_assets' });
+	}
+	finally {
+		value.database.close();
+	}
+});
+
+it('rejects a graphics backup with a custom asset using a bundled asset ID', async () => {
+	const value = await fixture();
+	try {
+		const { config, database, image } = value;
+		const logo = exampleGraphicsAssets[0]!;
+		database.sqlite.prepare('INSERT INTO graphics_assets (id, name, kind, format) VALUES (?, ?, ?, ?)')
+			.run(logo.id, 'Uploaded logo', logo.kind, logo.format);
+		const assets = path.join(graphicsFolder(config.dataDir), 'assets');
+		await mkdir(assets, { recursive: true });
+		await writeFile(path.join(assets, `${logo.id}.${logo.format}`), image);
+
+		const archive = await exportFixture(value);
+		const staging = path.join(value.root, 'colliding-graphics');
+		const imported = await extractArchive(path.join(config.backupDir, backupFilename(archive)), staging);
+		await expect(prepareDatabase(config, staging, imported)).rejects.toMatchObject({ code: 'backup_invalid_assets' });
+	}
+	finally {
+		value.database.close();
+	}
+});
+
+it('distinguishes unavailable validation storage from a missing archived graphics file', async () => {
+	const value = await fixture();
+	try {
+		const { config, database, image, repository, root } = value;
+		const asset = await storeGraphicsAsset(graphicsFolder(config.dataDir), 'logo.png', image, config.ffprobePath);
+		repository.graphics.addAsset(asset);
+		const archive = await exportFixture(value);
+		const filename = path.join(config.backupDir, backupFilename(archive));
+
+		const blocked = path.join(root, 'blocked-graphics-validation');
+		const blockedManifest = await extractArchive(filename, blocked);
+		await writeFile(path.join(blocked, 'checked-graphics'), '');
+		const failure = await prepareDatabase(config, blocked, blockedManifest).catch((error: unknown) => error);
+		expect(publicError(failure, 'test-request')).toMatchObject({
+			statusCode: 503, body: { code: 'storage_unavailable' },
+		});
+
+		const missing = path.join(root, 'missing-graphics-file');
+		const missingManifest = await extractArchive(filename, missing);
+		await rm(path.join(missing, 'graphics-assets', `${asset.id}.${asset.format}`));
+		await expect(prepareDatabase(config, missing, missingManifest)).rejects.toMatchObject({ code: 'backup_invalid_assets' });
+	}
+	finally {
+		value.database.close();
+	}
+});
+
+it('restores legacy graphics preset names, assignments, and registered asset bytes', async () => {
+	const value = await fixture();
+	try {
+		const { config, repository, channel, image } = value;
+		const asset = await storeGraphicsAsset(graphicsFolder(config.dataDir), 'watermark.png', image, config.ffprobePath);
+		repository.graphics.addAsset(asset);
+		const yaml = `version: 1
+layers:
+  - id: ${randomUUID()}
+    kind: media
+    assetId: ${asset.id}
+    anchor: bottom_right
+    horizontalMargin: 3
+    verticalMargin: 5
+    opacity: 70
+    withinSource: true
+    timing: { mode: always }
+`;
+		const preset = { id: randomUUID(), name: 'Live Clock' };
+		value.database.sqlite.prepare('INSERT INTO graphics_presets (id, name, name_key, yaml) VALUES (?, ?, ?, ?)')
+			.run(preset.id, preset.name, preset.name.toLowerCase(), yaml);
+		await repository.updateChannel(channel.id, { graphicsPresetId: preset.id });
+		const assignment = { mode: 'replace' as const, presetId: preset.id };
+		const filler = (await repository.fillerPresets.save({
+			kind: 'pre-roll', name: 'Station bumper', description: '', budget: { type: 'count', count: 1 }, graphicsAssignment: assignment,
+		})).preset;
+		const archive = await exportFixture(value);
+		const staging = path.join(value.root, 'graphics-import');
+		const imported = await extractArchive(path.join(config.backupDir, backupFilename(archive)), staging);
+		await prepareDatabase(config, staging, imported);
+		const restored = createDatabase(path.join(staging, 'restored.sqlite'), config.migrationsDir);
+		try {
+			const restoredRepository = new Repository(restored.db);
+			expect((await restoredRepository.getChannel(channel.id))?.graphicsPresetId).toBe(preset.id);
+			expect(restoredRepository.graphics.get(preset.id)).toMatchObject({ name: preset.name, yaml, protected: false });
+			expect((await restoredRepository.fillerPresets.list()).find(row => row.id === filler.id)?.graphicsAssignment).toEqual(assignment);
+			expect(await readFile(path.join(staging, 'graphics-assets', `${asset.id}.png`))).toEqual(image);
+		}
+		finally {
+			restored.close();
+		}
+	}
+	finally {
+		value.database.close();
 	}
 });
 

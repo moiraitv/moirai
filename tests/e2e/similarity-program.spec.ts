@@ -210,7 +210,7 @@ test('protects and saves unsafe exclusion text typed immediately before Escape',
 		await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 		await exclusions.press('Escape');
 		await expect(page.getByText('Save this program before closing?')).toBeVisible();
-		await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await page.getByRole('alertdialog').getByRole('button', { name: 'Save', exact: true }).click();
 		await expect.poll(async () => (await (await page.request.get(`/api/v1/programs/${program.id}`)).json()).config.hardExclusions)
 			.toEqual(['superhero movies', 'romantic comedies']);
 	}

@@ -1,3 +1,4 @@
+import { GraphicsRepository } from './graphics.js';
 import { FillerPresetRepository } from './filler-presets.js';
 import { MidRollPresetRepository } from './mid-roll-presets.js';
 import { readAiCatalog } from './ai-catalog.js';
@@ -133,6 +134,7 @@ export class Repository extends LibraryRepository {
 	}
 
 	/** Reusable guided break behavior for channel, template, and slot assignments. */
+	readonly graphics: GraphicsRepository;
 	readonly fillerPresets: FillerPresetRepository;
 	readonly midRollPresets: MidRollPresetRepository;
 	/** Reusable audio/video profiles and linked channel settings. */
@@ -156,6 +158,7 @@ export class Repository extends LibraryRepository {
 		super(database);
 		this.semantic = new SemanticRepository(database);
 		this.authentication = new AuthenticationRepository(database);
+		this.graphics = new GraphicsRepository(database);
 		this.fillerPresets = new FillerPresetRepository(database);
 		this.midRollPresets = new MidRollPresetRepository(database);
 		this.encodingProfiles = new EncodingProfileRepository(database);
@@ -539,6 +542,16 @@ export class Repository extends LibraryRepository {
 		channelId?: string,
 	): Promise<MaterializedSegmentRecord[]> {
 		return this.scheduling.listMaterializedTimelineSegments(rangeStart, rangeEnd, channelId);
+	}
+
+	/** Recover primary airing anchors by ID, scoped to their own channel. */
+	listTimelinePrimaryAnchors(channelId: string, segmentIds: string[]) {
+		return this.scheduling.listTimelinePrimaryAnchors(channelId, segmentIds);
+	}
+
+	/** Read committed media snapshots by segment ID without loading cursor or playback data. */
+	timelineMediaSnapshots(segmentIds: string[]) {
+		return this.scheduling.timelineMediaSnapshots(segmentIds);
 	}
 
 	/** Read a chronologically bounded committed range for combined guide responses. */

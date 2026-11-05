@@ -1,3 +1,4 @@
+import { resolveGraphicsPreviewPosition } from '../graphics/preview-context.js';
 import { catalogRead, type CatalogReadRequest } from '../repository/catalog-read.js';
 import type { PlayoutReadRequest } from '../playback/playout-preparation.js';
 import { PlayoutPreparationReader } from '../playback/playout-preparation.js';
@@ -7,8 +8,19 @@ import { invalidateCommittedGuideCache } from '../guide/schedule-guide.js';
 import { guideRead, type GuideReadRequest, type GuideReadResult } from '../guide/read-job.js';
 import { schedulingRead, type SchedulingReadRequest, type SchedulingReadResult } from './read-jobs.js';
 
+/** The editable and rendered previews share the same committed timeline lookup. */
+export interface GraphicsContextReadRequest {
+	kind: 'graphics-context';
+	channelId: string;
+	elapsedMs: number;
+	timeZone: string;
+	publicUrl: string;
+	render?: boolean;
+	includeContext?: boolean;
+}
+
 /** Compact interactive queries executed through the scheduling worker pool. */
-export type DatabaseReadRequest = SchedulingReadRequest | GuideReadRequest | CatalogReadRequest;
+export type DatabaseReadRequest = SchedulingReadRequest | GuideReadRequest | CatalogReadRequest | GraphicsContextReadRequest;
 /** Serialized public payload and optional follow-up metadata retained outside the payload. */
 export type DatabaseReadResult = SchedulingReadResult & GuideReadResult;
 
@@ -65,6 +77,21 @@ export class DatabaseJobReader {
 			this.db.$client.exec('BEGIN');
 		}
 		try {
+			if (request.kind === 'graphics-context') {
+				const channel = await this.repository.getChannel(request.channelId);
+				if (!channel) {
+					return { body: 'null' };
+				}
+				const position = await resolveGraphicsPreviewPosition(
+					this.repository,
+					channel,
+					request.elapsedMs,
+					request.timeZone,
+					request.publicUrl,
+					request.includeContext,
+				);
+				return { body: JSON.stringify(request.render ? position : position.preview) };
+			}
 			if (request.kind === 'catalog') {
 				return await catalogRead(this.repository, request);
 			}

@@ -133,3 +133,27 @@ export class PlaybackClientTracker {
 		}
 	}
 }
+
+/** Parse the pinned worker's completed playout cursor from a complete diagnostic line. */
+export function completedPlayoutFromWorkerLine(line: string): number | undefined {
+	if (!line.startsWith('{')) {
+		return undefined;
+	}
+	let message: string;
+	try {
+		const event = JSON.parse(line);
+		if (event?.target !== 'ersatztv_channel::channel_session' || event.level !== 'DEBUG' || typeof event.message !== 'string') {
+			return undefined;
+		}
+		message = event.message;
+	}
+	catch {
+		return undefined;
+	}
+	const cursor = /^transcoded until: (\d{4}-\d{2}-\d{2}) (\d{1,2}:\d{2}:\d{2})(\.\d+)? ([+-]\d{2}:\d{2})(?::00)?$/u.exec(message);
+	if (!cursor) {
+		return undefined;
+	}
+	const timestamp = Date.parse(`${cursor[1]}T${cursor[2]!.padStart(8, '0')}${cursor[3] ?? ''}${cursor[4]}`);
+	return Number.isFinite(timestamp) ? timestamp : undefined;
+}

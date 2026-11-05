@@ -10,6 +10,20 @@ import {
 
 const EXPECTED_HTTP_OPERATIONS = [
 	'getResourceUsage',
+	'createGraphicsPreset',
+	'updateGraphicsPreset',
+	'listGraphicsPresets',
+	'readGraphicsPreset',
+	'readGraphicsSampleClip',
+	'deleteGraphicsPreset',
+	'listGraphicsAssets',
+	'uploadGraphicsAsset',
+	'readGraphicsAsset',
+	'readGraphicsAssetPoster',
+	'readGraphicsPreviewContext',
+	'deleteGraphicsAsset',
+	'previewGraphics',
+	'readChannelGraphicsIssue',
 	'getMediaAirings',
 	'addLibraryGroupsToProgram',
 	'addLibraryItemsToProgram',
@@ -148,6 +162,19 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'updateProgram',
 	'updateScheduleTemplate',
 	'saveLocalAuthenticationCredentials',
+	'createBackup',
+	'deleteBackup',
+	'dismissBackupWarning',
+	'downloadBackup',
+	'getBackups',
+	'getGuideArtwork',
+	'previewSubtitleSelection',
+	'restoreBackup',
+	'reviewSemanticMatches',
+	'saveBackupSettings',
+	'uploadGuideArtwork',
+	'validateStoredBackup',
+	'validateUploadedBackup',
 ].sort();
 
 const EXPECTED_EVENT_TYPES = [
@@ -248,8 +275,8 @@ describe('generated interface documentation', () => {
 		}
 	});
 
-	it('documents fallback uploads as a multipart binary file', () => {
-		for (const operationId of ['putGlobalFallbackFiller', 'putChannelFallbackFiller']) {
+	it('documents fallback and graphics uploads as multipart binary files', () => {
+		for (const operationId of ['putGlobalFallbackFiller', 'putChannelFallbackFiller', 'uploadGraphicsAsset']) {
 			const schema = httpOperation(openapi, operationId).requestBody
 				?.content?.['multipart/form-data']?.schema as {
 					properties?: { file?: Record<string, unknown> };

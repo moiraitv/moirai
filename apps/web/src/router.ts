@@ -1,3 +1,4 @@
+import GraphicsPage from './views/GraphicsPage.vue';
 import FillerPresetsPage from './views/FillerPresetsPage.vue';
 import EncodingProfilesPage from './views/EncodingProfilesPage.vue';
 import { createRouter, createWebHistory } from 'vue-router';
@@ -44,6 +45,8 @@ export const router = createRouter({
 		{ path: '/schedules/mid-roll-presets', redirect: '/filler/mid-rolls' },
 		{ path: '/filler', redirect: '/filler/pre-rolls' },
 		...(['pre-roll', 'mid-roll', 'post-roll', 'tail'] as const).flatMap(kind => ['', '/:id'].map(suffix => ({ path: `/filler/${kind === 'tail' ? 'tail-fillers' : `${kind}s`}${suffix}`, component: FillerPresetsPage, props: { kind }, meta: { fillerKind: kind } }))),
+		{ path: '/graphics', component: GraphicsPage },
+		{ path: '/graphics/:id', component: GraphicsPage },
 		{ path: '/schedules/templates', component: TemplatesPage },
 		{ path: '/schedules/templates/:id', component: TemplatesPage },
 		{ path: '/schedules/channels', component: ChannelSchedulesPage },

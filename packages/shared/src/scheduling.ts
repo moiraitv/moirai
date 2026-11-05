@@ -1,5 +1,7 @@
+import { graphicsAssignmentSchema } from './graphics.js';
 import { compareEpisodeOrder } from './episode-order.js';
 import type { SelectionStateRecord } from './selection-state.js';
+export type { ChannelTimelineMaterializationStatus, TimelineMaterializationHealth } from './timeline-status.js';
 export type { FillerCycle, SelectionStateRecord, SelectionStateValue } from './selection-state.js';
 import { fillerAssignmentSchema, slotFillerAssignmentSchema, type FillerSettings } from './filler-presets.js';
 import { fillerConfigSchema, slotFillerSchema } from './filler.js';
@@ -372,6 +374,7 @@ export const similarityProgramConfigSchema = z.object({
 	/** Historical wire key; entries are concepts excluded by semantic similarity. */
 	hardExclusions: z.array(z.string().trim().min(1).max(100)).max(30)
 		.transform((values) => [...new Map(values.map((value) => [value.toLocaleLowerCase('en-US'), value])).values()]).optional(),
+	graphicsAssignment: graphicsAssignmentSchema.optional(),
 	subtitlePreferences: subtitlePreferencesSchema.optional(),
 	audioPreferences: audioPreferencesSchema.optional(),
 });
@@ -389,6 +392,7 @@ export const semanticProgramConfigSchema = z.discriminatedUnion('type', [similar
 /** Counted child Programs and their parent ordering and presentation preferences. */
 export const sequenceProgramConfigSchema = z.object({
 	type: z.literal('sequence'),
+	graphicsAssignment: graphicsAssignmentSchema.optional(),
 	subtitlePreferences: subtitlePreferencesSchema.optional(),
 	audioPreferences: audioPreferencesSchema.optional(),
 	entries: z
@@ -417,6 +421,7 @@ export const programConfigSchema = z.discriminatedUnion('type', [
 	themeProgramConfigSchema,
 	z.object({
 		type: z.literal('content'),
+		graphicsAssignment: graphicsAssignmentSchema.optional(),
 		subtitlePreferences: subtitlePreferencesSchema.optional(),
 		audioPreferences: audioPreferencesSchema.optional(),
 		source: contentSourceSchema,
@@ -601,6 +606,7 @@ export const scheduleSlotSchema = z
 			.min(0)
 			.max(SECONDS_PER_SCHEDULING_DAY - 1),
 		programId: z.uuid().nullable(),
+		graphicsAssignment: graphicsAssignmentSchema.optional(),
 		stateScope: z.enum(['persistent', 'occurrence']).default('persistent'),
 		guide: slotGuideSchema.optional(),
 		startEligibility: startEligibilitySchema.default({ type: 'require-fit' }),
@@ -666,6 +672,7 @@ export interface ScheduleBoundary extends Omit<
 
 /** Validate the schedule template create contract at runtime. */
 export const scheduleTemplateCreateSchema = z.object({
+	graphicsAssignment: graphicsAssignmentSchema.optional(),
 	name: z.string().trim().min(1).max(120),
 	period: z.literal('day').default('day'),
 	defaultFiller: fillerConfigSchema.nullable().default(null),
@@ -928,6 +935,7 @@ export interface ChannelScheduleLayer extends Omit<
 
 /** Validate the channel schedule config contract at runtime. */
 export const channelScheduleConfigSchema = z.object({
+	graphicsAssignment: graphicsAssignmentSchema.optional(),
 	avoidCrossChannelDuplicates: z.boolean().optional().describe('Prefer non-overlapping items on other channels for non-sequential selections. Enabled when omitted.'),
 	generationSeed: z.uuid().optional().describe('Server-managed randomness for unseeded programs; preserved on schedule saves.'),
 	defaultTemplateId: z.uuid().nullable().default(null),
@@ -1142,6 +1150,8 @@ export interface TimelineSegment {
 	programAncestry?: string[] | undefined;
 	id: string;
 	role: 'primary' | 'filler' | 'dead-air';
+	/** Committed preset identity for authored filler. */
+	fillerPresetId?: string | undefined;
 	/** Filler stage for generated previews; stored timeline reads may omit it. */
 	fillerStage?: 'pre-roll' | 'mid-roll' | 'post-roll' | 'tail' | 'fallback' | undefined;
 	channelId: string;
@@ -1248,19 +1258,4 @@ export interface GuideSegmentDetail {
 		libraryId: string | null;
 		libraryName: string | null;
 	};
-}
-
-/** Shared wire contract for timeline materialization health. */
-export type TimelineMaterializationHealth = 'ready' | 'pending' | 'generating' | 'failed';
-
-/** Shared wire contract for channel timeline materialization status. */
-export interface ChannelTimelineMaterializationStatus {
-	channelId: string;
-	health: TimelineMaterializationHealth;
-	windowStart: string | null;
-	windowEnd: string | null;
-	committedAt: string | null;
-	pendingSince: string | null;
-	applyAfter: string | null;
-	lastError: string | null;
 }

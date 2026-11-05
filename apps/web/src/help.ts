@@ -14,6 +14,7 @@ export const helpTopicIds = [
 	'playback.encoding-profiles',
 	'scheduling.templates',
 	'filler.presets',
+	'playback.graphics',
 	'scheduling.channel-schedules',
 	'settings.playback',
 	'settings.playback#playback-capacity',
@@ -78,6 +79,9 @@ export function helpTopicForPath(pathname: string): string {
 	}
 	if (pathname.startsWith('/schedules/programs')) {
 		return 'scheduling.programs';
+	}
+	if (pathname.startsWith('/graphics')) {
+		return 'playback.graphics';
 	}
 	if (pathname.startsWith('/filler/mid-rolls') || pathname.startsWith('/schedules/mid-roll-presets')) {
 		return 'filler.presets';

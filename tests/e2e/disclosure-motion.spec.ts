@@ -12,7 +12,9 @@ test('animates Advanced and surrounding AI controls while preserving its draft a
 	await expect(model).toBeHidden();
 	await advanced.click();
 	await expect(advanced).toHaveAttribute('aria-expanded', 'true');
-	expect(await content.evaluate(element => element.getAnimations().some(animation => animation.playState === 'running'))).toBe(true);
+	expect(await content.evaluate(element => element.getAnimations()
+		.filter(animation => animation.playState === 'running')
+		.map(animation => animation.effect?.getTiming().duration))).toContain(350);
 	expect(await page.locator('.ai-settings-panel > .settings-actions').evaluate(element => element.getAnimations().some(animation => animation.playState === 'running'))).toBe(true);
 	await model.fill('preserved-motion-draft');
 	await advanced.click();

@@ -6,8 +6,9 @@ import type { GuideTemplatePreviewValue } from '@moirai/shared';
 const props = defineProps<{
 	title: string;
 	values: GuideTemplatePreviewValue[];
+	insertable?: boolean;
 }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; insert: [name: string] }>();
 const panel = ref<HTMLElement>();
 const visible = ref(false);
 const teleportTarget = ref<HTMLElement | string>('body');
@@ -52,6 +53,12 @@ function onDocumentEvent(event: Event): void {
 	if (event.type === 'resize' || event.type === 'scroll') {
 		place();
 	}
+}
+
+/** Insert the selected value into an editable template and restore focus. */
+function insert(name: string): void {
+	emit('insert', name);
+	close(true);
 }
 
 /** Anchor the popover to a preview listing or channel cell. */
@@ -111,7 +118,7 @@ defineExpose({ show, close });
 			<dl>
 				<div v-for="row in props.values" :key="row.name">
 					<dt><code>{{ row.name }}</code></dt>
-					<dd>{{ row.value }}</dd>
+					<dd>{{ row.value }} <button v-if="insertable" class="button secondary" type="button" :aria-label="`Insert ${row.name}`" @click="insert(row.name)">Insert</button></dd>
 				</div>
 			</dl>
 		</section>

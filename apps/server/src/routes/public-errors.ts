@@ -207,7 +207,8 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
-	if (normalized.statusCode === 413 && normalized.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+	if (normalized.statusCode === 413
+		&& (normalized.code === 'FST_ERR_CTP_BODY_TOO_LARGE' || normalized.code === 'FST_REQ_FILE_TOO_LARGE')) {
 		return response(
 			requestId,
 			413,

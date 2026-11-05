@@ -466,6 +466,7 @@ export const channelCreateSchema = z.object({
 	name: z.string().trim().min(1).max(120),
 	encodingProfileId: z.uuid().nullable().optional(),
 	guideTemplateId: z.uuid().nullable().optional(),
+	graphicsPresetId: z.uuid().nullable().optional(),
 	logo: channelLogoSchema.nullable().default(null),
 	group: z.string().trim().max(120).nullable().default(null),
 	audio: audioNormalizationSchema.default({
@@ -684,3 +685,6 @@ export * from './resource-usage.js';
 export * from './episode-order.js';
 
 export * from './backups.js';
+
+export * from './graphics.js';
+export * from './graphics-geometry.js';

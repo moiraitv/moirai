@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GraphicsAssignmentEditor from '../components/graphics/GraphicsAssignmentEditor.vue';
 import { useResourceDraft } from '../composables/useResourceDraft';
 import { useRoute } from 'vue-router';
 import { computed, nextTick, onMounted, ref } from 'vue';
@@ -202,6 +203,7 @@ useDraftProtection(() => open.value && !readonlyPreset.value && dirty.value && r
 					<div class="form-grid"><label class="resource-primary-field"><span>Name</span><input ref="nameInput" v-model="form.name" :disabled="busy || readonlyPreset" maxlength="120" required /></label><label><span>Description</span><input v-model="form.description" :disabled="busy || readonlyPreset" maxlength="500" /></label></div>
 					<p v-if="id && !readonlyPreset">Changing break settings affects every assignment using this {{ label }}. Existing airings finish before pending settings apply.</p>
 					<MidRollSettingsEditor v-if="form.kind === 'mid-roll'" :model-value="form" :disabled="busy || readonlyPreset" @update:model-value="form = { ...form, ...$event }" />
+					<GraphicsAssignmentEditor v-model="form.graphicsAssignment" :disabled="busy || readonlyPreset" description="Applies to clips played with this Filler preset." />
 					<fieldset v-if="form.kind !== 'mid-roll'" :disabled="busy || readonlyPreset" class="mid-roll-settings"><legend>Filler Settings</legend><FillerBudgetEditor :model-value="form.budget" :allow-remaining="kind === 'tail'" @update:model-value="form = { ...form, budget: $event }" /></fieldset>
 					<p v-if="validationError" class="notice error" role="alert">{{ validationError }}</p><p v-if="editorError" class="notice error">{{ editorError }}</p>
 				</ResourceUsage></div>

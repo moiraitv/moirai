@@ -16,6 +16,7 @@ import { rebuildCatalogSearchForLibrary } from '../repository/catalog-search-sql
 import { foldMusicSearchText } from '../media/music-search.js';
 import type { BackupManifest, BackupPaths } from './format.js';
 import { atomicJson, recordSizeGuard } from './files.js';
+import { validateGraphicsBackup } from './validate-graphics.js';
 import { validateFallbackAssets } from './validate-assets.js';
 
 /** Identifiers that own resources or reference indexed/configured records must remain safe UUIDs. */
@@ -103,6 +104,7 @@ export async function prepareDatabase(config: BackupPaths, staging: string, mani
 		try {
 			progress('Checking managed assets (4/4)…');
 			await validateAssets(config, staging, manifest);
+			await validateGraphicsBackup(config, staging, sqlite);
 		}
 		catch (error) {
 			throw validationFailure('backup_invalid_assets', error);

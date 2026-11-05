@@ -1,3 +1,4 @@
+import { GraphicsRepository } from './graphics.js';
 import { referencedFillerAssignments } from '../scheduling/mid-roll-presets.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
@@ -67,6 +68,7 @@ export class FillerPresetRepository {
 	/** Save custom settings; name and description changes do not change scheduling behavior. */
 	async save(input: AnyFillerPresetCreate, id?: string): Promise<{ preset: AnyFillerPreset; behaviorChanged: boolean }> {
 		return this.db.transaction(tx => {
+			new GraphicsRepository(tx).validateAssignments([input.graphicsAssignment]);
 			const current = id ? tx.select().from(fillerPresets).where(eq(fillerPresets.id, id)).get() : undefined;
 			if (id && !current) {
 				throw new FillerPresetError('Filler preset not found', 404);
@@ -92,7 +94,7 @@ export class FillerPresetRepository {
 			else {
 				tx.insert(fillerPresets).values(row).run();
 			}
-			return { preset: mappedPreset(row), behaviorChanged: Boolean(current && JSON.stringify(presetBehavior(current.config)) !== JSON.stringify(presetBehavior(input))) };
+			return { preset: mappedPreset(row), behaviorChanged: Boolean(current && JSON.stringify([presetBehavior(current.config), current.config.graphicsAssignment]) !== JSON.stringify([presetBehavior(input), input.graphicsAssignment])) };
 		});
 	}
 

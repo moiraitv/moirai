@@ -180,7 +180,8 @@
 	}
 }
 
-.guide-template-selector-row {
+.guide-template-selector-row,
+.channel-graphics-selector-row {
 	display: flex;
 	align-items: flex-end;
 	flex-wrap: wrap;
@@ -188,5 +189,6 @@
 
 	label {
 		flex: 1 1 15rem;
+		min-width: 0;
 	}
 }

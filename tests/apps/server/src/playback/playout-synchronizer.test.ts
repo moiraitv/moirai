@@ -1,5 +1,6 @@
 import { ETV_PLAYOUT_VERSION } from '@ersatztv-source/index.js';
-import { channelCreateSchema, playbackSettingsSchema, type ScheduleGuide, type LiveEventInput, type TimelineSegment } from '@moirai/shared';
+import { LIVE_EVENT_PROTOCOL_VERSION, channelCreateSchema, playbackSettingsSchema, type ScheduleGuide, type LiveEventInput, type TimelineSegment } from '@moirai/shared';
+import * as graphicsPlayout from '@server/graphics/playout.js';
 import * as scheduleGuide from '@server/guide/schedule-guide.js';
 import * as mediaStreams from '@server/playback/audio-selection.js';
 import { randomUUID } from 'node:crypto';
@@ -22,14 +23,17 @@ function loggerFixture(): FastifyBaseLogger {
 describe('playout synchronizer', () => {
 	it.each([
 		['another channel timeline', false], ['another channel edit', false], ['scan progress', false],
-		['embedding progress', false], ['guide template', false], ['watcher status', false],
-		['this channel timeline', true], ['this channel edit', true], ['scan reconciliation', true],
+		['embedding progress', false], ['guide template', false], ['guide template with text graphics', true], ['watcher status', false],
+		['this channel timeline', true], ['this channel edit', true], ['this channel edit during decoration', true], ['scan reconciliation', true],
 		['global audio defaults', true], ['program preferences', true], ['credit template', true], ['library edit', true],
+		['compatibility mid-roll edit', true],
 	] as const)('publishes live playout with the correct retry behavior during %s', async (change, retry) => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-invalidation-'));
 		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Live' }), id: randomUUID(),
 			createdAt: '2026-10-02T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
-		const repository = { getChannel: async () => channel, schedulingCatalogRevision: 0 } as unknown as Repository;
+		const channelsUsingScope = vi.fn(() => [channel.id]);
+		const repository = { graphics: { assignments: () => new Map(), channelsUsingScope },
+			getChannel: async () => channel, schedulingCatalogRevision: 0 } as unknown as Repository;
 		const workers = new SchedulingWorkerPool(0, 32, { repository } as ConstructorParameters<typeof SchedulingWorkerPool>[2]);
 		vi.spyOn(workers, 'databaseBacked', 'get').mockReturnValue(true);
 		const otherId = randomUUID();
@@ -38,6 +42,9 @@ describe('playout synchronizer', () => {
 			const channelId = change.startsWith('this') ? channel.id : otherId;
 			event = change.endsWith('timeline') ? { type: 'timeline.changed', data: { channelId, status: 'ready' } }
 				: { type: 'channel.changed', data: { channelId, change: 'updated' } };
+		}
+		else if (change === 'compatibility mid-roll edit') {
+			event = { type: 'scheduling.changed', data: { entity: 'mid-roll-preset', change: 'updated', id: otherId } };
 		}
 		else if (change === 'global audio defaults') {
 			event = { type: 'playback.changed', data: { channelId: null, reason: 'settings-changed' } };
@@ -60,16 +67,29 @@ describe('playout synchronizer', () => {
 		const guide = { channels: [], timeZone: 'UTC', startDate: '2026-10-02', days: 3 } as unknown as ScheduleGuide;
 		const filename = '20261002T000000.000000000+0000_20261003T000000.000000000+0000.json';
 		let documentReads = 0;
+		const duringDecoration = change === 'this channel edit during decoration';
+		const destination = path.join(root, channel.id, filename);
+		const decorate = duringDecoration ? vi.spyOn(graphicsPlayout, 'decorateGraphics').mockImplementation(async (...args) => {
+			if (documentReads <= 3) {
+				workers.invalidateReads(event);
+			}
+			return { files: args[4], used: new Map() };
+		}) : undefined;
 		const read = vi.spyOn(workers, 'playoutRead').mockImplementation(async request => {
 			if (request.kind === 'playout-preparation') {
-				return { channel, guide, programs: [] };
+				if (duringDecoration) {
+					await expect(access(destination)).rejects.toMatchObject({ code: 'ENOENT' });
+					return { channel, guide, programs: [], graphics: { presets: new Map(), segments: [] } };
+				}
+				return { channel, guide, programs: [], ...(change === 'guide template with text graphics'
+					? { graphics: { presets: new Map(), segments: [], contexts: new Map() } } : {}) };
 			}
 			documentReads += 1;
-			if (documentReads <= 3) {
+			if (!duringDecoration && documentReads <= 3) {
 				// Read caches still refresh globally, just as the app's event subscription requires.
 				workers.invalidateReads(event);
 			}
-			return new Map([[filename, JSON.stringify({ pass: documentReads })]]);
+			return new Map([[filename, JSON.stringify({ pass: documentReads, items: [] })]]);
 		});
 		const synchronizer = new PlayoutSynchronizer(
 			repository,
@@ -87,9 +107,17 @@ describe('playout synchronizer', () => {
 			const passes = retry ? 4 : 1;
 			expect(documentReads).toBe(passes);
 			expect(read).toHaveBeenCalledTimes(passes * 2);
-			expect(await readFile(path.join(root, channel.id, filename), 'utf8')).toBe(JSON.stringify({ pass: passes }));
+			expect(await readFile(destination, 'utf8')).toBe(JSON.stringify({ pass: passes, items: [] }));
+			if (change === 'compatibility mid-roll edit') {
+				const sync = vi.spyOn(synchronizer, 'syncChannel').mockResolvedValue(path.dirname(destination));
+				synchronizer.handleEvent({ ...event, protocolVersion: LIVE_EVENT_PROTOCOL_VERSION,
+					eventId: randomUUID(), occurredAt: channel.updatedAt });
+				expect(channelsUsingScope).toHaveBeenCalledExactlyOnceWith('filler', otherId);
+				expect(sync).toHaveBeenCalledExactlyOnceWith(channel.id);
+			}
 		}
 		finally {
+			decorate?.mockRestore();
 			await synchronizer.close();
 			await workers.close();
 			await rm(root, { recursive: true, force: true });
@@ -114,7 +142,7 @@ describe('playout synchronizer', () => {
 			}).mockResolvedValueOnce(new Map()).mockResolvedValueOnce(preparation).mockResolvedValueOnce(new Map()),
 		};
 		const synchronizer = new PlayoutSynchronizer(
-			{ getChannel: vi.fn(async () => saved) } as unknown as Repository,
+			{ graphics: { assignments: () => new Map() }, getChannel: vi.fn(async () => saved) } as unknown as Repository,
 			root,
 			'UTC',
 			60,
@@ -290,7 +318,7 @@ describe('playout synchronizer', () => {
 		const ensureMaterialized = vi.fn(async () => undefined);
 		const synchronizer = new PlayoutSynchronizer(
 			{
-				getChannel: async () => channel,
+				graphics: { assignments: () => new Map() }, getChannel: async () => channel,
 				getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }),
 				listPrograms: async () => [],
 			} as unknown as Repository,
@@ -312,9 +340,9 @@ describe('playout synchronizer', () => {
 		} as ScheduleGuide);
 		vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
 		vi.spyOn(
-			synchronizer as unknown as { channelFiles(): Map<string, string> },
+			synchronizer as unknown as { channelFiles(): { files: Map<string, string>; usedGraphics: Map<string, number> } },
 			'channelFiles',
-		).mockReturnValue(new Map());
+		).mockReturnValue({ files: new Map(), usedGraphics: new Map() });
 		try {
 			await synchronizer.syncChannel(channelId);
 			expect(ensureMaterialized).not.toHaveBeenCalled();
@@ -338,7 +366,7 @@ describe('playout synchronizer', () => {
 		const ensureMaterialized = vi.fn(async () => undefined);
 		const synchronizer = new PlayoutSynchronizer(
 			{
-				getChannel: async () => channel,
+				graphics: { assignments: () => new Map() }, getChannel: async () => channel,
 				getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }),
 				listPrograms: async () => [],
 			} as unknown as Repository,
@@ -362,9 +390,9 @@ describe('playout synchronizer', () => {
 			} as ScheduleGuide);
 		vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
 		vi.spyOn(
-			synchronizer as unknown as { channelFiles(): Map<string, string> },
+			synchronizer as unknown as { channelFiles(): { files: Map<string, string>; usedGraphics: Map<string, number> } },
 			'channelFiles',
-		).mockReturnValue(new Map());
+		).mockReturnValue({ files: new Map(), usedGraphics: new Map() });
 		try {
 			await synchronizer.syncChannel(channelId);
 			expect(ensureMaterialized).toHaveBeenCalledOnce();
@@ -395,7 +423,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	const configured = { ...channelCreateSchema.parse({ number: '1', name: 'Music', subtitleMode: 'convert' }), id: channelId, createdAt: '', updatedAt: '' };
 	const logger = loggerFixture();
 	const synchronizer = new PlayoutSynchronizer(
-		{ getChannel: async () => configured, getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }), listPrograms: async () => [] } as unknown as Repository,
+		{ graphics: { assignments: () => new Map() }, getChannel: async () => configured, getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }), listPrograms: async () => [] } as unknown as Repository,
 		linked,
 		'UTC',
 		60,
@@ -409,7 +437,7 @@ it.each(['ass', 'idx'])('retains referenced %s assets through a symlinked playba
 	vi.spyOn(synchronizer.subtitles, 'prepare')
 		.mockResolvedValue(selections)
 		.mockResolvedValueOnce(Object.assign(new Map(selections), { subtitleMode: 'burn' as const }));
-	vi.spyOn(synchronizer as unknown as { channelFiles(): Map<string, string> }, 'channelFiles').mockReturnValue(new Map([['2026-09-09.json', JSON.stringify({ path: retained })]]));
+	vi.spyOn(synchronizer as unknown as { channelFiles(): { files: Map<string, string>; usedGraphics: Map<string, number> } }, 'channelFiles').mockReturnValue({ files: new Map([['2026-09-09.json', JSON.stringify({ path: retained })]]), usedGraphics: new Map() });
 	try {
 		await synchronizer.syncChannel(channelId);
 		await expect(readFile(retained, 'utf8')).resolves.toBe('retained');
@@ -447,7 +475,7 @@ it.each(['0.0.3', '0.0.4', '0.0.5'])('replaces %s playout while preserving media
 	} as ScheduleGuide;
 	const synchronizer = new PlayoutSynchronizer(
 		{
-			getChannel: async () => channel,
+			graphics: { assignments: () => new Map() }, getChannel: async () => channel,
 			getPlaybackSettings: async () => playbackSettingsSchema.parse({ audioPreferences: { language: 'fr' } }),
 			listPrograms: async () => [],
 			audioMetadata: async () => new Map([['/media/movie.mkv', { streams: [
@@ -491,3 +519,61 @@ it.each(['0.0.3', '0.0.4', '0.0.5'])('replaces %s playout while preserving media
 		await rm(root, { recursive: true, force: true });
 	}
 }, 30_000);
+
+it('reclaims completed graphics during playback while retaining a replaced item that is still in flight', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-graphics-lease-'));
+	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Graphics' }), id: randomUUID(), createdAt: '', updatedAt: '' };
+	const repository = { graphics: { assignments: () => new Map(), preparePresets: () => new Map() }, getChannel: async () => channel, listPrograms: async () => [], getPlaybackSettings: async () => playbackSettingsSchema.parse({}) } as unknown as Repository;
+	const synchronizer = new PlayoutSynchronizer(repository, root, 'UTC', 60, async () => {},
+		{ resolve: async () => null } as unknown as FallbackFillerStore,
+		{ publish: vi.fn() } as LiveEventPublisher, loggerFixture());
+	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue({ channels: [{ preview: { segments: [{ id: randomUUID(), role: 'primary' }] } }] } as ScheduleGuide);
+	const streams = vi.spyOn(mediaStreams, 'prepareMediaStreams').mockResolvedValue({ audio: new Map(), video: new Map() });
+	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
+	const graphics = path.join(synchronizer.channelFolder(channel.id), 'graphics');
+	const expired = path.join(graphics, 'a'.repeat(64) + '.png');
+	const retained = path.join(graphics, 'b'.repeat(64) + '.png');
+	const unleased = path.join(graphics, 'c'.repeat(64) + '.png');
+	const warmed = path.join(graphics, 'd'.repeat(64) + '.png');
+	const files = new Map<string, string>();
+	const publish = vi.spyOn(synchronizer as unknown as { channelFiles(): { files: Map<string, string>; usedGraphics: Map<string, number> } }, 'channelFiles');
+	let cursor: number | undefined;
+	synchronizer.consumerActive = () => true;
+	synchronizer.consumerProgress = () => cursor;
+	try {
+		await mkdir(graphics, { recursive: true });
+		await Promise.all([writeFile(expired, 'expired'), writeFile(retained, 'retained')]);
+		publish.mockReturnValueOnce({ files, usedGraphics: new Map([[expired, 1000], [retained, 3000]]) });
+		await synchronizer.syncChannel(channel.id);
+
+		channel.graphicsPresetId = randomUUID();
+		await Promise.all([writeFile(unleased, 'unpublished'), writeFile(warmed, 'late render')]);
+		const retries = (synchronizer as unknown as {
+			graphicsRetries: Map<string, { pending: Map<string, Promise<void>>; warmed: Set<string> }>;
+		}).graphicsRetries;
+		retries.set(channel.id, { pending: new Map(), warmed: new Set([path.basename(warmed)]) });
+		publish.mockReturnValue({ files, usedGraphics: new Map() });
+		await synchronizer.syncChannel(channel.id);
+		await expect(access(unleased)).rejects.toMatchObject({ code: 'ENOENT' });
+		await expect(access(warmed)).resolves.toBeUndefined();
+		await expect(access(expired)).resolves.toBeUndefined();
+		await expect(access(retained)).resolves.toBeUndefined();
+
+		cursor = 1000;
+		await synchronizer.syncChannel(channel.id);
+		await expect(access(expired)).rejects.toMatchObject({ code: 'ENOENT' });
+		await expect(access(warmed)).resolves.toBeUndefined();
+		retries.get(channel.id)!.warmed.delete(path.basename(warmed));
+		await expect(access(retained)).resolves.toBeUndefined();
+
+		cursor = 3000;
+		await synchronizer.syncChannel(channel.id);
+		await expect(access(warmed)).rejects.toMatchObject({ code: 'ENOENT' });
+		await expect(access(retained)).rejects.toMatchObject({ code: 'ENOENT' });
+	}
+	finally {
+		guide.mockRestore();
+		streams.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});

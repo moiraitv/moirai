@@ -425,6 +425,7 @@ export const scheduleTemplates = sqliteTable('schedule_templates', {
 	defaultMidRoll: text('default_mid_roll', { mode: 'json' }).$type<MidRollConfig | null>(),
 	defaultPreRoll: text('default_pre_roll', { mode: 'json' }).$type<FillerAssignment | null>(),
 	defaultPostRoll: text('default_post_roll', { mode: 'json' }).$type<FillerAssignment | null>(),
+	graphicsAssignment: text('graphics_assignment', { mode: 'json' }).$type<import('@moirai/shared').GraphicsAssignment>(),
 	...timestamps,
 }, (table) => [uniqueIndex('schedule_templates_name_key_unique').on(table.nameKey)]);
 
@@ -453,6 +454,7 @@ export const scheduleSlots = sqliteTable(
 		midRoll: text('mid_roll', { mode: 'json' }).$type<ScheduleSlot['midRoll']>().notNull().default({ mode: 'inherit' }),
 		preRoll: text('pre_roll', { mode: 'json' }).$type<ScheduleSlot['preRoll']>().notNull().default({ mode: 'inherit' }),
 		postRoll: text('post_roll', { mode: 'json' }).$type<ScheduleSlot['postRoll']>().notNull().default({ mode: 'inherit' }),
+		graphicsAssignment: text('graphics_assignment', { mode: 'json' }).$type<import('@moirai/shared').GraphicsAssignment>(),
 	},
 	(table) => [
 		uniqueIndex('schedule_slots_template_position').on(table.templateId, table.position),
@@ -607,6 +609,7 @@ export const materializedTimelineSegments = sqliteTable(
 		slotId: text('slot_id').notNull(),
 		programId: text('program_id'),
 		programAncestry: text('program_ancestry', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		fillerPresetId: text('filler_preset_id'),
 		mediaItemId: text('media_item_id'),
 		role: text('role').$type<'primary' | 'filler' | 'dead-air'>().notNull(),
 		title: text('title').notNull(),
@@ -834,3 +837,19 @@ export const fillerPresets = sqliteTable('filler_presets', {
 
 /** Compatibility schema name for existing Mid-Roll integrations. */
 export const midRollPresets = fillerPresets;
+
+/** User-authored graphics presets with stable case-insensitive names. */
+export const graphicsPresets = sqliteTable('graphics_presets', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	nameKey: text('name_key').notNull().unique(),
+	yaml: text('yaml').notNull(),
+});
+
+/** Managed graphics files addressable by stable IDs. */
+export const graphicsAssets = sqliteTable('graphics_assets', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	kind: text('kind').$type<import('@moirai/shared').GraphicsAsset['kind']>().notNull(),
+	format: text('format').$type<import('@moirai/shared').GraphicsAsset['format']>().notNull(),
+});

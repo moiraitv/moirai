@@ -31,6 +31,19 @@ import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates, resolveProgramSchedule } from './direct-program-templates.js';
 import { currentTimestamp, yieldToEventLoop } from '../time.js';
 
+/** Detect a committed window or generated tail that has already run out. */
+function timelineExpired(record: TimelineMaterializationRecord, now: string | Temporal.Instant): boolean {
+	return Temporal.Instant.compare(record.windowEnd, now) <= 0 || Temporal.Instant.compare(record.continuationAt, now) <= 0;
+}
+
+/** Defer pending work only while its existing timeline can still serve the channel. */
+function timelineDeferred(record: TimelineMaterializationRecord, now: string | Temporal.Instant): boolean {
+	return record.health !== 'failed' && record.applyAfter !== null
+		&& Temporal.Instant.compare(now, record.applyAfter) < 0
+		&& !timelineExpired(record, now)
+		&& !record.issues.some(issue => issue.code === 'source-unavailable' || issue.code === 'media-duration-missing');
+}
+
 /** Delay between background checks of the durable rolling schedule window. */
 const MATERIALIZATION_INTERVAL_MS = 60_000;
 /**
@@ -349,8 +362,7 @@ export class TimelineMaterializer {
 		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' }).toString();
 		const eligibleSchedules = records ? schedules.filter(schedule => {
 			const record = records.get(schedule.channelId);
-			return !record || record.health === 'failed' || !record.applyAfter || Temporal.Instant.compare(record.applyAfter, now) <= 0
-				|| record.issues.some(issue => issue.code === 'source-unavailable' || issue.code === 'media-duration-missing');
+			return !record || !timelineDeferred(record, now);
 		}) : schedules;
 		if (eligibleSchedules.length === 0) {
 			return;
@@ -440,11 +452,10 @@ export class TimelineMaterializer {
 		// Deferred channels need neither catalog hashing nor state-bearing segment reads.
 		let current = records ? records.get(schedule.channelId) ?? null : await this.repository.getTimelineMaterialization(schedule.channelId);
 		const now = Temporal.Now.instant().round({ smallestUnit: 'second', roundingMode: 'ceil' });
-		if (current?.health !== 'failed' && current?.applyAfter
-			&& Temporal.Instant.compare(now, current.applyAfter) < 0
-			&& !current.issues.some(issue => issue.code === 'source-unavailable' || issue.code === 'media-duration-missing')) {
+		if (current && timelineDeferred(current, now)) {
 			return null;
 		}
+		const recoveringExpiredTimeline = current && timelineExpired(current, now);
 
 		// Resolve the base template and desired rolling guide window.
 		const resolved = resolveProgramSchedule(schedule.channelId, schedule, templates, programs);
@@ -482,7 +493,7 @@ export class TimelineMaterializer {
 			templates,
 			programs,
 		);
-		const retryImmediately = retryingFailure || recoveringEmptyTimeline;
+		const retryImmediately = retryingFailure || recoveringEmptyTimeline || recoveringExpiredTimeline;
 
 		// Stage changed configuration at the next local-day boundary.
 		if (
@@ -515,7 +526,14 @@ export class TimelineMaterializer {
 		let baseState: SelectionStateRecord[] = [];
 		if (current) {
 			baseState = windowBaseState(stateAfter(current.baseState, existing, desiredStart), today.toString());
-			if (current.applyAfter && !recoveringEmptyTimeline) {
+			if (recoveringExpiredTimeline) {
+				// Resume the retained tail or rebuild from midnight after a longer outage.
+				if (compareInstants(current.continuationAt, desiredStart) > 0) {
+					replaceFrom = current.continuationAt;
+				}
+				initialState = stateAfter(current.baseState, existing, replaceFrom);
+			}
+			else if (current.applyAfter && !recoveringEmptyTimeline) {
 				replaceFrom = current.applyAfter;
 				const active = existing.find(
 					({ segment }) =>

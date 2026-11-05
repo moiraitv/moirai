@@ -66,6 +66,7 @@ export default defineConfig({
 				],
 			},
 			{ text: 'Filler', items: [{ text: 'Filler presets', link: '/filler/presets' }] },
+			{ text: 'Graphics', items: [{ text: 'Channel graphics', link: '/playback/graphics' }] },
 			{
 				text: 'Playback',
 				items: [

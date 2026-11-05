@@ -41,7 +41,9 @@ function validateScheduleTemplates(sqlite: Database.Database): void {
 	for (const template of templates) {
 		scheduleTemplateCreateSchema.parse({
 			...template,
-			slots: slots.filter(slot => slot.templateId === template.id),
+			graphicsAssignment: template.graphicsAssignment ?? undefined,
+			slots: slots.filter(slot => slot.templateId === template.id)
+				.map(slot => ({ ...slot, graphicsAssignment: slot.graphicsAssignment ?? undefined })),
 			boundaries: boundaries.filter(boundary => boundary.templateId === template.id),
 		});
 	}

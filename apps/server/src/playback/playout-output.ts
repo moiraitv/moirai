@@ -46,7 +46,7 @@ function elapsedMilliseconds(start: Temporal.Instant, finish: Temporal.Instant):
 }
 
 /** Clip one materialized segment to a daily window and expand its physical playback parts. */
-function playoutItems(
+export function playoutItems(
 	segment: TimelineSegment,
 	windowStart: Temporal.Instant,
 	windowEnd: Temporal.Instant,
