@@ -11,11 +11,12 @@ import type {
 	MediaSourcePickerEntry,
 	MediaSourcePickerResult,
 } from '@moirai/shared';
-import { DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
+import { catalogProgramItemQuerySchema, DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS } from '@moirai/shared';
 import { asc, eq, sql } from 'drizzle-orm';
 import type { MoiraiDatabase } from '../db/index.js';
 import { mediaItemGenres, mediaItems } from '../db/schema.js';
 import { addSourceMatch, escapeLike, ftsMatchQuery, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
+import { browseShowSearch, showEpisodeOrder, SHOW_GROUP_SEARCH_ORDER, type FilteredItemScope } from './catalog-show-search.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
 import { timestampBoundaryMilliseconds, type ContentExclusions } from '@moirai/shared';
 import type {
@@ -28,6 +29,9 @@ import type {
 } from './contracts.js';
 import { CatalogAssetsRepository } from './catalog-assets.js';
 import {
+	CATALOG_ITEM_COLUMNS,
+	GROUP_CHILD_COUNT,
+	SOURCE_GROUP_IDS,
 	mappedGroup,
 	mappedItem,
 } from './catalog-records.js';
@@ -43,30 +47,6 @@ export {
 	metadataReleaseDate,
 	metadataStrings,
 } from './catalog-records.js';
-
-/** Parameterized SQL fragments shared by flattened browsing and bulk program selection. */
-interface FilteredItemScope {
-	scopeCte: string;
-	where: string;
-	params: Array<string | number>;
-}
-
-/** The group aliased as `g` and its direct children, within the same library. */
-const SOURCE_GROUP_IDS = `(
-	SELECT g.id
-	UNION ALL
-	SELECT child.id FROM media_groups child
-	WHERE child.library_id = g.library_id AND child.parent_id = g.id
-)`;
-
-/** Count direct children of group `g` using the library-scoped parent indexes. */
-const GROUP_CHILD_COUNT = `(
-	SELECT COUNT(*) FROM media_groups child
-	WHERE child.library_id = g.library_id AND child.parent_id = g.id
-) + (
-	SELECT COUNT(*) FROM media_items child_item
-	WHERE child_item.library_id = g.library_id AND child_item.group_id = g.id
-)`;
 
 /**
  * Provide indexed catalog browsing, lookup, and artwork-owner queries. This repository translates
@@ -108,11 +88,19 @@ export class MediaCatalogRepository {
 			.limit(limit);
 	}
 
+	/** Read the library type when search behavior depends on the kind of media. */
+	private libraryType(libraryId: string): string | undefined {
+		const row = this.db.$client.prepare('SELECT type_key AS typeKey FROM libraries WHERE id = ?')
+			.get(libraryId) as { typeKey: string } | undefined;
+		return row?.typeKey;
+	}
+
 	/** Build one recursive, parameterized item scope from the shared catalog filter contract. */
 	private filteredItemScope(
 		libraryId: string,
 		query: CatalogProgramItemQuery,
 		forceLike = false,
+		includeMusic = false,
 	): FilteredItemScope {
 		const scopeParams: Array<string | number> = [];
 		let scopeCte = '';
@@ -125,12 +113,9 @@ export class MediaCatalogRepository {
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
 		}
 		if (query.search) {
-			const libraryType = this.db.$client
-				.prepare('SELECT type_key AS typeKey FROM libraries WHERE id = ?')
-				.get(libraryId) as { typeKey: string } | undefined;
 			const search = itemSearchPredicate(query.search, {
 				libraryId,
-				includeMusic: libraryType?.typeKey === 'music-videos',
+				includeMusic,
 				forceLike,
 			});
 			conditions.push(search.sql);
@@ -224,8 +209,9 @@ export class MediaCatalogRepository {
 
 		return {
 			scopeCte,
+			scopeParams,
 			where: conditions.join(' AND '),
-			params: [...scopeParams, ...conditionParams],
+			filterParams: conditionParams,
 		};
 	}
 
@@ -251,9 +237,8 @@ export class MediaCatalogRepository {
 	/** Browse a library with stable, URL-addressable sorting, filtering, and pagination. */
 	async browseMedia(libraryId: string, query: MediaBrowseQuery): Promise<MediaBrowseResult> {
 		// Preserve hierarchy only for the unfiltered title view.
-		const hasFilters = Boolean(
+		const hasItemFilters = Boolean(
 			query.name
-			|| query.search
 			|| query.artist
 			|| query.album
 			|| query.actor
@@ -270,7 +255,23 @@ export class MediaCatalogRepository {
 			|| query.primaryGenres.length
 			|| query.excludedGenres.length,
 		);
-		const flattenHierarchy = hasFilters || query.sort !== 'title';
+		const libraryType = query.search ? this.libraryType(libraryId) : undefined;
+		if (query.search && libraryType === 'shows') {
+			const scope = this.filteredItemScope(libraryId, { ...query, search: '' });
+			const { entries, pagination, matchedItemCount } = browseShowSearch(this.db, libraryId, {
+				...query, search: query.search, target: 'all', hasItemFilters,
+			}, scope);
+			return {
+				entries,
+				groups: entries.flatMap(entry => entry.group ? [entry.group] : []),
+				items: entries.flatMap(entry => entry.item ? [entry.item] : []),
+				pagination,
+				matchedItemCount,
+				navigation: [],
+			};
+		}
+
+		const flattenHierarchy = hasItemFilters || query.search || query.sort !== 'title';
 		if (!flattenHierarchy) {
 			return this.browseHierarchy(libraryId, query);
 		}
@@ -283,7 +284,9 @@ export class MediaCatalogRepository {
 		let navigation: MediaBrowseResult['navigation'] = [];
 		let totalEntries = 0;
 		for (;;) {
-			({ scopeCte, where, params: allParams } = this.filteredItemScope(libraryId, query, forceLike));
+			const scope = this.filteredItemScope(libraryId, query, forceLike, libraryType === 'music-videos');
+			({ scopeCte, where } = scope);
+			allParams = [...scope.scopeParams, ...scope.filterParams];
 			navigation = [];
 			totalEntries = 0;
 
@@ -331,19 +334,6 @@ export class MediaCatalogRepository {
 		}
 
 		// Fetch the requested page with stable tie-breaking across duplicate titles.
-		const itemColumns = `i.id, i.library_id AS libraryId, i.group_id AS groupId, i.stable_key AS stableKey,
-      i.kind, i.title, i.sort_title AS sortTitle, i.relative_path AS relativePath,
-      i.playback_path AS playbackPath, i.plot, i.year,
-      i.duration_milliseconds / 1000.0 AS durationSeconds,
-      i.season_number AS seasonNumber, i.episode_number AS episodeNumber,
-	  i.episode_end_number AS episodeEndNumber, i.edition, i.external_ids AS externalIds,
-	  i.track_number AS trackNumber, i.disc_number AS discNumber, i.artists,
-	  i.multipart_status AS multipartStatus, i.parts, i.subtitle_tracks AS subtitleTracks,
-      i.metadata_status AS metadataStatus, i.availability,
-      i.last_observed_at AS lastObservedAt, i.metadata,
-      i.artwork_relative_path AS artworkRelativePath,
-      i.fingerprint, i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
-      i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt`;
 		const direction = query.direction.toUpperCase();
 		const join = (query.sort === 'genre' ? 'JOIN media_item_genres pg ON pg.item_id = i.id ' : '')
 			+ (query.search ? 'LEFT JOIN media_groups g ON g.id = i.group_id LEFT JOIN media_groups parent ON parent.id = g.parent_id' : '');
@@ -361,7 +351,7 @@ export class MediaCatalogRepository {
 		const offset = (query.page - 1) * query.pageSize;
 		const rows = this.db.$client
 			.prepare(
-				`${scopeCte}SELECT ${itemColumns}${sectionColumns}${searchColumns} FROM media_items i ${join} WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
+				`${scopeCte}SELECT ${CATALOG_ITEM_COLUMNS}${sectionColumns}${searchColumns} FROM media_items i ${join} WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
 			)
 			.all(...allParams, query.pageSize, offset) as Array<RawItemRow & { groupTitle: string | null; groupKind: MediaGroup['kind'] | null; parentTitle: string | null; parentKind: MediaGroup['kind'] | null }>;
 
@@ -401,36 +391,37 @@ export class MediaCatalogRepository {
 		query: CatalogProgramItemQuery,
 		maxItemCount = DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
 	): ProgramItemSelection {
-		let { scopeCte, where, params } = this.filteredItemScope(libraryId, query);
-		let selectionWhere = query.sort === 'genre'
-			? `${where} AND EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id)`
-			: where;
+		const libraryType = query.search ? this.libraryType(libraryId) : undefined;
+		const includeMusic = libraryType === 'music-videos';
+		const showSearch = libraryType === 'shows';
+		const selectionFilter = showSearch ? " AND i.kind = 'episode'" : query.sort === 'genre'
+			? ' AND EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id)' : '';
+		let { scopeCte, scopeParams, where, filterParams } = this.filteredItemScope(libraryId, query, false, includeMusic);
+		let params = [...scopeParams, ...filterParams];
 		let matchedItemCount = (
 			this.db.$client
-				.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${selectionWhere}`)
+				.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${where}${selectionFilter}`)
 				.get(...params) as { count: number }
 		).count;
 		if (query.search && ftsMatchQuery(query.search) && matchedItemCount === 0) {
-			({ scopeCte, where, params } = this.filteredItemScope(libraryId, query, true));
-			selectionWhere = query.sort === 'genre'
-				? `${where} AND EXISTS (SELECT 1 FROM media_item_genres sg WHERE sg.item_id = i.id)`
-				: where;
+			({ scopeCte, scopeParams, where, filterParams } = this.filteredItemScope(libraryId, query, true, includeMusic));
+			params = [...scopeParams, ...filterParams];
 			matchedItemCount = (
 				this.db.$client
-					.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${selectionWhere}`)
+					.prepare(`${scopeCte}SELECT COUNT(*) AS count FROM media_items i WHERE ${where}${selectionFilter}`)
 					.get(...params) as { count: number }
 			).count;
 		}
 		const direction = query.direction.toUpperCase();
 		const genreAggregate = query.direction === 'asc' ? 'MIN' : 'MAX';
-		const order = query.sort === 'date-added'
+		const order = showSearch ? showEpisodeOrder('i') : query.sort === 'date-added'
 			? `i.date_added_at ${direction}, i.sort_title COLLATE NOCASE ASC, i.id ASC`
 			: query.sort === 'genre'
 				? `(SELECT ${genreAggregate}(sg.genre_name) FROM media_item_genres sg WHERE sg.item_id = i.id) COLLATE NOCASE ${direction}, i.sort_title COLLATE NOCASE ASC, i.id ASC`
 				: `CASE WHEN i.title_bucket = '#' THEN 0 ELSE 1 END ${query.direction === 'asc' ? 'ASC' : 'DESC'}, i.sort_title COLLATE NOCASE ${direction}, i.id ${direction}`;
 		const rows = this.db.$client
 			.prepare(
-				`${scopeCte}SELECT i.id FROM media_items i WHERE ${selectionWhere} ORDER BY ${order} LIMIT ?`,
+				`${scopeCte}SELECT i.id FROM media_items i WHERE ${where}${selectionFilter} ORDER BY ${order} LIMIT ?`,
 			)
 			.all(...params, maxItemCount + 1) as Array<{ id: string }>;
 
@@ -600,8 +591,9 @@ export class MediaCatalogRepository {
 		libraryId: string,
 		query: MediaSourcePickerQuery,
 	): Promise<MediaSourcePickerResult> {
-		if (query.target === 'groups') {
-			return this.browseGroupSourceOptions(libraryId, query);
+		const libraryType = query.search ? this.libraryType(libraryId) : undefined;
+		if (query.target === 'groups' && (libraryType !== 'shows' || query.groupMatch !== 'direct')) {
+			return this.browseGroupSourceOptions(libraryId, query, libraryType === 'shows');
 		}
 
 		if (!query.search) {
@@ -633,13 +625,24 @@ export class MediaCatalogRepository {
 			};
 		}
 
-		return this.searchItemSourceOptions(libraryId, query);
+		if (libraryType === 'shows') {
+			const scope = this.filteredItemScope(libraryId, catalogProgramItemQuerySchema.parse({
+				parentId: query.parentId,
+			}));
+			const { entries, pagination } = browseShowSearch(this.db, libraryId, {
+				...query, hasItemFilters: false,
+			}, scope);
+			return { entries, pagination };
+		}
+
+		return this.searchItemSourceOptions(libraryId, query, libraryType === 'music-videos');
 	}
 
 	/** Search playable items with show ordering metadata and explain matched fields. */
 	private searchItemSourceOptions(
 		libraryId: string,
 		query: MediaSourcePickerQuery,
+		includeMusic: boolean,
 	): MediaSourcePickerResult {
 		// Search titles, hierarchy labels, normalized genres, and normalized people together.
 		const rawPattern = `%${escapeLike(query.search)}%`;
@@ -655,15 +658,12 @@ export class MediaCatalogRepository {
 		if (query.parentId) {
 			conditions.push('i.group_id IN (SELECT id FROM scope)');
 		}
-		const library = this.db.$client
-			.prepare('SELECT type_key AS typeKey FROM libraries WHERE id = ?')
-			.get(libraryId) as { typeKey: string } | undefined;
 		const joins
 			= 'LEFT JOIN media_groups g ON g.id = i.group_id LEFT JOIN media_groups parent ON parent.id = g.parent_id';
 		const applySearch = (forceLike: boolean): { where: string; allParams: Array<string | number> } => {
 			const search = itemSearchPredicate(query.search, {
 				libraryId,
-				includeMusic: library?.typeKey === 'music-videos',
+				includeMusic,
 				forceLike,
 			});
 			return {
@@ -700,18 +700,7 @@ export class MediaCatalogRepository {
 		const offset = (query.page - 1) * query.pageSize;
 		const rows = this.db.$client
 			.prepare(
-				`${scopeCte}SELECT i.id, i.library_id AS libraryId, i.group_id AS groupId,
-          i.stable_key AS stableKey, i.kind, i.title, i.sort_title AS sortTitle,
-          i.relative_path AS relativePath, i.playback_path AS playbackPath, i.plot, i.year,
-          i.duration_milliseconds / 1000.0 AS durationSeconds, i.season_number AS seasonNumber,
-          i.episode_number AS episodeNumber, i.metadata_status AS metadataStatus,
-		  i.episode_end_number AS episodeEndNumber, i.edition, i.external_ids AS externalIds,
-		  i.track_number AS trackNumber, i.disc_number AS discNumber, i.artists,
-		  i.multipart_status AS multipartStatus, i.parts, i.subtitle_tracks AS subtitleTracks,
-          i.availability, i.last_observed_at AS lastObservedAt, i.metadata,
-          i.artwork_relative_path AS artworkRelativePath, i.fingerprint,
-          i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
-          i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt,
+				`${scopeCte}SELECT ${CATALOG_ITEM_COLUMNS},
           g.title AS groupTitle, g.kind AS groupKind,
           parent.title AS parentTitle, parent.kind AS parentKind,
           CASE WHEN g.kind = 'show' THEN g.id WHEN parent.kind = 'show' THEN parent.id ELSE NULL END AS showId,
@@ -753,6 +742,7 @@ export class MediaCatalogRepository {
 	private browseGroupSourceOptions(
 		libraryId: string,
 		query: MediaSourcePickerQuery,
+		orderShows: boolean,
 	): MediaSourcePickerResult {
 		// Search group labels and descendant item metadata within the requested hierarchy level.
 		const rawPattern = `%${escapeLike(query.search)}%`;
@@ -810,6 +800,7 @@ export class MediaCatalogRepository {
 
 		// Page matching groups and attach the metadata fields that matched the search.
 		const offset = (query.page - 1) * query.pageSize;
+		const order = orderShows ? SHOW_GROUP_SEARCH_ORDER : 'g.sort_title COLLATE NOCASE ASC, g.id ASC';
 		const rows = this.db.$client
 			.prepare(
 				`SELECT g.id, g.library_id AS libraryId, g.parent_id AS parentId, g.kind,
@@ -819,7 +810,7 @@ export class MediaCatalogRepository {
           ${GROUP_CHILD_COUNT} AS childCount,
           parent.title AS parentTitle, parent.kind AS parentKind
         FROM media_groups g ${joins} WHERE ${where}
-        ORDER BY g.sort_title COLLATE NOCASE ASC, g.id ASC LIMIT ? OFFSET ?`,
+        ORDER BY ${order} LIMIT ? OFFSET ?`,
 			)
 			.all(...params, query.pageSize, offset) as RawGroupRow[];
 		const matches = query.search

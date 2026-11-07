@@ -418,7 +418,7 @@ async function loadSourceOptions(): Promise<void> {
 		const browse = await api.mediaSourceOptions(form.libraryId, {
 			target: form.sourceType === 'group' || form.sourceType === 'group-collection'
 				? 'groups'
-				: 'items',
+				: selectedLibraryType.value === 'shows' && sourceSearch.value.trim() ? 'all' : 'items',
 			...(sourceParentId.value ? { parentId: sourceParentId.value } : {}),
 			page: sourcePage.value,
 			pageSize: 20,
@@ -531,6 +531,9 @@ function selectSource(entry: MediaSourcePickerEntry): void {
 /** Open a show group in the source picker hierarchy. */
 function browseGroup(entry: MediaSourcePickerEntry): void {
 	if (entry.group) {
+		if (selectedLibraryType.value === 'shows' && (form.sourceType === 'item' || form.sourceType === 'collection')) {
+			sourceSearch.value = '';
+		}
 		sourceParentId.value = entry.group.id;
 		sourcePage.value = 1;
 		void loadSourceOptions();

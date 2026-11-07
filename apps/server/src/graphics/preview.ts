@@ -1,5 +1,5 @@
 import { resolveGraphicsPreviewPosition, type GraphicsPreviewPosition } from './preview-context.js';
-import { openGraphicsClock, prepareClockStill, type GraphicsClock } from './clock.js';
+import { GraphicsClockSizeError, openGraphicsClock, prepareClockStill, type GraphicsClock } from './clock.js';
 import { constants } from 'node:fs';
 import { access, mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -47,6 +47,9 @@ export class GraphicsPreviewFailure extends Error {
 function previewFailure(stage: PreviewStage, error: unknown): GraphicsPreviewFailure {
 	if (error instanceof GraphicsPreviewFailure) {
 		return error;
+	}
+	if (error instanceof GraphicsClockSizeError) {
+		return new GraphicsPreviewFailure(stage, 'clock_size', error.message);
 	}
 
 	const failure = (error ?? {}) as { code?: string; syscall?: string; killed?: boolean; signal?: string; stderr?: unknown };

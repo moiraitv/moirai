@@ -18,12 +18,22 @@ type ClockLayer = Extract<GraphicsLayer, { kind: 'clock' }>;
 /** Maximum supported item duration, including a long broadcast day across a clock change. */
 const maximumDuration = 26 * 60 * 60 * 1000;
 
+/** Maximum raster dimensions for both clock previews and live streams. */
+export const graphicsClockRasterLimit = { width: 1024, height: 288 } as const;
+
+/** The requested badge exceeds the clock raster budget at this output size. */
+export class GraphicsClockSizeError extends Error {
+	constructor() {
+		super(`The clock badge exceeds ${graphicsClockRasterLimit.width} × ${graphicsClockRasterLimit.height} pixels. Reduce its width for this channel.`);
+	}
+}
+
 /** Bound the clock producer to a small region and a single frame per second. */
 const clockRequest = z.object({
 	start: z.number().int().min(0).max(8_640_000_000_000_000 - maximumDuration),
 	duration: z.number().int().positive().max(maximumDuration),
-	width: z.number().int().min(2).max(1024),
-	height: z.number().int().min(2).max(288),
+	width: z.number().int().min(2).max(graphicsClockRasterLimit.width),
+	height: z.number().int().min(2).max(graphicsClockRasterLimit.height),
 	color: z.string().regex(/^#[0-9a-f]{6}$/i),
 	background: z.string().regex(/^#[0-9a-f]{6}$/i),
 	backgroundOpacity: z.number().min(0).max(100),
@@ -97,6 +107,10 @@ async function clockRegion(layer: ClockLayer, video: Channel['video'], primary: 
 		return null;
 	}
 	const { size, bounds } = geometry;
+	if (size.width > graphicsClockRasterLimit.width || size.height > graphicsClockRasterLimit.height) {
+		throw new GraphicsClockSizeError();
+	}
+
 	return {
 		size, frame,
 		x: Math.min(frame.width - 2, Math.round(bounds.x / 2) * 2),

@@ -1,6 +1,7 @@
 import { graphicsPresets, materializedTimelineSegments } from '@server/db/schema.js';
 import { prepareGraphicsContexts } from '@server/graphics/context.js';
-import { preparePlayoutGraphicsLabels } from '@server/graphics/segments.js';
+import { graphicsPreparationBudget, preparePlayoutGraphicsLabels } from '@server/graphics/segments.js';
+import type { GraphicsClock } from '@server/graphics/clock.js';
 import { resolveGraphicsPreviewPosition } from '@server/graphics/preview-context.js';
 import { buildXmltv } from '@server/guide/epg.js';
 import { getGraphicsSampleClip } from '@server/graphics/sample-clip.js';
@@ -273,6 +274,13 @@ describe('channel graphics', () => {
 				{ id: channelId!.id, text: false }, { id: watermark!.id, text: false },
 				{ id: animated!.id, text: true }, { id: saved.id, text: true },
 			]);
+			const fallback = segment(6000, 7000, {
+				role: 'filler', programId: fillerProgram.id, mediaItemId: randomUUID(), templateId: template.id, slotId,
+			});
+			const fallbackAssignments = repository.graphics.assignments({ channelId: channel.id, segments: [fallback] });
+			expect(selectGraphicsSegments([fallback], channel, fallbackAssignments)[0]?.presets).toEqual([
+				{ id: channelId!.id, text: false }, { id: watermark!.id, text: false }, { id: animated!.id, text: true },
+			]);
 			expect(() => repository.graphics.delete(saved.id)).toThrow(/assigned/i);
 			await expect(repository.updateProgram(program.id, { config: { ...program.config, graphicsAssignment: add(randomUUID()) } })).rejects.toThrow(/does not exist/);
 			await repository.updateScheduleTemplate(template.id, { slots: [{ ...template.slots[0]!, graphicsAssignment: { mode: 'replace', presetId: lowerThird!.id } }] });
@@ -327,7 +335,7 @@ describe('channel graphics', () => {
 		expect(() => parseGraphics(graphicsExamples[0]!.yaml.replace('opacity: 70', 'opacity: 170'))).toThrow(/Line \d+, layers\.0\.opacity/);
 	});
 
-	it('publishes ordered text and image layers for primary items and only media over authored rolls', async () => {
+	it('publishes primary text and images, inherited images over filler media, and no graphics over dead air', async () => {
 		const state = await fixture();
 		try {
 			const { repository, root } = state;
@@ -339,7 +347,9 @@ describe('channel graphics', () => {
 			const roll = segment(start + 5000, start + 10_000, { role: 'filler', fillerStage: 'mid-roll', airing });
 			const second = segment(start + 10_000, start + 15_000, { airing });
 			const next = segment(start + 15_000, start + 20_000, { title: 'Coming Up' });
-			const segments = [primary, roll, second, next];
+			const fallback = segment(start + 20_000, start + 25_000, { role: 'filler', mediaItemId: randomUUID() });
+			const gap = segment(start + 25_000, start + 30_000, { role: 'dead-air' });
+			const segments = [primary, roll, second, next, fallback, gap];
 			const text = shapedFixture.layers[1]!;
 			const image = parseGraphics(graphicsExamples[0]!.yaml).layers[0]!;
 			const yaml = `version: 1\nlayers: ${JSON.stringify([{ ...text, id: randomUUID() }, image])}`;
@@ -376,6 +386,8 @@ describe('channel graphics', () => {
 			const items = JSON.parse(result.files.get('day.json')!).items;
 			expect(items[0].graphics.map((layer: { location: string }) => layer.location)).toEqual(['bottom_left', 'bottom_right']);
 			expect(items[1].graphics.map((layer: { location: string }) => layer.location)).toEqual(['bottom_right']);
+			expect(items[4].graphics.map((layer: { location: string }) => layer.location)).toEqual(['bottom_right']);
+			expect(items[5].graphics).toBeUndefined();
 			expect((await sharp(await readFile(items[0].graphics[0].source.path)).metadata()).hasAlpha).toBe(true);
 
 			const delayed = await decorateGraphics(root, prepared.presets, channel, prepared.segments, files, () => true, snapshots, undefined, 'UTC', undefined, new Map());
@@ -1018,6 +1030,55 @@ it('reuses a prepared watermark on later items after the live preparation budget
 	}
 	finally {
 		prepare.mockRestore();
+		timer.mockRestore();
+		await state.close();
+	}
+});
+
+it('keeps the prepared clock and defers later clocks once the live budget expires', async () => {
+	const state = await fixture();
+	let elapsed = 0;
+	const timer = vi.spyOn(performance, 'now').mockImplementation(() => elapsed);
+	try {
+		const { root, repository } = state;
+		const preset = graphicsExamples[4]!;
+		const channel = await repository.createChannel(channelCreateSchema.parse({
+			number: '7', name: 'Test TV', graphicsPresetId: preset.id,
+			video: { width: 1920, height: 1080, scalingMode: 'stretch' },
+		}));
+		const clock = {
+			layer: vi.fn<GraphicsClock['layer']>(async () => {
+				elapsed = graphicsPreparationBudget.live;
+				return {
+					kind: 'canvas', location: 'top_left', layout: { mode: 'region', origin: { x: 0, y: 0 } },
+					source: {
+						source_type: 'http', uri: 'http://127.0.0.1/clock', reconnect: false, timeout_us: 5_000_000,
+						probe_hint: { format_name: 'apng', video: [{
+							codec: 'apng', width: 384, height: 108, pix_fmt: 'rgba', stream_index: 0, frame_rate: '1/1',
+						}] },
+					},
+				};
+			}),
+			close: vi.fn<GraphicsClock['close']>(),
+		};
+		const start = Date.now() + 60_000;
+		const spans = [segment(start, start + 5000), segment(start + 5000, start + 10_000)];
+		const items = spans.map(span => ({
+			id: span.id, start: span.start, finish: span.finish,
+			source: { source_type: 'local', path: span.playbackPath },
+		}));
+		const files = new Map([['day.json', JSON.stringify({ version: ETV_PLAYOUT_VERSION, items })]]);
+		const snapshots = await GraphicsSnapshots.open(path.join(root, 'snapshots'));
+		const presets = repository.graphics.preparePresets(new Set([preset.id]));
+		const result = await decorateGraphics(root, presets, channel, spans, files, () => true, snapshots, undefined, 'UTC', clock);
+		const [first, second] = JSON.parse(result.files.get('day.json')!).items;
+		expect(clock.layer).toHaveBeenCalledTimes(1);
+		expect(first.graphics).toMatchObject([{ kind: 'canvas' }]);
+		expect(second.graphics).toBeUndefined();
+		expect(second.source).toEqual(items[1]!.source);
+		expect(result.issue).toMatch(/still being prepared/);
+	}
+	finally {
 		timer.mockRestore();
 		await state.close();
 	}

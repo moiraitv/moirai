@@ -11,6 +11,7 @@ import {
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	MAX_EXPLICIT_MEDIA_ITEMS,
 	MAX_MEDIA_GENRE_RULES,
+	mediaSourcePickerTargetSchema,
 	mediaSortSchema,
 	sortDirectionSchema,
 	validateMediaGenreRules,
@@ -106,7 +107,8 @@ const mediaGenreFacetQuerySchema = z.object({
 
 /** Bounded search accepted by scheduling media-source pickers. */
 const mediaSourceOptionsQuerySchema = z.object({
-	target: z.enum(['items', 'groups']),
+	target: mediaSourcePickerTargetSchema.describe('Use all for mixed show, season, and episode search in TV libraries'),
+	groupMatch: z.literal('direct').optional().describe('Limit TV group searches to the same title and plot matches returned by all'),
 	parentId: z.uuid().optional(),
 	page: z.coerce.number().int().min(1).default(1),
 	pageSize: z.coerce.number().int().min(1).max(100).default(50),

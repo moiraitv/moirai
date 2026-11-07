@@ -193,6 +193,7 @@ const direction = computed<'asc' | 'desc'>(() =>
 	queryString('direction') === 'desc' ? 'desc' : 'asc');
 const page = computed(() => Math.max(1, Number(queryString('page')) || 1));
 const parentId = computed(() => queryString('parent') || undefined);
+const showSearch = computed(() => library.value?.typeKey === 'shows' && Boolean(queryString('q').trim()));
 const dateWindow = computed(() => queryString('dateWindow'));
 const routeAnchor = computed(() => queryString('anchor'));
 const entries = computed(() => browse.value?.entries ?? []);
@@ -935,7 +936,12 @@ async function selectDateWindow(key: string): Promise<void> {
 /** Open a media group and record it in the breadcrumb trail. */
 async function enter(group: MediaGroup): Promise<void> {
 	const nextTrail = [...trail.value.slice(1), { id: group.id, title: group.title }];
-	await navigate({ parent: group.id, trail: JSON.stringify(nextTrail), page: undefined });
+	await navigate({
+		parent: group.id,
+		trail: JSON.stringify(nextTrail),
+		page: undefined,
+		...(showSearch.value ? { q: undefined } : {}),
+	});
 }
 
 /** Navigate to the selected breadcrumb level. */
@@ -1275,8 +1281,9 @@ onUnmounted(() => {
 			<nav v-if="trail.length > 1" class="breadcrumbs" aria-label="Library location">
 				<button v-for="(crumb, index) in trail" :key="crumb.id ?? 'root'" @click="jump(index)">{{ crumb.title }}</button>
 			</nav>
-			<div class="catalog-toolbar">
-				<div ref="navigationScroller" class="alphabet-filter" aria-label="Catalog navigation">
+			<div class="catalog-toolbar" :class="{ 'is-show-search': showSearch }">
+				<span v-if="showSearch" class="muted">Shows, seasons, episodes</span>
+				<div v-else ref="navigationScroller" class="alphabet-filter" aria-label="Catalog navigation">
 					<template v-if="sort === 'title'">
 						<button v-for="key in alphabet" :key="key" :ref="(element) => setNavigationButton(key, element)" :class="{ active: activeNavigationKey === key }" :aria-current="activeNavigationKey === key ? 'location' : undefined" :disabled="!browse?.navigation.some((option) => option.key === key)" @click="navigateToKey(key)">{{ key }}</button>
 					</template>
@@ -1287,7 +1294,7 @@ onUnmounted(() => {
 						<button v-for="option in browse?.navigation ?? []" :key="option.key" :ref="(element) => setNavigationButton(option.key, element)" class="genre-option" :class="{ active: activeNavigationKey === option.key }" :aria-current="activeNavigationKey === option.key ? 'location' : undefined" @click="navigateToKey(option.key)">{{ option.label }}</button>
 					</template>
 				</div>
-				<ActionMenu class="sort-control" :label="`Sort by: ${sortLabel}`" trigger-class="catalog-select wide" menu-class="sort-popover">
+				<ActionMenu v-if="!showSearch" class="sort-control" :label="`Sort by: ${sortLabel}`" trigger-class="catalog-select wide" menu-class="sort-popover">
 					<template #trigger>{{ sortLabel }} <ChevronDown :size="16" /></template>
 					<button v-for="option in [{ value: 'title', label: 'Title' }, { value: 'date-added', label: 'Date Added' }, { value: 'genre', label: 'Genre' }] as const" :key="option.value" type="button" :class="{ selected: sort === option.value }" @click="selectSort(option.value)">{{ option.label }}</button>
 					<button type="button" @click="toggleDirection"><ArrowDownAZ v-if="direction === 'asc'" :size="16" /><ArrowUpAZ v-else :size="16" />Reverse Order</button>
@@ -1338,7 +1345,7 @@ onUnmounted(() => {
 							<button
 								type="button"
 								class="toolbar-button catalog-selection-action"
-								:disabled="mediaLoading || !browse || entries.length === 0"
+								:disabled="mediaLoading || !browse || (browse.matchedItemCount ?? entries.length) === 0"
 								@click="addAllMatchingItems"
 							>
 								<Layers3 :size="15" /> {{ selectionKind === 'groups' ? 'Add All Items' : 'Add All' }}

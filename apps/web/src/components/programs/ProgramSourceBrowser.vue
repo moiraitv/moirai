@@ -36,11 +36,16 @@ const emit = defineEmits<{
 /** Build the compact metadata line shown for a source result. */
 function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 	if (entry.group) {
+		if (props.libraryType === 'shows') {
+			return [entry.parentTitle, entry.group.kind, mediaGroupSubtitle(props.libraryType, entry.group)].filter(Boolean).join(' · ');
+		}
+
 		return mediaGroupSubtitle(props.libraryType, entry.group) || entry.group.kind;
 	}
 
 	if (entry.item) {
-		return mediaItemSubtitle(props.libraryType, entry.item) || entry.item.kind;
+		const label = mediaItemSubtitle(props.libraryType, entry.item) || entry.item.kind;
+		return props.libraryType === 'shows' && entry.parentTitle ? `${entry.parentTitle} · ${label}` : label;
 	}
 
 	return '';

@@ -1,6 +1,37 @@
 import type { MediaGroup, MediaItem, MediaItemDetail } from '@moirai/shared';
 import { normalizedReleaseDate } from '../media/release-date.js';
 
+/** Base catalog projection for a media item aliased as `i`. */
+export const CATALOG_ITEM_COLUMNS = `i.id, i.library_id AS libraryId, i.group_id AS groupId,
+	i.stable_key AS stableKey, i.kind, i.title, i.sort_title AS sortTitle,
+	i.relative_path AS relativePath, i.playback_path AS playbackPath, i.plot, i.year,
+	i.duration_milliseconds / 1000.0 AS durationSeconds, i.season_number AS seasonNumber,
+	i.episode_number AS episodeNumber, i.episode_end_number AS episodeEndNumber,
+	i.edition, i.external_ids AS externalIds, i.track_number AS trackNumber,
+	i.disc_number AS discNumber, i.artists, i.multipart_status AS multipartStatus,
+	i.parts, i.subtitle_tracks AS subtitleTracks, i.metadata_status AS metadataStatus,
+	i.availability, i.last_observed_at AS lastObservedAt, i.metadata,
+	i.artwork_relative_path AS artworkRelativePath, i.fingerprint,
+	i.file_modified_at AS fileModifiedAt, i.date_added_at AS dateAddedAt,
+	i.title_bucket AS titleBucket, i.created_at AS createdAt, i.updated_at AS updatedAt`;
+
+/** Count direct children of group `g` using the library-scoped parent indexes. */
+export const GROUP_CHILD_COUNT = `(
+	SELECT COUNT(*) FROM media_groups child
+	WHERE child.library_id = g.library_id AND child.parent_id = g.id
+) + (
+	SELECT COUNT(*) FROM media_items child_item
+	WHERE child_item.library_id = g.library_id AND child_item.group_id = g.id
+)`;
+
+/** The group aliased as `g` and its direct children, within the same library. */
+export const SOURCE_GROUP_IDS = `(
+	SELECT g.id
+	UNION ALL
+	SELECT child.id FROM media_groups child
+	WHERE child.library_id = g.library_id AND child.parent_id = g.id
+)`;
+
 /** Joined media-item row before JSON columns are decoded. */
 export interface RawItemRow {
 	showId?: string | null;

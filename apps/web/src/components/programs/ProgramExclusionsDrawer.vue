@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import { Asterisk, Ban, Check, Layers3, X } from '@lucide/vue';
-import { MAX_EXCLUDED_MEDIA_ITEMS, MAX_EXPLICIT_MEDIA_GROUPS, type ContentExclusions, type MediaGroup, type MediaSelectionItem } from '@moirai/shared';
+import { MAX_EXCLUDED_MEDIA_ITEMS, MAX_EXPLICIT_MEDIA_GROUPS, type ContentExclusions, type MediaGroup, type MediaSelectionItem, type MediaSourcePickerTarget } from '@moirai/shared';
 import { api } from '../../api';
 import { artworkVariantUrl } from '../../artwork-url';
 import { errorMessage } from '../../error-message';
@@ -36,7 +36,7 @@ const tab = ref<ExclusionTab>(props.initialTab);
 const hierarchy = ref<MediaGroup[]>([]);
 const searchInput = ref('');
 const search = ref('');
-const target = ref<'items' | 'groups'>('items');
+const target = ref<MediaSourcePickerTarget>(props.libraryType === 'shows' ? 'all' : 'items');
 const browsePage = ref(1);
 const excludedPage = ref(1);
 const resultsPage = ref(1);
@@ -186,6 +186,7 @@ async function load(): Promise<void> {
 
 		const result = await api.mediaSourceOptions(props.libraryId, {
 			parentId: parent.value?.id, target: search.value ? target.value : 'items', search: search.value,
+			groupMatch: props.libraryType === 'shows' && target.value === 'groups' ? 'direct' : undefined,
 			page: browsePage.value, pageSize: PAGE_SIZE,
 		});
 		if (current === revision) {
@@ -371,6 +372,7 @@ onBeforeUnmount(() => {
 							<form class="program-exclusions-search" role="search" @submit.prevent="submitSearch">
 								<input v-model="searchInput" type="search" aria-label="Search library media" placeholder="Search library…" maxlength="120" @search="!searchInput && submitSearch()" />
 								<select v-if="canSearchGroups" v-model="target" aria-label="Search for" @change="submitSearch">
+									<option v-if="libraryType === 'shows'" value="all">All</option>
 									<option value="items">Items</option>
 									<option value="groups">Groups</option>
 								</select>

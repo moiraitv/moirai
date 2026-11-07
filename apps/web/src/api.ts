@@ -34,6 +34,7 @@ import type {
 	MediaGenreFacet,
 	MediaGroup,
 	MediaItem,
+	MediaSourcePickerTarget,
 	MediaSelectionItem,
 	MediaItemDetail,
 	MediaSort,
@@ -154,7 +155,8 @@ export interface MediaGenreFacetQuery {
 
 /** Search and paging controls for a program source picker. */
 export interface MediaSourcePickerQuery {
-	target: 'items' | 'groups';
+	target: MediaSourcePickerTarget;
+	groupMatch?: 'direct' | undefined;
 	parentId?: string | undefined;
 	page: number;
 	pageSize: number;

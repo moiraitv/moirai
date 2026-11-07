@@ -679,8 +679,13 @@ A program separates content eligibility from selection behavior. Content sources
 
 Library search uses a separate optional `search` parameter; the existing `name` filter remains
 title-only. Catalog search uses an FTS5 prefix index of titles, plots, genres, people, and group labels,
-kept in sync from catalog writes, and flattens to matching items so a shows-library query can return
-every matching episode. Live FTS triggers skip artwork-only item updates and group updates that do not
+kept in sync from catalog writes. TV Library search and mixed Program source searches paginate one
+set ordered by show title, season number, then episode season and episode number.
+Mixed results match group titles and plots independently of episode metadata and retain substring
+fallback for each result type. Active Library filters require a matching group to contain an episode
+that satisfies those filters. Season and episode cards include their owning show, and the exclusions
+drawer narrows the mixed results by type. Dedicated Program group searches keep descendant genre and credit
+matching. Live FTS triggers skip artwork-only item updates and group updates that do not
 change searchable text; scan persist defers those triggers and rebuilds `catalog_search` once for the
 library. Library listings read a stored `item_count` updated at scan commit instead of counting media
 rows on every request. The web shell ignores in-progress `scan.changed` events when refreshing the
@@ -706,7 +711,8 @@ comparison. Shared boundary math rounds finer-than-millisecond bounds upward, pr
 starts and exclusive ends against millisecond catalog records. Browsing, recursive selection, and
 in-memory scheduling use the same boundaries without extra queries or replacing the catalog index.
 
-Recursive Add All selection applies the same search and filters as browsing. Music-video Artist
+Recursive Add All selection applies the same search and filters as browsing. For TV searches it
+preserves the displayed episode order and uses the total episode count to determine availability. Music-video Artist
 and Album filters are shared by Library, Programs, and Quick Setup and evaluated against the same
 credits and hierarchy labels in SQL and scheduling. Music matching shares Unicode lowercase
 conversion across SQL, explanations, and scheduling, preserving accents and literal punctuation.
@@ -1727,12 +1733,15 @@ Channel graphics are the base of an ordered assignment stack. Schedules, Templat
 slots, and Filler presets can inherit, add, replace, or clear that stack. These assignment editors
 use the shared animated form disclosure and load the preset list on demand. Committed segments supply
 Template, slot, Program ancestry, and Filler preset identity. Filler resolves its own source Program
-and can render text from filler-specific assignments. New committed windows retain filler provenance;
+and can render text from filler-specific assignments. Indexed schedule fallback uses the same
+graphics assignments as other filler media. New committed windows retain filler provenance;
 older windows gain it at their normal scheduling refresh boundary.
 
 Graphics presets store versioned YAML with ordered media, shape, text, and clock layers. Live clocks
-use bounded, signed loopback alpha streams positioned as Next canvas regions. They advance from the
-scheduled item time plus the playback offset. Shapes support solid and two-stop linear fills and are
+use bounded, signed loopback alpha streams positioned as Next canvas regions. Clock previews and
+streams share a 1024 × 288 pixel badge limit. They advance from the scheduled item time plus the
+playback offset. Clock layers that have yet to be prepared are deferred when the graphics budget
+expires. Shapes support solid and two-stop linear fills and are
 rasterized to transparent snapshots. Moirai resolves optional rotation, shape skew, and attachment bounds
 before playout, retaining Next media-layer ordering and timing. Transformed animated assets are
 prepared as lossless alpha video loops capped at 128 MiB each. Layers that do not need resolved placement retain the native media path. The

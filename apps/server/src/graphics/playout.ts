@@ -1,8 +1,8 @@
-import type { GraphicsClock } from './clock.js';
+import { GraphicsClockSizeError, type GraphicsClock } from './clock.js';
 import { validateEtvDocument, type EtvGraphicsLayer, type EtvMediaGraphicsLayer } from '@moirai/ersatztv-contract';
 import { emptyGraphicsContext, hasGraphicsTransform, type Channel, type GraphicsContext } from '@moirai/shared';
 import type { PreparedGraphicsPresets } from '../repository/graphics.js';
-import { graphicsAssignmentsForSegment, graphicsPreparationBudget, type GraphicsSegment } from './segments.js';
+import { graphicsAssignmentsForSegment, graphicsPreparationBudget, isGraphicsEligible, type GraphicsSegment } from './segments.js';
 import { GraphicsSnapshotBusyError, type GraphicsSnapshots } from './snapshots.js';
 import { graphicsContexts, graphicsTiming, prepareGraphicsLayer } from './render.js';
 import { GraphicsAttachmentBoundsUnavailable, transformedGraphics } from './transforms.js';
@@ -75,7 +75,7 @@ export async function decorateGraphics(
 	for (const item of candidates) {
 		// Physical parts and daily clips append their identifiers to the original segment ID.
 		const segment = segmentById.get(item.id.replace(/:\d{4}-\d{2}-\d{2}(?::\d+)?$/, ''));
-		if (!segment || segment.role === 'dead-air' || (segment.role === 'filler' && !segment.airing && !segment.fillerPresetId)) {
+		if (!segment || !isGraphicsEligible(segment)) {
 			continue;
 		}
 		const preparedContext = contexts?.get(segment.id);
@@ -104,6 +104,11 @@ export async function decorateGraphics(
 					continue;
 				}
 				if (layer.kind === 'clock') {
+					if (remainingBudget(started, live) <= 0) {
+						issue ??= 'Some graphics are still being prepared';
+						continue;
+					}
+
 					try {
 						if (!clock) {
 							throw new Error('Clock renderer unavailable');
@@ -119,8 +124,8 @@ export async function decorateGraphics(
 							(item.graphics ??= []).push(canvas);
 						}
 					}
-					catch {
-						issue ??= 'The live clock could not be prepared.';
+					catch (error) {
+						issue ??= error instanceof GraphicsClockSizeError ? error.message : 'The live clock could not be prepared.';
 					}
 					continue;
 				}

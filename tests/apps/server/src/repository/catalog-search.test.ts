@@ -356,6 +356,113 @@ it('keeps hierarchy child counts and episode ordering in browsed and searched so
 	}
 });
 
+it('orders TV groups and episodes numerically across pages and preserves their search scope', async () => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	databases.push(database);
+	const repository = new Repository(database.db);
+	const library = await repository.createLibrary({
+		name: 'TV ordering', typeKey: 'shows', sourceType: 'on-disk',
+		sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' },
+		scanIntervalMinutes: 15, watcherEnabled: false, enabled: true,
+	});
+	const alpha = show(crypto.randomUUID(), 'Alpha Signal');
+	const zulu = show(crypto.randomUUID(), 'Zulu Signal');
+	const seasons = [
+		{ ...season(crypto.randomUUID(), alpha.id), title: 'Unknown Signal', metadata: {} },
+		{ ...season(crypto.randomUUID(), alpha.id), title: 'A Signal', metadata: { seasonNumber: 10 } },
+		{ ...season(crypto.randomUUID(), zulu.id), title: 'Z Signal', metadata: { seasonNumber: 2 } },
+		{ ...season(crypto.randomUUID(), zulu.id), title: 'Special Signal', metadata: { seasonNumber: 0 } },
+		{ ...season(crypto.randomUUID(), alpha.id), title: 'Season 4', metadata: { seasonNumber: 4 } },
+	];
+	const [unknown, ten, two, specials, parentMatchOnly] = seasons;
+	const items = [
+		{ ...episode(ten!.id, 'A Tenth Season'), seasonNumber: 10, episodeNumber: 1 },
+		{ ...episode(two!.id, 'A Tenth Episode'), seasonNumber: 2, episodeNumber: 10 },
+		{ ...episode(two!.id, 'Z Second Episode'), seasonNumber: 2, episodeNumber: 2, durationMilliseconds: 60_000 },
+		{ ...episode(two!.id, 'An Unnumbered Episode'), seasonNumber: 2, episodeNumber: null },
+		{ ...episode(unknown!.id, 'An Unnumbered Season'), seasonNumber: null, episodeNumber: 1 },
+		{ ...episode(specials!.id, 'Holiday'), seasonNumber: 0, episodeNumber: 1 },
+		{ ...episode(parentMatchOnly!.id, 'Inherited Match'), seasonNumber: 4, episodeNumber: 1 },
+	];
+	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [zulu, alpha, ...seasons], items, [], true);
+
+	const expectedGroups = [alpha, zulu, specials, two, ten, unknown].map(entry => entry!.id);
+	const expectedItems = [5, 2, 1, 3, 6, 0, 4].map(index => items[index]!.id);
+	const expected = [...expectedGroups, ...expectedItems];
+	const query = { target: 'all' as const, parentId: null, page: 1, pageSize: 4, search: 'Signal' };
+	const ordered = [];
+	for (let page = 1; page <= Math.ceil(expected.length / query.pageSize); page += 1) {
+		const result = await repository.browseMediaSourceOptions(library.id, { ...query, page });
+		expect(result.pagination).toMatchObject({ totalEntries: expected.length, totalPages: 4 });
+		ordered.push(...result.entries);
+	}
+	expect(ordered.map(entry => entry.key)).toEqual(expected);
+	expect(ordered.find(entry => entry.key === two!.id)).toMatchObject({ parentTitle: zulu.title, group: { childCount: 3 } });
+	expect(ordered.find(entry => entry.key === items[6]!.id)).toMatchObject({
+		item: { showId: alpha.id }, matches: [{ field: 'show', label: alpha.title }],
+	});
+
+	const scoped = await repository.browseMediaSourceOptions(library.id, { ...query, parentId: zulu.id, pageSize: 20 });
+	expect(scoped.entries.map(entry => entry.key)).toEqual([specials!.id, two!.id, ...expectedItems.slice(0, 4)]);
+	const itemsOnly = await repository.browseMediaSourceOptions(library.id, { ...query, target: 'items', pageSize: 20 });
+	expect(itemsOnly.entries.map(entry => entry.key)).toEqual(expectedItems);
+	const groupsOnly = await repository.browseMediaSourceOptions(library.id, { ...query, target: 'groups', pageSize: 20 });
+	expect(groupsOnly.entries.map(entry => entry.key)).toEqual([
+		alpha.id, zulu.id, specials!.id, two!.id, parentMatchOnly!.id, ten!.id, unknown!.id,
+	]);
+	const directGroups = await repository.browseMediaSourceOptions(library.id, {
+		...query, target: 'groups', groupMatch: 'direct', pageSize: 20,
+	});
+	expect(directGroups.entries.map(entry => entry.key)).toEqual(expectedGroups);
+
+	const catalogQuery = catalogProgramItemQuerySchema.parse({ search: 'Signal', sort: 'date-added', direction: 'desc' });
+	const catalog = await repository.browseMedia(library.id, { ...catalogQuery, page: 1, pageSize: 20 });
+	expect(catalog.entries.map(entry => entry.key)).toEqual(expected);
+	expect(catalog.matchedItemCount).toBe(expectedItems.length);
+	expect(catalog.navigation).toEqual([]);
+	const groupPage = await repository.browseMedia(library.id, { ...catalogQuery, page: 1, pageSize: 2 });
+	expect(groupPage.items).toEqual([]);
+	expect(groupPage.matchedItemCount).toBe(expectedItems.length);
+	const bulk = repository.resolveProgramItemSelection(library.id, { ...catalogQuery, sort: 'genre' });
+	expect(bulk).toEqual({ itemIds: expectedItems, matchedItemCount: expectedItems.length });
+	const filtered = await repository.browseMedia(library.id, {
+		...catalogQuery, parentId: zulu.id, maximumDurationSeconds: 60, page: 1, pageSize: 20,
+	});
+	expect(filtered.entries.map(entry => entry.key)).toEqual([two!.id, items[2]!.id]);
+	const filteredRoot = await repository.browseMedia(library.id, {
+		...catalogQuery, maximumDurationSeconds: 60, page: 1, pageSize: 20,
+	});
+	expect(filteredRoot.entries.map(entry => entry.key)).toEqual([zulu.id, two!.id, items[2]!.id]);
+	const filteredBulk = repository.resolveProgramItemSelection(library.id, { ...catalogQuery, maximumDurationSeconds: 60 });
+	expect(filteredBulk).toEqual({ itemIds: [items[2]!.id], matchedItemCount: 1 });
+});
+
+it('falls back to TV substring matches independently for groups and episodes', async () => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	databases.push(database);
+	const repository = new Repository(database.db);
+	const library = await repository.createLibrary({
+		name: 'TV substring matching', typeKey: 'shows', sourceType: 'on-disk',
+		sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' },
+		scanIntervalMinutes: 15, watcherEnabled: false, enabled: true,
+	});
+	const group = { ...show(crypto.randomUUID(), 'Example'), plot: 'Bookmark SkyBreadcrumb' };
+	const item = { ...episode(group.id, 'SkyBookmark'), plot: 'Breadcrumb' };
+	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [group], [item], [], true);
+
+	for (const search of ['Bookmark', 'Breadcrumb']) {
+		const result = await repository.browseMediaSourceOptions(library.id, {
+			target: 'all', parentId: null, page: 1, pageSize: 5, search,
+		});
+		expect(result.entries.map(entry => entry.key)).toEqual([group.id, item.id]);
+		expect(result.entries[0]?.matches).toEqual([{ field: 'plot', label: group.plot }]);
+		const groups = await repository.browseMediaSourceOptions(library.id, {
+			target: 'groups', groupMatch: 'direct', parentId: null, page: 1, pageSize: 5, search,
+		});
+		expect(groups.entries).toEqual(result.entries.filter(entry => entry.kind === 'group'));
+	}
+});
+
 it('returns empty search pages without fetching rows and preserves substring matches', async () => {
 	const database = createDatabase(':memory:', path.resolve('drizzle'));
 	databases.push(database);
@@ -380,22 +487,22 @@ it('returns empty search pages without fetching rows and preserves substring mat
 			browse: (search: string, page: number) => repository.browseMedia(library.id, {
 				...catalogProgramItemQuerySchema.parse({ search }), page, pageSize,
 			}),
-			matchId: item.id,
+			matchIds: [group.id, item.id],
 		},
 		...(['items', 'groups'] as const).map(target => ({
 			browse: (search: string, page: number) => repository.browseMediaSourceOptions(library.id, {
 				target, parentId: null, search, page, pageSize,
 			}),
-			matchId: target === 'items' ? item.id : group.id,
+			matchIds: [target === 'items' ? item.id : group.id],
 		})),
 	];
-	for (const { browse, matchId } of searches) {
+	for (const { browse, matchIds } of searches) {
 		prepare.mockClear();
 		expect(await browse('unmatched', 2)).toMatchObject({
 			entries: [],
 			pagination: { page: 2, pageSize, totalEntries: 0, totalPages: 1 },
 		});
 		expect(prepare).not.toHaveBeenCalledWith(expect.stringMatching(/\bOFFSET\b/u));
-		expect((await browse('nfel', 1)).entries.map(entry => entry.key)).toEqual([matchId]);
+		expect((await browse('nfel', 1)).entries.map(entry => entry.key)).toEqual(matchIds);
 	}
 });

@@ -7,11 +7,12 @@ import { expect, it } from 'vitest';
 import { channelCreateSchema, graphicsTimeFormatter } from '@moirai/shared';
 import { loadConfig } from '@server/config.js';
 import { createDatabase } from '@server/db/index.js';
-import { openGraphicsClock } from '@server/graphics/clock.js';
+import { GraphicsClockSizeError, graphicsClockRasterLimit, openGraphicsClock, prepareClockStill } from '@server/graphics/clock.js';
 import { runGraphicsProcess } from '@server/graphics/assets.js';
 import { parseGraphics } from '@server/graphics/document.js';
 import { graphicsExamples } from '@server/graphics/examples.js';
 import { renderGraphicsSampleClip } from '@server/graphics/preview.js';
+import { GraphicsSnapshots } from '@server/graphics/snapshots.js';
 import { Repository } from '@server/repository/index.js';
 
 const engine = process.env.MOIRAI_TEST_GRAPHICS_ENGINE;
@@ -21,6 +22,39 @@ it('formats midnight and the spring-forward boundary in the broadcast zone', () 
 	expect(format.format(new Date('2026-01-02T08:00:00Z'))).toBe('00:00:00');
 	expect(format.format(new Date('2026-03-08T09:59:59Z'))).toBe('01:59:59');
 	expect(format.format(new Date('2026-03-08T10:00:00Z'))).toBe('03:00:00');
+});
+
+it('uses the same clock raster size limit for still previews and live layers', async () => {
+	const service = await openGraphicsClock('UTC');
+	const directory = await mkdtemp(path.join(os.tmpdir(), 'moirai-clock-size-'));
+	try {
+		const [example] = parseGraphics(graphicsExamples[4]!.yaml).layers;
+		if (example?.kind !== 'clock') {
+			throw new Error('Expected the clock example');
+		}
+		const snapshots = await GraphicsSnapshots.open(directory);
+		const layer = { ...example, width: 25 };
+		const video = {
+			...channelCreateSchema.parse({ number: '1', name: 'Test' }).video,
+			width: graphicsClockRasterLimit.width * 4,
+			height: graphicsClockRasterLimit.height * 8,
+		};
+		const start = Date.parse('2026-03-08T09:59:54Z');
+		const still = await prepareClockStill(layer, start, 'UTC', video, undefined, 'ffprobe', snapshots);
+		expect(await sharp(still!.source.path).metadata()).toMatchObject(graphicsClockRasterLimit);
+		const canvas = await service.layer(layer, start, 9000, video, undefined, 'ffprobe');
+		expect(canvas?.source.probe_hint?.video?.[0]).toMatchObject(graphicsClockRasterLimit);
+
+		const oversized = { ...video, width: video.width + 8 };
+		await expect(prepareClockStill(layer, start, 'UTC', oversized, undefined, 'ffprobe', snapshots))
+			.rejects.toBeInstanceOf(GraphicsClockSizeError);
+		await expect(service.layer(layer, start, 9000, oversized, undefined, 'ffprobe'))
+			.rejects.toBeInstanceOf(GraphicsClockSizeError);
+	}
+	finally {
+		await service.close();
+		await rm(directory, { recursive: true, force: true });
+	}
 });
 
 it.skipIf(!engine || !existsSync(engine))('streams signed clock pixels with alpha and the correct mid-item timestamp', async () => {

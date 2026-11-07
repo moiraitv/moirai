@@ -209,6 +209,8 @@ export type CatalogProgramItemQuery = z.infer<typeof catalogProgramItemQuerySche
 /** One item or hierarchy group returned by catalog browsing. */
 export interface MediaBrowseEntry {
 	matches?: MediaSourceMatch[];
+	/** Owning show or artist when a search result is displayed outside its hierarchy. */
+	parentTitle?: string | undefined;
 	key: string;
 	kind: 'item' | 'group';
 	navigationKey: string;
@@ -231,6 +233,8 @@ export interface MediaBrowseResult {
 	entries: MediaBrowseEntry[];
 	groups: MediaGroup[];
 	items: MediaItem[];
+	/** Total matching episodes across all pages of a mixed TV search. */
+	matchedItemCount?: number | undefined;
 	pagination: {
 		page: number;
 		pageSize: number;
@@ -253,9 +257,13 @@ export interface MediaSourceMatch {
 /** Catalog entry with the metadata fields that matched source-picker search. */
 export type MediaSourcePickerEntry = MediaBrowseEntry & {
 	matches: MediaSourceMatch[];
-	/** Owning show or artist when a search result is displayed outside its hierarchy. */
-	parentTitle?: string | undefined;
 };
+
+/** Searchable source types, including mixed results for TV libraries. */
+export const mediaSourcePickerTargetSchema = z.enum(['items', 'groups', 'all']);
+
+/** The source types requested by a library media picker. */
+export type MediaSourcePickerTarget = z.infer<typeof mediaSourcePickerTargetSchema>;
 
 /** Selected media with its canonical identity and optional exclusion match. */
 export type MediaSelectionItem = MediaItem & { canonicalId?: string | undefined; excluded?: true | undefined };

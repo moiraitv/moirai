@@ -13,9 +13,15 @@ export interface ResolvedGraphicsPreset {
 }
 
 /** Committed metadata and ordered graphics needed by the playout adapter. */
-export type GraphicsSegment = Pick<TimelineSegment, 'id' | 'airing' | 'role' | 'title' | 'subtitle' | 'start' | 'finish' | 'fillerPresetId'> & {
+export type GraphicsSegment = Pick<TimelineSegment, 'id' | 'airing' | 'role' | 'title' | 'subtitle' | 'start' | 'finish' | 'fillerPresetId' | 'mediaItemId'> & {
 	presets?: ResolvedGraphicsPreset[];
 };
+
+/** Keep primary items, authored rolls, and indexed filler eligible for graphics. */
+export function isGraphicsEligible(segment: Pick<GraphicsSegment, 'role' | 'airing' | 'fillerPresetId' | 'mediaItemId'>): boolean {
+	return segment.role === 'primary'
+		|| (segment.role === 'filler' && Boolean(segment.airing || segment.fillerPresetId || segment.mediaItemId));
+}
 
 /** Resolve a stack for one committed item using its actual selection and placement. */
 export function resolveGraphicsPresets(channel: Channel, segment: TimelineSegment, assignments: GraphicsAssignments): ResolvedGraphicsPreset[] {
@@ -52,13 +58,13 @@ export function resolveGraphicsPresets(channel: Channel, segment: TimelineSegmen
 	return stack;
 }
 
-/** Keep primary context and authored rolls even if only some items have assigned graphics. */
+/** Keep eligible context even if only some items have assigned graphics. */
 export function selectGraphicsSegments(segments: TimelineSegment[], channel?: Channel, assignments?: GraphicsAssignments): GraphicsSegment[] {
 	return segments
-		.filter(segment => segment.role === 'primary' || (segment.role === 'filler' && (segment.airing || segment.fillerPresetId)))
+		.filter(isGraphicsEligible)
 		.map(segment => {
-			const { id, airing, role, title, subtitle, start, finish, fillerPresetId } = segment;
-			return { id, airing, role, title, subtitle, start, finish, fillerPresetId,
+			const { id, airing, role, title, subtitle, start, finish, fillerPresetId, mediaItemId } = segment;
+			return { id, airing, role, title, subtitle, start, finish, fillerPresetId, mediaItemId,
 				...(channel && assignments ? { presets: resolveGraphicsPresets(channel, segment, assignments) } : {}) };
 		});
 }

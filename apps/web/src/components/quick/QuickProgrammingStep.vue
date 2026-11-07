@@ -89,7 +89,9 @@ async function loadOptions(background = false): Promise<void> {
 		}
 		else {
 			const result = await api.mediaSourceOptions(props.libraryId, {
-				target: draft.value.sourceType === 'group-collection' ? 'groups' : 'items',
+				target: draft.value.sourceType === 'group-collection'
+					? 'groups'
+					: props.scenario === 'shows' && search.value.trim() ? 'all' : 'items',
 				...(parentId.value ? { parentId: parentId.value } : {}),
 				page: page.value,
 				pageSize: 20,
@@ -229,6 +231,9 @@ function changeSourceType(): void {
 /** Open a hierarchy group while choosing explicit media. */
 function browse(entry: MediaSourcePickerEntry): void {
 	if (entry.group) {
+		if (props.scenario === 'shows' && draft.value.sourceType === 'collection') {
+			search.value = '';
+		}
 		parentId.value = entry.group.id;
 		page.value = 1;
 		void loadOptions();

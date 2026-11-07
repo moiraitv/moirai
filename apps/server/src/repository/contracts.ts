@@ -3,6 +3,7 @@ import type {
 	ChannelTimelineMaterializationStatus,
 	MediaExternalId,
 	MediaPart,
+	MediaSourcePickerTarget,
 	MediaSubtitleTrack,
 	MultipartStatus,
 	ScanRun,
@@ -98,7 +99,8 @@ export interface ReconciledPresenceCheck {
 
 /** Bounded catalog query used by program source pickers. */
 export interface MediaSourcePickerQuery {
-	target: 'items' | 'groups';
+	target: MediaSourcePickerTarget;
+	groupMatch?: 'direct' | undefined;
 	parentId: string | null;
 	page: number;
 	pageSize: number;

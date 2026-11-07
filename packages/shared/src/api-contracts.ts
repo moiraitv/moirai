@@ -239,6 +239,7 @@ export const mediaSourceMatchSchema = z.object({
 /** One media item or hierarchy group returned by catalog browsing. */
 export const mediaBrowseEntrySchema = z.object({
 	matches: z.array(mediaSourceMatchSchema).optional(),
+	parentTitle: z.string().optional(),
 	key: z.string(),
 	kind: z.enum(['item', 'group']),
 	navigationKey: z.string(),
@@ -261,6 +262,7 @@ export const mediaBrowseResultSchema = z.object({
 	entries: z.array(mediaBrowseEntrySchema),
 	groups: z.array(mediaGroupSchema),
 	items: z.array(mediaItemSchema),
+	matchedItemCount: z.number().int().nonnegative().optional(),
 	pagination: paginationSchema,
 	navigation: z.array(z.object({
 		key: z.string(),
@@ -274,7 +276,6 @@ export const mediaBrowseResultSchema = z.object({
 export const mediaSourcePickerResultSchema = z.object({
 	entries: z.array(mediaBrowseEntrySchema.extend({
 		matches: z.array(mediaSourceMatchSchema),
-		parentTitle: z.string().optional(),
 	})),
 	pagination: paginationSchema,
 });

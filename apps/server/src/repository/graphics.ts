@@ -1,5 +1,6 @@
 import { instantMilliseconds } from '../db/instant.js';
 import { validateGraphicsTemplate } from '../graphics/render.js';
+import { isGraphicsEligible } from '../graphics/segments.js';
 import { randomUUID } from 'node:crypto';
 import { asc, eq, sql } from 'drizzle-orm';
 import { graphicsAssignmentSchema, type GraphicsAssignment, type GraphicsAsset, type GraphicsDocument, type GraphicsPreset, type TimelineSegment } from '@moirai/shared';
@@ -210,8 +211,7 @@ export class GraphicsRepository {
 
 	/** Batch overrides for a committed window, or read all assignments for administration. */
 	assignments(window?: { channelId: string; segments: readonly TimelineSegment[] }): GraphicsAssignments {
-		const segments = window?.segments.filter(segment => segment.role === 'primary'
-			|| (segment.role === 'filler' && (segment.airing || segment.fillerPresetId)));
+		const segments = window?.segments.filter(isGraphicsEligible);
 		const templates = segments?.map(segment => segment.templateId);
 		const slots = segments?.map(segment => segment.slotId);
 		const programs = segments?.flatMap(segment => segment.programAncestry?.length
