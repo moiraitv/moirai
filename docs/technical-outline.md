@@ -1876,6 +1876,11 @@ upstream image supports `linux/amd64` and `linux/arm64`; upstream dropped `linux
 continue to target `linux/amd64`. The development submodule is excluded from the
 Docker build context.
 
+The Docker build installs all workspaces for compilation and checks. The final image copies a
+separate lockfile-based production install scoped to the server workspace. Local semantic inference
+uses the CPU, so the Docker install skips ONNX Runtime's CUDA download and packages only the native
+ONNX binaries for the target architecture.
+
 Publishing a GitHub release triggers `.github/workflows/publish-image.yml` to build that tagged
 commit for `linux/amd64` and push to `ghcr.io/<owner>/<repository>` using the workflow's scoped
 `GITHUB_TOKEN`. Images receive the release tag and its normalized semantic version; stable releases
