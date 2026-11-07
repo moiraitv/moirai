@@ -39,9 +39,9 @@ RUN npm ci --omit=dev --workspace=@moirai/server \
 
 FROM node:24.22.1-bookworm-slim AS node-runtime
 
-# ErsatzTV Next v0.2.3 revision 54c6cb9ec03b7bd259144896c625c06fda09b3d0. The
+# ErsatzTV Next v0.2.5 revision c5cb065f9f35dbbcb7c05845f0f92c70f576a480. The
 # upstream image index is pinned to prevent an unnoticed engine change.
-FROM ghcr.io/ersatztv/next@sha256:bc6344e497b9535084d9ac6f86be121d4ff0ed1cac96c1b5a1fd9581a710d443 AS runtime
+FROM ghcr.io/ersatztv/next@sha256:4dbf4d7c379b9535505e59773f18d71e89b8823ae07dd859506806cc062a2cf9 AS runtime
 USER root
 ENV NODE_ENV=production \
     HOME=/home/ersatztv \
