@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.0 - 2026-11-07
+
+### New
+
+- **Graphics** adds reusable on-screen overlays for watermarks, animated logos, now-playing and upcoming listings, and live clocks. Combine media, shape, text, and clock layers in the visual editor or YAML. Start with one of six built-in examples, preview the animation, or render a frame against a channel's committed schedule.
+  - Set a base graphics preset on a Channel. Channel Schedules, Templates, slots, Programs, and Filler presets can add to, replace, or clear inherited graphics. Text can use channel and media metadata, including titles and subtitles from the channel's guide template. Configuration backups include graphics presets, uploaded assets, and assignments.
+- **Manage exclusions** lets Content Programs skip individual items or entire shows, seasons, artists, and albums across library queries, explicit selections, and AI selections. Browse, search, preview, and restore excluded media in one place. Group exclusions also cover media indexed later. Library queries apply exclusions before the item limit.
+
+### Improvements
+
+- TV searches in the Library, Program pickers, exclusions, and Quick Setup group results by show and order seasons and episodes numerically. Season and episode cards show their series name, and adding all matching episodes to a Program preserves that order.
+- With **Avoid simultaneous duplicates on other channels** enabled, a primary Similar Items or Theme Program can start its next set early if every remaining item conflicts and the next set offers an item that fits. The scheduler keeps its normal fallback if no suitable alternative is available.
+
+### Changes
+
+- The bundled **ErsatzTV Next** engine is updated to **v0.2.5**, with channel configuration schema **0.1.3** and playout schema **0.0.8**. The upgrade includes hardware-accelerated playback and subtitle fixes. Native installations should upgrade the worker and **ErsatzTV FFmpeg 8.1.2-8** together. If rolling back, stop playback workers and regenerate playout with the restored application before tuning.
+- The production Docker image now installs only server runtime dependencies and ships CPU-only ONNX binaries for the target architecture. The unpacked Linux/amd64 image went from **3.20 GB to 2.44 GB**. Local Docker builds now stream output and flag disk-space failures.
+- Updated Fastify Static and the TypeScript ESLint parser's dependency override to pick up patched glob-matching dependencies.
+
+### Fixes
+
+- Expired channel schedules now rebuild immediately when scheduling resumes, even if a pending change was waiting for the next daily boundary.
+
 ## 0.7.1 - 2026-10-24
 
 ### Fixes
