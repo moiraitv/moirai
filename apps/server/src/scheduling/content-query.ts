@@ -203,3 +203,9 @@ export function compareLibraryQueryMedia(
 	const compared = compareSchedulingMedia(a, b);
 	return sort.direction === 'asc' ? compared : -compared;
 }
+
+/** Cap the ordered eligible matches before checking whether the selected media can play. */
+export function orderedLibraryQueryMatches(matches: SchedulableMedia[], source: LibraryQuerySource): SchedulableMedia[] {
+	matches.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort));
+	return source.itemLimit == null ? matches : matches.slice(0, source.itemLimit);
+}

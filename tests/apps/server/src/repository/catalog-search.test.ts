@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { catalogProgramItemQuerySchema, orderSelectedMedia, type SelectedMediaSortable } from '@moirai/shared';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
 import { Repository, type DiscoveredGroup, type DiscoveredItem } from '@server/repository/index.js';
 import { withCatalogSearchDefer } from '@server/repository/catalog-search-sql.js';
@@ -102,6 +102,7 @@ function episode(groupId: string, title: string): DiscoveredItem {
 }
 
 afterEach(() => {
+	vi.restoreAllMocks();
 	for (const database of databases.splice(0)) {
 		database.close();
 	}
@@ -319,7 +320,7 @@ it.each(['1969-12-31T23:59:59.000Z', '2026-08-23T00:00:00.000Z'])('shares exact 
 	expect(JSON.stringify(plan)).toContain('media_items_library_added_idx');
 });
 
-it('resolves show hierarchy in browsed and searched picker items before episode ordering', async () => {
+it('keeps hierarchy child counts and episode ordering in browsed and searched source choices', async () => {
 	const database = createDatabase(':memory:', path.resolve('drizzle'));
 	databases.push(database);
 	const repository = new Repository(database.db);
@@ -333,6 +334,13 @@ it('resolves show hierarchy in browsed and searched picker items before episode 
 		{ ...episode(alphaSeason.id, 'Alpha Episode 1'), seasonNumber: 1, episodeNumber: 1 },
 	];
 	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [alpha, alphaSeason, zulu], items, [], true);
+
+	const browseQuery = { ...catalogProgramItemQuerySchema.parse({}), page: 1, pageSize: 50 };
+	const root = await repository.browseMedia(library.id, browseQuery);
+	expect(root.groups).toMatchObject([{ id: alpha.id, childCount: 1 }, { id: zulu.id, childCount: 1 }]);
+	const nested = await repository.browseMedia(library.id, { ...browseQuery, parentId: alpha.id });
+	expect(nested.groups).toMatchObject([{ id: alphaSeason.id, childCount: 2 }]);
+
 	const query = { target: 'items' as const, parentId: null, page: 1, pageSize: 50, search: 'Episode' };
 	const searched = (await repository.browseMediaSourceOptions(library.id, query)).entries.flatMap(entry => entry.item ? [entry.item] : []);
 	const browsed = (await Promise.all([alphaSeason.id, zulu.id].map(parentId => repository.browseMediaSourceOptions(library.id, { ...query, parentId, search: '' }))))
@@ -345,5 +353,49 @@ it('resolves show hierarchy in browsed and searched picker items before episode 
 		expect(selection.find(item => item.id === items[0]!.id)).toMatchObject({ showId: alpha.id, showSortTitle: alpha.sortTitle });
 		expect(selection.find(item => item.id === items[1]!.id)).toMatchObject({ showId: zulu.id, showSortTitle: zulu.sortTitle });
 		expect(orderSelectedMedia<SelectedMediaSortable>(selection, { type: 'episode', direction: 'asc' }).map(item => item.id)).toEqual(expected);
+	}
+});
+
+it('returns empty search pages without fetching rows and preserves substring matches', async () => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	databases.push(database);
+	const repository = new Repository(database.db);
+	const library = await repository.createLibrary({
+		name: 'Shows',
+		typeKey: 'shows',
+		sourceType: 'on-disk',
+		sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' },
+		scanIntervalMinutes: 15,
+		watcherEnabled: false,
+		enabled: true,
+	});
+	const group = show(crypto.randomUUID(), 'Seinfeld');
+	const item = episode(group.id, 'The Contest');
+	await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [group], [item], [], true);
+
+	const prepare = vi.spyOn(database.sqlite, 'prepare');
+	const pageSize = 20;
+	const searches = [
+		{
+			browse: (search: string, page: number) => repository.browseMedia(library.id, {
+				...catalogProgramItemQuerySchema.parse({ search }), page, pageSize,
+			}),
+			matchId: item.id,
+		},
+		...(['items', 'groups'] as const).map(target => ({
+			browse: (search: string, page: number) => repository.browseMediaSourceOptions(library.id, {
+				target, parentId: null, search, page, pageSize,
+			}),
+			matchId: target === 'items' ? item.id : group.id,
+		})),
+	];
+	for (const { browse, matchId } of searches) {
+		prepare.mockClear();
+		expect(await browse('unmatched', 2)).toMatchObject({
+			entries: [],
+			pagination: { page: 2, pageSize, totalEntries: 0, totalPages: 1 },
+		});
+		expect(prepare).not.toHaveBeenCalledWith(expect.stringMatching(/\bOFFSET\b/u));
+		expect((await browse('nfel', 1)).entries.map(entry => entry.key)).toEqual([matchId]);
 	}
 });

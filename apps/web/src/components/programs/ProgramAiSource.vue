@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AI_RESULT_COUNTS, type AiGeneration, type AiProgress, type AiProgressDetails, type AiResultCount, type AiSelectionCoverage } from '@moirai/shared';
+import { AI_RESULT_COUNTS, type AiGeneration, type AiProgress, type AiProgressDetails, type AiResultCount, type AiSelectionCoverage, type ContentExclusions } from '@moirai/shared';
 import { computed, onScopeDispose, ref, watch } from 'vue';
 import { api, ApiError } from '../../api';
 import { errorMessage } from '../../error-message';
@@ -11,12 +11,11 @@ const maxResults = defineModel<AiResultCount>('maxResults', { required: true });
 /** Plain-language labels for the shared result-count steps. */
 const resultLabels = ['Few', 'Some', 'Moderate', 'Many', 'Most'] as const;
 const resultLabel = computed(() => resultLabels[AI_RESULT_COUNTS.indexOf(maxResults.value)] ?? 'Some');
-const excludedItemIds = defineModel<string[]>('excludedItemIds', { required: true });
 const itemIds = defineModel<string[]>('itemIds', { required: true });
 const generation = defineModel<string | null>('generation', { required: true });
 const sortType = defineModel<'date-added' | 'name' | 'release-date' | 'episode' | 'manual'>('sortType', { required: true });
 const sortDirection = defineModel<'asc' | 'desc'>('sortDirection', { required: true });
-const props = defineProps<{ libraryId: string; libraryType: string; draftRevision: number; sequential: boolean }>();
+const props = defineProps<{ libraryId: string; libraryType: string; draftRevision: number; sequential: boolean; exclusions: ContentExclusions }>();
 const generating = ref(false);
 const activity = ref<AiProgress>('preparing');
 const elapsed = ref(0);
@@ -72,7 +71,7 @@ function apply(value: AiGeneration): boolean {
 	}
 	if (value.state === 'completed' && value.result) {
 		completed.value = true;
-		const excluded = new Set(excludedItemIds.value);
+		const excluded = new Set(props.exclusions.itemIds);
 		const selectedIds = value.result.itemIds.filter((id) => !excluded.has(id));
 		itemIds.value = selectedIds;
 		selectionPrompt.value = prompt.value.trim();
@@ -140,7 +139,7 @@ async function generate(): Promise<void> {
 	elapsed.value = 0;
 	activity.value = 'preparing';
 	try {
-		await api.startAiGeneration({ id, libraryId: props.libraryId, prompt: prompt.value.trim(), maxResults: maxResults.value, excludedItemIds: excludedItemIds.value });
+		await api.startAiGeneration({ id, libraryId: props.libraryId, prompt: prompt.value.trim(), maxResults: maxResults.value, exclusions: props.exclusions });
 		// The editor may have cancelled before this job existed; stop the job this response created.
 		if (disposed || generation.value !== id) {
 			void api.cancelAiGeneration(id).catch(() => {});
@@ -227,8 +226,7 @@ onScopeDispose(() => {
 					<span role="status">{{ activityLabel }}</span>
 					<span class="ai-selection-elapsed" aria-live="off">{{ progressPercent }}% estimated · {{ elapsedLabel }} elapsed</span>
 				</div>
-				<small v-else-if="itemIds.length > 0 || coverage" role="status"><span>{{ itemIds.length }} selected<template v-if="coverage"> · {{ coverage.reviewedCount.toLocaleString() }} of {{ coverage.libraryCount.toLocaleString() }} reviewed</template></span><template v-if="completed"> · 100%</template></small>
-				<slot name="results" :generating="generating"></slot>
+				<small v-else-if="itemIds.length > 0 || coverage" role="status"><span>{{ itemIds.length }} {{ exclusions.itemIds.length || exclusions.groupIds.length ? 'generated' : 'selected' }}<template v-if="coverage"> · {{ coverage.reviewedCount.toLocaleString() }} of {{ coverage.libraryCount.toLocaleString() }} reviewed</template></span><template v-if="completed"> · 100%</template></small>
 			</div>
 			<p v-if="coverage?.queryEmbeddingsAvailable === false" class="ai-selection-warning">Some search concepts lacked local embeddings; title, plot, and metadata matching still ran.</p>
 			<p v-if="coverage?.mediaEmbeddingsAvailable === false" class="ai-selection-warning">Some library items lacked local embeddings; title, plot, and metadata matching still ran.</p>

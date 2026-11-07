@@ -55,6 +55,18 @@ function catalog(availability: 'available' | 'unconfirmed'): SchedulingCatalog {
 }
 
 describe('scheduling program status', () => {
+	it('uses the indexed title and preview for an absorbed exact-item reference', () => {
+		const fixture = catalog('available');
+		const movie = fixture.media[0]!;
+		const alias = '00000000-0000-4000-8000-000000000004';
+		fixture.mediaAliases = { [alias]: movie.id };
+		const exact: SchedulingProgram = { ...program, config: { type: 'content',
+			source: { type: 'item', itemId: alias }, strategy: { type: 'sequential' } } };
+		expect(schedulingProgramStatuses([exact], fixture)[0]).toMatchObject({
+			health: 'ready', sourceLabel: movie.title, previewItems: [{ id: movie.id }],
+		});
+	});
+
 	it.each(['asc', 'desc'] as const)('previews AI results in indexed-date order (%s)', direction => {
 		const fixture = catalog('available');
 		fixture.media = ['2026-03-01', '2026-01-01', '2026-02-01'].map((dateAddedAt, index) => ({

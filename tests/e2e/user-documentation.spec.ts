@@ -169,7 +169,8 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await page.setViewportSize(subtitleViewport);
 	await subtitles.getByRole('button', { name: /Audio and subtitles/ }).click();
 
-	await page.getByRole('radio', { name: /^Sequence/u }).check();
+	const programTypes = page.getByRole('radiogroup', { name: 'Program type' });
+	await programTypes.getByText('Sequence', { exact: true }).click();
 	await expect(page.getByRole('dialog', { name: 'Create Program' })).toBeVisible();
 	await page.getByPlaceholder('e.g. Evening Lineup').fill('Evening Cinema Sequence');
 	for (const [index, programId] of sequenceProgramIds.entries()) {
@@ -197,12 +198,12 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 
 	await page.setViewportSize({ width: 1440, height: 900 });
 	seedSemanticCache(documentationServer.directory);
-	await page.getByRole('radio', { name: /^Theme/u }).check();
+	await programTypes.getByText('Theme', { exact: true }).click();
 	await page.getByPlaceholder('e.g. Evening Lineup').fill('Space discovery');
 	await page.getByLabel('Theme', { exact: true }).fill('Space exploration and first contact');
 	await expect(page.getByRole('region', { name: 'Sample matches' }).getByRole('link').first()).toBeVisible();
 	await capture(page, 'program-theme-create.png');
-	await page.getByRole('radio', { name: /^Similar Items/u }).check();
+	await programTypes.getByText('Similar Items', { exact: true }).click();
 	await page.getByLabel('Source Program', { exact: true }).selectOption(sequenceProgramIds[1]!);
 	await page.getByPlaceholder('e.g. Evening Lineup').fill('Related Cinema');
 	await page.getByLabel('Exclusions', { exact: true }).fill('superhero movies');

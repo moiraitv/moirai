@@ -588,7 +588,7 @@ export class TimelineMaterializer {
 		// Generate only the missing or replaceable part of the rolling window.
 		const generationDate = localDate(replaceFrom, this.timeZone);
 		const days = Math.max(1, generationDate.until(desiredEndDate, { largestUnit: 'days' }).days);
-		const catalog = committedCatalog(sourceCatalog);
+		const catalog = committedCatalog(await this.repository.withSchedulingCursorAliases(sourceCatalog, initialState));
 		const initialContinuation = current?.inputFingerprint === currentFingerprint
 			? existing.findLast((record) => Temporal.Instant.compare(record.segment.finish, replaceFrom) === 0)?.continuation ?? null
 			: null;

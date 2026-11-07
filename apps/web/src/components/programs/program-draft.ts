@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import { z } from 'zod';
-import { audioPreferencesSchema, catalogProgramItemFilterSchema, subtitlePreferencesSchema } from '@moirai/shared';
+import { audioPreferencesSchema, catalogProgramItemFilterSchema, excludedItemIdsSchema, subtitlePreferencesSchema } from '@moirai/shared';
 import { api } from '../../api';
 import { useResourceDraft } from '../../composables/useResourceDraft';
 import { legacyAiProgramDraftSchema } from './ai-program-draft';
@@ -19,6 +19,13 @@ export function useProgramDraft<T extends object>(form: T, identity: () => strin
 		capture: () => ({ form, generation: generation.value }),
 		restore: fields => {
 			Object.assign(form, fields.form);
+			if ('sourceType' in fields.form && fields.form.sourceType === 'ai'
+				&& !Object.hasOwn(fields.form, 'contentExclusions') && 'excludedItemIds' in fields.form) {
+				const itemIds = excludedItemIdsSchema.safeParse(fields.form.excludedItemIds);
+				if (itemIds.success) {
+					Object.assign(form, { contentExclusions: { itemIds: itemIds.data, groupIds: [] } });
+				}
+			}
 			generation.value = fields.generation;
 		},
 		dirty: () => JSON.stringify(form) !== baselineFields || Boolean(generation.value),

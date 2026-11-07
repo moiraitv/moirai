@@ -33,8 +33,12 @@ test('captures movie and sitcom schedule recipes', { tag: '@docs-screenshot' }, 
 	});
 	await page.goto(`/schedules/programs/${shuffle}`);
 	await expect(page.getByRole('button', { name: /^Shuffle \(no repeats\)/ })).toHaveAttribute('aria-pressed', 'true');
-	await page.locator('.plain-disclosure-trigger').filter({ hasText: 'Browse media' }).click();
-	await captureThrough(page, page.locator('.program-editor-main'), page.locator('.strategy-seed-field'), 'example-movie-shuffle.png');
+	await expect(page.getByRole('region', { name: 'Browse media' }).locator('.source-picker-list article').first()).toBeVisible();
+	// Use the tall capture viewport to show the media browser and shuffle settings together.
+	await page.addStyleTag({ content: '.moirai-dialog.schedule-editor-modal { height: var(--overlay-available-height); }' });
+	const shuffleSeed = page.locator('.strategy-seed-field');
+	await expect(shuffleSeed).toBeInViewport();
+	await captureThrough(page, page.locator('.program-editor-main'), shuffleSeed, 'example-movie-shuffle.png');
 
 	// Each double-feature step owns a distinct curated pool and its shuffle progress.
 	const moviePrograms: string[] = [];

@@ -11,9 +11,9 @@ export * from './mid-roll.js';
 export * from './ai-selection.js';
 import { audioPreferencesSchema } from './audio.js';
 import { z } from 'zod';
-import { excludedItemIdsSchema } from './item-exclusions.js';
-import { MAX_EXPLICIT_MEDIA_ITEMS } from './media-limits.js';
-export { MAX_EXPLICIT_MEDIA_ITEMS } from './media-limits.js';
+import { contentExclusionsSchema, excludedItemIdsSchema, validateAiSourceExclusions } from './item-exclusions.js';
+import { MAX_EXPLICIT_MEDIA_GROUPS, MAX_EXPLICIT_MEDIA_ITEMS } from './media-limits.js';
+export { MAX_EXPLICIT_MEDIA_GROUPS, MAX_EXPLICIT_MEDIA_ITEMS } from './media-limits.js';
 import { slotGuideSchema, type GuideEntry } from './guide.js';
 import { subtitlePreferencesSchema } from './subtitles.js';
 import type { MediaAvailability, SourceAvailability } from './index.js';
@@ -50,8 +50,6 @@ export const DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS = 5_000;
 export const PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD = 5;
 /** SHA-256 token binding a program-addition confirmation to its ordered item identifiers. */
 export const programItemAdditionConfirmationTokenSchema = z.string().regex(/^[a-f0-9]{64}$/);
-/** Bound shared scheduling contracts resource use for explicit media groups. */
-export const MAX_EXPLICIT_MEDIA_GROUPS = 1_000;
 /** Bound shared scheduling contracts resource use for channel schedule layers. */
 export const MAX_CHANNEL_SCHEDULE_LAYERS = 32;
 /** Bound shared scheduling contracts resource use for schedule predicate nodes. */
@@ -220,6 +218,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		type: z.literal('collection'),
 		libraryId: z.uuid(),
 		itemIds: selectedMediaItemIdsSchema,
+		exclusions: contentExclusionsSchema.optional(),
 		additionBatches: selectedMediaAdditionBatchesSchema.optional(),
 		sort: selectedMediaSortSchema.default({ type: 'date-added', direction: 'asc' }),
 	}),
@@ -227,6 +226,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		type: z.literal('ai'),
 		libraryId: z.uuid(),
 		excludedItemIds: excludedItemIdsSchema.optional(),
+		exclusions: contentExclusionsSchema.optional(),
 		prompt: z.string().trim().min(1).max(2_000),
 		itemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS)
 			.refine((ids) => new Set(ids).size === ids.length, 'Selected media must be unique'),
@@ -240,6 +240,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('group-collection'),
 		libraryId: z.uuid(),
+		exclusions: contentExclusionsSchema.optional(),
 		groupIds: z
 			.array(z.uuid())
 			.min(1)
@@ -249,6 +250,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('library-query'),
 		libraryId: z.uuid(),
+		exclusions: contentExclusionsSchema.optional(),
 		kinds: z
 			.array(z.string().trim().min(1).max(64))
 			.max(32)
@@ -290,10 +292,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 	}
 
 	if (source.type === 'ai') {
-		const excluded = new Set(source.excludedItemIds ?? []);
-		if (source.itemIds.some((id) => excluded.has(id))) {
-			context.addIssue({ code: 'custom', path: ['itemIds'], message: 'Selected items cannot also be removed' });
-		}
+		validateAiSourceExclusions(source, context);
 	}
 
 	if (source.type === 'collection' && source.additionBatches) {
@@ -506,6 +505,7 @@ export type QuickChannelSetupCreate = z.infer<typeof quickChannelSetupCreateSche
 export const quickChannelQueryPreviewRequestSchema = z.object({
 	scenario: z.string().trim().min(1).max(64),
 	libraryId: z.uuid(),
+	exclusions: contentExclusionsSchema.optional(),
 	...catalogProgramItemFilterShape,
 	sort: libraryQuerySortSchema.default({ type: 'name', direction: 'asc' }),
 	itemLimit: z.number().int().min(1).max(MAX_LIBRARY_QUERY_ITEMS).nullable().default(null),

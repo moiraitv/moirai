@@ -2,11 +2,14 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
+import { eq } from 'drizzle-orm';
 import { libraries, mediaItems, mediaGroups, mediaItemAliases, mediaItemGenres, schedulingPrograms, channels, scheduleTemplates, channelSchedules, timelineMaterializations, materializedTimelineSegments } from '@server/db/schema.js';
 import { mediaAirings } from '@server/repository/media-airings.js';
 import { mediaResourceUsage } from '@server/repository/media-resource-usage.js';
 import { SchedulingRepository } from '@server/repository/scheduling.js';
 import { programConfigSchema } from '@moirai/shared';
+import { schedulingProgramStatuses } from '@server/scheduling/status.js';
+import { selectProgram, type SelectionContext } from '@server/scheduling/selection.js';
 
 const databases: ReturnType<typeof createDatabase>[] = [];
 afterEach(() => databases.splice(0).forEach(database => database.close()));
@@ -88,6 +91,112 @@ it('uses scheduler filters and query limits with a single shared catalog, retain
 	db.run(`UPDATE media_items SET availability = 'missing' WHERE id = '${item}'`);
 	scheduling.invalidateSchedulingCatalog();
 	expect((await usage(item))?.total).toBe(63);
+});
+
+it('subtracts aliased items and overlapping group trees before query limits and reports fully excluded sources as empty', async () => {
+	const { db, libraryId, addItem, usage, scheduling } = fixture();
+	const group = (title: string, parentId: string | null = null) => {
+		const id = randomUUID();
+		db.insert(mediaGroups).values({ id, parentId, libraryId, stableKey: id, kind: parentId ? 'season' : 'show', title, sortTitle: title, metadata: {} }).run();
+		return id;
+	};
+	const excludedShow = group('Excluded show');
+	const season = group('Season 1', excludedShow);
+	const differentShow = group('Unrelated show');
+	const excludedEpisode = addItem('Alpha', season);
+	const aliasedItem = addItem('Bravo');
+	const eligible = addItem('Zulu', differentShow);
+	const alias = randomUUID();
+	db.insert(mediaItemAliases).values({ aliasId: alias, itemId: aliasedItem, libraryId }).run();
+	const exclusions = { itemIds: [alias, alias], groupIds: [season, excludedShow] };
+	const strategy = { type: 'sequential' } as const;
+	const query = await scheduling.createProgram({ name: 'Query', config: { type: 'content', strategy,
+		source: { type: 'library-query', libraryId, kinds: [], genres: [], itemLimit: 1, exclusions } } });
+	const items = await scheduling.createProgram({ name: 'Items', config: { type: 'content', strategy,
+		source: { type: 'collection', libraryId, itemIds: [excludedEpisode, aliasedItem], sort: { type: 'date-added', direction: 'asc' }, exclusions } } });
+	const groups = await scheduling.createProgram({ name: 'Groups', config: { type: 'content', strategy,
+		source: { type: 'group-collection', libraryId, groupIds: [excludedShow, differentShow], exclusions } } });
+	const ai = await scheduling.createProgram({ name: 'AI', config: { type: 'content', strategy,
+		source: { type: 'ai', libraryId, prompt: 'Library titles', itemIds: [excludedEpisode, aliasedItem, eligible], sort: { type: 'date-added', direction: 'asc' }, exclusions } } });
+	expect((await scheduling.getProgram(query.id))?.config).toMatchObject({ source: { exclusions: { itemIds: [alias], groupIds: [...exclusions.groupIds].sort() } } });
+	const laterEpisode = addItem('A new episode', season);
+	const programs = [query, items, groups, ai];
+	const catalog = await scheduling.getSchedulingCatalog(programs);
+	const statuses = schedulingProgramStatuses(programs, catalog);
+	expect(statuses.map(status => status.previewItems.map(item => item.id))).toEqual([[eligible], [], [eligible], [eligible]]);
+	expect(statuses[1]).toMatchObject({ health: 'empty', indexedItemCount: 0 });
+	const scoped = await scheduling.getSchedulingCatalog([items, { ...groups, config: { type: 'content', strategy,
+		source: { type: 'group-collection', libraryId, groupIds: [differentShow] } } }]);
+	expect(schedulingProgramStatuses([items], scoped)[0]).toMatchObject({ health: 'empty' });
+	expect(scoped.media.map(item => item.id)).not.toContain(laterEpisode);
+	expect((await usage(eligible))?.items.map(owner => owner.name)).toEqual(['AI', 'Groups', 'Query']);
+	for (const id of [excludedEpisode, aliasedItem, laterEpisode]) {
+		expect((await usage(id))?.total).toBe(0);
+	}
+});
+
+it.each(['library-query', 'group-collection'] as const)('resumes a %s from a saved multipart cursor after an exclusion edit', async type => {
+	const { db, libraryId, addItem, scheduling } = fixture();
+	const groupId = randomUUID();
+	db.insert(mediaGroups).values({ id: groupId, libraryId, stableKey: groupId, kind: 'show', title: 'Series', sortTitle: 'Series', metadata: {} }).run();
+	const a = addItem('Alpha', groupId);
+	const b = addItem('Bravo', groupId);
+	const c = addItem('Charlie', groupId);
+	addItem('Delta', groupId);
+	const source = type === 'library-query' ? { type, libraryId, kinds: [], genres: [] } : { type, libraryId, groupIds: [groupId] };
+	const strategy = { type: 'sequential' } as const;
+	const program = await scheduling.createProgram({ name: 'Sequential', config: { type: 'content', source, strategy } });
+	const context = async (): Promise<SelectionContext> => {
+		const programs = await scheduling.listPrograms();
+		const catalog = await scheduling.getSchedulingCatalog(programs);
+		return { programs: new Map(programs.map(program => [program.id, program])), catalog,
+			candidateCache: new Map(), blockedPrograms: new Set(), fitRejectionCount: 0, issues: [], issueKeys: new Set(), issueIndex: new Map(),
+			boundaryOrigin: null, templateId: randomUUID(), scheduleLayerId: null, slotId: randomUUID(), now: '2026-01-01T00:00:00Z',
+			viewingPreferences: { itemScores: {}, showScores: {} }, selectionStart: '2026-01-01T00:00:00Z', occupiedMedia: [] };
+	};
+	const original = await context();
+	const key = `primary:cursor:${program.id}`;
+	const first = selectProgram(program.id, key, new Map(), original)!;
+	const second = selectProgram(program.id, key, first.state, original)!;
+	expect([first.media.id, second.media.id]).toEqual([a, b]);
+
+	const canonical = addItem('Bravo', groupId);
+	const unrelatedAlias = randomUUID();
+	db.insert(mediaItemAliases).values([{ aliasId: b, itemId: canonical, libraryId }, { aliasId: unrelatedAlias, itemId: c, libraryId }]).run();
+	db.delete(mediaItems).where(eq(mediaItems.id, b)).run();
+	scheduling.invalidateSchedulingCatalog();
+	await scheduling.updateProgram(program.id, { config: { type: 'content', strategy, source: { ...source, exclusions: { itemIds: [a], groupIds: [] } } } });
+	const overview = await context();
+	expect(overview.catalog.mediaAliases?.[b]).toBeUndefined();
+	const catalog = await scheduling.withSchedulingCursorAliases(overview.catalog, second.state.values());
+	expect(catalog.mediaAliases?.[b]).toBe(canonical);
+	expect(catalog.mediaAliases?.[unrelatedAlias]).toBeUndefined();
+	expect(catalog.media).toBe(overview.catalog.media);
+	expect(overview.catalog.mediaAliases?.[b]).toBeUndefined();
+	expect(catalog.cacheKey).not.toBe(overview.catalog.cacheKey);
+	const resumed = selectProgram(program.id, key, second.state, { ...overview, catalog });
+	expect(resumed?.media.id).toBe(c);
+});
+
+it('rejects new exclusions from another library and preserves a previously saved reference after removal', async () => {
+	const { db, libraryId, addItem, scheduling } = fixture();
+	const otherLibraryId = randomUUID(), otherGroup = randomUUID(), otherItem = randomUUID();
+	db.insert(libraries).values({ id: otherLibraryId, name: 'Other', typeKey: 'shows', sourceType: 'local', sourceConfig: { scanRoot: '/other', playbackRoot: null } }).run();
+	db.insert(mediaGroups).values({ id: otherGroup, libraryId: otherLibraryId, stableKey: otherGroup, kind: 'show', title: 'Other', sortTitle: 'Other', metadata: {} }).run();
+	db.insert(mediaItems).values({ id: otherItem, libraryId: otherLibraryId, stableKey: otherItem, kind: 'episode', title: 'Other', sortTitle: 'Other',
+		relativePath: otherItem, playbackPath: '/other/episode', metadataStatus: 'complete', metadata: {}, fingerprint: otherItem, dateAddedAt: '2026-01-01' }).run();
+	const item = addItem('Removed later');
+	const config = programConfigSchema.parse({ type: 'content', strategy: { type: 'sequential' },
+		source: { type: 'library-query', libraryId, exclusions: { itemIds: [item] } } });
+	const program = await scheduling.createProgram({ name: 'Original', config });
+	const withExclusions = (itemIds: string[], groupIds: string[]) => programConfigSchema.parse({ ...config,
+		source: { type: 'library-query', libraryId, exclusions: { itemIds, groupIds } } });
+	await expect(scheduling.updateProgram(program.id, { config: withExclusions([item, otherItem], []) })).rejects.toThrow(/excluded items/i);
+	await expect(scheduling.updateProgram(program.id, { config: withExclusions([item], [otherGroup]) })).rejects.toThrow(/excluded groups/i);
+	db.delete(mediaItems).where(eq(mediaItems.id, item)).run();
+	await expect(scheduling.updateProgram(program.id, { name: 'Renamed', config })).resolves.toMatchObject({ name: 'Renamed', config });
+	await expect(scheduling.updateProgram(program.id, { config: withExclusions([], []) })).resolves.toMatchObject({ name: 'Renamed' });
+	await expect(scheduling.updateProgram(program.id, { config })).rejects.toThrow(/excluded items/i);
 });
 
 

@@ -19,6 +19,7 @@ import type {
 	AuthenticationState,
 	Channel,
 	ChannelCreate,
+	ContentExclusions,
 	PlaybackEngineStatus,
 	PlaybackSettings,
 	Library,
@@ -33,6 +34,7 @@ import type {
 	MediaGenreFacet,
 	MediaGroup,
 	MediaItem,
+	MediaSelectionItem,
 	MediaItemDetail,
 	MediaSort,
 	MediaSourcePickerResult,
@@ -422,10 +424,14 @@ export const api = {
 			`/api/v1/libraries/${id}/media-source-options?${params}`,
 		);
 	},
-	mediaSelection: (id: string, itemIds: string[]) =>
-		request<MediaItem[]>(`/api/v1/libraries/${id}/media-selection`, {
+	mediaSelection: (id: string, itemIds: string[], exclusions?: ContentExclusions) =>
+		request<MediaSelectionItem[]>(`/api/v1/libraries/${id}/media-selection`, {
 			method: 'POST',
-			body: JSON.stringify({ itemIds }),
+			body: JSON.stringify({ itemIds, exclusions }),
+		}),
+	mediaSelectionAliases: (id: string, itemIds: string[]) =>
+		request<Record<string, string>>(`/api/v1/libraries/${id}/media-selection/aliases`, {
+			method: 'POST', body: JSON.stringify({ itemIds }),
 		}),
 	mediaGroupSelection: (id: string, groupIds: string[]) =>
 		request<MediaGroup[]>(`/api/v1/libraries/${id}/media-group-selection`, {

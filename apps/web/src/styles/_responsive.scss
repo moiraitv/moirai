@@ -803,6 +803,39 @@
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
+	.program-exclusions-drawer {
+		.program-exclusions-footer .source-picker-pagination {
+			flex-basis: 100%;
+			justify-content: space-between;
+		}
+
+		.program-matches-tabs {
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+
+		.selection-drawer-header > button {
+			flex-basis: 44px;
+			height: 44px;
+		}
+
+		.program-exclusions-list article {
+			grid-template-columns: 42px minmax(0, 1fr);
+			row-gap: 6px;
+		}
+
+		.source-picker-actions {
+			grid-column: 2;
+			flex-wrap: wrap;
+		}
+
+		.source-picker-actions button,
+		.program-exclusions-path button,
+		.program-exclusions-footer button {
+			min-height: 44px;
+		}
+	}
+
 	.selection-drawer-header,
 	.selection-drawer-toolbar {
 		padding-inline: 16px;

@@ -20,7 +20,6 @@ import {
 	channelSchedules,
 	libraries,
 	mediaGroups,
-	mediaItemAliases,
 	mediaItemGenres,
 	mediaItems,
 	materializedTimelineSegments,
@@ -46,6 +45,7 @@ import {
 	metadataStrings,
 } from './catalog.js';
 import { SchedulingConfigurationRepository } from './scheduling-config.js';
+import { resolveSchedulingMediaAliases, withSchedulingCursorAliases } from './scheduling-cursor-aliases.js';
 
 /** Bound multi-row timeline writes below SQLite statement parameter limits. */
 const TIMELINE_COMMIT_BATCH_SIZE = 500;
@@ -231,8 +231,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		return deleted;
 	}
 
-	/** Load a group together with its descendants and ancestors for artwork inheritance. */
-	private loadRelatedMediaGroups(groupIds: string[]): SchedulingGroupArtworkRow[] {
+	/** Load group ancestors and, for group sources, their descendant trees. */
+	private loadRelatedMediaGroups(groupIds: string[], includeDescendants = true): SchedulingGroupArtworkRow[] {
 		if (groupIds.length === 0) {
 			return [];
 		}
@@ -245,6 +245,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
                   UNION
                   SELECT media_groups.id FROM media_groups
                   JOIN descendants ON media_groups.parent_id = descendants.id
+                  WHERE ?
                 ),
                 related(id) AS (
                   SELECT id FROM descendants
@@ -261,7 +262,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
                 media_groups.fanart_relative_path AS fanartRelativePath,
                 media_groups.metadata AS metadata
               FROM media_groups JOIN related ON related.id = media_groups.id`,
-		).all(JSON.stringify(groupIds)) as SchedulingGroupArtworkRow[];
+		).all(JSON.stringify(groupIds), includeDescendants ? 1 : 0) as SchedulingGroupArtworkRow[];
 	}
 
 	/** Load catalog rows for explicit media identifiers, including current artwork URLs. */
@@ -296,6 +297,11 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			? { kind: preset.kind, budget: preset.budget, predicate: preset.predicate, fallbackIntervalSeconds: preset.fallbackIntervalSeconds }
 			: { kind: preset.kind, budget: preset.budget }]));
 		return { ...catalog, fillerPresets: midRollPresets, midRollPresets: Object.fromEntries(Object.entries(midRollPresets).filter(([, preset]) => preset.kind === 'mid-roll')) as NonNullable<SchedulingCatalog['midRollPresets']>, ...(catalog.cacheKey ? { cacheKey: `${catalog.cacheKey}:mid-roll:${createHash('sha256').update(JSON.stringify(midRollPresets)).digest('hex')}` } : {}) };
+	}
+
+	/** Resolve missing sequential cursor IDs without expanding the cached media scope. */
+	async withSchedulingCursorAliases(catalog: SchedulingCatalog, state: Iterable<SelectionStateRecord>): Promise<SchedulingCatalog> {
+		return withSchedulingCursorAliases(this.db, catalog, state);
 	}
 
 	/** Reuse the catalog cache independently of preset behavior and editor metadata. */
@@ -375,15 +381,6 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 	private async loadSchedulingCatalog(
 		scope: ReturnType<typeof schedulingCatalogScope>,
 	): Promise<SchedulingCatalog> {
-		const aliasItemIds = [...new Set([...scope.itemIds, ...scope.aliasItemIds ?? []])];
-		const aliases = aliasItemIds.length > 0
-			? await this.db.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
-				.from(mediaItemAliases)
-				.where(sql`${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(aliasItemIds)}))`)
-			: [];
-		const mediaAliases = Object.fromEntries(aliases.map((alias) => [alias.aliasId, alias.itemId]));
-		const scopedItemIds = scope.itemIds.map((id) => mediaAliases[id] ?? id);
-
 		// Resolve referenced groups to the libraries that own their media.
 		const referencedGroups
 			= scope.groupIds.length > 0
@@ -413,16 +410,22 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				sql`${mediaItems.libraryId} IN (SELECT value FROM json_each(${JSON.stringify([...fullMediaLibraryIds])}))`,
 			);
 		}
-		if (scopedItemIds.length > 0) {
-			mediaConditions.push(
-				sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(scopedItemIds)}))`,
-			);
-		}
 		if (relatedGroupIds.length > 0) {
 			mediaConditions.push(
-				sql`${mediaItems.groupId} IN (SELECT value FROM json_each(${JSON.stringify(relatedGroupIds)}))`,
+				sql`${mediaItems.libraryId} IN (SELECT value FROM json_each(${JSON.stringify([...groupLibraryIds])}))
+					AND ${mediaItems.groupId} IN (SELECT value FROM json_each(${JSON.stringify(relatedGroupIds)}))`,
 			);
 		}
+
+		// Resolve authored references before fetching their canonical media.
+		const aliasItemIds = [...new Set([...scope.itemIds, ...scope.aliasItemIds ?? []])];
+		const aliases = aliasItemIds.length > 0 ? await resolveSchedulingMediaAliases(this.db, aliasItemIds) : [];
+		const mediaAliases = Object.fromEntries(aliases.map(({ aliasId, itemId }) => [aliasId, itemId]));
+		if (scope.itemIds.length > 0) {
+			const scopedItemIds = scope.itemIds.map((id) => mediaAliases[id] ?? id);
+			mediaConditions.push(sql`${mediaItems.id} IN (SELECT value FROM json_each(${JSON.stringify(scopedItemIds)}))`);
+		}
+
 		const episodeGroup = alias(mediaGroups, 'episode_group');
 		const episodeParent = alias(mediaGroups, 'episode_parent');
 		const items
@@ -470,11 +473,17 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			scopedLibraryIds.add(item.libraryId);
 		}
 
-		const inheritedGroupRows = relatedGroupRows.length === 0
-			? this.loadRelatedMediaGroups([
-				...new Set(items.flatMap((item) => item.groupId ? [item.groupId] : [])),
-			])
-			: [];
+		// Explicit items may belong to a different tree from the selected group sources.
+		const ancestorLibraries = new Set(scope.ancestorLibraryIds);
+		const loadedGroupIds = new Set(relatedGroupIds);
+		const inheritedGroupIds = new Set<string>();
+		for (const item of items) {
+			if (item.groupId && (relatedGroupRows.length === 0 || (ancestorLibraries.has(item.libraryId)
+				&& !fullMediaLibraryIds.has(item.libraryId) && !loadedGroupIds.has(item.groupId)))) {
+				inheritedGroupIds.add(item.groupId);
+			}
+		}
+		const inheritedGroupRows = this.loadRelatedMediaGroups([...inheritedGroupIds], relatedGroupRows.length === 0);
 
 		// Load hierarchy for full-library sources and merge it with explicitly related groups.
 		const libraryGroups

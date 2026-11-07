@@ -152,10 +152,11 @@ export async function materializeScheduleGuide(
 		programsPromise,
 		repository.getSelectionStatesByChannel(),
 	]);
-	const catalog = await repository.getSchedulingCatalog(
+	const baseCatalog = await repository.getSchedulingCatalog(
 		programs,
 		schedulingRootProgramIds(templates, schedules),
 	);
+	const catalog = await repository.withSchedulingCursorAliases(baseCatalog, [...statesByChannel.values()].flat());
 	let segmentCount = 0;
 	const channels: ScheduleGuide['channels'] = [];
 	for (const schedule of schedules) {

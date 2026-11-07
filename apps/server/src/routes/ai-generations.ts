@@ -6,6 +6,7 @@ import type { Repository } from '../repository/index.js';
 import type { EmbeddingWakeStatus } from '../semantic/service.js';
 import { authenticatedSession } from '../auth/http.js';
 import { AiGenerations } from '../ai/generations.js';
+import { AI_SELECTION_BODY_LIMIT } from './media-request-limits.js';
 import { generateAiSelection } from '../ai/pipeline.js';
 import { AiRunLogger } from '../ai/run-logging.js';
 import { productionAiRequestOptions } from '../ai/provider.js';
@@ -25,11 +26,11 @@ export function registerAiGenerationRoutes(app: FastifyInstance, dependencies: {
 	const { config, repository, aiSettings, requestEmbeddingWork } = dependencies;
 	const jobs = new AiGenerations();
 	app.addHook('onClose', async () => jobs.close());
-	app.post('/api/v1/ai/generations', { schema: apiOperation({
+	app.post('/api/v1/ai/generations', { bodyLimit: AI_SELECTION_BODY_LIMIT, schema: apiOperation({
 		operationId: 'startAiGeneration', tags: ['AI'], summary: 'Start or reconnect to a retained AI generation',
 		body: aiGenerationRequestSchema,
 		response: { 202: responseContent('Generation accepted', 'application/json', aiGenerationSchema) },
-		errors: [400, 401, 409, 503],
+		errors: [400, 401, 409, 413, 503],
 	}) }, async (request, reply) => {
 		const ai = aiSettings?.active() ?? config.ai;
 		if (!ai) {
@@ -51,7 +52,7 @@ export function registerAiGenerationRoutes(app: FastifyInstance, dependencies: {
 					throw new AiSelectionError('Library not found.');
 				}
 				const result = await generateAiSelection(ai, body.prompt, library.typeKey, {
-					loadCatalog: () => repository.aiCatalog(body.libraryId, body.excludedItemIds),
+					loadCatalog: () => repository.aiCatalog(body.libraryId, body.excludedItemIds, body.exclusions),
 					excludedItemIds: body.excludedItemIds,
 					loadVectors: (concepts, signal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, signal, requestEmbeddingWork),
 					...(!ai.webSearch ? { fastLocalReview: true } : {}),

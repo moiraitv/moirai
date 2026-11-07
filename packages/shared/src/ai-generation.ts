@@ -6,7 +6,7 @@ import { aiProgressSchema } from './ai-progress.js';
 export const AI_GENERATION_TARGET_MS = 180_000;
 
 /** Client-chosen identity makes reconnects safe without starting a second paid generation. */
-export const aiGenerationRequestSchema = aiContentSelectionRequestSchema.extend({ id: z.uuid() });
+export const aiGenerationRequestSchema = aiContentSelectionRequestSchema.safeExtend({ id: z.uuid() });
 /** Request for one reconnectable generation. */
 export type AiGenerationRequest = z.infer<typeof aiGenerationRequestSchema>;
 /** Retained generation state; only complete, validated selections become results. */

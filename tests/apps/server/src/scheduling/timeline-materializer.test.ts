@@ -122,6 +122,7 @@ function fixture() {
 		})),
 		viewingPreferenceScores: vi.fn(() => ({ itemScores: {}, showScores: {} })),
 		getSchedulingCatalog: vi.fn(async () => catalog),
+		withSchedulingCursorAliases: vi.fn<Repository['withSchedulingCursorAliases']>(async catalog => catalog),
 		getTimelineMaterialization: vi.fn(async () => materialization),
 		listMaterializedTimelineSegments: vi.fn(
 			async (start: string, finish: string, requestedChannel?: string) =>
@@ -759,6 +760,9 @@ describe('durable timeline materializer', () => {
 		);
 		await restarted.runNow();
 
+		expect(test.repository.withSchedulingCursorAliases).toHaveBeenLastCalledWith(test.catalog, expect.arrayContaining([
+			expect.objectContaining({ value: expect.objectContaining({ type: 'sequential', lastItemId: initial.at(-1)?.segment.mediaItemId }) }),
+		]));
 		const rolled = test.segments();
 		const originalOverlap = initial.filter((entry) => entry.segment.start >= '2026-08-23T07:00:00Z');
 		const rolledIds = new Set(rolled.map((entry) => entry.segment.id));

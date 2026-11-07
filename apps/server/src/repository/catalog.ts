@@ -5,8 +5,8 @@ import type {
 	MediaCardPreview,
 	MediaGenreFacet,
 	MediaGroup,
-	MediaItem,
 	MediaItemDetail,
+	MediaSelectionItem,
 	MediaSourceMatch,
 	MediaSourcePickerEntry,
 	MediaSourcePickerResult,
@@ -17,7 +17,7 @@ import type { MoiraiDatabase } from '../db/index.js';
 import { mediaItemGenres, mediaItems } from '../db/schema.js';
 import { addSourceMatch, escapeLike, ftsMatchQuery, itemSourceMatches, itemSearchPredicate, musicFieldPredicate } from './catalog-search.js';
 import { normalizeGenre, normalizeSearchText } from '../scanner/catalog-metadata.js';
-import { timestampBoundaryMilliseconds } from '@moirai/shared';
+import { timestampBoundaryMilliseconds, type ContentExclusions } from '@moirai/shared';
 import type {
 	MediaBrowseQuery,
 	MediaFileOwner,
@@ -50,6 +50,23 @@ interface FilteredItemScope {
 	where: string;
 	params: Array<string | number>;
 }
+
+/** The group aliased as `g` and its direct children, within the same library. */
+const SOURCE_GROUP_IDS = `(
+	SELECT g.id
+	UNION ALL
+	SELECT child.id FROM media_groups child
+	WHERE child.library_id = g.library_id AND child.parent_id = g.id
+)`;
+
+/** Count direct children of group `g` using the library-scoped parent indexes. */
+const GROUP_CHILD_COUNT = `(
+	SELECT COUNT(*) FROM media_groups child
+	WHERE child.library_id = g.library_id AND child.parent_id = g.id
+) + (
+	SELECT COUNT(*) FROM media_items child_item
+	WHERE child_item.library_id = g.library_id AND child_item.group_id = g.id
+)`;
 
 /**
  * Provide indexed catalog browsing, lookup, and artwork-owner queries. This repository translates
@@ -303,6 +320,16 @@ export class MediaCatalogRepository {
 			break;
 		}
 
+		const pagination = {
+			page: query.page,
+			pageSize: query.pageSize,
+			totalEntries,
+			totalPages: Math.max(1, Math.ceil(totalEntries / query.pageSize)),
+		};
+		if (totalEntries === 0) {
+			return { entries: [], groups: [], items: [], pagination, navigation };
+		}
+
 		// Fetch the requested page with stable tie-breaking across duplicate titles.
 		const itemColumns = `i.id, i.library_id AS libraryId, i.group_id AS groupId, i.stable_key AS stableKey,
       i.kind, i.title, i.sort_title AS sortTitle, i.relative_path AS relativePath,
@@ -363,12 +390,7 @@ export class MediaCatalogRepository {
 			entries,
 			groups: [],
 			items,
-			pagination: {
-				page: query.page,
-				pageSize: query.pageSize,
-				totalEntries,
-				totalPages: Math.max(1, Math.ceil(totalEntries / query.pageSize)),
-			},
+			pagination,
 			navigation,
 		};
 	}
@@ -466,8 +488,7 @@ export class MediaCatalogRepository {
         parent.artwork_relative_path AS parentArtworkRelativePath, parent.metadata AS parentMetadata,
         '' AS fingerprint, NULL AS fileModifiedAt, g.created_at AS dateAddedAt,
         ${groupBucket} AS titleBucket, g.created_at AS createdAt, g.updated_at AS updatedAt,
-        (SELECT COUNT(*) FROM media_groups child WHERE child.parent_id = g.id) +
-          (SELECT COUNT(*) FROM media_items child_item WHERE child_item.group_id = g.id) AS childCount
+        ${GROUP_CHILD_COUNT} AS childCount
       FROM media_groups g LEFT JOIN media_groups parent ON parent.id = g.parent_id AND parent.library_id = g.library_id
       WHERE g.library_id = ? AND ${groupParent}${groupSearch}
       UNION ALL
@@ -665,6 +686,16 @@ export class MediaCatalogRepository {
 			).count;
 		}
 
+		const pagination = {
+			page: query.page,
+			pageSize: query.pageSize,
+			totalEntries,
+			totalPages: Math.max(1, Math.ceil(totalEntries / query.pageSize)),
+		};
+		if (totalEntries === 0) {
+			return { entries: [], pagination };
+		}
+
 		// Page matching media and retain hierarchy labels for match explanations.
 		const offset = (query.page - 1) * query.pageSize;
 		const rows = this.db.$client
@@ -701,6 +732,7 @@ export class MediaCatalogRepository {
 		const matches = itemSourceMatches(this.db, rows, rawPattern, normalizedPattern, genrePattern);
 		const entries = rows.map((row) => {
 			const item = mappedItem(row);
+			const parentTitle = row.parentTitle ?? row.groupTitle;
 			return {
 				key: item.id,
 				kind: 'item' as const,
@@ -710,17 +742,10 @@ export class MediaCatalogRepository {
 				item,
 				group: null,
 				matches: matches.get(item.id) ?? [],
+				...(parentTitle ? { parentTitle } : {}),
 			};
 		});
-		return {
-			entries,
-			pagination: {
-				page: query.page,
-				pageSize: query.pageSize,
-				totalEntries,
-				totalPages: Math.max(1, Math.ceil(totalEntries / query.pageSize)),
-			},
-		};
+		return { entries, pagination };
 	}
 
 
@@ -744,29 +769,23 @@ export class MediaCatalogRepository {
 			conditions.push('g.parent_id IS NULL');
 		}
 		if (query.search) {
+			// Scope the indexed item lookup to this group and its direct children before
+			// checking metadata, so a miss does not rescan the library for each group.
 			conditions.push(`(
         g.title LIKE ? ESCAPE '\\' COLLATE NOCASE
         OR parent.title LIKE ? ESCAPE '\\' COLLATE NOCASE
         OR EXISTS (
-          SELECT 1 FROM media_items gi
-          LEFT JOIN media_groups owner ON owner.id = gi.group_id
-          WHERE gi.library_id = g.library_id
-            AND (owner.id = g.id OR owner.parent_id = g.id)
-            AND EXISTS (
+          SELECT 1 FROM media_items i
+          WHERE i.library_id = g.library_id
+            AND i.group_id IN ${SOURCE_GROUP_IDS}
+            AND (EXISTS (
               SELECT 1 FROM media_item_genres gmg
-              WHERE gmg.item_id = gi.id
+              WHERE gmg.item_id = i.id
                 AND (gmg.genre_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR gmg.genre_key LIKE ? ESCAPE '\\' COLLATE NOCASE)
-            )
-        )
-        OR EXISTS (
-          SELECT 1 FROM media_items pi
-          LEFT JOIN media_groups owner ON owner.id = pi.group_id
-          WHERE pi.library_id = g.library_id
-            AND (owner.id = g.id OR owner.parent_id = g.id)
-            AND EXISTS (
+            ) OR EXISTS (
               SELECT 1 FROM media_item_people gmp
-              WHERE gmp.item_id = pi.id AND gmp.normalized_name LIKE ? ESCAPE '\\'
-            )
+              WHERE gmp.item_id = i.id AND gmp.normalized_name LIKE ? ESCAPE '\\'
+            ))
         )
       )`);
 			params.push(rawPattern, rawPattern, rawPattern, genrePattern, normalizedPattern);
@@ -779,6 +798,16 @@ export class MediaCatalogRepository {
 				.get(...params) as { count: number }
 		).count;
 
+		const pagination = {
+			page: query.page,
+			pageSize: query.pageSize,
+			totalEntries,
+			totalPages: Math.max(1, Math.ceil(totalEntries / query.pageSize)),
+		};
+		if (totalEntries === 0) {
+			return { entries: [], pagination };
+		}
+
 		// Page matching groups and attach the metadata fields that matched the search.
 		const offset = (query.page - 1) * query.pageSize;
 		const rows = this.db.$client
@@ -787,8 +816,7 @@ export class MediaCatalogRepository {
           g.title, g.sort_title AS sortTitle, g.year, g.plot, g.metadata,
           g.artwork_relative_path AS artworkRelativePath,
           parent.artwork_relative_path AS parentArtworkRelativePath, parent.metadata AS parentMetadata,
-          (SELECT COUNT(*) FROM media_groups child WHERE child.parent_id = g.id) +
-            (SELECT COUNT(*) FROM media_items child_item WHERE child_item.group_id = g.id) AS childCount,
+          ${GROUP_CHILD_COUNT} AS childCount,
           parent.title AS parentTitle, parent.kind AS parentKind
         FROM media_groups g ${joins} WHERE ${where}
         ORDER BY g.sort_title COLLATE NOCASE ASC, g.id ASC LIMIT ? OFFSET ?`,
@@ -808,20 +836,13 @@ export class MediaCatalogRepository {
 				item: null,
 				group,
 				matches: matches.get(group.id) ?? [],
+				...(row.parentTitle ? { parentTitle: row.parentTitle } : {}),
 			};
 		});
-		return {
-			entries,
-			pagination: {
-				page: query.page,
-				pageSize: query.pageSize,
-				totalEntries,
-				totalPages: Math.max(1, Math.ceil(totalEntries / query.pageSize)),
-			},
-		};
+		return { entries, pagination };
 	}
 
-	/** Report whether group source matches. */
+	/** Explain group title, genre, and credit matches for the current page. */
 	private groupSourceMatches(
 		rows: RawGroupRow[],
 		rawPattern: string,
@@ -849,14 +870,13 @@ export class MediaCatalogRepository {
 		const placeholders = ids.map(() => '?').join(', ');
 		const genreRows = this.db.$client
 			.prepare(
-				`SELECT target.id AS targetId, mg.genre_name AS label
-        FROM media_groups target
-        JOIN media_groups owner ON owner.id = target.id OR owner.parent_id = target.id
-        JOIN media_items i ON i.group_id = owner.id
+				`SELECT g.id AS targetId, mg.genre_name AS label
+        FROM media_groups g
+        JOIN media_items i ON i.library_id = g.library_id AND i.group_id IN ${SOURCE_GROUP_IDS}
         JOIN media_item_genres mg ON mg.item_id = i.id
-        WHERE target.id IN (${placeholders})
+        WHERE g.id IN (${placeholders})
           AND (mg.genre_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR mg.genre_key LIKE ? ESCAPE '\\' COLLATE NOCASE)
-        GROUP BY target.id, mg.genre_key, mg.genre_name
+        GROUP BY g.id, mg.genre_key, mg.genre_name
         ORDER BY mg.genre_name COLLATE NOCASE`,
 			)
 			.all(...ids, rawPattern, genrePattern) as Array<{ targetId: string; label: string }>;
@@ -865,13 +885,12 @@ export class MediaCatalogRepository {
 		}
 		const peopleRows = this.db.$client
 			.prepare(
-				`SELECT target.id AS targetId, mp.person_type AS field, mp.name AS label
-        FROM media_groups target
-        JOIN media_groups owner ON owner.id = target.id OR owner.parent_id = target.id
-        JOIN media_items i ON i.group_id = owner.id
+				`SELECT g.id AS targetId, mp.person_type AS field, mp.name AS label
+        FROM media_groups g
+        JOIN media_items i ON i.library_id = g.library_id AND i.group_id IN ${SOURCE_GROUP_IDS}
         JOIN media_item_people mp ON mp.item_id = i.id
-        WHERE target.id IN (${placeholders}) AND mp.normalized_name LIKE ? ESCAPE '\\'
-        GROUP BY target.id, mp.person_type, mp.normalized_name, mp.name
+        WHERE g.id IN (${placeholders}) AND mp.normalized_name LIKE ? ESCAPE '\\'
+        GROUP BY g.id, mp.person_type, mp.normalized_name, mp.name
         ORDER BY mp.name COLLATE NOCASE`,
 			)
 			.all(...ids, normalizedPattern) as Array<{
@@ -906,13 +925,19 @@ export class MediaCatalogRepository {
 		return this.assets.listMediaGenres(libraryId, selection);
 	}
 
+	/** Resolve historical item IDs without loading item details. */
+	async listMediaItemAliases(libraryId: string, itemIds: string[]): Promise<Record<string, string>> {
+		return this.assets.listMediaItemAliases(libraryId, itemIds);
+	}
+
 	/** Resolve selected media in request order with canonical or authored response identifiers. */
 	async listMediaItemsByIds(
 		libraryId: string,
 		itemIds: string[],
 		identity: 'canonical' | 'requested' = 'canonical',
-	): Promise<MediaItem[]> {
-		return this.assets.listMediaItemsByIds(libraryId, itemIds, identity);
+		exclusions?: ContentExclusions,
+	): Promise<MediaSelectionItem[]> {
+		return this.assets.listMediaItemsByIds(libraryId, itemIds, identity, exclusions);
 	}
 
 	/** Collect the stable identifiers for list media groups by. */

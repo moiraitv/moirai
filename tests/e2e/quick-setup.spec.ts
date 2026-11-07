@@ -120,6 +120,14 @@ test('creates a movie channel through Quick Setup while its new library scans', 
 
 	// Changing libraries must discard selections owned by the previous library.
 	await page.getByRole('combobox', { name: /^Media choice/ }).selectOption('collection');
+	const browseMedia = setupDialog.getByRole('button', { name: 'Browse media', exact: true });
+	const browseSearch = setupDialog.getByRole('searchbox', { name: 'Search source media', exact: true });
+	await expect(browseMedia).toHaveAttribute('aria-expanded', 'true');
+	await browseMedia.click();
+	await expect(browseMedia).toHaveAttribute('aria-expanded', 'false');
+	await expect(browseSearch).toBeHidden();
+	await browseMedia.click();
+	await expect(browseSearch).toBeVisible();
 	await page.locator('.source-picker-list article').filter({ hasText: 'Quick Movie 00' })
 		.getByRole('button', { name: 'Add', exact: true }).click();
 	await expect(page.locator('.quick-selection-review')).toContainText('Quick Movie 00');

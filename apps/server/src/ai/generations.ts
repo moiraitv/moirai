@@ -1,5 +1,6 @@
 import { AiSelectionError } from './errors.js';
 import type { AiGeneration, AiGenerationRequest, AiContentSelectionResponse } from '@moirai/shared';
+import { contentExclusionsSchema, mergeContentExclusions } from '@moirai/shared';
 import type { AiRequestActivity } from './provider.js';
 
 /** Completed results remain reconnectable for one hour without unbounded retention. */
@@ -16,6 +17,7 @@ const AI_GENERATION_CANCEL_LIMIT = 128;
 interface GenerationRecord {
 	owner: string;
 	request: AiGenerationRequest;
+	exclusionKey: string;
 	value: AiGeneration;
 	controller: AbortController;
 	expiresAt: number;
@@ -24,6 +26,11 @@ interface GenerationRecord {
 /** Safe errors for reconnect, ownership, and capacity failures. */
 function generationError(message: string, statusCode: number): Error {
 	return Object.assign(new Error(message), { statusCode, expose: true });
+}
+
+/** Compare candidate exclusions by their effective membership across both request formats. */
+function exclusionKey(request: AiGenerationRequest): string {
+	return JSON.stringify(contentExclusionsSchema.parse(mergeContentExclusions(request.exclusions, request.excludedItemIds) ?? {}));
 }
 
 /**
@@ -99,10 +106,11 @@ export class AiGenerations {
 	): AiGeneration {
 		this.prune();
 		const existing = this.records.get(request.id);
+		const key = exclusionKey(request);
 		if (existing) {
 			if (existing.owner !== owner || existing.request.libraryId !== request.libraryId || existing.request.prompt !== request.prompt
 				|| existing.request.maxResults !== request.maxResults
-				|| JSON.stringify(existing.request.excludedItemIds ?? []) !== JSON.stringify(request.excludedItemIds ?? [])) {
+				|| existing.exclusionKey !== key) {
 				throw generationError('Generation identity is already in use.', 409);
 			}
 			return existing.value;
@@ -112,7 +120,7 @@ export class AiGenerations {
 			throw generationError(cancellation.owner === owner ? 'Generation cancelled.' : 'Generation identity is already in use.', 409);
 		}
 		this.assertCapacity(owner);
-		const record: GenerationRecord = { owner, request, controller: new AbortController(), expiresAt: Infinity,
+		const record: GenerationRecord = { owner, request, exclusionKey: key, controller: new AbortController(), expiresAt: Infinity,
 			value: { id: request.id, startedAt: Date.now(), state: 'running', status: 'preparing' } };
 		this.records.set(request.id, record);
 		void Promise.resolve().then(() => {

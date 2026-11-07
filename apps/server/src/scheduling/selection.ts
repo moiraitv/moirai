@@ -2,14 +2,13 @@ import { candidateIndex } from './candidate-index.js';
 import { durationMilliseconds } from '@moirai/shared';
 import { assertFillerProgram } from './validation.js';
 import { selectFillerCandidate } from './filler-cycle.js';
-import { selectOrderedCandidate } from './candidate-selection.js';
+import { selectOrderedCandidate, sequentialCandidateOffset } from './candidate-selection.js';
 import { selectSequence } from './sequence-selection.js';
 import { chooseSimilarity } from '../semantic/selection.js';
 import { createHash } from 'node:crypto';
 import {
 	countLabel,
 	MAX_MEDIA_DURATION_MILLISECONDS,
-	orderSelectedMedia,
 	type ProgramConfig,
 	type SchedulableMedia,
 	type SchedulingCatalog,
@@ -21,13 +20,10 @@ import {
 	type ViewingPreferenceScores,
 } from '@moirai/shared';
 import { stableJson, stableJsonFingerprint } from '../stable-json.js';
-import {
-	compareLibraryQueryMedia,
-	compareSchedulingMedia,
-	libraryQueryStateSource,
-	mediaMatchesLibraryQuery,
-} from './content-query.js';
+import { libraryQueryStateSource, orderedLibraryQueryMatches } from './content-query.js';
+import { contentExclusionMatcher, indexedContentMatches, omittedContentSuccessor, orderContentMatches, sourceExclusions } from './content-source.js';
 import { recordTimelineIssue, type RecordedTimelineIssue } from './timeline-issues.js';
+import { aiCursorFingerprints, type CursorCompatibleProgram } from './ai-cursor.js';
 
 /** Selected media item and the cursor state to persist after playback. */
 export interface SelectionResult {
@@ -53,7 +49,7 @@ export interface SelectionContext {
 	/** Optional primary airing duration, evaluated against isolated filler state. */
 	mediaDuration?: ((media: SchedulableMedia) => number) | undefined;
 	/** Configuration fingerprints shared by all branches in this generation. */
-	stateFingerprints?: Map<SchedulingProgram, { fingerprint: string; compatible: string | null }>;
+	stateFingerprints?: Map<SchedulingProgram, { fingerprint: string; compatible: string[] }>;
 	programs: Map<string, SchedulingProgram>;
 	catalog: SchedulingCatalog;
 	candidateCache: Map<
@@ -64,6 +60,7 @@ export interface SelectionContext {
 			unavailableCount: number;
 			missingReferenceMessage: string | null;
 			missingMemberMessage: string | null;
+			afterOmission?: (id: string) => number | undefined;
 		}
 	>;
 	blockedPrograms: Set<string>;
@@ -237,29 +234,6 @@ export function addIssue(
 	}, context.issueIndex);
 }
 
-/** Return whether a media group belongs to the requested ancestor without following cycles. */
-function isDescendantOf(
-	groupId: string | null,
-	ancestorId: string,
-	parents: Record<string, string | null>,
-): boolean {
-	let current = groupId;
-	const visited = new Set<string>();
-	while (current) {
-		if (current === ancestorId) {
-			return true;
-		}
-
-		if (visited.has(current)) {
-			return false;
-		}
-
-		visited.add(current);
-		current = parents[current] ?? null;
-	}
-	return false;
-}
-
 /** Resolve and cache the playable media eligible for a content program. */
 function candidatesFor(
 	config: Extract<ProgramConfig, { type: 'content' }>,
@@ -316,22 +290,12 @@ function candidatesFor(
 		return cached.playable;
 	}
 
-	// Resolve the smallest available catalog index for the configured source type.
+	// Resolve indexed inclusions separately from intentional exclusions.
 	const source = config.source;
-	const mediaById
-		= context.catalog.mediaById ?? new Map(context.catalog.media.map((item) => [item.id, item]));
-	const mediaByLibrary
-		= context.catalog.mediaByLibrary
-			?? new Map<string, SchedulableMedia[]>(
-				Object.keys(context.catalog.libraryAvailability).map((libraryId) => [
-					libraryId,
-					context.catalog.media.filter((media) => media.libraryId === libraryId),
-				]),
-			);
-	const canonicalItemId = (id: string): string => context.catalog.mediaAliases?.[id] ?? id;
+	const matching = indexedContentMatches(source, context.catalog);
 	let missingReferenceMessage: string | null = null;
 	if (source.type === 'item') {
-		if (!mediaById.has(canonicalItemId(source.itemId))) {
+		if (matching.length === 0) {
 			missingReferenceMessage = 'The exact item referenced by this program no longer exists.';
 		}
 	}
@@ -347,54 +311,6 @@ function candidatesFor(
 			missingReferenceMessage = 'The library referenced by this program no longer exists.';
 		}
 	}
-
-	// Filter source members by group ancestry, media kind, and genre constraints.
-	const collectionItemIds = (source.type === 'collection' || source.type === 'ai') && source.sort.type === 'manual'
-		? source.sort.itemIds
-		: source.type === 'collection' || source.type === 'ai'
-			? source.itemIds
-			: [];
-	const candidatePool
-		= source.type === 'item'
-			? [mediaById.get(canonicalItemId(source.itemId))]
-				.filter((media): media is SchedulableMedia => Boolean(media))
-			: source.type === 'collection' || source.type === 'ai'
-				? collectionItemIds.flatMap((itemId) => {
-					const media = mediaById.get(canonicalItemId(itemId));
-					return media ? [media] : [];
-				})
-				: source.type === 'library-query' || source.type === 'group-collection'
-					? (mediaByLibrary.get(source.libraryId) ?? [])
-					: context.catalog.media;
-	const collectionIds = new Set((source.type === 'collection' || source.type === 'ai') ? source.itemIds.map(canonicalItemId) : []);
-	const matching = candidatePool.filter((media) => {
-		if (config.source.type === 'item') {
-			return media.id === canonicalItemId(config.source.itemId);
-		}
-
-		if (config.source.type === 'group') {
-			return config.source.includeDescendants
-				? isDescendantOf(media.groupId, config.source.groupId, context.catalog.groupParents)
-				: media.groupId === config.source.groupId;
-		}
-
-		if (config.source.type === 'group-collection') {
-			return (
-				media.libraryId === config.source.libraryId
-				&& config.source.groupIds.some((groupId) =>
-					isDescendantOf(media.groupId, groupId, context.catalog.groupParents))
-			);
-		}
-
-		if (config.source.type === 'collection' || config.source.type === 'ai') {
-			return (
-				media.libraryId === config.source.libraryId
-				&& collectionIds.has(media.id)
-			);
-		}
-
-		return mediaMatchesLibraryQuery(media, config.source);
-	});
 
 	// Report deleted explicit members separately from a missing source container.
 	let missingMemberMessage: string | null = null;
@@ -423,13 +339,10 @@ function candidatesFor(
 		missingReferenceMessage = 'All selected items are no longer indexed.';
 	}
 
-	// Limit the authored query set before eligibility checks, matching status and previews.
-	const queryMatches = source.type === 'library-query'
-		? matching.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort))
-		: matching;
-	const selected = source.type === 'library-query' && source.itemLimit != null
-		? queryMatches.slice(0, source.itemLimit)
-		: queryMatches;
+	// Apply exclusions before filling the query limit and checking playback availability.
+	const excluded = contentExclusionMatcher(sourceExclusions(source), context.catalog);
+	const eligible = excluded ? matching.filter(media => !excluded(media)) : matching;
+	const selected = source.type === 'library-query' ? orderedLibraryQueryMatches(eligible, source) : eligible;
 
 	// Exclude unavailable or unmeasured media and cache the resulting diagnostics.
 	const unavailable = selected.filter((media) => {
@@ -445,26 +358,17 @@ function candidatesFor(
 		(media) => !usableDurationSeconds(media.durationSeconds),
 	);
 	const measured = candidates.filter((media) => usableDurationSeconds(media.durationSeconds));
-	const aiIndexedSort = source.type === 'ai' && source.sort.type === 'date-added' ? source.sort : null;
-	const playable = aiIndexedSort
-		? measured.sort((left, right) => compareLibraryQueryMedia(left, right, aiIndexedSort))
-		: source.type === 'collection' || source.type === 'ai'
-			? orderSelectedMedia(
-				measured,
-				source.sort,
-				source.type === 'collection'
-					? source.additionBatches?.map((batch) => batch.map(canonicalItemId))
-					: undefined,
-			)
-			: source.type === 'library-query'
-				? measured
-				: measured.sort(compareSchedulingMedia);
+	const playable = source.type === 'library-query' ? measured : orderContentMatches(measured, source, context.catalog);
+	const cappedMatches = selected.length < eligible.length ? selected : undefined;
+	const afterOmission = config.strategy.type === 'sequential' && (eligible.length < matching.length || cappedMatches)
+		? omittedContentSuccessor(matching, playable, source, context.catalog, excluded, cappedMatches) : undefined;
 	context.candidateCache.set(programId, {
 		playable,
 		missingDuration,
 		unavailableCount: unavailable.length,
 		missingReferenceMessage,
 		missingMemberMessage,
+		...(afterOmission ? { afterOmission } : {}),
 	});
 
 	// Surface eligibility problems once through the shared issue de-duplicator.
@@ -522,7 +426,7 @@ function stateFor(
 	configFingerprint: string,
 	initial: SelectionStateValue,
 	now: string,
-	compatibleFingerprint: string | null = null,
+	compatibleFingerprints: readonly string[],
 	filler = false,
 ): SelectionStateRecord {
 	const existing = state.get(consumerKey);
@@ -532,10 +436,7 @@ function stateFor(
 			state.set(consumerKey, owned);
 			return owned;
 		}
-		if (
-			compatibleFingerprint !== null
-			&& existing.configFingerprint === compatibleFingerprint
-		) {
+		if (compatibleFingerprints.includes(existing.configFingerprint)) {
 			const migrated = { ...existing, value: filler ? { ...existing.value } : structuredClone(existing.value), configFingerprint, updatedAt: now };
 			state.set(consumerKey, migrated);
 			return migrated;
@@ -622,20 +523,36 @@ function selectionStateConfig(input: ProgramConfig): unknown {
 	};
 }
 
+/** Keep content cursors compatible when only candidate exclusions change. */
+function withoutExclusionState(input: ProgramConfig): ProgramConfig {
+	if (input.type === 'content' && 'exclusions' in input.source) {
+		const { exclusions: _exclusions, ...source } = input.source;
+		void _exclusions;
+		return { ...input, source };
+	}
+	return input;
+}
+
 /** Compute canonical and legacy cursor fingerprints once for each immutable generation Program. */
-function stateFingerprints(program: SchedulingProgram, context: SelectionContext): { fingerprint: string; compatible: string | null } {
+function stateFingerprints(program: CursorCompatibleProgram, context: SelectionContext): { fingerprint: string; compatible: string[] } {
 	const cache = context.stateFingerprints ??= new Map();
 	const cached = cache.get(program);
 	if (cached) {
 		return cached;
 	}
+	const ai = aiCursorFingerprints(program.config);
+	if (ai) {
+		const fingerprints = { fingerprint: ai.fingerprint, compatible: [ai.emptyLegacy, ai.legacy, program.legacyAiCursorFingerprint].filter(value => value !== undefined) };
+		cache.set(program, fingerprints);
+		return fingerprints;
+	}
 
-	const { graphicsAssignment: _graphics, ...config } = program.config;
+	const { graphicsAssignment: _graphics, ...config } = withoutExclusionState(program.config);
 	void _graphics;
 	const compatible = config.type === 'sequence' ? normalizeSequenceOrdering(config)
 		: config.type === 'content' && config.source.type === 'library-query' ? config : legacySetSelectionStateConfig(config);
 	const fingerprints = { fingerprint: stableJsonFingerprint(selectionStateConfig(config)),
-		compatible: compatible === null ? null : stableJsonFingerprint(compatible) };
+		compatible: compatible === null ? [] : [stableJsonFingerprint(compatible)] };
 	cache.set(program, fingerprints);
 	return fingerprints;
 }
@@ -689,7 +606,7 @@ function chooseContent(
 			}
 			return seededOrder(candidates, strategy.seed, consumerKey, cycle);
 		};
-		const selected = selectFillerCandidate(candidates, record, context, fitSeconds, order);
+		const selected = selectFillerCandidate(candidates, record, context, fitSeconds, order, context.candidateCache.get(program.id)?.afterOmission);
 		if (selected) {
 			if (value.type === 'sequential') {
 				value.nextIndex = (candidates.indexOf(selected) + 1) % candidates.length;
@@ -720,11 +637,7 @@ function chooseContent(
 			legacyStateConfig,
 		);
 		const value = record.value as Extract<SelectionStateValue, { type: 'sequential' }>;
-		const afterLast = value.lastItemId
-			? candidates.findIndex((candidate) => candidate.id === value.lastItemId) + 1
-			: value.nextIndex;
-		const start
-			= afterLast > 0 ? afterLast % candidates.length : value.nextIndex % candidates.length;
+		const start = sequentialCandidateOffset(candidates, value, context.catalog.mediaAliases, context.candidateCache.get(program.id)?.afterOmission) % candidates.length;
 		const ordered = candidates.map(
 			(_, offset) => candidates[(start + offset) % candidates.length]!,
 		);

@@ -5,12 +5,15 @@ import type {
 	SchedulingProgram,
 	SchedulableMedia,
 } from '@moirai/shared';
+import { sourceExclusions } from './content-source.js';
 
 /** Library, group, and item identifiers referenced by a set of programs. */
 export interface SchedulingCatalogScope {
 	itemIds: string[];
 	/** References needing identity resolution without loading their media. */
 	aliasItemIds?: string[];
+	/** Libraries whose scoped item selections need complete ancestor chains. */
+	ancestorLibraryIds?: string[];
 	groupIds: string[];
 	sourceLibraryIds: string[];
 	libraryIds: string[];
@@ -122,6 +125,7 @@ export function schedulingCatalogScope(
 	const byId = new Map(programs.map((program) => [program.id, program]));
 	const itemIds = new Set<string>();
 	const aliasItemIds = new Set<string>();
+	const ancestorLibraryIds = new Set<string>();
 	const groupIds = new Set<string>();
 	const libraryIds = new Set<string>();
 	const sourceLibraryIds = new Set<string>();
@@ -150,6 +154,13 @@ export function schedulingCatalogScope(
 		}
 
 		const source = program.config.source;
+		const exclusions = sourceExclusions(source);
+		if (exclusions) {
+			exclusions.itemIds.forEach(id => aliasItemIds.add(id));
+			if ((source.type === 'collection' || source.type === 'ai') && exclusions.groupIds.length) {
+				ancestorLibraryIds.add(source.libraryId);
+			}
+		}
 		if (source.type === 'item') {
 			itemIds.add(source.itemId);
 		}
@@ -172,6 +183,7 @@ export function schedulingCatalogScope(
 	return {
 		itemIds: [...itemIds].sort(),
 		...(aliasItemIds.size > 0 ? { aliasItemIds: [...aliasItemIds].sort() } : {}),
+		...(ancestorLibraryIds.size > 0 ? { ancestorLibraryIds: [...ancestorLibraryIds].sort() } : {}),
 		groupIds: [...groupIds].sort(),
 		sourceLibraryIds: [...sourceLibraryIds].sort(),
 		libraryIds: [...libraryIds].sort(),

@@ -1,6 +1,21 @@
-import type { SchedulableMedia } from '@moirai/shared';
+import type { SchedulableMedia, SchedulingCatalog, SelectionStateValue } from '@moirai/shared';
 import { hasSelectionCollision, selectionDuration, type SelectionContext, type SelectionFitMode } from './selection.js';
 import { durationMilliseconds } from '@moirai/shared';
+
+/** Resume after the canonical saved item, retaining an end-of-cycle offset for filler. */
+export function sequentialCandidateOffset(
+	candidates: SchedulableMedia[],
+	cursor: Extract<SelectionStateValue, { type: 'sequential' }>,
+	aliases: SchedulingCatalog['mediaAliases'],
+	afterOmission?: (id: string) => number | undefined,
+): number {
+	if (cursor.lastItemId) {
+		const id = aliases?.[cursor.lastItemId] ?? cursor.lastItemId;
+		const last = candidates.findIndex(media => media.id === id);
+		return last >= 0 ? last + 1 : afterOmission?.(id) ?? cursor.nextIndex % candidates.length;
+	}
+	return cursor.nextIndex % candidates.length;
+}
 
 /** Select in authored order, or retain the longest fit, without expanding unused candidates. */
 export function selectOrderedCandidate(

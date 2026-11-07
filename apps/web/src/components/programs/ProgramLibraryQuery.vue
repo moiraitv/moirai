@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue';
 import type {
 	CatalogProgramItemFilter,
+	ContentExclusions,
 	LibraryQuerySort,
 	MediaGenreFacet,
 } from '@moirai/shared';
@@ -10,10 +11,12 @@ import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import LibraryQueryFilter from '../library/LibraryQueryFilter.vue';
 import QuickQueryPreview from '../quick/QuickQueryPreview.vue';
+import ProgramExclusions from './ProgramExclusions.vue';
 
 const props = defineProps<{
 	libraryId: string;
 	libraryType: string;
+	libraryName: string;
 	genres: MediaGenreFacet[];
 	loading: boolean;
 	loaded: boolean;
@@ -22,6 +25,7 @@ const props = defineProps<{
 const filter = defineModel<CatalogProgramItemFilter>({ required: true });
 const sort = defineModel<LibraryQuerySort>('sort', { required: true });
 const itemLimit = defineModel<number | null>('itemLimit', { required: true });
+const exclusions = defineModel<ContentExclusions>('exclusions', { required: true });
 const items = ref<QuickChannelQueryPreviewResult['items']>([]);
 const indexedItemCount = ref(0);
 const previewLoading = ref(false);
@@ -61,6 +65,7 @@ async function loadPreview(background = false): Promise<void> {
 				...filter.value,
 				sort: sort.value,
 				itemLimit: itemLimit.value,
+				exclusions: exclusions.value,
 				cursor: nextCursor,
 				limit: Math.min(48, Math.max(24, targetCount - nextItems.length)),
 			});
@@ -105,6 +110,7 @@ async function loadMore(): Promise<void> {
 			...filter.value,
 			sort: sort.value,
 			itemLimit: itemLimit.value,
+			exclusions: exclusions.value,
 			cursor: cursor.value,
 			limit: 24,
 		});
@@ -136,6 +142,7 @@ watch(
 		filter.value,
 		sort.value,
 		itemLimit.value,
+		exclusions.value,
 	]),
 	() => void loadPreview(),
 );
@@ -155,6 +162,7 @@ onMounted(() => void loadPreview());
 			:loading="props.loading"
 			:loaded="props.loaded"
 		/>
+		<ProgramExclusions v-model="exclusions" :library-id="libraryId" :library-type="libraryType" :library-name="libraryName" />
 		<QuickQueryPreview
 			:items="items"
 			:indexed-item-count="indexedItemCount"

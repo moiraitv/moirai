@@ -17,6 +17,7 @@ import { apiOperation, responseContent, multiContentResponse } from './contracts
 import { workerRequestSignal } from './worker-response.js';
 import { registerAiGenerationRoutes } from './ai-generations.js';
 import { registerAiSettingsRoutes } from './ai-settings.js';
+import { AI_SELECTION_BODY_LIMIT } from './media-request-limits.js';
 
 /** Services required to expose AI content selection. */
 interface AiRouteDependencies {
@@ -47,6 +48,7 @@ export function registerAiRoutes(
 	}, async () => ({ configured: (aiSettings?.active() ?? config.ai) !== null }));
 
 	app.post('/api/v1/ai/content-selection', {
+		bodyLimit: AI_SELECTION_BODY_LIMIT,
 		schema: apiOperation({
 			operationId: 'selectAiContent',
 			tags: ['AI'],
@@ -58,7 +60,7 @@ export function registerAiRoutes(
 					'text/event-stream': aiSelectionEventSchema,
 				}),
 			},
-			errors: [400, 401, 404, 422, 500, 503],
+			errors: [400, 401, 404, 413, 422, 500, 503],
 		}),
 	}, async (request, reply) => {
 		const ai = aiSettings?.active() ?? config.ai;
@@ -90,7 +92,7 @@ export function registerAiRoutes(
 			runLog.start();
 			try {
 				const result = await generateAiSelection(activeAi, body.prompt, libraryType, {
-					loadCatalog: () => repository.aiCatalog(body.libraryId, body.excludedItemIds),
+					loadCatalog: () => repository.aiCatalog(body.libraryId, body.excludedItemIds, body.exclusions),
 					excludedItemIds: body.excludedItemIds,
 					loadVectors: (concepts, generationSignal) => loadAiEmbeddings(repository.semantic, body.libraryId, concepts, generationSignal, requestEmbeddingWork),
 					...(!activeAi.webSearch ? { fastLocalReview: true } : {}),

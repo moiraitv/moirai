@@ -1,6 +1,6 @@
 import type { FillerCycle, SchedulableMedia, SelectionStateRecord } from '@moirai/shared';
 import { candidateIndex } from './candidate-index.js';
-import { selectOrderedCandidate } from './candidate-selection.js';
+import { selectOrderedCandidate, sequentialCandidateOffset } from './candidate-selection.js';
 import type { SelectionContext } from './selection.js';
 import { durationMilliseconds } from '@moirai/shared';
 
@@ -17,6 +17,7 @@ export function selectFillerCandidate(
 	context: SelectionContext,
 	fitSeconds: number | null,
 	order: (cycle: number) => SchedulableMedia[],
+	afterOmission?: (id: string) => number | undefined,
 ): SchedulableMedia | null {
 	const { byId, canonicalIds } = candidateIndex(candidates, context);
 	const canonical = (ids: string[]): string[] => {
@@ -37,8 +38,7 @@ export function selectFillerCandidate(
 		const value = record.value;
 		const initialCycle = value.type === 'shuffle' ? value.cycle : 'counter' in value ? value.counter : 0;
 		const initial = canonical(order(initialCycle).map(media => media.id));
-		const afterLast = value.type === 'sequential' && value.lastItemId ? candidates.findIndex(media => media.id === value.lastItemId) + 1 : 0;
-		const sequentialPosition = value.type === 'sequential' ? afterLast > 0 ? afterLast : value.nextIndex % candidates.length : 0;
+		const sequentialPosition = value.type === 'sequential' ? sequentialCandidateOffset(candidates, value, context.catalog.mediaAliases, afterOmission) : 0;
 		const consumed = value.type === 'similarity' ? new Set(canonical(value.consumedItemIds)) : new Set<string>();
 		const remaining = value.type === 'shuffle' && value.cycleItemIds.length ? canonical(value.remainingItemIds)
 			: value.type === 'similarity' ? initial.filter(id => !consumed.has(id))

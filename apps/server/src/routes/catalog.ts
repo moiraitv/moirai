@@ -6,6 +6,7 @@ import type { FastifyInstance, RouteHandlerMethod } from 'fastify';
 import { z } from 'zod';
 import {
 	canonicalGenreKey,
+	contentExclusionsSchema,
 	genreMatchSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	MAX_EXPLICIT_MEDIA_ITEMS,
@@ -34,6 +35,7 @@ import { MediaPreviewError, mediaMimeType, parseMediaRange, resolveMediaFile } f
 import type { Repository } from '../repository/index.js';
 import { openSourceFile, SourceFileError } from '../media/source-file.js';
 import { parseId } from './params.js';
+import { MEDIA_SELECTION_BODY_LIMIT } from './media-request-limits.js';
 import {
 	apiOperation,
 	binaryBodySchema,
@@ -112,7 +114,13 @@ const mediaSourceOptionsQuerySchema = z.object({
 });
 
 /** Explicit media-item identifiers resolved for a scheduling program. */
-const mediaSelectionSchema = z.object({ itemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS) });
+const mediaSelectionSchema = z.object({
+	itemIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_ITEMS),
+	exclusions: contentExclusionsSchema.optional(),
+});
+
+/** Resolve historical IDs without requesting selected media metadata. */
+const mediaSelectionAliasesSchema = mediaSelectionSchema.pick({ itemIds: true });
 
 /** Explicit media-group identifiers resolved for a scheduling program. */
 const mediaGroupSelectionSchema = z.object({ groupIds: z.array(z.uuid()).max(MAX_EXPLICIT_MEDIA_GROUPS) });
@@ -220,18 +228,33 @@ export function registerCatalogRoutes(
 	});
 	// Resolve explicitly selected item and group summaries in stable request order.
 	app.post('/api/v1/libraries/:id/media-selection', {
+		bodyLimit: MEDIA_SELECTION_BODY_LIMIT,
 		schema: apiOperation({
 			operationId: 'resolveMediaSelection',
 			tags: ['Catalog'],
 			summary: 'Resolve selected media items',
 			params: idParamsSchema,
 			body: mediaSelectionSchema,
-			response: { 200: responseContent('Selected media retaining request identifiers', 'application/json', z.array(mediaItemSchema)) },
-			errors: [400, 404, 500, 503],
+			response: { 200: responseContent('Selected media with request identifiers and exclusion matches', 'application/json', z.array(mediaItemSchema.extend({ canonicalId: z.uuid().optional(), excluded: z.literal(true).optional() }))) },
+			errors: [400, 404, 413, 500, 503],
 		}),
 	}, async (request) => {
-		const itemIds = mediaSelectionSchema.parse(request.body).itemIds;
-		return repository.listMediaItemsByIds(parseId(request), itemIds, 'requested');
+		const { itemIds, exclusions } = mediaSelectionSchema.parse(request.body);
+		return repository.listMediaItemsByIds(parseId(request), itemIds, 'requested', exclusions);
+	});
+	app.post('/api/v1/libraries/:id/media-selection/aliases', {
+		schema: apiOperation({
+			operationId: 'resolveMediaSelectionAliases',
+			tags: ['Catalog'],
+			summary: 'Resolve historical media selection IDs without fetching item details',
+			params: idParamsSchema,
+			body: mediaSelectionAliasesSchema,
+			response: { 200: responseContent('Historical IDs mapped to current item IDs', 'application/json', z.record(z.uuid(), z.uuid())) },
+			errors: [400, 413, 500, 503],
+		}),
+	}, async (request) => {
+		const { itemIds } = mediaSelectionAliasesSchema.parse(request.body);
+		return repository.listMediaItemAliases(parseId(request), itemIds);
 	});
 	app.post('/api/v1/libraries/:id/media-group-selection', {
 		schema: apiOperation({

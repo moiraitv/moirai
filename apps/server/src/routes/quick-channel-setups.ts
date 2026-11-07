@@ -12,6 +12,7 @@ import type { AppConfig } from '../config.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
 import { registerQuickSetupPreviewRoute } from './quick-setup-preview.js';
+import { QUERY_PREVIEW_BODY_LIMIT } from './media-request-limits.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { apiOperation, responseContent } from './contracts.js';
 
@@ -31,6 +32,7 @@ export function registerQuickChannelSetupRoutes(
 ): void {
 	registerQuickSetupPreviewRoute(app, { config, schedulingWorkers });
 	app.post('/api/v1/quick-channel-setups/query-preview', {
+		bodyLimit: QUERY_PREVIEW_BODY_LIMIT,
 		schema: apiOperation({
 			operationId: 'previewQuickChannelQuery',
 			tags: ['Channels', 'Scheduling'],
@@ -43,7 +45,7 @@ export function registerQuickChannelSetupRoutes(
 					quickChannelQueryPreviewResultSchema,
 				),
 			},
-			errors: [400, 404, 500, 503],
+			errors: [400, 404, 413, 500, 503],
 		}),
 	}, async (request, reply) => {
 		const result = await schedulingWorkers.read({ kind: 'query', input: quickChannelQueryPreviewRequestSchema.parse(request.body) }, workerRequestSignal(reply));

@@ -274,6 +274,7 @@ export const mediaBrowseResultSchema = z.object({
 export const mediaSourcePickerResultSchema = z.object({
 	entries: z.array(mediaBrowseEntrySchema.extend({
 		matches: z.array(mediaSourceMatchSchema),
+		parentTitle: z.string().optional(),
 	})),
 	pagination: paginationSchema,
 });

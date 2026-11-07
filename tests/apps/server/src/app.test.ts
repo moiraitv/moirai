@@ -17,10 +17,13 @@ import { Temporal } from '@js-temporal/polyfill';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	channelCreateSchema,
+	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
 	effectiveChannelTvgId,
 	libraryCreateSchema,
 	liveEventSchema,
 	MAX_MEDIA_GENRE_RULES,
+	MAX_EXCLUDED_MEDIA_ITEMS,
+	MAX_EXPLICIT_MEDIA_GROUPS,
 	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	SECONDS_PER_SCHEDULING_DAY,
 	XMLTV_EPG_DAYS,
@@ -32,7 +35,7 @@ import { AuthenticationRequestError, OIDC_SESSION_TTL_MS } from '@server/auth/se
 import { loadConfig } from '@server/config.js';
 import { openWriteDatabase } from '@server/db/write-connection.js';
 import { createDatabase } from '@server/db/index.js';
-import { authenticationSessions, mediaItems } from '@server/db/schema.js';
+import { authenticationSessions, mediaItemAliases, mediaItems } from '@server/db/schema.js';
 import { Repository } from '@server/repository/index.js';
 
 const transparentPng = await sharp({
@@ -1193,6 +1196,56 @@ describe('API', () => {
 		expect(indexed.items.map((item) => item.title)).toEqual(['New Item']);
 	});
 
+	it('validates large combined selection and exclusion lists through Program and catalog routes', async () => {
+		const { app, services } = await fixture();
+		const libraryId = randomUUID();
+		const itemIds = Array.from({ length: DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS }, () => randomUUID());
+		const exclusions = {
+			itemIds: Array.from({ length: MAX_EXCLUDED_MEDIA_ITEMS }, () => randomUUID()),
+			groupIds: Array.from({ length: MAX_EXPLICIT_MEDIA_GROUPS }, () => randomUUID()),
+		};
+		const program = await services.repository.createProgram({ name: 'Fixture', config: {
+			type: 'content', source: { type: 'collection', libraryId, itemIds: itemIds.slice(0, 1), sort: { type: 'date-added', direction: 'asc' } },
+			strategy: { type: 'sequential' },
+		} });
+		const payload = { name: 'Large collection', config: { type: 'content', strategy: { type: 'sequential' },
+			source: { type: 'collection', libraryId, itemIds, exclusions, sort: { type: 'manual', itemIds },
+				additionBatches: itemIds.map(id => [id]) } } };
+
+		for (const [method, url] of [['POST', '/api/v1/programs'], ['PATCH', `/api/v1/programs/${program.id}`]] as const) {
+			const response = await app.inject({ method, url, payload });
+			expect(response.statusCode, response.body).toBe(400);
+			expect(response.json().message).toMatch(/excluded items must be indexed/i);
+		}
+		const url = `/api/v1/libraries/${libraryId}/media-selection`;
+		expect((await app.inject({ method: 'POST', url, payload: { itemIds, exclusions } })).statusCode).toBe(200);
+		expect((await app.inject({ method: 'POST', url, payload: { itemIds,
+			exclusions: { ...exclusions, groupIds: [...exclusions.groupIds, randomUUID()] } } })).statusCode).toBe(400);
+	}, 20_000);
+
+	it('omits legacy AI cursor metadata from public Program reads', async () => {
+		const { app, services } = await fixture();
+		const source = { type: 'ai' as const, libraryId: randomUUID(), prompt: 'Movies', itemIds: [],
+			sort: { type: 'manual' as const, itemIds: [] } };
+		const program = await services.repository.createProgram({ name: 'Legacy AI cursor', config: {
+			type: 'content', source: { ...source, excludedItemIds: [randomUUID()] }, strategy: { type: 'sequential' },
+		} });
+		const updated = await services.repository.updateProgram(program.id, { config: {
+			type: 'content', source, strategy: { type: 'sequential' },
+		} });
+		expect((await services.repository.getProgram(program.id))?.legacyAiCursorFingerprint).toBeDefined();
+
+		const list = await app.inject({ url: '/api/v1/programs' });
+		const detail = await app.inject({ url: `/api/v1/programs/${program.id}` });
+		const overview = await app.inject({ url: '/api/v1/scheduling/overview' });
+		for (const response of [list, detail, overview]) {
+			expect(response.statusCode, response.body).toBe(200);
+		}
+		expect(list.json()).toEqual([updated]);
+		expect(detail.json()).toEqual(updated);
+		expect(overview.json().programs).toEqual([updated]);
+	}, 20_000);
+
 	it('supports scheduling overview, assignments, draft previews, and the batch guide', async () => {
 		const { app, services } = await fixture();
 		const channelResponse = await app.inject({
@@ -1884,12 +1937,19 @@ describe('API', () => {
 				itemLimit: 2,
 			},
 		});
+		const excluded = await app.inject({
+			method: 'POST', url: '/api/v1/quick-channel-setups/query-preview',
+			payload: { scenario: 'movies', libraryId: library.id, itemLimit: 2,
+				exclusions: { itemIds: [firstPage.items[0].id] } },
+		});
 
 		expect(first.statusCode).toBe(200);
 		expect(firstPage.indexedItemCount).toBe(3);
 		expect(firstPage.items.map((item: { title: string }) => item.title))
 			.toEqual(['Alpha', 'Middle']);
 		expect(firstPage.nextCursor).toBe('2');
+		expect(excluded.statusCode).toBe(200);
+		expect(excluded.json()).toMatchObject({ indexedItemCount: 2, items: [{ title: 'Middle' }, { title: 'Zulu' }], nextCursor: null });
 		expect(second.statusCode).toBe(200);
 		expect(second.json().items.map((item: { title: string }) => item.title)).toEqual(['Zulu']);
 		expect(second.json().nextCursor).toBeNull();
@@ -2822,7 +2882,7 @@ it('validates duration query bounds and forwards unrestricted and inclusive valu
 });
 
 it('defaults newly added episode programs and resolves the same hierarchy for review and scheduling', async () => {
-	const { app, services, root } = await fixture();
+	const { app, services, root, database } = await fixture();
 	const library = await services.repository.createLibrary(libraryCreateSchema.parse({ name: 'Episode order', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: root }, watcherEnabled: false }));
 	const directory = path.join(root, 'Space Station', 'Season 01');
 	await mkdir(directory, { recursive: true });
@@ -2841,6 +2901,14 @@ it('defaults newly added episode programs and resolves the same hierarchy for re
 	const selection = await app.inject({ method: 'POST', url: `/api/v1/libraries/${library.id}/media-selection`, payload: { itemIds } });
 	expect(selection.statusCode).toBe(200);
 	const selected = selection.json();
+	const aliasId = randomUUID();
+	database.db.insert(mediaItemAliases).values({ aliasId, libraryId: library.id, itemId: itemIds[0]! }).run();
+	const aliases = await app.inject({ method: 'POST', url: `/api/v1/libraries/${library.id}/media-selection/aliases`, payload: { itemIds: [aliasId, itemIds[0]] } });
+	expect(aliases.statusCode).toBe(200);
+	expect(aliases.json()).toEqual({ [aliasId]: itemIds[0] });
+	const aliased = await app.inject({ method: 'POST', url: `/api/v1/libraries/${library.id}/media-selection`, payload: { itemIds: [aliasId] } });
+	expect(aliased.statusCode).toBe(200);
+	expect(aliased.json()).toMatchObject([{ id: aliasId, canonicalId: itemIds[0] }]);
 	expect(selected.every((item: { showId: string; showSortTitle: string }) => item.showId === discovery.groups.find(group => group.kind === 'show')!.id && Boolean(item.showSortTitle))).toBe(true);
 	const catalog = await services.repository.getSchedulingCatalog([reopened!]);
 	const sortedReview = orderSelectedMedia(selected, { type: 'episode', direction: 'asc' });

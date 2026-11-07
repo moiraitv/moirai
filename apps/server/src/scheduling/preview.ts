@@ -126,11 +126,12 @@ export class PreviewExecutor {
 
 		const timestamp = currentTimestamp();
 		const schedule = { ...resolved.schedule, channelId: input.channelId, createdAt: timestamp, updatedAt: timestamp };
-		const catalog = await this.scheduling.getSchedulingCatalog(
+		const baseCatalog = await this.scheduling.getSchedulingCatalog(
 			programs,
 			schedulingRootProgramIds(templates, [{ ...schedule, ...input.schedule }]),
 			referencedMidRollPresetIds(templates, [input.schedule]),
 		);
+		const catalog = await this.scheduling.withSchedulingCursorAliases(baseCatalog, state);
 		return {
 			input: { channelId: input.channelId, timeZone, startDate: input.startDate, days: input.days,
 				schedule, template, templates: resolved.templates, programs, catalog, state },

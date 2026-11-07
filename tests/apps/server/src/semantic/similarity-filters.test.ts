@@ -55,12 +55,13 @@ it('keeps legacy similarity programs unfiltered and rejects conflicting genre ru
 	expect(similarityProgramConfigSchema.safeParse({ ...config, filter: { genres: ['Comedy'], excludedGenres: ['comedy'] } }).success).toBe(false);
 });
 
-it('uses a saved AI selection as similarity anchors with same-library candidates and vectors', async () => {
+it('uses only eligible saved AI results as similarity anchors with same-library candidates and vectors', async () => {
 	const f = await fixture();
 	try {
 		await f.embeddings();
 		const source = await f.repository.createProgram({ name: 'AI anchors', config: { type: 'content',
-			source: { type: 'ai', libraryId: f.library.id, prompt: 'Films like this', itemIds: [f.ids[0]!], sort: { type: 'date-added', direction: 'asc' } },
+			source: { type: 'ai', libraryId: f.library.id, prompt: 'Films like this', itemIds: [f.ids[0]!, f.ids[1]!],
+				sort: { type: 'date-added', direction: 'asc' }, exclusions: { itemIds: [f.ids[1]!], groupIds: [] } },
 			strategy: { type: 'sequential' } } });
 		const similar = await f.repository.createProgram({ name: 'Related to AI', config: { type: 'similarity', sourceProgramId: source.id, quantity: 3, variety: 35 } });
 		const context = await f.context();

@@ -1023,34 +1023,16 @@
 	flex: 1;
 }
 
-.source-browser-disclosure > .plain-disclosure-trigger {
-	padding-block: 10px;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	color: var(--muted-strong);
-	font-size: 0.85rem;
-	font-weight: 600;
-	list-style: none;
-	cursor: pointer;
-}
+.program-source-browser {
+	display: grid;
+	gap: 12px;
+	min-width: 0;
 
-.source-browser-disclosure > .plain-disclosure-trigger::-webkit-details-marker {
-	display: none;
-}
-
-.source-browser-disclosure > .plain-disclosure-trigger svg {
-	transition: transform var(--motion-standard) var(--motion-enter);
-}
-
-.source-browser-disclosure > .plain-disclosure-trigger > .plain-disclosure-marker {
-	order: 1;
-	margin-right: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.source-browser-disclosure > .plain-disclosure-trigger svg {
-		transition: none;
+	> h4 {
+		margin: 0;
+		color: var(--muted-strong);
+		font-size: 0.85rem;
+		font-weight: 600;
 	}
 }
 
@@ -1074,7 +1056,7 @@
 }
 
 .source-browser-back {
-	margin-block: 12px;
+	justify-self: start;
 }
 
 .similarity-range-labels {
@@ -1459,6 +1441,89 @@
 
 .program-match-done {
 	margin-inline-start: auto;
+}
+
+.selected-collection-summary.program-exclusions-summary {
+	height: auto;
+	min-height: 60px;
+	align-items: center;
+	gap: 8px;
+	border-radius: var(--radius-panel);
+}
+
+.program-exclusions-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.program-exclusions-drawer .selection-drawer-header > button {
+	flex: 0 0 42px;
+	height: 42px;
+}
+
+.program-exclusions-footer {
+	flex-wrap: wrap;
+
+	.source-picker-pagination {
+		flex: 1 0 auto;
+		justify-content: flex-start;
+		white-space: nowrap;
+	}
+
+	.program-exclusions-actions {
+		margin-inline-start: auto;
+	}
+}
+
+.program-exclusions-search {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+
+	input {
+		flex: 1 1 160px;
+		min-width: 0;
+	}
+
+	select {
+		width: auto;
+	}
+}
+
+.program-exclusions-path {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.82rem;
+}
+
+.source-picker-list.program-exclusions-list {
+	max-height: none;
+	overflow: visible;
+	border-radius: var(--radius-panel);
+
+	article {
+		border-bottom: 0;
+	}
+
+	.program-exclusions-row + .program-exclusions-row {
+		border-top: 1px solid var(--line);
+	}
+
+	.source-picker-copy strong,
+	.source-picker-copy small {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+
+	.toolbar-button.exclusion-selected {
+		color: var(--accent);
+		background: var(--color-selected);
+		cursor: default;
+	}
 }
 
 .program-matches-drawer .selected-item-grid article > .program-match-restore {

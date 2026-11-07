@@ -13,8 +13,9 @@ import type { Repository } from '../repository/index.js';
 import { currentTimestamp } from '../time.js';
 import { schedulingRootProgramIds } from './catalog.js';
 import { resolveProgramSchedule } from './direct-program-templates.js';
-import { schedulingProgramStatuses, schedulingContentMatches } from './status.js';
-import { compareLibraryQueryMedia } from './content-query.js';
+import { schedulingProgramStatuses } from './status.js';
+import { indexedContentMatches, withoutContentExclusions } from './content-source.js';
+import { orderedLibraryQueryMatches } from './content-query.js';
 import { libraryTypeMediaKind } from './quick-setup-resources.js';
 import { generateTimelineDetailed } from './engine.js';
 import { validateTemplate } from './validation.js';
@@ -22,6 +23,7 @@ import { guideTimelinePreview } from '../guide/preview.js';
 import { semanticSource } from '../semantic/source.js';
 import { similarityProgramStatus } from '../semantic/status.js';
 import { refinementTexts } from '../semantic/refinement.js';
+import { publicSchedulingProgram } from './ai-cursor.js';
 
 /** Read jobs keep catalog data on their executing thread and return only public results. */
 export type SchedulingReadRequest
@@ -118,7 +120,7 @@ async function overview(repository: Repository, readComplete: () => void) {
 	]);
 	readComplete();
 	return {
-		programs,
+		programs: programs.map(publicSchedulingProgram),
 		templates,
 		channelSchedules,
 		programStatuses: timePhase('compute', () => schedulingProgramStatuses(programs, catalog)),
@@ -137,7 +139,7 @@ async function queryPreview(repository: Repository, input: QuickChannelQueryPrev
 
 	const timestamp = currentTimestamp();
 	const query = catalogProgramItemFilterSchema.parse(input);
-	const programConfig: Extract<SchedulingProgram['config'], { type: 'content' }> = {
+	const programConfig = {
 		type: 'content',
 		source: {
 			type: 'library-query',
@@ -146,9 +148,10 @@ async function queryPreview(repository: Repository, input: QuickChannelQueryPrev
 			kinds: [libraryTypeMediaKind(input.scenario)],
 			sort: input.sort,
 			itemLimit: input.itemLimit,
+			...(input.exclusions ? { exclusions: input.exclusions } : {}),
 		},
 		strategy: { type: 'sequential' },
-	};
+	} satisfies Extract<SchedulingProgram['config'], { type: 'content' }>;
 	const program: SchedulingProgram = {
 		id: QUICK_QUERY_PREVIEW_PROGRAM_ID,
 		name: 'Quick Setup query preview',
@@ -158,11 +161,9 @@ async function queryPreview(repository: Repository, input: QuickChannelQueryPrev
 	};
 	const catalog = await repository.getSchedulingCatalog([program]);
 	readComplete();
-	const orderedMatches = schedulingContentMatches(programConfig, catalog)
-		.sort((left, right) => compareLibraryQueryMedia(left, right, input.sort));
-	const matches = input.itemLimit === null
-		? orderedMatches
-		: orderedMatches.slice(0, input.itemLimit);
+	const source = programConfig.source;
+	const eligible = withoutContentExclusions(indexedContentMatches(source, catalog), source, catalog);
+	const matches = orderedLibraryQueryMatches(eligible, source);
 	const offset = input.cursor === null ? 0 : Number.parseInt(input.cursor, 10);
 	if (!Number.isSafeInteger(offset) || offset > matches.length) {
 		throw app.httpErrors.badRequest('The query cursor is invalid');
@@ -202,11 +203,12 @@ async function persisted(repository: Repository, request: Extract<SchedulingRead
 		programsPromise,
 		repository.getSelectionState(id),
 	]);
-	const catalog = await repository.getSchedulingCatalog(
+	const baseCatalog = await repository.getSchedulingCatalog(
 		programs,
 		schedulingRootProgramIds(templates, [schedule]),
 		referencedMidRollPresetIds(templates, [schedule]),
 	);
+	const catalog = await repository.withSchedulingCursorAliases(baseCatalog, state);
 	const resolved = resolveProgramSchedule(id, schedule, templates, programs);
 	const template = resolved.template;
 	if (!template) {
@@ -285,11 +287,12 @@ async function templateDraft(repository: Repository, request: Extract<Scheduling
 		throw app.httpErrors.notFound('Base schedule template not found');
 	}
 
-	const catalog = await repository.getSchedulingCatalog(
+	const baseCatalog = await repository.getSchedulingCatalog(
 		programs,
 		schedulingRootProgramIds(previewTemplates, [previewSchedule]),
 		referencedMidRollPresetIds(previewTemplates, [previewSchedule]),
 	);
+	const catalog = await repository.withSchedulingCursorAliases(baseCatalog, state);
 	readComplete();
 	const generated = timePhase('compute', () => generateTimelineDetailed({
 		channelId,

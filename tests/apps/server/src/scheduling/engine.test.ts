@@ -1932,13 +1932,14 @@ describe('schedule timeline engine', () => {
 			releaseDate: null,
 		});
 		const items = [oldestAdded, middleAdded, newestAdded];
-		const orderedTitles = (sort: SelectedMediaSort): string[] => {
+		const orderedTitles = (sort: SelectedMediaSort, excludedItemIds: string[] = []): string[] => {
 			const collection = program(10, {
 				type: 'content',
 				source: {
 					type: 'collection',
 					libraryId: uuid(900),
 					itemIds: items.map((item) => item.id),
+					exclusions: { itemIds: excludedItemIds, groupIds: [] },
 					additionBatches: [[oldestAdded.id], [middleAdded.id, newestAdded.id]],
 					sort,
 				},
@@ -1960,6 +1961,84 @@ describe('schedule timeline engine', () => {
 			type: 'manual',
 			itemIds: [newestAdded.id, oldestAdded.id, middleAdded.id],
 		})).toEqual(['Alpha Earlier', 'Zulu', 'Alpha Later']);
+		expect(orderedTitles({ type: 'manual', itemIds: [newestAdded.id, oldestAdded.id, middleAdded.id] }, [oldestAdded.id]).slice(0, 2))
+			.toEqual(['Alpha Earlier', 'Alpha Later']);
+	});
+
+	it.each(['sequential', 'shuffle'] as const)(
+		'skips excluded query members while continuing %s playback from a saved cursor',
+		(strategy) => {
+			const items = Array.from({ length: 7 }, (_, index) => media(index + 1, 6 * 3600));
+			const original = contentProgram(10, [1, 2], strategy);
+			if (original.config.type !== 'content' || original.config.source.type !== 'library-query') {
+				throw new Error('Expected a library query');
+			}
+			const daily = template([{ programId: original.id, startSeconds: 0 }]);
+			const first = generateTimeline(input([original], items, daily));
+			const played = new Set(first.segments.map(segment => segment.mediaItemId));
+			const upcoming = items.filter(item => !played.has(item.id));
+			const excluded = upcoming[0]!;
+			const edited: SchedulingProgram = { ...original, config: { ...original.config,
+				source: { ...original.config.source, exclusions: { itemIds: [excluded.id], groupIds: [] } } } };
+			const resumed = generateTimeline(input([edited], items, daily, { startDate: '2026-01-06', state: first.proposedState }));
+			const primary = resumed.segments.filter(segment => segment.role === 'primary').map(segment => segment.mediaItemId);
+			expect(new Set(primary.slice(0, 2))).toEqual(new Set(upcoming.slice(1).map(item => item.id)));
+			expect(primary).not.toContain(excluded.id);
+		},
+	);
+
+	it.each(['limited query', 'manual collection'] as const)('resumes a %s after the last aired item is excluded', mode => {
+		const items = Array.from({ length: 7 }, (_, index) => media(index + 1, 6 * 3600));
+		const ids = items.map(item => item.id);
+		const source = mode === 'limited query'
+			? { type: 'library-query' as const, libraryId: uuid(900), kinds: [], genres: [], itemLimit: 5 }
+			: { type: 'collection' as const, libraryId: uuid(900), itemIds: ids, sort: { type: 'manual' as const, itemIds: [...ids].reverse() } };
+		const original = program(10, { type: 'content', source, strategy: { type: 'sequential' } });
+		const daily = template([{ programId: original.id, startSeconds: 0 }]);
+		const first = generateTimeline(input([original], items, daily));
+		const aired = first.segments.filter(segment => segment.role === 'primary').map(segment => segment.mediaItemId);
+		const last = aired.at(-1)!;
+		const edited = program(10, { type: 'content', strategy: { type: 'sequential' },
+			source: { ...source, exclusions: { itemIds: [last], groupIds: [] } } });
+		const resumed = generateTimeline(input([edited], items, daily, { startDate: '2026-01-06', state: first.proposedState }));
+		const next = resumed.segments.filter(segment => segment.role === 'primary').map(segment => segment.mediaItemId);
+		expect(aired).toEqual((mode === 'limited query' ? [1, 2, 3, 4] : [7, 6, 5, 4]).map(uuid));
+		expect(next).toEqual((mode === 'limited query' ? [5, 6, 1, 2] : [3, 2, 1, 7]).map(uuid));
+	});
+
+	it('resumes after the canonical last aired item when an earlier collection item is excluded', () => {
+		const items = Array.from({ length: 4 }, (_, index) => media(index + 1, SECONDS_PER_SCHEDULING_DAY / 2));
+		const ids = items.map(item => item.id);
+		const source = { type: 'collection' as const, libraryId: uuid(900), itemIds: ids,
+			sort: { type: 'manual' as const, itemIds: ids } };
+		const original = program(10, { type: 'content', source, strategy: { type: 'sequential' } });
+		const daily = template([{ programId: original.id, startSeconds: 0 }]);
+		const first = generateTimeline(input([original], items, daily));
+		expect(primaryTitles(first)).toEqual(['Item 1', 'Item 2']);
+
+		const catalog = input([original], items, daily).catalog;
+		const canonical = { ...items[1]!, id: uuid(20) };
+		const edited = program(10, { type: 'content', strategy: { type: 'sequential' },
+			source: { ...source, exclusions: { itemIds: [ids[0]!], groupIds: [] } } });
+		const resumed = generateTimeline(input([edited], items, daily, {
+			startDate: '2026-01-06', state: first.proposedState,
+			catalog: { ...catalog, media: [items[0]!, canonical, ...items.slice(2)], mediaAliases: { [ids[1]!]: canonical.id } },
+		}));
+		expect(primaryTitles(resumed)).toEqual(['Item 3', 'Item 4']);
+	});
+
+	it('wraps to the first query match when restored items push the cursor beyond the limit', () => {
+		const items = Array.from({ length: 4 }, (_, index) => media(index + 1, SECONDS_PER_SCHEDULING_DAY));
+		const source = { type: 'library-query' as const, libraryId: uuid(900), kinds: [], genres: [], itemLimit: 2 };
+		const original = program(10, { type: 'content', strategy: { type: 'sequential' },
+			source: { ...source, exclusions: { itemIds: items.slice(0, 2).map(item => item.id), groupIds: [] } } });
+		const daily = template([{ programId: original.id, startSeconds: 0 }]);
+		const first = generateTimeline(input([original], items, daily));
+		expect(primaryTitles(first)).toEqual(['Item 3']);
+
+		const edited = program(10, { type: 'content', source, strategy: { type: 'sequential' } });
+		const resumed = generateTimeline(input([edited], items, daily, { startDate: '2026-01-06', state: first.proposedState }));
+		expect(primaryTitles(resumed)).toEqual(['Item 1']);
 	});
 
 	it.each(['sequential', 'shuffle'] as const)(

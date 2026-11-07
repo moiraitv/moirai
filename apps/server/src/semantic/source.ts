@@ -1,4 +1,5 @@
 import { mediaMatchesLibraryQuery } from '../scheduling/content-query.js';
+import { contentExclusionMatcher, sourceExclusions } from '../scheduling/content-source.js';
 import type { ProgramConfig, SchedulingCatalog, SchedulingProgram } from '@moirai/shared';
 
 /** Resolve semantic source scope consistently for previews, retries, and seed generation. */
@@ -7,7 +8,12 @@ export function semanticSource(config: Extract<ProgramConfig, { type: 'similarit
 	const collection = source?.config.type === 'content' && (source.config.source.type === 'collection' || source.config.source.type === 'ai') ? source.config.source : null;
 	const libraryId = config.type === 'theme' ? config.libraryId : collection?.libraryId;
 	const valid = config.type === 'theme' ? Boolean(catalog.libraryAvailability[config.libraryId]) : Boolean(collection);
-	const sourceIds = [...new Set(collection?.itemIds.map((id) => catalog.mediaAliases?.[id] ?? id) ?? [])];
+	let sourceIds = [...new Set(collection?.itemIds.map((id) => catalog.mediaAliases?.[id] ?? id) ?? [])];
+	const excludedAnchor = contentExclusionMatcher(collection ? sourceExclusions(collection) : undefined, catalog);
+	if (excludedAnchor) {
+		const byId = catalog.mediaById ?? new Map(catalog.media.map(media => [media.id, media]));
+		sourceIds = sourceIds.filter(id => !excludedAnchor({ id, groupId: byId.get(id)?.groupId ?? null }));
+	}
 	const ids = new Set(sourceIds);
 	const kinds = new Set(catalog.media.filter((media) => ids.has(media.id)).map((media) => media.kind));
 	const query = libraryId && config.filter

@@ -3,6 +3,7 @@ import { programConfigSchema, type ResourceUsage, type SchedulingProgram } from 
 import type { MoiraiDatabase } from '../db/index.js';
 import { mediaItems, mediaItemAliases, schedulingPrograms } from '../db/schema.js';
 import { compareLibraryQueryMedia, mediaMatchesLibraryQuery } from '../scheduling/content-query.js';
+import { contentExclusionMatcher, sourceExclusions } from '../scheduling/content-source.js';
 import type { SchedulingRepository } from './scheduling.js';
 
 /**
@@ -38,6 +39,11 @@ export async function mediaResourceUsage(db: MoiraiDatabase, scheduling: Schedul
 			continue;
 		}
 		const source = parsed.data.source;
+		const exclusions = sourceExclusions(source);
+		if (exclusions?.itemIds.some(value => ids.has(value)) || exclusions?.groupIds.some(value => ancestors.has(value))) {
+			continue;
+		}
+
 		let role: string | null = null;
 		if (source.type === 'item' && ids.has(source.itemId)) {
 			role = 'Selected item';
@@ -73,7 +79,9 @@ export async function mediaResourceUsage(db: MoiraiDatabase, scheduling: Schedul
 					continue;
 				}
 				if (source.itemLimit != null) {
+					const excluded = contentExclusionMatcher(source.exclusions, catalog);
 					const preceding = catalog.media.filter(candidate => mediaMatchesLibraryQuery(candidate, source)
+						&& !excluded?.(candidate)
 						&& compareLibraryQueryMedia(candidate, media, source.sort) < 0).length;
 					if (preceding >= source.itemLimit) {
 						continue;

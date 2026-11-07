@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { GraphicsAssignment } from '@moirai/shared';
 import GraphicsAssignmentEditor from '../graphics/GraphicsAssignmentEditor.vue';
-import ProgramMatchesDrawer from './ProgramMatchesDrawer.vue';
 import ProgramAiSource from './ProgramAiSource.vue';
 import { useProgramDraft } from './program-draft';
 import { useAuthenticationStore } from '../../stores/authentication';
@@ -17,7 +16,9 @@ import type { AudioPreferences, SubtitlePreferences } from '@moirai/shared';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import {
 	catalogProgramItemFilterSchema,
+	mergeContentExclusions,
 	MAX_EXPLICIT_MEDIA_GROUPS,
+	type ContentExclusions,
 	type MediaGenreFacet,
 	type MediaGroup,
 	type MediaItem,
@@ -55,6 +56,7 @@ import { subscribeToSelectedMediaRefresh } from './selected-media-refresh';
 import { isProgramDraftValid } from './program-save-state';
 import { useProgramResourceActions } from './program-resource-actions';
 import ProgramLibraryQuery from './ProgramLibraryQuery.vue';
+import ProgramExclusions from './ProgramExclusions.vue';
 import { emptyCatalogProgramItemFilter } from '../library/library-filter';
 
 const props = withDefaults(
@@ -89,7 +91,6 @@ const sourcePage = ref(1);
 const sourceTotalPages = ref(1);
 const sourceSearch = ref('');
 const subtitlesOpen = useDisclosureState('program-subtitles');
-const sourceBrowserOpen = useDisclosureState('program-source-browser', true);
 const selectedSourceLabel = ref('');
 const selectedItems = ref<MediaItem[]>([]);
 const selectedGroups = ref<MediaGroup[]>([]);
@@ -100,7 +101,6 @@ const selectedGroupsLoaded = ref(false);
 const selectionDrawerOpen = ref(false);
 const selectedItemSearch = ref('');
 const selectedOrderChosen = ref(false);
-const selectionReviewButton = ref<HTMLButtonElement>();
 const selectionSummary = ref<InstanceType<typeof ProgramSelectionSummary>>();
 let selectedItemsLoadSequence = 0;
 let selectedGroupsLoadSequence = 0;
@@ -246,6 +246,7 @@ const form = reactive({
 		direction: 'asc' | 'desc';
 	},
 	queryItemLimit: null as number | null,
+	contentExclusions: { itemIds: [], groupIds: [] } as ContentExclusions,
 	excludedItemIds: [] as string[],
 	selectedItemIds: [] as string[],
 	selectedItemSort: 'date-added' as 'date-added' | 'name' | 'release-date' | 'episode' | 'manual',
@@ -258,6 +259,7 @@ const form = reactive({
 	repeat: true,
 	entries: [] as Array<{ id: string; programId: string; count: number }>,
 });
+const supportsContentExclusions = computed(() => form.sourceType !== 'item' && form.sourceType !== 'group');
 const aiDraft = useProgramDraft(form, () => editingId.value ?? 'new', () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${editingId.value ?? 'new'}`, () => isDirty.value);
 const { generation: aiGeneration, warning: aiDraftWarning } = aiDraft;
 const originalSnapshot = ref(JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT }));
@@ -291,6 +293,7 @@ function resetForm(program?: SchedulingProgram): void {
 	form.filter = program?.config.type === 'theme' || program?.config.type === 'similarity' ? catalogProgramItemFilterSchema.parse(program.config.filter ?? {}) : emptyCatalogProgramItemFilter();
 	form.querySort = { type: 'name', direction: 'asc' };
 	form.queryItemLimit = null;
+	form.contentExclusions = { itemIds: [], groupIds: [] };
 	form.aiPrompt = '';
 	form.aiSelectionPrompt = null;
 	form.aiResultLimit = AI_DEFAULT_RESULT_COUNT;
@@ -313,6 +316,12 @@ function resetForm(program?: SchedulingProgram): void {
 	if (program?.config.type === 'content') {
 		const source = program.config.source;
 		form.sourceType = source.type;
+		if ('exclusions' in source || source.type === 'ai') {
+			const exclusions = mergeContentExclusions(source.exclusions, source.type === 'ai' ? source.excludedItemIds : undefined);
+			if (exclusions) {
+				form.contentExclusions = cloneContractValue(exclusions);
+			}
+		}
 		switch (source.type) {
 			case 'library-query':
 				form.libraryId = source.libraryId;
@@ -647,7 +656,6 @@ async function closeSelectionDrawer(): Promise<void> {
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	await nextTick();
-	selectionReviewButton.value?.focus();
 	selectionSummary.value?.focus();
 }
 
@@ -680,6 +688,7 @@ function defaultSelectedItemSort(): void {
 /** Clear selections and filters that cannot carry across a source-library change. */
 function changeSourceLibrary(): void {
 	defaultSelectedItemSort();
+	form.contentExclusions = { itemIds: [], groupIds: [] };
 	selectionDrawerOpen.value = false;
 	selectedItemSearch.value = '';
 	form.sourceId = '';
@@ -706,6 +715,7 @@ function changeSourceLibrary(): void {
 		form.queryItemLimit = null;
 	}
 	if (form.sourceType === 'ai') {
+		form.excludedItemIds = [];
 		form.aiPrompt = '';
 		form.aiSelectionPrompt = null;
 		form.selectedItemIds = [];
@@ -737,6 +747,9 @@ async function changeSourceType(): Promise<void> {
 	await nextTick();
 	if (!sourceLibraries.value.some((library) => library.id === form.libraryId)) {
 		form.libraryId = sourceLibraries.value[0]?.id ?? '';
+	}
+	if (previousLibraryId !== form.libraryId) {
+		form.contentExclusions = { itemIds: [], groupIds: [] };
 	}
 	if (form.sourceType === 'library-query') {
 		form.kinds = [...libraryQueryKinds.value];
@@ -815,6 +828,8 @@ function payload(): ProgramCreate {
 		throw new Error('Select at least one media group.');
 	}
 
+	const excludedIds = new Set(form.contentExclusions.itemIds);
+	const generatedIds = new Set(form.sourceType === 'ai' ? form.selectedItemIds : []);
 	const source
 		= form.sourceType === 'item'
 			? ({ type: 'item', itemId: form.sourceId } as const)
@@ -842,7 +857,8 @@ function payload(): ProgramCreate {
 								type: 'ai',
 								libraryId: form.libraryId,
 								prompt: form.aiPrompt.trim(),
-								excludedItemIds: form.excludedItemIds, itemIds: form.selectedItemIds,
+								excludedItemIds: form.excludedItemIds.filter(id => excludedIds.has(id) && !generatedIds.has(id)),
+								itemIds: form.selectedItemIds,
 								sort: selectedItemSort.value,
 							} as const)
 							: ({
@@ -853,7 +869,13 @@ function payload(): ProgramCreate {
 								sort: form.querySort,
 								itemLimit: form.queryItemLimit,
 							} as const);
-	return { name: form.name, config: { type: 'content', source, strategy, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
+	const legacyExclusions = new Set(source.type === 'ai' ? source.excludedItemIds : []);
+	const itemIds = form.contentExclusions.itemIds.filter(id => !legacyExclusions.has(id));
+	const { groupIds } = form.contentExclusions;
+	const contentSource = supportsContentExclusions.value && (itemIds.length || groupIds.length)
+		? { ...source, exclusions: { itemIds, groupIds } }
+		: source;
+	return { name: form.name, config: { type: 'content', source: contentSource, strategy, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
 }
 const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 	program: () => programs.value.find((candidate) => candidate.id === editingId.value),
@@ -1015,6 +1037,9 @@ onBeforeUnmount(() => {
 });
 useDraftProtection(() => editorOpen.value && (isDirty.value || Boolean(aiGeneration.value)) && aiDraft.unsafe.value);
 watch(() => [form.type, form.sourceType], () => {
+	if (form.type !== 'content' || !supportsContentExclusions.value) {
+		form.contentExclusions = { itemIds: [], groupIds: [] };
+	}
 	if (form.type !== 'content' || form.sourceType !== 'ai') {
 		if (aiGeneration.value) {
 			void api.cancelAiGeneration(aiGeneration.value).catch(() => {});
@@ -1134,28 +1159,24 @@ watch(() => [form.type, form.sourceType], () => {
 											>
 										</div>
 
-										<ProgramAiSource
-											v-if="form.sourceType === 'ai'" v-model:prompt="form.aiPrompt"
-											v-model:selection-prompt="form.aiSelectionPrompt" v-model:max-results="form.aiResultLimit"
-											v-model:generation="aiGeneration" v-model:item-ids="form.selectedItemIds" v-model:excluded-item-ids="form.excludedItemIds"
-											v-model:sort-type="form.selectedItemSort" v-model:sort-direction="form.selectedItemSortDirection"
-											:library-id="form.libraryId" :library-type="selectedLibraryType" :draft-revision="draftRevision" :sequential="form.strategy === 'sequential'"
-										>
-											<template #results="{ generating }">
-												<button
-													ref="selectionReviewButton" type="button" class="toolbar-button"
-													:disabled="generating" @click="openSelectionDrawer">
-													Review results
-												</button>
-											</template>
-										</ProgramAiSource>
+										<template v-if="form.sourceType === 'ai'">
+											<ProgramAiSource
+												v-model:prompt="form.aiPrompt" v-model:selection-prompt="form.aiSelectionPrompt" v-model:max-results="form.aiResultLimit"
+												v-model:generation="aiGeneration" v-model:item-ids="form.selectedItemIds" v-model:sort-type="form.selectedItemSort"
+												v-model:sort-direction="form.selectedItemSortDirection" :exclusions="form.contentExclusions"
+												:library-id="form.libraryId" :library-type="selectedLibraryType" :draft-revision="draftRevision" :sequential="form.strategy === 'sequential'"
+											/>
+											<ProgramExclusions v-model="form.contentExclusions" :result-ids="form.selectedItemIds" :library-id="form.libraryId" :library-type="selectedLibraryType" :library-name="sourceLibraryLabel" :disabled="Boolean(aiGeneration)" @remove-missing="removeSelectedItem" />
+										</template>
 										<template v-else-if="form.sourceType === 'library-query'">
 											<ProgramLibraryQuery
 												v-model="form.filter"
 												v-model:sort="form.querySort"
 												v-model:item-limit="form.queryItemLimit"
+												v-model:exclusions="form.contentExclusions"
 												:library-id="form.libraryId"
 												:library-type="selectedLibraryType"
+												:library-name="sourceLibraryLabel"
 												:genres="genres"
 												:loading="sourceLoading"
 												:loaded="sourceLoaded"
@@ -1177,7 +1198,7 @@ watch(() => [form.type, form.sourceType], () => {
 												descendants</label
 											>
 											<ProgramSourceBrowser
-												v-model:open="sourceBrowserOpen" v-model:search="sourceSearch"
+												v-model:search="sourceSearch"
 												:source-type="form.sourceType" :library-type="selectedLibraryType"
 												:source-entries="sourceEntries" :source-loading="sourceLoading" :source-loaded="sourceLoaded"
 												:source-parent-id="sourceParentId" :source-page="sourcePage" :source-total-pages="sourceTotalPages"
@@ -1186,6 +1207,7 @@ watch(() => [form.type, form.sourceType], () => {
 												@toggle-item="toggleSelectedItem" @toggle-group="toggleSelectedGroup" @page="changeSourcePage"
 												@root="sourceParentId = undefined; sourcePage = 1; loadSourceOptions();"
 											/>
+											<ProgramExclusions v-if="supportsContentExclusions" v-model="form.contentExclusions" :library-id="form.libraryId" :library-type="selectedLibraryType" :library-name="sourceLibraryLabel" />
 										</template>
 									</div>
 								</section>
@@ -1233,13 +1255,8 @@ watch(() => [form.type, form.sourceType], () => {
 				/>
 			</form>
 		</div>
-		<ProgramMatchesDrawer
-			v-if="selectionDrawerOpen && form.sourceType === 'ai'"
-			v-model:excluded-item-ids="form.excludedItemIds" :library-id="form.libraryId" :item-ids="form.selectedItemIds"
-			@remove-item="removeSelectedItem" @clear="clearSelectedItems" @close="closeSelectionDrawer"
-		/>
 		<MediaSelectionDrawer
-			v-else-if="selectionDrawerOpen"
+			v-if="selectionDrawerOpen"
 			v-bind="selectionReviewProps"
 			@update:search="selectedItemSearch = $event"
 			@update:sort-type="changeSelectedItemSort"

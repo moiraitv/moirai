@@ -687,9 +687,12 @@ rows on every request. The web shell ignores in-progress `scan.changed` events w
 library list. When prefix matching finds nothing, the same filters fall back to substring
 `LIKE` so queries such as `ein` still match `Seinfeld`. Music-video libraries keep credit and album matching, including
 Unicode folding. Search results skip A–Z navigation aggregation. Catalog and source-picker item
-searches share those predicates. Search
-results carry optional match reasons, resolved in page-bounded batches only while searching;
-cards share the same formatter and virtualized rows account for the extra explanation line.
+searches share those predicates. Catalog and source-picker searches skip fetching a page after the
+final match count is zero. Hierarchy browsing uses library-scoped indexes to count direct child
+groups and items. Group source searches use the same indexes to check genre and credit matches on
+media in each group and its immediate child groups. Search results carry optional match reasons,
+resolved in page-bounded batches only while searching. Cards share the same formatter and virtualized
+rows account for the extra explanation line.
 Shared catalog filters support inclusive minimumDurationSeconds and maximumDurationSeconds bounds
 against indexed playback duration, including fractional media durations. Bounds are optional,
 nonnegative safe whole seconds with minimum no greater than maximum; unknown durations are excluded
@@ -709,6 +712,25 @@ credits and hierarchy labels in SQL and scheduling. Music matching shares Unicod
 conversion across SQL, explanations, and scheduling, preserving accents and literal punctuation.
 Absent filters preserve saved selection state;
 these additions need no database migration or rescan.
+
+Library-query, selected-item, selected-group and AI Content sources share an optional exclusion set
+in Program configuration JSON. It retains up to 25,000 item IDs and 1,000 group IDs. Saves validate
+new references against the source library in batches and retain existing references that later
+disappear. Matching resolves absorbed item aliases and excludes group descendants using current
+catalog ancestry, including descendants indexed after the Program was saved. Query limits apply to
+remaining indexed matches before availability and duration checks. Scheduling, status, live query
+previews and media usage share these rules. An entirely excluded source reports empty. Changes use
+the normal schedule regeneration boundary and reconcile candidate membership against saved cursors.
+Schedule generation and previews resolve missing sequential cursor IDs through the alias index at
+the selected playback boundary, using only targets already in the cached catalog. Status and query
+previews only resolve authored IDs.
+The editor shares one library browser and exclusion review across the four sources. The drawer keeps
+pagination in its footer and uses shared catalog previews for indexed items. It
+resolves saved item aliases when opening the exclusions drawer, groups equivalent item references
+for review, and restores all references to the same indexed item together. Legacy AI cursor
+fingerprints remain compatible across exclusion-only edits without a database migration.
+Program saves, catalog selection, query previews, and AI requests have route-specific JSON size
+limits that account for both their inclusion and exclusion lists. Schema limits still cap entries.
 
 Library catalog pages can add one page-local selection or every recursively matching filtered item
 to a selected-items program. Catalog cards also expose a single-item or single-group add control
@@ -757,19 +779,18 @@ bounded to 32 jobs with two running per administrator. Cancellation frees the re
 briefly blocking the same ID from starting late. GET and DELETE enforce creator ownership.
 Program browser drafts retain AI fields, the prompt that produced the current selection, and the job ID under account/program-specific keys; earlier AI-only drafts migrate on first open.
 Closing retains the draft; saving or resetting clears it. Restoration checks the saved program
-revision and warns about conflicting edits. Save remains blocked while a job is pending. Editing the prompt after generation warns that saving retains the previous selection. Errors or incomplete streams preserve the previous selection. AI selections reuse the full
-selection review drawer with search and two-step draft exclusions. Review fetches indexed cards
-in one batch only when opened; loading failures expose retry without an empty-state claim.
+revision and warns about conflicting edits. Save remains blocked while a job is pending. Editing the prompt after generation warns that saving retains the previous selection. Errors or incomplete streams preserve the previous selection. The shared exclusions drawer adds a searchable
+AI Results tab that loads indexed cards on demand, distinguishing exclusions from missing results.
+Excluding a result preserves the frozen selection so a restore can make it playable again. Missing
+references can be removed from the draft. Older item-only AI removals appear in Excluded.
 AI indexed-date ordering uses indexed timestamps in scheduling and status previews.
-AI, Similar Items, and Theme configurations retain a bounded, deduplicated `excludedItemIds`
-set (up to the explicit-media contract ceiling) in existing configuration JSON. Missing fields
-mean no removals; no database migration is required. Draft recovery and Reset include removals.
-AI generation filters removed IDs and absorbed multipart aliases before retrieval or paid review;
-retained-job identity includes the normalized removal set. Applying reconnected results also checks
-current draft removals. Embedding coverage checks the remaining eligible identities rather than
-full-library vector counts. Empty AI selections can be saved and report empty health; ordinary
-collections still require an item. Restoring an AI item allows later matching without reinserting
-it into the current frozen selection.
+AI generation filters item IDs, absorbed multipart aliases and excluded group descendants before
+retrieval or paid review. Both AI request paths cap the distinct item IDs across the legacy and
+current fields. Retained-job identity uses that effective set, and the editor keeps it fixed while
+a job is pending. Embedding coverage checks the eligible identities rather
+than full-library vector counts. Empty AI selections can be saved and report empty health.
+Similar Items and Theme retain their bounded, deduplicated item removals in configuration JSON.
+Draft recovery and Reset include removals.
 Similar Items and Theme expose a paged, searchable matching-pool review through scheduling workers,
 using the same relevance pool as set generation without advancing seed state. Review is independent
 of Quantity and per-consumer committed sets. Manual removals filter new and active sets, including
@@ -945,7 +966,7 @@ The existing semantic preview/retry routes accept either configuration,
 and the existing seed storage retains the originating configuration without a schema migration.
 
 Similar Items programs (`similarity`) reference Content programs with explicit item collections or
-frozen AI selections. Both use their saved item IDs as semantic anchors and their source library for
+frozen AI selections. Both use their remaining selected item IDs as semantic anchors and their source library for
 same-kind candidates and embedding scope.
 Update validation rejects changes to the saved source Program ID before persistence; source contents
 and similarity settings remain editable.

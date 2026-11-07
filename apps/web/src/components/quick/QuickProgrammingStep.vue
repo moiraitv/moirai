@@ -16,6 +16,7 @@ import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import type { QuickProgrammingDraft } from '../../quick-setup';
 import LibraryQueryFilter from '../library/LibraryQueryFilter.vue';
+import FormDisclosure from '../FormDisclosure.vue';
 import ProgramSourceBrowser from '../programs/ProgramSourceBrowser.vue';
 import SelectionStrategyEditor from '../programs/SelectionStrategyEditor.vue';
 import QuickQueryPreview from './QuickQueryPreview.vue';
@@ -345,29 +346,30 @@ onMounted(() => {
 					@load-more="loadMoreQueryPreview"
 				/>
 			</div>
-			<ProgramSourceBrowser
-				v-else
-				v-model:open="browserOpen"
-				v-model:search="search"
-				class="span-2"
-				:source-type="draft.sourceType"
-				:library-type="scenario"
-				:source-entries="entries"
-				:source-loading="loading"
-				:source-loaded="loaded"
-				:source-parent-id="parentId"
-				:source-page="page"
-				:source-total-pages="totalPages"
-				:selected-id-set="selectedIds"
-				:selected-group-id-set="selectedGroupIds"
-				@search="page = 1; loadOptions()"
-				@root="parentId = undefined; page = 1; loadOptions()"
-				@browse="browse"
-				@select="() => undefined"
-				@toggle-item="toggleItem"
-				@toggle-group="toggleGroup"
-				@page="page = $event; loadOptions()"
-			/>
+			<FormDisclosure v-else v-model:open="browserOpen" class="span-2 quick-source-browser" plain>
+				<template #summary>Browse media</template>
+				<ProgramSourceBrowser
+					v-model:search="search"
+					hide-heading
+					:source-type="draft.sourceType"
+					:library-type="scenario"
+					:source-entries="entries"
+					:source-loading="loading"
+					:source-loaded="loaded"
+					:source-parent-id="parentId"
+					:source-page="page"
+					:source-total-pages="totalPages"
+					:selected-id-set="selectedIds"
+					:selected-group-id-set="selectedGroupIds"
+					@search="page = 1; loadOptions()"
+					@root="parentId = undefined; page = 1; loadOptions()"
+					@browse="browse"
+					@select="() => undefined"
+					@toggle-item="toggleItem"
+					@toggle-group="toggleGroup"
+					@page="page = $event; loadOptions()"
+				/>
+			</FormDisclosure>
 		</div>
 		<div v-if="draft.sourceType === 'collection' && draft.items.length" class="quick-selection-review panel">
 			<h3>Selected items <small>{{ draft.items.length.toLocaleString() }}</small></h3>

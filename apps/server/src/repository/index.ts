@@ -21,13 +21,14 @@ import type {
 	ChannelSchedule,
 	ChannelScheduleConfig,
 	ChannelUpdate,
+	ContentExclusions,
 	LibraryContentPreview,
 	MediaGroup,
 	MediaBrowseResult,
 	MediaCardPreview,
 	MediaGenreFacet,
-	MediaItem,
 	MediaItemDetail,
+	MediaSelectionItem,
 	MediaSourcePickerResult,
 	PlaybackSettings,
 	ProgramCreate,
@@ -46,6 +47,7 @@ import type {
 	ViewingPreferenceSummary,
 } from '@moirai/shared';
 import type { QuickChannelSetupResult } from '@moirai/shared/api-contracts';
+import type { CursorCompatibleProgram } from '../scheduling/ai-cursor.js';
 import type { MoiraiDatabase } from '../db/index.js';
 import { MediaCatalogRepository } from './catalog.js';
 import { AuthenticationRepository } from './authentication.js';
@@ -207,8 +209,8 @@ export class Repository extends LibraryRepository {
 	}
 
 	/** Load full-library identities for local discovery and retrieval, without paid-context truncation. */
-	async aiCatalog(libraryId: string, excludedItemIds: string[] = []) {
-		return readAiCatalog(this.database, libraryId, excludedItemIds);
+	async aiCatalog(libraryId: string, excludedItemIds: string[] = [], exclusions?: ContentExclusions) {
+		return readAiCatalog(this.database, libraryId, excludedItemIds, exclusions);
 	}
 
 
@@ -237,13 +239,19 @@ export class Repository extends LibraryRepository {
 		return this.catalog.listMediaGenres(libraryId, selection);
 	}
 
+	/** Resolve historical item IDs without loading item details. */
+	async listMediaItemAliases(libraryId: string, itemIds: string[]): Promise<Record<string, string>> {
+		return this.catalog.listMediaItemAliases(libraryId, itemIds);
+	}
+
 	/** Resolve selected media in request order with canonical or authored response identifiers. */
 	async listMediaItemsByIds(
 		libraryId: string,
 		itemIds: string[],
 		identity: 'canonical' | 'requested' = 'canonical',
-	): Promise<MediaItem[]> {
-		return this.catalog.listMediaItemsByIds(libraryId, itemIds, identity);
+		exclusions?: ContentExclusions,
+	): Promise<MediaSelectionItem[]> {
+		return this.catalog.listMediaItemsByIds(libraryId, itemIds, identity, exclusions);
 	}
 
 	/** Return successful probe data used to avoid reopening unchanged media files. */
@@ -340,12 +348,12 @@ export class Repository extends LibraryRepository {
 	}
 
 	/** List reusable scheduling programs. */
-	async listPrograms(): Promise<SchedulingProgram[]> {
+	async listPrograms(): Promise<CursorCompatibleProgram[]> {
 		return this.scheduling.listPrograms();
 	}
 
 	/** Return one reusable scheduling program. */
-	async getProgram(id: string): Promise<SchedulingProgram | null> {
+	async getProgram(id: string): Promise<CursorCompatibleProgram | null> {
 		return this.scheduling.getProgram(id);
 	}
 
@@ -467,6 +475,11 @@ export class Repository extends LibraryRepository {
 		presetIds: string[] = [],
 	): Promise<SchedulingCatalog> {
 		return this.scheduling.getSchedulingCatalog(programs, rootProgramIds, presetIds);
+	}
+
+	/** Resolve saved cursor IDs against media already loaded for generation. */
+	async withSchedulingCursorAliases(catalog: SchedulingCatalog, state: Iterable<SelectionStateRecord>): Promise<SchedulingCatalog> {
+		return this.scheduling.withSchedulingCursorAliases(catalog, state);
 	}
 
 	/** Load current artwork URLs for explicit media identifiers. */

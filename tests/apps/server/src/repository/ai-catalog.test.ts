@@ -67,6 +67,11 @@ it('loads bounded local plot evidence with episode identities in two library-sco
 		expect(withAliases).toHaveLength(1);
 		expect(withAliases[0]).toMatchObject({ id, aliasIds: [aliasId] });
 		expect(prepare).toHaveBeenCalledTimes(2);
+		for (const exclusions of [{ itemIds: [aliasId], groupIds: [] }, { itemIds: [], groupIds: [showId] }]) {
+			expect(await readAiCatalog(database.db, libraryId, [], exclusions)).toMatchObject([{ id, excluded: true }]);
+			expect(await new MediaCatalogRepository(database.db).listMediaItemsByIds(libraryId, [id, randomUUID()], 'requested', exclusions))
+				.toMatchObject([{ id, excluded: true }]);
+		}
 	}
 	finally {
 		database.close();

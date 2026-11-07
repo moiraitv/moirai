@@ -19,6 +19,8 @@ export interface AiCatalogItem {
 	id: string;
 	/** Compatibility identities needed to enforce removals after multipart reconciliation. */
 	aliasIds?: string[];
+	/** Whether an authored item or group exclusion removes this candidate before retrieval. */
+	excluded?: boolean;
 	title: string;
 	year: number | null;
 	kind: string;

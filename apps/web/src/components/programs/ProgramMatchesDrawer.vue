@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onScopeDispose, ref, useId, watch } from 'vue';
+import { nextTick, onMounted, onScopeDispose, ref, useId, watch } from 'vue';
 import { Asterisk, RotateCcw, Trash2, X } from '@lucide/vue';
 import { MAX_EXCLUDED_MEDIA_ITEMS, type ProgramConfig, type SemanticMatchesResponse } from '@moirai/shared';
 import { api } from '../../api';
@@ -12,11 +12,10 @@ import MediaCardPreview from '../MediaCardPreview.vue';
 
 const props = defineProps<{
 	libraryId: string;
-	itemIds?: string[];
 	config?: Extract<ProgramConfig, { type: 'similarity' | 'theme' }> | undefined;
 }>();
 const excludedItemIds = defineModel<string[]>('excludedItemIds', { required: true });
-const emit = defineEmits<{ close: []; removeItem: [id: string]; clear: [] }>();
+const emit = defineEmits<{ close: [] }>();
 const drawer = ref<HTMLElement>();
 const content = ref<HTMLElement>();
 const visible = ref(true);
@@ -36,7 +35,6 @@ const pending = ref(false);
 const preparationFailed = ref(false);
 const message = ref('');
 const items = ref<Array<Omit<SemanticMatchesResponse['items'][number], 'availability'> & { availability: string; missing?: boolean }>>([]);
-const ai = computed(() => props.itemIds !== undefined);
 let revision = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let active: AbortController | undefined;
@@ -96,7 +94,7 @@ async function load(): Promise<void> {
 			message.value = result.message;
 		}
 		else {
-			const ids = tab.value === 'removed' ? excludedItemIds.value : props.itemIds ?? [];
+			const ids = tab.value === 'removed' ? excludedItemIds.value : [];
 			const media = ids.length && props.libraryId ? await api.mediaSelection(props.libraryId, ids) : [];
 			if (current !== revision) {
 				return;
@@ -155,28 +153,10 @@ function remove(id: string): void {
 	}
 
 	excludedItemIds.value = [...new Set([...excludedItemIds.value, id])];
-	emit('removeItem', id);
 	void removeCard(id);
 }
 
-/** Clear the current AI selection only when every removal can be retained. */
-function clear(): void {
-	const ids = [...new Set([...excludedItemIds.value, ...props.itemIds ?? []])];
-	if (ids.length > MAX_EXCLUDED_MEDIA_ITEMS) {
-		actionError.value = `At most ${MAX_EXCLUDED_MEDIA_ITEMS.toLocaleString()} removed items can be retained. Restore items first.`;
-		return;
-	}
-
-	excludedItemIds.value = ids;
-	emit('clear');
-	items.value = [];
-	total.value = 0;
-	page.value = 0;
-	cursors.value = [null];
-	nextCursor.value = null;
-}
-
-/** Restore future matching eligibility without inserting an AI item into its frozen selection. */
+/** Restore an item to future semantic matching. */
 function restore(id: string): void {
 	excludedItemIds.value = excludedItemIds.value.filter((candidate) => candidate !== id);
 	actionError.value = '';
@@ -222,7 +202,7 @@ onScopeDispose(() => {
 			<div v-show="visible" class="selection-drawer-backdrop" :inert="!visible" :aria-hidden="!visible" @click.self="close">
 				<aside ref="drawer" v-modal-focus="{ escape: close }" class="selection-drawer media-selection-drawer program-matches-drawer" role="dialog" aria-modal="true" aria-labelledby="matches-drawer-title" tabindex="-1">
 					<header class="selection-drawer-header">
-						<div><p class="eyebrow">{{ ai ? 'AI results' : 'Program matches' }}</p><h2 id="matches-drawer-title">{{ ai ? 'Review results' : 'Review matches' }}</h2><p>Changes are kept in your draft. Save the Program to apply them.</p></div>
+						<div><p class="eyebrow">Program matches</p><h2 id="matches-drawer-title">Review matches</h2><p>Changes are kept in your draft. Save the Program to apply them.</p></div>
 						<button type="button" aria-label="Close selection" @click="close"><X :size="21" /></button>
 					</header>
 					<div class="program-matches-toolbar">
@@ -233,12 +213,12 @@ onScopeDispose(() => {
 						<input v-model="search" class="program-matches-search" type="search" aria-label="Search selected media" placeholder="Search items…" maxlength="200" />
 					</div>
 					<div :id="`${tabPrefix}-panel`" ref="content" class="selection-drawer-content" role="tabpanel" :aria-labelledby="`${tabPrefix}-${tab}`" :aria-busy="loading" tabindex="0">
-						<p v-if="tab === 'removed'" class="muted">Restore allows future matching again.<template v-if="ai"> Generate again to include restored items in AI results.</template></p>
+						<p v-if="tab === 'removed'" class="muted">Restore allows future matching again.</p>
 						<p v-if="actionError" class="notice warning" role="alert">{{ actionError }}</p>
 						<LoadingState v-if="loading" label="Loading selected media…" />
 						<div v-else-if="failure" class="notice warning" role="alert">Could not load the selection. {{ failure }} <button type="button" @click="load">Try again</button></div>
 						<template v-else-if="loaded">
-							<p role="status">{{ total }} {{ tab === 'removed' ? 'removed' : ai ? 'selected' : 'matches' }}</p>
+							<p role="status">{{ total }} {{ tab === 'removed' ? 'removed' : 'matches' }}</p>
 							<p v-if="pending || preparationFailed" class="notice warning" role="status">{{ message }} Review shows prepared matches. <button type="button" @click="load">Refresh</button></p>
 							<div v-if="items.length" class="selected-item-grid">
 								<MediaCardPreview v-for="item in items" :key="item.id" :item="item" :hide-info="Boolean(item.missing)" class="selected-item-preview">
@@ -255,7 +235,6 @@ onScopeDispose(() => {
 						</template>
 					</div>
 					<footer class="selection-drawer-footer">
-						<TwoStepActionButton v-if="ai && tab === 'matches'" class="toolbar-button danger-button" :disabled="!itemIds?.length || loading" label="Clear All" confirm-label="Confirm Clear All" confirm-text="Confirm Clear" @confirm="clear"><Trash2 :size="16" />Clear All</TwoStepActionButton>
 						<button type="button" class="button secondary program-match-done" @click="close">Done</button>
 					</footer>
 				</aside>

@@ -62,6 +62,21 @@ it.each(['next-fit-only', 'best-fit-only', 'next-truncate', 'best-fit-or-truncat
 	expect(result.state.get('tail')!.value.fillerCycle!.remainingItemIds).toEqual(truncate ? [] : ['item-1']);
 });
 
+it('starts a filler cycle after an excluded item when restoring an older sequential cursor', () => {
+	const f = fixture([30, 30, 30, 30]);
+	const first = selectProgram(f.program.id, 'filler', f.state, f.context)!;
+	const second = selectProgram(f.program.id, 'filler', first.state, f.context)!;
+	expect(second.media.id).toBe('item-1');
+	if (f.program.config.type !== 'content' || f.program.config.source.type !== 'collection') {
+		throw new Error('Expected a collection');
+	}
+	const edited: SchedulingProgram = { ...f.program, config: { ...f.program.config,
+		source: { ...f.program.config.source, exclusions: { itemIds: [second.media.id], groupIds: [] } } } };
+	const context = { ...f.context, programs: new Map([[edited.id, edited]]), candidateCache: new Map() };
+	const resumed = planFiller(edited.id, { type: 'count', count: 1 }, second.state, context, 'filler', 'UTC', 'break');
+	expect(resumed.spans.map(span => span.media.id)).toEqual(['item-2']);
+});
+
 it('keeps fractional budgets exact after serialized continuation and repeated accumulation', () => {
 	const f = fixture([0.001]);
 	const budget = { type: 'duration', seconds: 1, policy: 'next-fit-only' } as const;

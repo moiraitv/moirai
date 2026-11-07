@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import type { SchedulingProgram } from '@moirai/shared';
 import { inputFingerprint, InputFingerprintContext } from '@server/scheduling/input-fingerprint.js';
 import { stableJsonFingerprint } from '@server/stable-json.js';
 
@@ -43,4 +44,18 @@ it('normalizes the enabled duplicate policy while distinguishing channel opt-out
 	const enabled = inputFingerprint(schedule, [], [], catalog);
 	expect(inputFingerprint({ ...schedule, avoidCrossChannelDuplicates: true }, [], [], catalog)).toBe(enabled);
 	expect(inputFingerprint({ ...schedule, avoidCrossChannelDuplicates: false }, [], [], catalog)).not.toBe(enabled);
+});
+
+it.each(['legacy', 'current'] as const)('invalidates a committed input when a %s exclusion resolves to selected media', mode => {
+	const source = { type: 'ai', libraryId: 'library', prompt: 'Movies', itemIds: ['selected'],
+		sort: { type: 'date-added', direction: 'asc' } } as const;
+	const program: SchedulingProgram = { id: 'program', name: 'AI', createdAt: '', updatedAt: '', config: {
+		type: 'content', strategy: { type: 'sequential' }, source: { ...source, itemIds: [...source.itemIds],
+			...(mode === 'legacy' ? { excludedItemIds: ['absorbed'] } : { exclusions: { itemIds: ['absorbed'], groupIds: [] } }) },
+	} };
+	const schedule = { channelId: 'channel', defaultTemplateId: null, defaultProgramId: program.id, layers: [], defaultFiller: null, createdAt: '', updatedAt: '' };
+	const catalog = { media: [], groupParents: {}, groupTitles: {}, libraryNames: {}, libraryAvailability: {} };
+	const committed = inputFingerprint(schedule, [], [program], catalog);
+	expect(inputFingerprint(schedule, [], [program], { ...catalog, mediaAliases: { unrelated: 'selected' } })).toBe(committed);
+	expect(inputFingerprint(schedule, [], [program], { ...catalog, mediaAliases: { absorbed: 'selected' } })).not.toBe(committed);
 });

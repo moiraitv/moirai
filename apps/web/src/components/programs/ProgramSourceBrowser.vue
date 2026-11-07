@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FormDisclosure from '../FormDisclosure.vue';
+import { useId } from 'vue';
 import { ArrowLeft, Asterisk, Layers3, Plus, X } from '@lucide/vue';
 import type { ContentSource, MediaGroup, MediaItem, MediaSourcePickerEntry } from '@moirai/shared';
 import { mediaSearchMatchText } from '../../media-search-matches';
@@ -8,9 +8,10 @@ import { artworkSrcset, artworkVariantUrl } from '../../artwork-url';
 import { hideBrokenImage } from '../../image-error';
 import { mediaGroupSubtitle, mediaItemSubtitle } from '../../media-labels';
 
-const open = defineModel<boolean>('open', { required: true });
+const headingId = useId();
 const search = defineModel<string>('search', { required: true });
 const props = defineProps<{
+	hideHeading?: boolean;
 	sourceType: ContentSource['type'];
 	libraryType: string;
 	sourceEntries: MediaSourcePickerEntry[];
@@ -49,12 +50,8 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 </script>
 
 <template>
-	<FormDisclosure
-		v-model:open="open"
-		plain
-		class="source-browser-disclosure"
-	>
-		<template #summary>Browse media</template>
+	<section class="program-source-browser" :aria-labelledby="hideHeading ? undefined : headingId">
+		<h4 v-if="!hideHeading" :id="headingId">Browse media</h4>
 		<div class="source-picker-toolbar">
 			<input
 				v-model="search"
@@ -176,5 +173,5 @@ function sourceEntrySubtitle(entry: MediaSourcePickerEntry): string {
 				Next
 			</button>
 		</div>
-	</FormDisclosure>
+	</section>
 </template>

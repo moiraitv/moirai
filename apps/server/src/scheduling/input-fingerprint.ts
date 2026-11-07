@@ -4,6 +4,7 @@ import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates } from './direct-program-templates.js';
+import { sourceExclusions } from './content-source.js';
 
 /** Stage semantic batch rollover and order-preserving collision policy at the daily boundary. */
 const DUPLICATE_AVOIDANCE_POLICY_VERSION = 3;
@@ -201,6 +202,7 @@ export function inputFingerprint(
 	const libraryIds = new Set<string>();
 	const itemIds = new Set<string>();
 	const groupIds = new Set<string>();
+	const exclusionAliases: Record<string, string> = {};
 	for (const program of selectedPrograms) {
 		if (program.config.type === 'theme') {
 			libraryIds.add(program.config.libraryId);
@@ -211,6 +213,12 @@ export function inputFingerprint(
 		}
 
 		const source = program.config.source;
+		for (const id of sourceExclusions(source)?.itemIds ?? []) {
+			const canonical = catalog.mediaAliases?.[id];
+			if (canonical) {
+				exclusionAliases[id] = canonical;
+			}
+		}
 		if (source.type === 'item') {
 			itemIds.add(source.itemId);
 		}
@@ -238,6 +246,7 @@ export function inputFingerprint(
 		templates: selectedTemplates.map(template => context.playback(template)),
 		programs: selectedPrograms,
 		catalog: {
+			...(Object.keys(exclusionAliases).length ? { exclusionAliases } : {}),
 			midRollPresets: Object.fromEntries(fillerPresetIds
 				.map(id => [id, catalog.fillerPresets?.[id] ?? catalog.midRollPresets?.[id]])),
 			semantic: semanticSchedulingFingerprint(schedule.channelId, selectedPrograms, catalog),

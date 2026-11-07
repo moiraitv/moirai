@@ -1,109 +1,24 @@
 import { similarityProgramStatus } from '../semantic/status.js';
 import {
-	orderSelectedMedia,
 	PROGRAM_PREVIEW_ITEM_LIMIT,
 	type ProgramConfig,
-	type SchedulableMedia,
 	type SchedulingCatalog,
 	type SchedulingProgram,
 	type SchedulingProgramHealth,
 	type SchedulingProgramStatus,
 } from '@moirai/shared';
-import {
-	compareLibraryQueryMedia,
-	compareSchedulingMedia,
-	mediaMatchesLibraryQuery,
-} from './content-query.js';
-
-/** Check whether one indexed group descends from another. */
-function descendantOf(
-	groupId: string | null,
-	ancestorId: string,
-	parents: Record<string, string | null>,
-): boolean {
-	const visited = new Set<string>();
-	let current = groupId;
-	while (current) {
-		if (current === ancestorId) {
-			return true;
-		}
-
-		if (visited.has(current)) {
-			return false;
-		}
-
-		visited.add(current);
-		current = parents[current] ?? null;
-	}
-	return false;
-}
-
-/** Return catalog media eligible for one content source. */
-export function schedulingContentMatches(
-	config: Extract<ProgramConfig, { type: 'content' }>,
-	catalog: SchedulingCatalog,
-): SchedulableMedia[] {
-	const byId = catalog.mediaById ?? new Map(catalog.media.map((media) => [media.id, media]));
-	const byLibrary = catalog.mediaByLibrary;
-	const source = config.source;
-	const collectionItemIds = (source.type === 'collection' || source.type === 'ai') && source.sort.type === 'manual'
-		? source.sort.itemIds
-		: source.type === 'collection' || source.type === 'ai'
-			? source.itemIds
-			: [];
-	const pool
-		= source.type === 'item'
-			? [byId.get(source.itemId)].filter((media): media is SchedulableMedia => Boolean(media))
-			: source.type === 'collection' || source.type === 'ai'
-				? collectionItemIds.flatMap((itemId) => {
-					const media = byId.get(itemId);
-					return media ? [media] : [];
-				})
-				: 'libraryId' in source && byLibrary
-					? (byLibrary.get(source.libraryId) ?? [])
-					: catalog.media;
-	return pool.filter((media) => {
-		if (config.source.type === 'item') {
-			return media.id === config.source.itemId;
-		}
-
-		if (config.source.type === 'group') {
-			return config.source.includeDescendants
-				? descendantOf(media.groupId, config.source.groupId, catalog.groupParents)
-				: media.groupId === config.source.groupId;
-		}
-
-		if (config.source.type === 'group-collection') {
-			return (
-				media.libraryId === config.source.libraryId
-				&& config.source.groupIds.some((groupId) =>
-					descendantOf(media.groupId, groupId, catalog.groupParents))
-			);
-		}
-
-		if (config.source.type === 'collection' || config.source.type === 'ai') {
-			return (
-				media.libraryId === config.source.libraryId && config.source.itemIds.includes(media.id)
-			);
-		}
-
-		return mediaMatchesLibraryQuery(media, config.source);
-	});
-}
+import { orderedLibraryQueryMatches } from './content-query.js';
+import { indexedContentMatches, orderContentMatches, withoutContentExclusions } from './content-source.js';
 
 /** Return the user-facing label for content. */
 function contentLabel(
 	config: Extract<ProgramConfig, { type: 'content' }>,
 	catalog: SchedulingCatalog,
+	firstIndexedTitle: string | undefined,
 ): string {
 	const source = config.source;
 	if (source.type === 'item') {
-		return (
-			(
-				catalog.mediaById?.get(source.itemId)
-				?? catalog.media.find((media) => media.id === source.itemId)
-			)?.title ?? 'Missing item'
-		);
+		return firstIndexedTitle ?? 'Missing item';
 	}
 
 	if (source.type === 'group') {
@@ -134,12 +49,10 @@ function contentStatus(
 	}
 
 	const source = program.config.source;
+	const indexed = indexedContentMatches(source, catalog);
 	let missing = false;
 	if (source.type === 'item') {
-		missing = !(
-			catalog.mediaById?.has(source.itemId)
-			?? catalog.media.some((media) => media.id === source.itemId)
-		);
+		missing = indexed.length === 0;
 	}
 	else if (source.type === 'group') {
 		missing = !(source.groupId in catalog.groupParents);
@@ -147,29 +60,15 @@ function contentStatus(
 	else {
 		missing = !(source.libraryId in catalog.libraryAvailability);
 	}
-	const sourceMatches = schedulingContentMatches(program.config, catalog);
-	const aiIndexedSort = source.type === 'ai' && source.sort.type === 'date-added' ? source.sort : null;
-	const orderedMatches = aiIndexedSort
-		? sourceMatches.sort((left, right) => compareLibraryQueryMedia(left, right, aiIndexedSort))
-		: source.type === 'collection' || source.type === 'ai'
-			? orderSelectedMedia(
-				sourceMatches,
-				source.sort,
-				source.type === 'collection' ? source.additionBatches : undefined,
-			)
-			: source.type === 'library-query'
-				? sourceMatches.sort((left, right) => compareLibraryQueryMedia(left, right, source.sort))
-				: sourceMatches.sort(compareSchedulingMedia);
-	const matches = source.type === 'library-query' && source.itemLimit != null
-		? orderedMatches.slice(0, source.itemLimit)
-		: orderedMatches;
+	const sourceMatches = withoutContentExclusions(indexed, source, catalog);
+	const matches = source.type === 'library-query' ? orderedLibraryQueryMatches(sourceMatches, source) : orderContentMatches(sourceMatches, source, catalog);
 	const missingCollectionMembers
-		= source.type === 'collection' || source.type === 'ai' ? source.itemIds.length - matches.length : 0;
+		= source.type === 'collection' || source.type === 'ai' ? source.itemIds.length - indexed.length : 0;
 	const missingGroupMembers
 		= source.type === 'group-collection'
 			? source.groupIds.filter((groupId) => !(groupId in catalog.groupParents)).length
 			: 0;
-	if ((source.type === 'collection' || source.type === 'ai') && source.itemIds.length > 0 && matches.length === 0) {
+	if ((source.type === 'collection' || source.type === 'ai') && source.itemIds.length > 0 && indexed.length === 0) {
 		missing = true;
 	}
 	if (source.type === 'group-collection' && missingGroupMembers === source.groupIds.length) {
@@ -198,7 +97,7 @@ function contentStatus(
 	return {
 		programId: program.id,
 		health,
-		sourceLabel: contentLabel(program.config, catalog),
+		sourceLabel: contentLabel(program.config, catalog, indexed[0]?.title),
 		indexedItemCount: matches.length,
 		availableItemCount: available.length,
 		previewItems: matches.slice(0, PROGRAM_PREVIEW_ITEM_LIMIT).map((media) => ({

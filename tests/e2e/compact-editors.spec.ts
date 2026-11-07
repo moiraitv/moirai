@@ -137,7 +137,7 @@ async function assignTemplate(
 	expect(response.ok(), await response.text()).toBe(true);
 }
 
-test('remembers program media browsing and contains selection drawers', async ({ page }) => {
+test('keeps program media browsing visible and contains selection drawers', async ({ page }) => {
 	test.setTimeout(90_000);
 	const headers = await authenticatedHeaders(page);
 	const id = randomUUID();
@@ -162,21 +162,17 @@ test('remembers program media browsing and contains selection drawers', async ({
 	await page.getByLabel('Source type').selectOption('collection');
 	await page.unroute('**/api/v1/scheduling/overview');
 	await expect(page.getByRole('searchbox', { name: 'Search source media' })).toBeVisible();
-	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
 	await page.getByRole('button', { name: 'Close program editor' }).click();
 
 	await page.goto(`/schedules/programs/${programId}`);
 	const search = page.getByRole('searchbox', { name: 'Search source media' });
-	await expect(search).toBeHidden();
+	const browser = page.getByRole('region', { name: 'Browse media' });
+	await expect(browser.getByRole('heading', { name: 'Browse media' })).toBeVisible();
+	await expect(browser).toHaveCSS('row-gap', '12px');
+	await expect(search).toBeVisible();
 	await page.reload();
-	await expect(search).toBeHidden();
+	await expect(search).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Review Selection' })).toBeEnabled();
-	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
-	await search.fill('Compact');
-	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
-	await expect(search).toBeHidden();
-	await page.locator('.source-browser-disclosure > .plain-disclosure-trigger').click();
-	await expect(search).toHaveValue('Compact');
 
 	for (const viewport of [
 		{ width: 390, height: 844 },
@@ -192,6 +188,41 @@ test('remembers program media browsing and contains selection drawers', async ({
 		await page.getByRole('button', { name: 'Close selection' }).click();
 		await expect(page.locator('.selection-drawer-backdrop')).toHaveCount(0);
 	}
+});
+
+test('finishes Browse media searches for shows in a grouped program', async ({ page }) => {
+	const headers = await authenticatedHeaders(page);
+	const id = randomUUID();
+	const root = path.resolve(`test-results/runtime/shows-${id}`);
+	for (const title of ['Space Station', 'Ocean Watch']) {
+		const season = path.join(root, title, 'Season 01');
+		await mkdir(season, { recursive: true });
+		await writeFile(path.join(season, 'Pilot S01E01.mp4'), 'fixture');
+	}
+	const response = await page.request.post('/api/v1/libraries', {
+		headers,
+		data: { name: `Source shows ${id}`, typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: root } },
+	});
+	expect(response.ok(), await response.text()).toBe(true);
+	const library = await response.json() as { id: string };
+	await waitForLibraryScan(page, library.id);
+
+	await page.goto('/schedules/programs/new');
+	await page.getByLabel('Source type').selectOption('group-collection');
+	await page.getByLabel('Library', { exact: true }).selectOption(library.id);
+	const browser = page.getByRole('region', { name: 'Browse media' });
+	await expect(browser.getByText('Ocean Watch', { exact: true })).toBeVisible();
+
+	const search = browser.getByRole('searchbox');
+	await search.fill('space station');
+	await search.press('Enter');
+	await expect(browser.getByText('Ocean Watch', { exact: true })).toHaveCount(0);
+	await expect(browser.getByText('Space Station', { exact: true })).toBeVisible();
+	await expect(browser.getByText('Season 1', { exact: true })).toBeVisible();
+
+	await search.fill('no matching show');
+	await browser.getByRole('button', { name: 'Search', exact: true }).click();
+	await expect(browser.getByText('No matching source media.')).toBeVisible();
 });
 
 test('keeps template and channel schedule editors contained on short and portrait viewports', async ({ page }) => {

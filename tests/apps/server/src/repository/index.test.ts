@@ -1310,6 +1310,29 @@ describe('Repository scan reconciliation', () => {
 				entry.matches.some((match) => match.field === 'genre' && match.label === 'Science Fiction')),
 		).toBe(true);
 
+		const titleGroups = await repository.browseMediaSourceOptions(library.id, {
+			target: 'groups',
+			parentId: null,
+			page: 2,
+			pageSize: 1,
+			search: 'space station',
+		});
+		expect(titleGroups.pagination).toMatchObject({ totalEntries: 2, totalPages: 2 });
+		expect(titleGroups.entries).toMatchObject([
+			{ group: { id: showId, childCount: 1 }, matches: [{ field: 'title', label: 'Space Station' }] },
+		]);
+
+		const seasonMatches = await repository.browseMediaSourceOptions(library.id, {
+			target: 'groups',
+			parentId: showId,
+			page: 1,
+			pageSize: 10,
+			search: 'Nova',
+		});
+		expect(seasonMatches.entries).toMatchObject([
+			{ group: { id: seasonId, childCount: 1 }, matches: [{ field: 'actor', label: 'Nova Performer' }] },
+		]);
+
 		const showSearch = await repository.browseMedia(library.id, {
 			parentId: null,
 			page: 1,

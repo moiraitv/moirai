@@ -253,7 +253,12 @@ export interface MediaSourceMatch {
 /** Catalog entry with the metadata fields that matched source-picker search. */
 export type MediaSourcePickerEntry = MediaBrowseEntry & {
 	matches: MediaSourceMatch[];
+	/** Owning show or artist when a search result is displayed outside its hierarchy. */
+	parentTitle?: string | undefined;
 };
+
+/** Selected media with its canonical identity and optional exclusion match. */
+export type MediaSelectionItem = MediaItem & { canonicalId?: string | undefined; excluded?: true | undefined };
 
 /** Bounded source-picker results for scheduling program configuration. */
 export interface MediaSourcePickerResult {

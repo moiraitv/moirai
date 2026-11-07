@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { excludedItemIdsSchema } from './item-exclusions.js';
+import { contentExclusionsSchema, excludedItemIdsSchema, validateAiExclusionLimit } from './item-exclusions.js';
 
 /** Whether an OpenAI-compatible content model is configured on the server. */
 export const aiStatusSchema = z.object({ configured: z.boolean() });
@@ -68,9 +68,10 @@ export type AiResultCount = z.infer<typeof aiResultCountSchema>;
 export const aiContentSelectionRequestSchema = z.object({
 	libraryId: z.uuid(),
 	excludedItemIds: excludedItemIdsSchema.optional(),
+	exclusions: contentExclusionsSchema.optional(),
 	prompt: z.string().trim().min(1).max(2_000),
 	maxResults: aiResultCountSchema.optional(),
-});
+}).superRefine(validateAiExclusionLimit);
 /** Shared wire contract for an AI content-selection request. */
 export type AiContentSelectionRequest = z.infer<typeof aiContentSelectionRequestSchema>;
 

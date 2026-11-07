@@ -37,6 +37,21 @@
 	background: transparent;
 }
 
+.quick-source-browser > .plain-disclosure-trigger {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding-block: 10px;
+	color: var(--muted-strong);
+	font-size: 0.85rem;
+	font-weight: 600;
+
+	> .plain-disclosure-marker {
+		order: 1;
+		margin-right: 0;
+	}
+}
+
 .quick-setup-shell {
 	max-width: 1040px;
 	margin: 0 auto;

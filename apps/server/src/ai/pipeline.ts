@@ -137,7 +137,7 @@ export async function generateAiSelection(
 		activity.onProgress?.('preparing');
 		const excluded = new Set(dependencies.excludedItemIds ?? []);
 		const libraryCatalog = await dependencies.loadCatalog();
-		const catalog = libraryCatalog.filter((item) => !excluded.has(item.id) && !item.aliasIds?.some((id) => excluded.has(id)));
+		const catalog = libraryCatalog.filter((item) => !item.excluded && !excluded.has(item.id) && !item.aliasIds?.some((id) => excluded.has(id)));
 		signal.throwIfAborted();
 		if (!catalog.length) {
 			return { itemIds: [], unmatched: [], catalogTruncated: false, coverage: {

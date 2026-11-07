@@ -33,7 +33,9 @@ import type { AppConfig } from '../config.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
+import { publicSchedulingProgram } from '../scheduling/ai-cursor.js';
 import { parseId } from './params.js';
+import { PROGRAM_REQUEST_BODY_LIMIT } from './media-request-limits.js';
 import { apiOperation, emptyResponseSchema, idParamsSchema, responseContent } from './contracts.js';
 
 
@@ -84,15 +86,16 @@ export function registerSchedulingRoutes(
 			response: { 200: responseContent('Configured programs', 'application/json', z.array(schedulingProgramSchema)) },
 			errors: [500, 503],
 		}),
-	}, async () => repository.listPrograms());
+	}, async () => (await repository.listPrograms()).map(publicSchedulingProgram));
 	app.post('/api/v1/programs', {
+		bodyLimit: PROGRAM_REQUEST_BODY_LIMIT,
 		schema: apiOperation({
 			operationId: 'createProgram',
 			tags: ['Programs'],
 			summary: 'Create a content program',
 			body: programCreateSchema,
 			response: { 201: responseContent('Created program', 'application/json', schedulingProgramSchema) },
-			errors: [400, 409, 500, 503],
+			errors: [400, 409, 413, 500, 503],
 		}),
 	}, async (request, reply) => {
 		const input = programCreateSchema.parse(request.body);
@@ -266,9 +269,10 @@ export function registerSchedulingRoutes(
 			throw app.httpErrors.notFound('Program not found');
 		}
 
-		return program;
+		return publicSchedulingProgram(program);
 	});
 	app.patch('/api/v1/programs/:id', {
+		bodyLimit: PROGRAM_REQUEST_BODY_LIMIT,
 		schema: apiOperation({
 			operationId: 'updateProgram',
 			tags: ['Programs'],
@@ -277,7 +281,7 @@ export function registerSchedulingRoutes(
 			params: idParamsSchema,
 			body: programUpdateSchema,
 			response: { 200: responseContent('Updated program', 'application/json', schedulingProgramSchema) },
-			errors: [400, 404, 409, 500, 503],
+			errors: [400, 404, 409, 413, 500, 503],
 		}),
 	}, async (request) => {
 		const input = programUpdateSchema.parse(request.body);

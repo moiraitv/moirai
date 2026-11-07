@@ -2,10 +2,18 @@
 import { playbackOrderLabel } from './playback-order-label';
 import ProgramFilterSummary from './ProgramFilterSummary.vue';
 import { computed } from 'vue';
-import type { SchedulingProgram, SchedulingProgramStatus } from '@moirai/shared';
+import { mergeContentExclusions, type SchedulingProgram, type SchedulingProgramStatus } from '@moirai/shared';
 import { programValueLabel } from './program-catalog';
 const props = defineProps<{ program: SchedulingProgram; status?: SchedulingProgramStatus | undefined; libraries: { id: string; name: string }[] }>();
 const config = computed(() => props.program.config.type === 'content' ? props.program.config : null);
+const exclusionCount = computed(() => {
+	const source = config.value?.source;
+	const exclusions = mergeContentExclusions(
+		source && 'exclusions' in source ? source.exclusions : undefined,
+		source?.type === 'ai' ? source.excludedItemIds : undefined,
+	);
+	return exclusions ? exclusions.itemIds.length + exclusions.groupIds.length : 0;
+});
 const orderLabel = computed(() => {
 	const source = config.value?.source;
 	if (source?.type === 'collection' || source?.type === 'ai') {
@@ -32,6 +40,7 @@ const libraryName = computed(() => {
 			<template v-if="config.source.type === 'collection' || config.source.type === 'ai'"><dt>Selected items</dt><dd>{{ config.source.itemIds.length }}</dd></template>
 			<template v-if="config.source.type === 'ai'"><dt>Prompt</dt><dd>{{ config.source.prompt }}</dd></template>
 			<template v-if="config.source.type === 'group-collection'"><dt>Selected groups</dt><dd>{{ config.source.groupIds.length }}</dd></template>
+			<template v-if="exclusionCount"><dt>Exclusions</dt><dd>{{ exclusionCount.toLocaleString() }} {{ exclusionCount === 1 ? 'entry' : 'entries' }}</dd></template>
 			<template v-if="config.source.type === 'library-query'">
 				<template v-if="config.source.itemLimit"><dt>Item limit</dt><dd>{{ config.source.itemLimit }}</dd></template>
 			</template>

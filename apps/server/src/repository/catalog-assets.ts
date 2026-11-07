@@ -4,12 +4,14 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type {
 	LibraryContentPreview,
+	ContentExclusions,
 	MediaGenreFacet,
 	MediaGroup,
 	MediaGroupKind,
 	MediaCardPreview,
 	MediaItem,
 	MediaItemDetail,
+	MediaSelectionItem,
 } from '@moirai/shared';
 import { MAX_LIBRARY_CONTENT_PREVIEW_ITEMS } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
@@ -39,6 +41,7 @@ import {
 	technicalCodecs,
 } from './catalog-records.js';
 import type { RawGroupRow, RawItemRow } from './catalog-records.js';
+import { excludedMediaPredicate } from './content-exclusions.js';
 
 /** Raw row returned by the bounded library-overview carousel query. */
 interface RawLibraryContentPreviewRow {
@@ -133,41 +136,59 @@ export class CatalogAssetsRepository {
 		return listGenreFacets(this.db.$client, libraryId, selection);
 	}
 
-	/** Return selected media in request order using canonical or authored response identifiers. */
+	/** Resolve only the requested historical item IDs that still belong to this library. */
+	async listMediaItemAliases(libraryId: string, itemIds: string[]): Promise<Record<string, string>> {
+		if (itemIds.length === 0) {
+			return {};
+		}
+
+		const rows = await this.db.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
+			.from(mediaItemAliases)
+			.where(and(
+				eq(mediaItemAliases.libraryId, libraryId),
+				sql`${mediaItemAliases.aliasId} IN (SELECT value FROM json_each(${JSON.stringify(itemIds)}))`,
+			));
+		return Object.fromEntries(rows.map(row => [row.aliasId, row.itemId]));
+	}
+
+	/** Resolve selected media in request order, marking matches to supplied exclusions. */
 	async listMediaItemsByIds(
 		libraryId: string,
 		itemIds: string[],
 		identity: 'canonical' | 'requested' = 'canonical',
-	): Promise<MediaItem[]> {
+		exclusions?: ContentExclusions,
+	): Promise<MediaSelectionItem[]> {
 		if (itemIds.length === 0) {
 			return [];
 		}
 
-		const aliases = await this.db.select({ aliasId: mediaItemAliases.aliasId, itemId: mediaItemAliases.itemId })
-			.from(mediaItemAliases)
-			.where(inArray(mediaItemAliases.aliasId, itemIds));
-		const aliasMap = new Map(aliases.map((alias) => [alias.aliasId, alias.itemId]));
-		const canonicalIds = itemIds.map((id) => aliasMap.get(id) ?? id);
+		const aliases = await this.listMediaItemAliases(libraryId, itemIds);
+		const canonicalIds = itemIds.map(id => aliases[id] ?? id);
 		const parent = alias(mediaGroups, 'selection_parent');
+		const excluded = excludedMediaPredicate(libraryId, exclusions);
 		const rows = await this.db
-			.select({ item: mediaItems, group: mediaGroups, parent })
+			.select({ item: mediaItems, group: mediaGroups, parent, excluded: sql<number>`CASE WHEN ${excluded ?? sql`0`} THEN 1 ELSE 0 END` })
 			.from(mediaItems)
 			.leftJoin(mediaGroups, and(eq(mediaGroups.id, mediaItems.groupId), eq(mediaGroups.libraryId, mediaItems.libraryId)))
 			.leftJoin(parent, and(eq(parent.id, mediaGroups.parentId), eq(parent.libraryId, mediaItems.libraryId)))
 			.where(and(eq(mediaItems.libraryId, libraryId), inArray(mediaItems.id, canonicalIds)));
-		const byId = new Map(rows.map(({ item, group, parent: ancestor }) => {
+		const byId = new Map(rows.map(({ item, group, parent: ancestor, excluded }) => {
 			const show = group?.kind === 'show' ? group : ancestor?.kind === 'show' ? ancestor : null;
 			return [item.id, {
 				...mappedItem(item as unknown as RawItemRow),
 				showId: show?.id ?? null,
 				showSortTitle: show?.sortTitle ?? null,
+				...(excluded ? { excluded: true as const } : {}),
 			}];
 		}));
 		return canonicalIds.flatMap((canonicalId, index) => {
 			const item = byId.get(canonicalId);
-			return item
-				? [{ ...item, id: identity === 'requested' ? itemIds[index]! : item.id }]
-				: [];
+			const requestedId = itemIds[index]!;
+			if (!item) {
+				return [];
+			}
+			return identity === 'requested' && requestedId !== canonicalId
+				? [{ ...item, id: requestedId, canonicalId }] : [item];
 		});
 	}
 

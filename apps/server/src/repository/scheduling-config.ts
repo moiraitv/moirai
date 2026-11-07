@@ -1,8 +1,10 @@
 import { GraphicsRepository } from './graphics.js';
 import { FillerPresetRepository } from './filler-presets.js';
 import { templatePlaybackInput } from '../scheduling/template-playback.js';
+import { preserveLegacyAiCursor, type CursorCompatibleProgram } from '../scheduling/ai-cursor.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 import { validateCreditReference } from './subtitle-validation.js';
+import { normalizeContentExclusions, validateContentExclusions } from './content-exclusions.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type {
@@ -66,6 +68,17 @@ function programItemAdditionConfirmationToken(itemIds: string[], orderSensitive:
 		.digest('hex');
 }
 
+/** Keep cursor migration metadata in storage alongside the authored Program JSON. */
+type StoredProgramConfig = ProgramConfig & { legacyAiCursorFingerprint?: string };
+
+/** Decode authored config separately from the server-owned legacy cursor fingerprint. */
+function programFromRow(row: typeof schedulingPrograms.$inferSelect): CursorCompatibleProgram {
+	const { legacyAiCursorFingerprint } = row.config as StoredProgramConfig;
+	return { id: row.id, name: row.name, config: programConfigSchema.parse(row.config),
+		createdAt: row.createdAt, updatedAt: row.updatedAt,
+		...(typeof legacyAiCursorFingerprint === 'string' && /^[a-f0-9]{64}$/.test(legacyAiCursorFingerprint) ? { legacyAiCursorFingerprint } : {}) };
+}
+
 /**
  * Own authored programs, templates, and layered channel schedule configuration. This repository
  * validates cross-resource references and stable identifiers before persisting configuration, while
@@ -75,39 +88,25 @@ export class SchedulingConfigurationRepository {
 	constructor(protected readonly db: MoiraiDatabase) {}
 
 	/** List reusable scheduling programs. */
-	async listPrograms(): Promise<SchedulingProgram[]> {
+	async listPrograms(): Promise<CursorCompatibleProgram[]> {
 		const rows = await this.db.select().from(schedulingPrograms).orderBy(asc(schedulingPrograms.name));
-		return rows.map((row) => ({
-			id: row.id,
-			name: row.name,
-			config: programConfigSchema.parse(row.config),
-			createdAt: row.createdAt,
-			updatedAt: row.updatedAt,
-		}));
+		return rows.map(programFromRow);
 	}
 
 	/** Return one reusable scheduling program. */
-	async getProgram(id: string): Promise<SchedulingProgram | null> {
+	async getProgram(id: string): Promise<CursorCompatibleProgram | null> {
 		const [program] = await this.db
 			.select()
 			.from(schedulingPrograms)
 			.where(eq(schedulingPrograms.id, id));
-		return program
-			? {
-				id: program.id,
-				name: program.name,
-				config: programConfigSchema.parse(program.config),
-				createdAt: program.createdAt,
-				updatedAt: program.updatedAt,
-			}
-			: null;
+		return program ? programFromRow(program) : null;
 	}
 
 	/** Persist a reusable scheduling program. */
 	async createProgram(input: ProgramCreate): Promise<SchedulingProgram> {
 		validateCreditReference(this.db, input.config.subtitlePreferences);
 		const timestamp = currentTimestamp();
-		const config = this.normalizeCollectionAdditionOrder(null, input.config);
+		const config = normalizeContentExclusions(this.normalizeCollectionAdditionOrder(null, input.config));
 		const program: SchedulingProgram = {
 			id: randomUUID(),
 			...input,
@@ -128,6 +127,7 @@ export class SchedulingConfigurationRepository {
 
 		this.db.transaction(tx => {
 			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
+			validateContentExclusions(tx, undefined, config);
 			tx.insert(schedulingPrograms).values({ ...program, nameKey }).run();
 		});
 		return program;
@@ -260,7 +260,7 @@ export class SchedulingConfigurationRepository {
 			return null;
 		}
 		const config = input.config
-			? this.normalizeCollectionAdditionOrder(current.config, input.config)
+			? normalizeContentExclusions(this.normalizeCollectionAdditionOrder(current.config, input.config))
 			: current.config;
 		if (input.config) {
 			await this.validateProgramStructure(current.config, config);
@@ -271,7 +271,8 @@ export class SchedulingConfigurationRepository {
 		}
 
 		const updated: SchedulingProgram = {
-			...current,
+			id: current.id,
+			createdAt: current.createdAt,
 			name: input.name ?? current.name,
 			config,
 			updatedAt: currentTimestamp(),
@@ -288,11 +289,14 @@ export class SchedulingConfigurationRepository {
 		if (conflict && conflict.id !== id) {
 			throw new ResourceIdentityConflictError('program');
 		}
+		const legacyAiCursorFingerprint = input.config ? preserveLegacyAiCursor(current, config) : current.legacyAiCursorFingerprint;
+		const storedConfig: StoredProgramConfig = { ...config, ...(legacyAiCursorFingerprint ? { legacyAiCursorFingerprint } : {}) };
 
 		this.db.transaction(tx => {
 			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
+			validateContentExclusions(tx, current.config, config);
 			tx.update(schedulingPrograms)
-				.set({ name: updated.name, nameKey, config: updated.config, updatedAt: updated.updatedAt })
+				.set({ name: updated.name, nameKey, config: storedConfig, updatedAt: updated.updatedAt })
 				.where(eq(schedulingPrograms.id, id)).run();
 		});
 		return updated;
