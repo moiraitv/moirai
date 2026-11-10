@@ -184,7 +184,8 @@ export function createAsyncApiDocument(): ApiDescriptionDocument {
 			version: '0.1.0',
 			description: [
 				'Bounded server-to-client status events sent by Moirai.',
-				'Browser upgrades require the configured application origin, and each connection ends',
+				'Browser upgrades require an allowed application origin, including any exact origin',
+				'configured in MOIRAI_ALLOWED_ORIGINS. Each connection ends',
 				'with policy code 1008 when its administrator session is revoked or expires.',
 				'Clients must stop reconnecting until they authenticate again after that policy close.',
 				`Intentional credential replacement closes with code ${LIVE_EVENT_SESSION_REPLACED_CLOSE_CODE}`,

@@ -31,6 +31,29 @@ const FRAME_ANCESTORS_POLICY = "frame-ancestors 'none'";
 /** Private cache policy applied to management and authentication-sensitive responses. */
 const PRIVATE_RESPONSE_CACHE_CONTROL = 'private, no-store';
 
+/** Preserve HTTPS cookies through TLS termination while permitting a distinct, opted-in HTTP origin. */
+function requiresSecureSessionCookie(request: FastifyRequest, config: AppConfig): boolean {
+	if (request.protocol === 'https') {
+		return true;
+	}
+	if (!config.publicUrl.startsWith('https://')) {
+		return false;
+	}
+
+	const authority = request.host;
+	const httpOrigin = URL.parse(`http://${authority}`);
+	if (request.protocol !== 'http' || !httpOrigin
+		|| httpOrigin.username || httpOrigin.password || httpOrigin.pathname !== '/'
+		|| httpOrigin.search || httpOrigin.hash || !config.allowedOrigins.includes(httpOrigin.origin)) {
+		return true;
+	}
+
+	// An HTTP backend cannot distinguish a bare authority shared by HTTP and HTTPS without TLS.
+	const httpsOrigin = new URL(`https://${authority}`).origin;
+	return httpsOrigin === config.publicUrl || httpsOrigin === config.managementUrl
+		|| config.allowedOrigins.includes(httpsOrigin);
+}
+
 /** Set one hardened administrator-session cookie after issuing or validating its bearer. */
 export function setAuthenticationSessionCookie(
 	reply: FastifyReply,
@@ -45,7 +68,7 @@ export function setAuthenticationSessionCookie(
 	reply.setCookie(AUTHENTICATION_COOKIE, token, {
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: new URL(config.publicUrl).protocol === 'https:',
+		secure: requiresSecureSessionCookie(reply.request, config),
 		path: '/',
 		maxAge: remainingSeconds,
 	});
@@ -56,7 +79,7 @@ export function clearAuthenticationSessionCookie(reply: FastifyReply, config: Ap
 	reply.clearCookie(AUTHENTICATION_COOKIE, {
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: new URL(config.publicUrl).protocol === 'https:',
+		secure: requiresSecureSessionCookie(reply.request, config),
 		path: '/',
 	});
 }
@@ -73,21 +96,18 @@ function csrfMatches(actual: string | undefined, expected: string): boolean {
 		&& timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-/** Return whether a browser origin is a configured application origin or loopback development host. */
+/** Allow configured browser origins and the loopback development exception. */
 function allowedOrigin(origin: string, config: AppConfig): boolean {
-	try {
-		const parsed = new URL(origin);
-		if (parsed.origin === config.publicUrl || parsed.origin === config.managementUrl) {
-			return true;
-		}
-
-		const serverHostIsLoopback = isLoopbackHostname(config.host);
-		const originIsLoopback = isLoopbackHostname(parsed.hostname);
-		return serverHostIsLoopback && originIsLoopback;
-	}
-	catch {
+	const parsed = URL.parse(origin);
+	if (!parsed || parsed.origin !== origin || !['http:', 'https:'].includes(parsed.protocol)) {
 		return false;
 	}
+	if (origin === config.publicUrl || origin === config.managementUrl
+		|| config.allowedOrigins.includes(origin)) {
+		return true;
+	}
+
+	return isLoopbackHostname(config.host) && isLoopbackHostname(parsed.hostname);
 }
 
 /** Return whether one canonical API route can carry administrator or authentication state. */

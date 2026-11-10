@@ -106,9 +106,11 @@ function nextLiveEvent(
 }
 
 async function fixture(options: {
+	allowedOrigins?: string[];
 	authenticated?: boolean;
 	host?: string;
 	managementUrl?: string;
+	publicUrl?: string;
 	serveWeb?: boolean;
 	sessionAgeMs?: number;
 	trustedProxies?: string[];
@@ -129,7 +131,8 @@ async function fixture(options: {
 		migrationsDir: path.resolve('drizzle'),
 		logLevel: 'silent',
 		guideDays: options.guideDays ?? XMLTV_EPG_DAYS,
-		publicUrl: 'https://moirai.example.test',
+		publicUrl: options.publicUrl ?? 'https://moirai.example.test',
+		allowedOrigins: options.allowedOrigins ?? [],
 		...(options.managementUrl ? { managementUrl: options.managementUrl } : {}),
 		...(options.host ? { host: options.host } : {}),
 		...(options.trustedProxies ? { trustedProxies: options.trustedProxies } : {}),
@@ -316,6 +319,122 @@ describe('API', () => {
 		});
 
 		expect(response.statusCode).toBe(200);
+	});
+
+	it('initializes administration and opens live events from an exact additional origin', async () => {
+		const origin = 'http://100.101.102.103:3000';
+		const host = new URL(origin).host;
+		const { rawApp } = await fixture({
+			authenticated: false,
+			host: '0.0.0.0',
+			allowedOrigins: [origin],
+		});
+		const payload = { username: 'Administrator', password: 'a long local password' };
+		for (const unlisted of ['https://100.101.102.103:3000', 'http://100.101.102.103:3001']) {
+			const denied = await rawApp.inject({
+				method: 'POST', url: '/api/v1/auth/setup', headers: { host, origin: unlisted }, payload,
+			});
+			expect(denied.statusCode).toBe(403);
+			expect(denied.json()).toMatchObject({ code: 'csrf_rejected' });
+		}
+		const setup = await rawApp.inject({
+			method: 'POST', url: '/api/v1/auth/setup', headers: { host, origin }, payload,
+		});
+		expect(setup.statusCode).toBe(201);
+		const cookie = String(setup.headers['set-cookie']).split(';', 1)[0];
+		const csrfToken = setup.json().csrfToken as string;
+		const write = await rawApp.inject({
+			method: 'PUT', url: '/api/v1/playback/settings',
+			headers: { host, origin, cookie, 'x-moirai-csrf': csrfToken },
+			payload: { maxActiveSessions: 5 },
+		});
+		expect(write.statusCode).toBe(200);
+
+		const socket = await rawApp.injectWS('/api/v1/events', { headers: { host, origin, cookie } });
+		socket.close();
+		await expect(rawApp.injectWS('/api/v1/events', {
+			headers: { host, origin: 'http://100.101.102.103:3001', cookie },
+		})).rejects.toThrow(/403/);
+	});
+
+	it.each([
+		{
+			name: 'HTTPS forwarded by a trusted proxy with an HTTP public URL',
+			publicUrl: 'http://moirai.lan:3000',
+			origin: 'https://dvr.example.test',
+			host: '127.0.0.1:3000',
+			forwardedHost: 'dvr.example.test',
+			forwardedProto: 'https',
+			remoteAddress: '10.0.0.10',
+			secure: true,
+		},
+		{
+			name: 'direct HTTP at a distinct additional origin with an HTTPS public URL',
+			publicUrl: 'https://moirai.example.test',
+			origin: 'http://100.101.102.103:3000',
+			host: '100.101.102.103:3000',
+			forwardedProto: 'https',
+			remoteAddress: '10.0.0.11',
+			secure: false,
+		},
+		{
+			name: 'the HTTPS public URL with spoofed forwarded headers from an untrusted peer',
+			publicUrl: 'https://moirai.example.test',
+			origin: 'https://moirai.example.test',
+			host: '127.0.0.1:3000',
+			forwardedHost: '100.101.102.103:3000',
+			forwardedProto: 'http',
+			remoteAddress: '10.0.0.11',
+			secure: true,
+		},
+		{
+			name: 'an HTTPS address that overlaps an additional HTTP origin',
+			publicUrl: 'https://moirai.example.test',
+			origin: 'https://moirai.example.test',
+			host: 'moirai.example.test',
+			remoteAddress: '10.0.0.11',
+			secure: true,
+		},
+	])('uses the same cookie security for setup, renewal, and logout with $name', async ({
+		publicUrl, origin, host, forwardedHost, forwardedProto, remoteAddress, secure,
+	}) => {
+		const { rawApp, database } = await fixture({
+			authenticated: false,
+			publicUrl,
+			allowedOrigins: [origin, 'http://100.101.102.103:3000', 'http://moirai.example.test'],
+			trustedProxies: ['10.0.0.10'],
+		});
+		const headers = {
+			host,
+			...(forwardedHost ? { 'x-forwarded-host': forwardedHost } : {}),
+			...(forwardedProto ? { 'x-forwarded-proto': forwardedProto } : {}),
+		};
+		const setup = await rawApp.inject({
+			method: 'POST', url: '/api/v1/auth/setup', remoteAddress, headers: { ...headers, origin },
+			payload: { username: 'Administrator', password: 'a long local password' },
+		});
+		expect(setup.statusCode).toBe(201);
+		expect(setup.cookies[0]).toMatchObject({ name: 'moirai_session', httpOnly: true });
+		expect(Boolean(setup.cookies[0]?.secure)).toBe(secure);
+		const cookie = `${setup.cookies[0]!.name}=${setup.cookies[0]!.value}`;
+		const csrfToken = setup.json().csrfToken as string;
+
+		const staleActivity = new Date(Date.now() - 25 * 60 * 60 * 1_000).toISOString();
+		database.sqlite.prepare('UPDATE authentication_sessions SET last_seen_at = ?').run(staleActivity);
+		const session = await rawApp.inject({
+			url: '/api/v1/auth/session', remoteAddress, headers: { ...headers, cookie },
+		});
+		expect(session.json()).toMatchObject({ status: 'authenticated' });
+		expect(session.cookies[0]).toMatchObject({ name: 'moirai_session', value: setup.cookies[0]!.value });
+		expect(Boolean(session.cookies[0]?.secure)).toBe(secure);
+
+		const logout = await rawApp.inject({
+			method: 'POST', url: '/api/v1/auth/logout', remoteAddress,
+			headers: { ...headers, origin, cookie, 'x-moirai-csrf': csrfToken },
+		});
+		expect(logout.statusCode).toBe(200);
+		expect(logout.cookies[0]).toMatchObject({ name: 'moirai_session', value: '', maxAge: 0 });
+		expect(Boolean(logout.cookies[0]?.secure)).toBe(secure);
 	});
 
 	it('skips session persistence work for public resources but resolves the session endpoint', async () => {

@@ -18,11 +18,12 @@ Most installations need only a few environment values:
 | `MOIRAI_PLAYBACK_STREAM_DIR` | Folder for generated playback/transcode output. Defaults to `streams` inside the data directory (`/data/streams` in Docker). An absolute path can point to a separate writable mount. |
 | `MOIRAI_TIME_ZONE` | Local time zone used for guide dates, schedule boundaries, and automatic backups. |
 | `MOIRAI_LOG_LEVEL` | Amount of server detail retained in logs. |
-| `MOIRAI_TRUST_PROXY` | Narrow IP addresses or networks allowed to supply forwarded client addresses. |
+| `MOIRAI_TRUST_PROXY` | Narrow IP addresses or networks allowed to supply forwarded request details. |
+| `MOIRAI_ALLOWED_ORIGINS` | Extra exact browser origins for local administration, such as a tailnet address. |
 
 The supplied image listens on port 3000 and stores state under `/data`. Media folders need separate read-only mounts. You can also [map a writable transcode folder](/getting-started/docker) separately from persistent application data. Hardware acceleration devices and their owning group IDs must also be passed into the container explicitly.
 
-Keep secrets such as `MOIRAI_LOGTO_APP_SECRET` outside version control. Trust only reverse proxies you control; an overly broad `MOIRAI_TRUST_PROXY` lets clients influence the address used for security throttling.
+Keep secrets such as `MOIRAI_LOGTO_APP_SECRET` outside version control. Trust only reverse proxies you control. An overly broad `MOIRAI_TRUST_PROXY` lets clients influence the client address and scheme Moirai uses for authentication.
 
 ## Set environment values
 
@@ -42,7 +43,8 @@ These are the application defaults. The Docker image overrides `MOIRAI_HOST` to 
 | `MOIRAI_MANAGEMENT_URL` | `MOIRAI_PUBLIC_URL` | Browser UI origin; may differ only by port for split development servers |
 | `MOIRAI_WEB_PORT` | `5173` | Development-only Vite server port; unused by production serving |
 | `MOIRAI_WEB_HOST` | Derived | Optional Vite bind address for development |
-| `MOIRAI_TRUST_PROXY` | Unset | Comma-separated proxy IPs/CIDRs trusted to report original client addresses |
+| `MOIRAI_TRUST_PROXY` | Unset | Comma-separated proxy IPs/CIDRs trusted to report the original client address, host, and scheme |
+| `MOIRAI_ALLOWED_ORIGINS` | Unset | Comma-separated exact HTTP(S) origins allowed for browser administration |
 | `MOIRAI_LOGTO_ENDPOINT` | Unset | Logto tenant origin; enables Logto only when all three Logto values are set |
 | `MOIRAI_LOGTO_APP_ID` | Unset | Traditional-web application ID issued by Logto |
 | `MOIRAI_LOGTO_APP_SECRET` | Unset | Traditional-web application secret; never returned or logged |
@@ -84,9 +86,13 @@ Relative `MOIRAI_DATA_DIR` and explicit `MOIRAI_LOG_DIR` paths resolve from the 
 
 `MOIRAI_PUBLIC_URL` and `MOIRAI_MANAGEMENT_URL` must use the same scheme and hostname; only their ports may differ. Development normally uses port 5173 for the browser and port 3000 for the API. The development command selects the browser return address automatically unless `MOIRAI_MANAGEMENT_URL` is set.
 
+Use `MOIRAI_ALLOWED_ORIGINS` to add browser addresses for local admin setup, sign-in, and live updates. List each HTTP or HTTPS origin separately, including its scheme and any non-default port. A trailing slash is optional. The list accepts origins only, so omit paths, credentials, queries, fragments, and wildcards. See [Access Moirai over Tailscale](/getting-started/access#access-moirai-over-tailscale) for examples.
+
+If you use both HTTP and HTTPS for administration, prefer separate hostnames. Browsers share cookies across ports on the same hostname. After you sign in over HTTPS, an HTTP sign-in on the same hostname can appear to succeed but leave you signed out, even when the two addresses use different ports.
+
 Configure all three Logto values together or leave all three unset. See [Set up Logto](/getting-started/access) for provider settings and callback URLs.
 
-For `MOIRAI_TRUST_PROXY`, supply only the proxy addresses or CIDRs you control. Multiple entries are comma-separated; `loopback`, `linklocal`, and `uniquelocal` groups are also accepted. This lets Moirai use the original client address for sign-in rate limits when requests arrive through a trusted proxy.
+For `MOIRAI_TRUST_PROXY`, use the immediate proxy's IP address as Moirai sees it. In Docker this can be a bridge address rather than `127.0.0.1`. Multiple entries are comma-separated, and CIDRs and the `loopback`, `linklocal`, and `uniquelocal` groups are also accepted. The proxy must overwrite client-supplied forwarded headers with the original client address and browser-facing host and scheme. Moirai uses the forwarded client address for sign-in rate limits and the forwarded scheme to set `Secure` on HTTPS session cookies, including when the IPTV URL uses HTTP.
 
 ## Local playback tools
 

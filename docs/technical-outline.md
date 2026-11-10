@@ -1953,8 +1953,10 @@ Management routes require one opaque administrator-session cookie by default. Ex
 exceptions cover authentication entry points, health probes, IPTV delivery, XMLTV, and the bounded
 logo and artwork resources referenced by those feeds. Playback status, client identities, logs,
 media previews, management reads and writes, and the live-event WebSocket require authentication.
-The API does not grant cross-origin browser access. Unsafe requests additionally require an allowed
-application origin and the authenticated session's `X-Moirai-CSRF` synchronizer token. The generated
+The API does not grant cross-origin browser access. The origin guard checks browser origins on
+unsafe requests and WebSocket upgrades against the configured application origins and exact
+`MOIRAI_ALLOWED_ORIGINS` entries, with a loopback development exception. Protected writes also
+require the authenticated session's `X-Moirai-CSRF` synchronizer token. The generated
 OpenAPI security requirements identify both the session cookie and this header on protected writes,
 and protected operations document the `401` and applicable `403` failures enforced by the shared
 guard.
@@ -2365,6 +2367,9 @@ password work cannot exceed the native worker-pool capacity. Session persistence
 sessions per identity and 1,024 across the installation, evicting and disconnecting the oldest when a
 new session crosses either limit. Public resources bypass session resolution. Reverse proxies must be
 explicitly trusted by IP or CIDR before forwarded client addresses affect authentication throttles.
+Session cookies use the effective HTTPS scheme, including trusted proxy forwarding, with an HTTPS
+public URL as a compatibility fallback. A distinct explicitly allowed HTTP address can use an
+HTTP session cookie. Logto transaction binding and redirect origins follow canonical configuration.
 Management and authentication-sensitive responses prohibit shared caching, and browser responses
 deny framing to prevent UI redressing from another origin.
 

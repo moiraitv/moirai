@@ -19,6 +19,25 @@ When an operator has configured Logto, choose **Sign In with Logto** to authenti
 
 If local credentials are lost, use the single-use recovery command described in [Account and recovery](/operations/account-and-recovery). Do not expose an uninitialized installation to the internet: another visitor could claim it first.
 
+## Access Moirai over Tailscale
+
+Install Tailscale on the machine running Moirai and connect your remote devices to the same tailnet. Choose how you want administrators and IPTV players to connect, and be sure to restrict access to the devices or users you trust before creating the first administrator.
+
+### LAN playback and tailnet administration
+
+1. Keep `MOIRAI_PUBLIC_URL` set to the address your IPTV players use, such as `http://192.168.1.100:3000` or `https://moirai.example.com`. Publish the Docker port on the interfaces you intend to use and restrict access with your host firewall and tailnet policy.
+2. Set `MOIRAI_ALLOWED_ORIGINS` to the exact browser address you will use for administration, such as `http://100.101.102.103:3000` or `https://moirai.example-tailnet.ts.net` (Tailscale Serve). Include the scheme and any non-default port.
+3. If you use Serve or another reverse proxy for HTTPS, configure `MOIRAI_TRUST_PROXY` with the immediate proxy address as seen by Moirai. See [Configuration reference](/operations/configuration) for how to pass the browser's scheme safely.
+4. Recreate the container and open the tailnet address to create or sign in to the local administrator account. For Logto sign-in, use the configured sign-in address.
+
+### Tailnet-only access with private HTTPS
+
+1. Change the Docker port mapping to `127.0.0.1:3000:3000` to publish the backend on the host's loopback interface.
+2. On the host, run `tailscale serve --bg 3000` and copy the HTTPS address it prints. See [Tailscale's Docker guide](https://tailscale.com/docs/solutions/host-private-server-docker) for prerequisites and access controls.
+3. Set `MOIRAI_PUBLIC_URL` to that HTTPS address, leave `MOIRAI_MANAGEMENT_URL` unset, and recreate the container. If administrators and IPTV players will all use that address, leave `MOIRAI_ALLOWED_ORIGINS` unset too.
+
+If the page never loads, check that the client is on the tailnet, the host and port are reachable, and the access policy permits the connection. If the page loads but setup says the request origin is not allowed, compare the exact address in the browser with the configured origins.
+
 ## Set up Logto
 
 Create a **Traditional web** application in Logto. Set the following environment values for Moirai using the values from that application:

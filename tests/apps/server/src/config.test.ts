@@ -103,6 +103,34 @@ describe('trusted proxy configuration', () => {
 	});
 });
 
+describe('additional browser origins', () => {
+	it('defaults to an empty list and normalizes exact origins from the environment', () => {
+		vi.stubEnv('MOIRAI_ALLOWED_ORIGINS', '  ');
+		expect(loadConfig().allowedOrigins).toEqual([]);
+		vi.stubEnv('MOIRAI_ALLOWED_ORIGINS', ' https://DVR.example.test:443/ , http://[fd00::1]:3000, https://dvr.example.test ');
+		expect(loadConfig().allowedOrigins).toEqual([
+			'https://dvr.example.test',
+			'http://[fd00::1]:3000',
+		]);
+	});
+
+	it.each([
+		'*',
+		'https://*.example.test',
+		'https://%2a.example.test',
+		'https://user:password@dvr.example.test',
+		'https://dvr.example.test/admin/..',
+		'https://dvr.example.test/?',
+		'https://dvr.example.test/#',
+		'https://dvr.example.test:invalid',
+		'ftp://dvr.example.test',
+		'dvr.example.test',
+	])('rejects an invalid origin at startup (%s)', (origin) => {
+		vi.stubEnv('MOIRAI_ALLOWED_ORIGINS', `https://valid.example.test,${origin}`);
+		expect(() => loadConfig()).toThrow(/MOIRAI_ALLOWED_ORIGINS/);
+	});
+});
+
 describe('media probe configuration', () => {
 	it('uses bounded defaults and accepts an explicit executable', () => {
 		expect(loadConfig({ ffprobePath: '/opt/media/ffprobe' })).toMatchObject({

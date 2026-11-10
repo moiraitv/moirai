@@ -24,6 +24,8 @@ export interface AppConfig {
 	trustedProxies: string[];
 	publicUrl: string;
 	managementUrl: string;
+	/** Additional browser origins authorized to manage the application. */
+	allowedOrigins: string[];
 	debug: boolean;
 	logLevel: string;
 	logDir: string;
@@ -245,6 +247,24 @@ export function resolveManagementUrl(value: string | undefined, publicUrl: strin
 	return resolved;
 }
 
+/** Normalize a comma-separated allowlist of exact HTTP(S) browser origins. */
+export function resolveAllowedOrigins(value?: string): string[] {
+	if (!value?.trim()) {
+		return [];
+	}
+
+	const origins = value.split(',').map((entry) => {
+		const candidate = entry.trim();
+		const parsed = URL.parse(candidate);
+		if (!/^https?:\/\/[^/?#\\\s@*]+\/?$/iu.test(candidate) || !parsed || parsed.hostname.includes('*')) {
+			throw new Error('MOIRAI_ALLOWED_ORIGINS must contain exact HTTP(S) origins without wildcards, credentials, paths, queries, or fragments');
+		}
+		return parsed.origin;
+	});
+
+	return [...new Set(origins)];
+}
+
 /** Flag URL hosts that cannot be reached by a separate IPTV client. */
 export function publicUrlStatus(value: string): PublicUrlStatus {
 	const hostname = new URL(value).hostname.toLowerCase();
@@ -311,6 +331,8 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 			?? resolveTrustedProxies(process.env.MOIRAI_TRUST_PROXY),
 		publicUrl,
 		managementUrl,
+		allowedOrigins: overrides.allowedOrigins
+			?? resolveAllowedOrigins(process.env.MOIRAI_ALLOWED_ORIGINS),
 		debug: overrides.debug ?? debugFromEnvironment(process.env.MOIRAI_DEBUG),
 		logLevel: overrides.logLevel ?? process.env.MOIRAI_LOG_LEVEL ?? 'info',
 		dataDir,

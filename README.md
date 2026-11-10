@@ -90,6 +90,7 @@ Most installations need only a few settings:
 | `MOIRAI_TIME_ZONE` | Your schedule's time zone, such as `America/New_York`. |
 | Storage mounts | Keep `/data` persistent and mount your media folders read-only. |
 | `MOIRAI_TRUST_PROXY` | If using a reverse proxy, set only the proxy's IP address or network. |
+| `MOIRAI_ALLOWED_ORIGINS` | Extra exact browser origins for administration, such as a tailnet address. |
 
 Add environment settings under `environment` in your Compose file. Putting a value in a host `.env` file alone does not pass it into the container; the Compose file must reference or load it. Run `docker compose up -d` after changing the configuration.
 
