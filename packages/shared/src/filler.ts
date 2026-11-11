@@ -1,10 +1,4 @@
 import { z } from 'zod';
-import type { SchedulingProgram } from './scheduling.js';
-
-/** Leaf Programs can supply filler without composite quotas or nested selection. */
-export function isFillerProgram(program: Pick<SchedulingProgram, 'config'>): boolean {
-	return program.config.type !== 'sequence';
-}
 
 /** Validate the filler selection policy contract at runtime. */
 export const fillerSelectionPolicySchema = z.enum([

@@ -8,17 +8,18 @@ const props = defineProps<{ program: SchedulingProgram; programs: Map<string, Sc
 const emit = defineEmits<{ select: [id: string] }>();
 const programNames = computed(() => new Map([...props.programs].map(([id, program]) => [id, program.name])));
 const entries = computed(() => props.program.config.type === 'sequence' ? props.program.config.entries : []);
-const orderingLabel = computed(() => props.program.config.type === 'sequence' ? ({ ordered: 'Ordered', 'shuffled-blocks': 'Shuffled blocks', 'shuffled-allocations': 'Shuffled allocations', 'balanced-rotation': 'Balanced rotation' }[props.program.config.ordering?.type ?? 'ordered']) : 'Ordered');
-const cycleCount = computed(() => entries.value.reduce((sum, entry) => sum + entry.count, 0));
-/** Describe the configured selections for one step without simulating playback. */
+const orderingLabel = computed(() => props.program.config.type === 'sequence' ? ({ ordered: 'Ordered', 'shuffled-blocks': 'Shuffled blocks', 'shuffled-allocations': 'Shuffled allocations', 'balanced-rotation': 'Balanced rotation', chance: 'Chance' }[props.program.config.ordering?.type ?? 'ordered']) : 'Ordered');
+const chance = computed(() => props.program.config.type === 'sequence' && props.program.config.ordering?.type === 'chance');
+const cycleCount = computed(() => entries.value.reduce((sum, entry) => sum + (chance.value ? Number(entry.count > 0) : entry.count), 0));
+/** Describe a step’s probability or item count without simulating playback. */
 function itemCountLabel(count: number): string {
-	return `${count} ${count === 1 ? 'Item' : 'Items'}`;
+	return chance.value ? `${count}% chance` : `${count} ${count === 1 ? 'Item' : 'Items'}`;
 }
 </script>
 <template>
 	<section v-if="program.config.type === 'sequence'" class="program-inspector-section program-sequence-configuration">
 		<h3 class="eyebrow">Sequence Configuration</h3>
-		<p class="program-sequence-total">{{ cycleCount }} {{ cycleCount === 1 ? 'item' : 'items' }} per cycle</p>
+		<p class="program-sequence-total">{{ chance ? 'Up to ' : '' }}{{ cycleCount }} {{ cycleCount === 1 ? 'item' : 'items' }} per cycle</p>
 		<p>{{ orderingLabel }} · Steps shown in authored order</p>
 		<ol class="program-source-list">
 			<li v-for="(entry, index) in entries" :key="entry.id">

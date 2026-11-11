@@ -68,6 +68,12 @@ export function selectFillerCandidate(
 	const remaining = cycle.remainingItemIds.map(id => byId.get(id)!);
 	const selected = selectOrderedCandidate(remaining, context, fitSeconds, 'first-fit-arbitrary');
 	if (!selected) {
+		const fit = context.fillerSelection?.fit;
+		if (fit) {
+			fit.playable = candidates.length > 0;
+			const fullBudget = durationMilliseconds(context.fillerSelection!.fullBudgetSeconds);
+			fit.wholeStage = remaining.some(media => durationMilliseconds(media.durationSeconds!) <= fullBudget);
+		}
 		return null;
 	}
 	cycle.remainingItemIds = cycle.remainingItemIds.filter(id => id !== selected.id);

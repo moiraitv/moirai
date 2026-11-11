@@ -1,9 +1,10 @@
-import type {
-	ChannelSchedule,
-	ScheduleTemplate,
-	SchedulingCatalog,
-	SchedulingProgram,
-	SchedulableMedia,
+import {
+	eligibleSequenceEntries,
+	type ChannelSchedule,
+	type ScheduleTemplate,
+	type SchedulingCatalog,
+	type SchedulingProgram,
+	type SchedulableMedia,
 } from '@moirai/shared';
 import { sourceExclusions } from './content-source.js';
 
@@ -90,7 +91,7 @@ export function schedulingRootProgramIds(
 	return ids;
 }
 
-/** Resolve only Programs reachable through sequence entries and similarity sources. */
+/** Resolve Programs reachable through eligible Sequence steps and similarity sources. */
 export function reachableSchedulingPrograms(programs: SchedulingProgram[], rootProgramIds?: Iterable<string>): SchedulingProgram[] {
 	const byId = new Map(programs.map((program) => [program.id, program]));
 	const pending = rootProgramIds ? [...rootProgramIds] : programs.map((program) => program.id);
@@ -108,7 +109,7 @@ export function reachableSchedulingPrograms(programs: SchedulingProgram[], rootP
 		}
 		result.push(program);
 		if (program.config.type === 'sequence') {
-			pending.push(...program.config.entries.map((entry) => entry.programId));
+			pending.push(...eligibleSequenceEntries(program.config).map(entry => entry.programId));
 		}
 		else if (program.config.type === 'similarity') {
 			pending.push(program.config.sourceProgramId);

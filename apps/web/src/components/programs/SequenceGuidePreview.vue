@@ -61,7 +61,7 @@ function segmentLabel(segment: TimelineSegment): string {
 			</button>
 		</div>
 		<p>Sample day starting with fresh sequence and child progress. Four hours visible; scroll horizontally to explore the day.</p>
-		<p v-if="invalid" class="notice">Add valid steps and counts to preview this sequence.</p>
+		<p v-if="invalid" class="notice">Add valid steps and quantities to preview this sequence.</p>
 		<p v-else-if="error" class="notice error" role="alert">{{ error }}</p>
 		<p v-else-if="updating || queued" role="status">{{ preview ? 'Updating sample…' : 'Loading sample…' }}</p>
 		<p v-if="stale && preview" class="sequence-preview-stale">Previous sample — scheduling changes are not shown yet.</p>

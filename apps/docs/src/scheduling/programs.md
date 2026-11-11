@@ -179,16 +179,24 @@ Choose **Sequence** when you want to combine existing ![](/icons/list-video.svg)
 2. In the Sequence editor, choose **Add Step** and select a ![](/icons/list-video.svg) Program.
 3. Set the count for that step and add any remaining steps.
 4. Use the up and down arrows to arrange the steps.
-5. Choose **Ordering**: **Ordered** keeps the listed step order; **Shuffled blocks** shuffles steps while keeping their selections together; **Shuffled allocations** mixes selections while keeping each step’s count; **Balanced rotation** spreads selections proportionally and avoids consecutive turns from the same step when possible. Shuffle modes offer an optional **Stable seed**.
+5. Choose **Ordering**. **Ordered** follows the listed steps. **Shuffled blocks** shuffles steps and keeps each step’s clips together. **Shuffled allocations** mixes clips while keeping each step’s count. **Balanced rotation** spreads clips proportionally and avoids consecutive turns from the same step when possible. **Chance** checks each step independently in the listed order. Shuffle and Chance modes offer an optional **Stable seed**.
 6. Enable **Repeat sequence** to begin another cycle after its allocations finish, otherwise it plays only the sequence and leaves any remaining time empty.
 
-When used as filler, **Shuffled blocks** keeps the current step together even when its next selection cannot fit. **Best fit only** leaves the remaining gap; **Best fit or truncate** can shorten the next selection from that step.
+### Use Chance ordering
 
-The inspector’s **Sequence Configuration** shows each source as a numbered block with a media preview and its configured count: **1 Item**, **2 Items**, and so on. A small **more** tile appears after the thumbnails when the source contains additional items beyond those shown. Select a block to inspect that source Program. The **items per cycle** total adds the configured step counts, including unavailable sources; it does not promise that every item is currently playable.
+![Sequence ordering with Chance selected and an optional stable seed](/screenshots/program-sequence-ordering.png)
+
+When you choose **Chance**, enter a percentage for each step. A 30% step has a 30% chance to play one clip each cycle. A 0% step never plays, and a 100% step always tries to play. For example, a 100% bumper and a 30% promo average about 23% promos by clip count when both sources can supply clips. With **Repeat sequence** enabled, cycles where every step misses are skipped without taking airtime.
+
+You can assign any Sequence as a **Source Program** for [filler](/filler/presets#keep-filler-varied). The filler preset controls the number of clips or the time available for the break.
+
+### Inspect a Sequence
+
+The inspector’s **Sequence Configuration** shows each source as a numbered block with a media preview and its count or chance. Counted modes show the total configured clips per cycle. Chance shows the most clips that could play in one cycle. A small **more** tile appears after the thumbnails when the source contains additional items. Select a block to inspect that source Program.
 
 ![Sequence Configuration with numbered source previews and selections per cycle](/screenshots/program-sequence-inspector.png)
 
-The Programs list and inspector’s source preview show distinct media from the Sequence’s sources; they do not predict playback order or step counts.
+The Programs list and inspector’s source preview sample distinct media from the Sequence’s eligible sources independently of playback order and step counts. Steps set to 0% in Chance mode are excluded from the Sequence’s health, item counts, and source preview.
 
 ### Preview a Sequence’s day
 
@@ -196,7 +204,7 @@ The Sequence editor and inspector include a **Guide preview** of one sample day,
 
 ![Sequence guide preview with a four-hour view, colored selections, and numbered entry legend](/screenshots/program-sequence-guide.png)
 
-The sample updates automatically when you change steps, counts, repeat, ordering, or an active shuffle seed. Use **Refresh** to manually reload the sample.
+The sample updates automatically when you change steps, quantities, repeat, ordering, or an active stable seed. Use **Refresh** to manually reload the sample.
 
 This preview does not advance any Channel’s playback progress or predict an existing Channel’s current lineup. A Sequence with **Repeat sequence** disabled leaves a gap after it finishes. Unavailable sources and other scheduling issues appear below the preview.
 

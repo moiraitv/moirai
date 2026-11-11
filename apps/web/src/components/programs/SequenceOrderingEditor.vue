@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ListOrdered, Shuffle, Dices, Rows3 } from '@lucide/vue';
+import { ListOrdered, Shuffle, Dices, Rows3, Percent } from '@lucide/vue';
 import type { SequenceOrdering } from '@moirai/shared';
 defineProps<{ modelValue: SequenceOrdering['type']; seed: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: SequenceOrdering['type']]; 'update:seed': [value: string] }>();
@@ -10,11 +10,12 @@ const modes = [
 	{ id: 'shuffled-blocks', label: 'Shuffled blocks', detail: 'Shuffle the steps each cycle, keeping each step’s selections together.', icon: Shuffle },
 	{ id: 'shuffled-allocations', label: 'Shuffled allocations', detail: 'Mix selections across steps while keeping each step’s count.', icon: Dices },
 	{ id: 'balanced-rotation', label: 'Balanced rotation', detail: 'Spread each step’s selections through the cycle, avoiding consecutive turns when possible.', icon: Rows3 },
+	{ id: 'chance', label: 'Chance', detail: 'Give each step its own chance to play one item per cycle, in the listed order.', icon: Percent },
 ] as const;
 </script>
 
 <template>
-	<section class="program-editor-section">
+	<section class="program-editor-section sequence-ordering-section">
 		<div class="program-section-heading">
 			<span>2</span>
 			<div class="program-section-heading-copy"><strong>Ordering</strong><p class="program-section-description">Choose how the sequence takes selections from its steps.</p></div>
@@ -25,7 +26,7 @@ const modes = [
 			</button>
 		</div>
 		<p class="program-section-description">Each child program’s Selection and Playback order determine which items it contributes. Sequence ordering arranges those selections; Shuffled allocations and Balanced rotation may change their placement within the cycle.</p>
-		<label v-if="modelValue === 'shuffled-blocks' || modelValue === 'shuffled-allocations'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="emit('update:seed', ($event.target as HTMLInputElement).value)" /></label>
+		<label v-if="modelValue === 'shuffled-blocks' || modelValue === 'shuffled-allocations' || modelValue === 'chance'" class="strategy-seed-field"><span>Stable seed</span><input :value="seed" placeholder="Optional deterministic seed" @input="emit('update:seed', ($event.target as HTMLInputElement).value)" /></label>
 		<div class="program-playback-state">
 			<div class="program-playback-state-summary"><strong>Playback progress</strong></div>
 			<p>When assigned directly to a channel, this program continues from its saved position automatically. In a template, each slot can continue from its saved position or restart each day.</p>

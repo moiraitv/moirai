@@ -5,7 +5,7 @@ import type {
 	ScheduleTemplateCreate,
 	SchedulingProgram,
 } from '@moirai/shared';
-import { isFillerProgram, SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
+import { SECONDS_PER_SCHEDULING_DAY } from '@moirai/shared';
 
 /** Report an invalid relationship between authored scheduling resources. */
 export class SchedulingValidationError extends Error {
@@ -21,16 +21,10 @@ function referencedProgramIds(config: ProgramConfig): string[] {
 		: config.type === 'similarity' ? [config.sourceProgramId] : [];
 }
 
-/** Reject missing or composite filler sources before persistence or planning. */
+/** Reject missing filler sources before persistence. */
 export function assertFillerProgram(filler: Pick<FillerConfig, 'programId'> | null | undefined, programs: ReadonlyMap<string, SchedulingProgram>): void {
-	if (filler) {
-		const program = programs.get(filler.programId);
-		if (!program) {
-			throw new SchedulingValidationError(`Filler program ${filler.programId} does not exist`);
-		}
-		if (!isFillerProgram(program)) {
-			throw new SchedulingValidationError('Sequence Programs cannot be used as filler sources');
-		}
+	if (filler && !programs.has(filler.programId)) {
+		throw new SchedulingValidationError(`Filler program ${filler.programId} does not exist`);
 	}
 }
 

@@ -233,18 +233,19 @@ describe('sequence ordering', () => {
 		expect(JSON.stringify(parent).length).toBeLessThan(3000);
 	});
 
-	it.each(modes.slice(1, 3))('uses generation randomness unless an explicit seed is set for $type', (ordering) => {
-		const initial = fixture(ordering);
+	it.each([...modes.slice(1, 3), { type: 'chance', seed: 'test' }] satisfies SequenceOrdering[])('uses generation randomness unless an explicit seed is set for $type', (ordering) => {
+		const counts = ordering.type === 'chance' ? [30, 60, 100] : undefined;
+		const initial = fixture(ordering, true, counts);
 		const first = generateTimelineDetailed(initial);
 		expect(generateTimelineDetailed({ ...initial, schedule: { ...initial.schedule, generationSeed: uuid(800) } }).segments).toEqual(first.segments);
-		const unseeded = fixture({ ...ordering, seed: '' } as SequenceOrdering);
+		const unseeded = fixture({ ...ordering, seed: '' } as SequenceOrdering, true, counts);
 		const a = generateTimelineDetailed({ ...unseeded, schedule: { ...unseeded.schedule, generationSeed: uuid(800) } });
 		const b = generateTimelineDetailed({ ...unseeded, schedule: { ...unseeded.schedule, generationSeed: uuid(801) } });
 		expect(primaryTitles(a)).not.toEqual(primaryTitles(b));
 	});
 });
 
-it.each(modes)('loads saved $type configuration and progress after a database restart', async (ordering) => {
+it.each([...modes, { type: 'chance', seed: 'test' }] satisfies SequenceOrdering[])('loads saved $type configuration and progress after a database restart', async (ordering) => {
 	const directory = await mkdtemp(path.join(tmpdir(), 'moirai-sequence-'));
 	const databasePath = path.join(directory, 'test.sqlite');
 	let database = createDatabase(databasePath, path.resolve('drizzle'));
@@ -441,4 +442,31 @@ it.each(['shuffle', 'random', 'weighted-random'] as const)('keeps %s avoidance o
 	expect(disabled.proposedState).toEqual(baseline.proposedState);
 	const allOccupied = initial.catalog.media.map(item => ({ ...occupiedMedia[0]!, mediaItemId: item.id }));
 	expect(generateTimelineDetailed({ ...initial, occupiedMedia: allOccupied }).segments).toEqual(baseline.segments);
+});
+
+it('rolls each Chance step once per pass and never selects a zero-percent step', () => {
+	const ordering = { type: 'chance', seed: 'ad-demo' } as const;
+	const finite = generateTimelineDetailed(fixture(ordering, false, [0, 30, 100]));
+	expect(primaryTitles(finite)).toEqual(['Item 2', 'Item 3']);
+	const repeating = fixture(ordering, true, [0, 30, 100]);
+	const titles = primaryTitles(generateTimelineDetailed(repeating));
+	expect(titles.slice(0, 6)).toEqual(['Item 2', 'Item 3', 'Item 3', 'Item 3', 'Item 2', 'Item 3']);
+	expect(primaryTitles(generateTimelineDetailed(repeating))).toEqual(titles);
+});
+
+it('skips empty repeating Chance cycles without airtime and ends an empty finite pass', () => {
+	const ordering = { type: 'chance', seed: 'test' } as const;
+	const repeating = generateTimelineDetailed(fixture(ordering, true, [1, 0, 0]));
+	expect(primaryTitles(repeating)).toHaveLength(24);
+	const state = repeating.proposedState.find(record => record.value.type === 'sequence')?.value;
+	expect(state?.type === 'sequence' && state.rotation?.cycle).toBeGreaterThan(23);
+	expect(primaryTitles(generateTimelineDetailed(fixture(ordering, false, [1, 0, 0])))).toEqual([]);
+	expect(primaryTitles(generateTimelineDetailed(fixture(ordering, true, [0, 0, 0])))).toEqual([]);
+});
+
+it('validates Chance percentages without allowing zero counted selections', () => {
+	const config = fixture({ type: 'chance', seed: 'test' }, true, [0, 30, 100]).programs.at(-1)!.config;
+	expect(programConfigSchema.safeParse(config).success).toBe(true);
+	expect(programConfigSchema.safeParse({ ...config, ordering: { type: 'ordered' } }).success).toBe(false);
+	expect(programConfigSchema.safeParse(fixture({ type: 'chance', seed: '' }, true, [101]).programs.at(-1)!.config).success).toBe(false);
 });

@@ -1,6 +1,7 @@
 import { similarityProgramStatus } from '../semantic/status.js';
 import {
 	PROGRAM_PREVIEW_ITEM_LIMIT,
+	eligibleSequenceEntries,
 	type ProgramConfig,
 	type SchedulingCatalog,
 	type SchedulingProgram,
@@ -165,7 +166,7 @@ export function schedulingProgramStatuses(
 		}
 
 		const nextAncestry = new Set(ancestry).add(program.id);
-		const children = program.config.entries.map((entry) => {
+		const children = eligibleSequenceEntries(program.config).map((entry) => {
 			const child = byId.get(entry.programId);
 			if (!child || nextAncestry.has(entry.programId)) {
 				return {

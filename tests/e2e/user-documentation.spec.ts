@@ -190,9 +190,10 @@ test('captures Programs', { tag: '@docs-screenshot' }, async ({ page, documentat
 	await expect(page.locator('.sequence-guide-preview').getByRole('status')).toHaveCount(0);
 	await captureThrough(page, sequenceEditor.locator('.sequence-editor-section'), sequenceEditor.locator('.strategy-card-grid'), 'program-sequence-create.png');
 	await expect(page.getByRole('button', { name: /^Ordered Play/ })).toHaveAttribute('aria-pressed', 'true');
-	await page.getByRole('button', { name: /^Shuffled blocks/ }).click();
+	await page.getByRole('button', { name: /^Chance / }).click();
+	await page.getByRole('spinbutton', { name: 'Step 2 chance (%)', exact: true }).fill('30');
 	await page.getByRole('textbox', { name: 'Stable seed' }).fill('cartoon-demo');
-	await captureSection(page, page.locator('.program-editor-section').filter({ has: page.getByRole('button', { name: /^Shuffled blocks/ }) }), 'program-sequence-ordering.png');
+	await captureSection(page, page.locator('.program-editor-section').filter({ has: page.getByRole('button', { name: /^Chance / }) }), 'program-sequence-ordering.png');
 	await page.getByRole('button', { name: /^Balanced rotation/ }).click();
 	await expect(page.getByRole('textbox', { name: 'Stable seed' })).toHaveCount(0);
 

@@ -257,14 +257,24 @@ const form = reactive({
 	seed: '',
 	sequenceOrdering: 'ordered' as SequenceOrdering['type'],
 	repeat: true,
-	entries: [] as Array<{ id: string; programId: string; count: number }>,
+	entries: [] as Array<{ id: string; programId: string; count: number; chance: number }>,
 });
 const supportsContentExclusions = computed(() => form.sourceType !== 'item' && form.sourceType !== 'group');
 const aiDraft = useProgramDraft(form, () => editingId.value ?? 'new', () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${editingId.value ?? 'new'}`, () => isDirty.value);
 const { generation: aiGeneration, warning: aiDraftWarning } = aiDraft;
-const originalSnapshot = ref(JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT }));
+const originalSnapshot = ref(draftSnapshot());
 const previewProgramNames = computed(() => new Map(programs.value.map(program => [program.id, program.name])));
-const isDirty = computed(() => JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT }) !== originalSnapshot.value);
+const isDirty = computed(() => draftSnapshot() !== originalSnapshot.value);
+
+/** Compare the active draft while retaining alternate Sequence quantities for mode switches. */
+function draftSnapshot(): string {
+	const draft = { ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT };
+	if (form.type === 'sequence') {
+		const ordering = sequenceOrdering();
+		return JSON.stringify({ ...draft, entries: sequenceEntries(), seed: 'seed' in ordering ? ordering.seed : '' });
+	}
+	return JSON.stringify(draft);
+}
 
 /** Initialize the form from an existing program or safe defaults for a new content rule. */
 function resetForm(program?: SchedulingProgram): void {
@@ -371,7 +381,11 @@ function resetForm(program?: SchedulingProgram): void {
 		form.sequenceOrdering = program.config.ordering?.type ?? 'ordered';
 		form.seed = program.config.ordering && 'seed' in program.config.ordering ? program.config.ordering.seed : '';
 		form.repeat = program.config.repeat;
-		form.entries = cloneContractValue(program.config.entries);
+		form.entries = program.config.entries.map(entry => ({
+			...entry,
+			count: form.sequenceOrdering === 'chance' ? 1 : entry.count,
+			chance: form.sequenceOrdering === 'chance' ? entry.count : 100,
+		}));
 	}
 	if (!program) {
 		form.kinds = [...libraryQueryKinds.value];
@@ -379,7 +393,7 @@ function resetForm(program?: SchedulingProgram): void {
 	sourceParentId.value = undefined;
 	sourcePage.value = 1;
 	sourceSearch.value = '';
-	originalSnapshot.value = JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT });
+	originalSnapshot.value = draftSnapshot();
 }
 
 /** Restore browser-owned AI work after loading the current saved program. */
@@ -780,16 +794,21 @@ function changeSourcePage(page: number): void {
 
 /** Serialize only settings used by the selected sequence ordering mode. */
 function sequenceOrdering(): SequenceOrdering {
-	return form.sequenceOrdering === 'shuffled-blocks' || form.sequenceOrdering === 'shuffled-allocations'
+	return form.sequenceOrdering === 'shuffled-blocks' || form.sequenceOrdering === 'shuffled-allocations' || form.sequenceOrdering === 'chance'
 		? { type: form.sequenceOrdering, seed: form.seed }
 		: { type: form.sequenceOrdering };
+}
+
+/** Serialize only the quantities belonging to the active Sequence mode. */
+function sequenceEntries() {
+	return form.entries.map(({ id, programId, count, chance }) => ({ id, programId, count: form.sequenceOrdering === 'chance' ? chance : count }));
 }
 
 /** Append a sequence entry using the first program other than the one being edited. */
 function addSequenceEntry(): void {
 	const candidate = programs.value.find((program) => program.id !== editingId.value);
 	if (candidate) {
-		form.entries.push({ id: randomUuid(), programId: candidate.id, count: 1 });
+		form.entries.push({ id: randomUuid(), programId: candidate.id, count: 1, chance: 100 });
 	}
 }
 
@@ -813,9 +832,18 @@ function payload(): ProgramCreate {
 			audioPreferences: form.audioPreferences } };
 	}
 	if (form.type === 'sequence') {
+		const ordering = sequenceOrdering();
 		return {
 			name: form.name,
-			config: { type: 'sequence', ordering: sequenceOrdering(), entries: form.entries, repeat: form.repeat, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences },
+			config: {
+				type: 'sequence',
+				ordering,
+				entries: sequenceEntries(),
+				repeat: form.repeat,
+				graphicsAssignment: form.graphicsAssignment,
+				subtitlePreferences: form.subtitlePreferences,
+				audioPreferences: form.audioPreferences,
+			},
 		};
 	}
 
@@ -923,7 +951,7 @@ async function save(stayOnPage = false): Promise<boolean> {
 		resetForm(saved);
 		form.aiResultLimit = requestedCount;
 		savedIdentity.value = saved.id;
-		originalSnapshot.value = JSON.stringify({ ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT });
+		originalSnapshot.value = draftSnapshot();
 		if (!props.embedded && !stayOnPage) {
 			allowRouteLeave = true;
 			try {
@@ -1231,6 +1259,7 @@ watch(() => [form.type, form.sourceType], () => {
 								v-else
 								v-model:entries="form.entries"
 								v-model:repeat="form.repeat"
+								:chance="form.sequenceOrdering === 'chance'"
 								:programs="programs"
 								:editing-id="editingId"
 								@add="addSequenceEntry"

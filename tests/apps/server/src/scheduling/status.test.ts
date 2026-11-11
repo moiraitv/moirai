@@ -253,3 +253,26 @@ it('samples bounded distinct previews across sequence sources and nested sequenc
 	expect(statuses[4]!.previewItems).toEqual([]);
 	expect(statuses[1]!.indexedItemCount).toBe(PROGRAM_PREVIEW_ITEM_LIMIT * 3);
 });
+
+it.each([0, 30])('summarizes eligible Chance sources when the first step is set to %i%%', (chance) => {
+	const fixture = catalog('available');
+	const active = fixture.media[0]!;
+	const disabled = { ...active, id: 'disabled-media', title: 'Disabled film' };
+	const unavailable = { ...active, id: 'unavailable-media', availability: 'unconfirmed' as const };
+	fixture.media.push(disabled, unavailable);
+	const sources: SchedulingProgram[] = [active, disabled, unavailable].map(item => ({
+		...program, id: `source-${item.id}`, config: { type: 'content', source: { type: 'item', itemId: item.id }, strategy: { type: 'sequential' } },
+	}));
+	const sequence: SchedulingProgram = { ...program, id: 'chance', config: {
+		type: 'sequence', repeat: true, ordering: { type: 'chance', seed: '' },
+		entries: sources.map(({ id }, index) => ({ id: `step-${index}`, programId: id, count: index === 0 ? chance : 0 })),
+	} };
+
+	const [status] = schedulingProgramStatuses([sequence, ...sources], fixture);
+	expect(status).toMatchObject({
+		health: chance ? 'ready' : 'empty',
+		indexedItemCount: chance ? 1 : 0,
+		availableItemCount: chance ? 1 : 0,
+	});
+	expect(status!.previewItems.map(item => item.id)).toEqual(chance ? [active.id] : []);
+});

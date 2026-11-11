@@ -663,7 +663,9 @@ components, an inline desktop layout, and a focus-trapped drawer on smaller view
 selected Program loads paginated usage details; rows derive reference counts from the overview.
 Semantic previews remain samples rather than committed sets, and inspection does not alter generation.
 Sequence previews sample distinct media across child previews in source order, bounded by the shared
-preview limit, without running selection or changing sequence counts. Sequence inspection also shows
+preview limit, without running selection or changing sequence counts. Chance steps at 0% are excluded
+from aggregate Sequence health, item counts, source previews, catalog loads, and schedule input
+fingerprints. Authored references still participate in validation. Sequence inspection also shows
 ordered, numbered source blocks with responsive thumbnails from the loaded status map and a sum of
 configured selections per cycle; source navigation does not fetch additional preview data.
 Inspector, list, and editor deletion use the shared permanent-deletion modal confirmation.
@@ -1105,14 +1107,16 @@ Program: Weeknight Mix
 ```
 
 Sequences default to authored order and also support shuffled blocks, shuffled allocations with exact
-per-entry quotas, and proportional balanced rotation. Shuffle modes accept stable seeds and inherit
-channel regeneration randomness when unseeded. Balanced rotation avoids the previous entry when
+per-entry quotas, proportional balanced rotation, and independent per-step Chance ordering. Shuffle
+and Chance modes accept stable seeds and inherit channel regeneration randomness when unseeded. Balanced rotation avoids the previous entry when
 another remains, breaking proportional-deficit ties by authored order. Counts measure leaf selections,
 including nested sequences. Parent cycle state is bounded by entry count and persists independently
-of child cursors. Primary shuffled blocks retain their existing handoff rules. Explicit Ordered and legacy
+of child cursors. Chance yields at most one leaf selection per step in authored order. Repeating
+Chance samples past empty passes in work bounded by entry count, and fit probes preserve the
+current pass. Primary shuffled blocks retain their existing handoff rules. Explicit Ordered and legacy
 omitted ordering preserve existing progress, including preference-bearing legacy fingerprints; ordering
 changes restart the parent cycle without resetting child episode progress. User-guide example schedules
-cover movie shuffles, genre double features, sitcom rotations, all four sequence modes, and a weekend
+cover movie shuffles, genre double features, sitcom rotations, the four counted sequence modes, and a weekend
 template variation.
 Sequence editor and inspector previews generate a fresh sample day through the read-only scheduling
 worker, scoped to reachable saved child Programs and an unsaved parent configuration. A four-hour
@@ -1220,13 +1224,19 @@ eligible cycle is appended behind them only after whole-stage-eligible membershi
 No item is queued twice. A smaller remainder cannot prematurely replenish a cycle, and collision
 preference never spends membership. Truncating policies search complete fits first, then consume a
 truncated queued item. Legacy policy values remain accepted as whole-item or truncation aliases.
-Semantic filler carries deferred members ahead of new ranked sets. Filler sources accept Content,
-Similar Items, and Theme Programs; editors and server validation exclude Sequence Programs.
+Semantic filler carries deferred members ahead of new ranked sets. Sequence filler composes the
+existing leaf queues under independent step cursors. Whole-clip searches may pass over an unfit
+turn. Repeating Sequences carry at most one outstanding allocation per oversized step across
+cycles, servicing it before active turns when it fits. A turn that fits the full stage prevents
+refilling just to fill a smaller remainder. Parent and child progress commit with the emitted
+span, including after resuming legacy tail state. Each proposed filler clip searches at most 512
+nested Sequence turns across its whole-clip and truncation attempts.
 Catalog indexes append to owned arrays, and seeded ordering computes each candidate key once.
 Candidate membership indexes are shared within a generation without caching position-dependent fit
 or collision results. Speculative filler branches replace borrowed queue arrays before mutation.
 Accepted airings commit state only for emitted spans; tail continuation starts from explicit initial
-stage progress. Complete per-segment selection checkpoints and persisted formats remain unchanged.
+stage progress. Per-segment checkpoints and preview responses carry optional waiting and deferred
+Sequence turns. The existing JSON storage accepts prior cursor values.
 
 Each generation indexes other-channel occupancy by media item once and shares that lookup with
 speculative filler selection, avoiding full schedule scans for each candidate.

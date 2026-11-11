@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { isFillerProgram, canonicalFillerPolicy } from '@moirai/shared';
+import { canonicalFillerPolicy } from '@moirai/shared';
 import { Pencil } from '@lucide/vue';
 import type { FillerConfig, SchedulingProgram } from '@moirai/shared';
 
@@ -12,11 +11,10 @@ const emit = defineEmits<{
 	'update:modelValue': [value: FillerConfig | null];
 	'edit-program': [programId: string];
 }>();
-const fillerPrograms = computed(() => props.programs.filter(isFillerProgram));
 
 /** Enable channel fallback filler with the first program, or remove its configuration. */
 function toggleFiller(enabled: boolean): void {
-	const programId = fillerPrograms.value[0]?.id;
+	const programId = props.programs[0]?.id;
 	emit(
 		'update:modelValue',
 		enabled && programId ? { programId, policy: 'best-fit-or-truncate' } : null,
@@ -54,7 +52,7 @@ function programName(id: string): string {
 				<input
 					type="checkbox"
 					:checked="modelValue !== null"
-					:disabled="!modelValue && fillerPrograms.length === 0"
+					:disabled="!modelValue && programs.length === 0"
 					@change="toggleFiller(($event.target as HTMLInputElement).checked)"
 				/>
 				<span>Configure channel filler</span>
@@ -66,7 +64,7 @@ function programName(id: string): string {
 							:value="modelValue.programId"
 							@change="updateProgram(($event.target as HTMLSelectElement).value)"
 						>
-							<option v-for="program in fillerPrograms" :key="program.id" :value="program.id">
+							<option v-for="program in programs" :key="program.id" :value="program.id">
 								{{ program.name }}
 							</option>
 						</select>

@@ -59,3 +59,22 @@ it.each(['legacy', 'current'] as const)('invalidates a committed input when a %s
 	expect(inputFingerprint(schedule, [], [program], { ...catalog, mediaAliases: { unrelated: 'selected' } })).toBe(committed);
 	expect(inputFingerprint(schedule, [], [program], { ...catalog, mediaAliases: { absorbed: 'selected' } })).not.toBe(committed);
 });
+
+it('ignores edits to a source while its Chance step is disabled', () => {
+	const config = { type: 'theme', libraryId: 'library', theme: 'Space', variety: 35, quantity: 3 } as const;
+	const theme: SchedulingProgram = { id: 'theme', name: 'Theme', createdAt: '', updatedAt: '', config };
+	const edited: SchedulingProgram = { ...theme, config: { ...config, theme: 'Ocean' } };
+	const schedule = { channelId: 'channel', defaultTemplateId: null, defaultProgramId: 'sequence', layers: [], defaultFiller: null, createdAt: '', updatedAt: '' };
+	const catalog = { media: [], groupParents: {}, groupTitles: {}, libraryNames: {}, libraryAvailability: {} };
+	const fingerprint = (count: number, source: SchedulingProgram) => inputFingerprint(schedule, [], [
+		{ id: 'sequence', name: 'Chance', createdAt: '', updatedAt: '', config: { type: 'sequence', repeat: true,
+			ordering: { type: 'chance', seed: '' }, entries: [{ id: 'step', programId: source.id, count }] } },
+		source,
+	], catalog);
+
+	const disabled = fingerprint(0, theme);
+	const enabled = fingerprint(30, theme);
+	expect(fingerprint(0, edited)).toBe(disabled);
+	expect(enabled).not.toBe(disabled);
+	expect(fingerprint(30, edited)).not.toBe(enabled);
+});

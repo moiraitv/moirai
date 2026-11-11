@@ -3,14 +3,15 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from '@lucide/vue';
 import type { SchedulingProgram } from '@moirai/shared';
 import TwoStepActionButton from '../TwoStepActionButton.vue';
 
-/** One counted program reference in a composite sequence. */
+/** One draft step, with separate values for counted and chance ordering. */
 interface SequenceEntry {
 	id: string;
 	programId: string;
 	count: number;
+	chance: number;
 }
 
-const props = defineProps<{ entries: SequenceEntry[]; programs: SchedulingProgram[]; editingId: string | null; repeat: boolean }>();
+const props = defineProps<{ entries: SequenceEntry[]; programs: SchedulingProgram[]; editingId: string | null; repeat: boolean; chance: boolean }>();
 const emit = defineEmits<{ add: []; move: [index: number, direction: -1 | 1]; remove: [index: number]; 'update:entries': [entries: SequenceEntry[]]; 'update:repeat': [repeat: boolean] }>();
 
 /** Update one sequence entry without mutating the parent's array in place. */
@@ -25,7 +26,7 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 			<span>1</span>
 			<div class="program-section-heading-copy">
 				<strong>Sequence steps</strong>
-				<p class="program-section-description">Combine existing programs in a counted custom order.</p>
+				<p class="program-section-description">{{ chance ? 'Set the chance (%) that each step plays one item per cycle.' : 'Combine existing programs in a counted custom order.' }}</p>
 			</div>
 		</div>
 		<div class="program-sequence-panel">
@@ -33,8 +34,8 @@ function updateEntry(index: number, update: Partial<SequenceEntry>): void {
 				<span class="sequence-entry-ordinal" :aria-label="`Step ${index + 1}`">{{ index + 1 }}</span>
 				<div class="sequence-entry-fields">
 					<div class="sequence-entry-selection">
-						<input :aria-label="`Step ${index + 1} count`" :value="entry.count" type="number" inputmode="numeric" min="1" max="10000" @input="updateEntry(index, { count: Number(($event.target as HTMLInputElement).value) })" />
-						<span>×</span>
+						<input :aria-label="`Step ${index + 1} ${chance ? 'chance (%)' : 'count'}`" :value="chance ? entry.chance : entry.count" type="number" inputmode="numeric" :min="chance ? 0 : 1" :max="chance ? 100 : 10000" @input="updateEntry(index, { [chance ? 'chance' : 'count']: ($event.target as HTMLInputElement).valueAsNumber })" />
+						<span aria-hidden="true">{{ chance ? '%' : '×' }}</span>
 						<select :aria-label="`Step ${index + 1} Program`" :value="entry.programId" @change="updateEntry(index, { programId: ($event.target as HTMLSelectElement).value })">
 							<option v-for="candidate in programs.filter((candidate) => candidate.id !== editingId)" :key="candidate.id" :value="candidate.id">{{ candidate.name }}</option>
 						</select>

@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, MAX_TIMELINE_SEGMENTS, type FillerBudget, type SelectionStateRecord } from '@moirai/shared';
 import { TimelineMaterializationLimitError } from './limits.js';
-import { changedStateRecords, selectProgram, type SelectionContext } from './selection.js';
+import { addIssue, changedStateRecords, selectProgram, type SelectionContext } from './selection.js';
+import { SEQUENCE_FILLER_PROBE_LIMIT } from './sequence-filler.js';
 import type { AiringSpan } from './mid-roll.js';
-import { assertFillerProgram } from './validation.js';
 import { durationMilliseconds } from '@moirai/shared';
 
 /** Sample a reproducible quantity without consuming state during candidate evaluation. */
@@ -70,9 +70,6 @@ export function planFiller(
 	progress: FillerProgress | undefined = undefined,
 	maxSpans = MAX_TIMELINE_SEGMENTS,
 ): { spans: AiringSpan[]; state: Map<string, SelectionStateRecord>; durationSeconds: number; initialProgress: FillerProgress; progress: FillerProgress } {
-	if (context.programs.get(programId)?.config.type === 'sequence') {
-		assertFillerProgram({ programId }, context.programs);
-	}
 	context.fillerSemanticSources ??= new Map();
 	context.candidateIndexes ??= new WeakMap();
 	let state = sourceState;
@@ -89,16 +86,22 @@ export function planFiller(
 		remaining.fullBudgetSeconds = fullBudgetSeconds;
 	}
 	const initialProgress = { ...remaining };
+	const sequence = context.programs.get(programId)?.config.type === 'sequence';
 	let remainingQuantity = remaining.unit === 'seconds' ? durationMilliseconds(remaining.remaining) : remaining.remaining;
 	while (remainingQuantity > 0 && elapsedMilliseconds < availableMilliseconds) {
 		const capacityMilliseconds = Math.min(availableMilliseconds - elapsedMilliseconds, remaining.unit === 'seconds' ? remainingQuantity : availableMilliseconds);
-		const selectionContext = { ...context, mediaDuration: undefined, fillerSelection: { fullBudgetSeconds, allowTruncation },
+		const probes = sequence ? { remaining: SEQUENCE_FILLER_PROBE_LIMIT } : undefined;
+		const selectionContext = { ...context, mediaDuration: undefined, fillerSelection: { fullBudgetSeconds, allowTruncation, probes },
 			selectionStart: new Date(stageStartMilliseconds + elapsedMilliseconds).toISOString() };
 		let selected = selectProgram(programId, consumerKey, state, selectionContext, capacityMilliseconds / 1_000, 'first-fit-arbitrary');
-		if (!selected && allowTruncation) {
+		if (!selected && allowTruncation && (!probes || probes.remaining > 0)) {
 			selected = selectProgram(programId, consumerKey, state, selectionContext);
 		}
 		if (!selected) {
+			if (probes?.remaining === 0) {
+				addIssue(selectionContext, { code: 'source-unavailable', programId, mediaItemId: null,
+					message: `Sequence filler reached its ${SEQUENCE_FILLER_PROBE_LIMIT}-step search limit. Simplify nested Sequences or use clips that fit the break.` });
+			}
 			break;
 		}
 		const naturalMilliseconds = durationMilliseconds(selected.media.durationSeconds!);

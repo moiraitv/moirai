@@ -388,8 +388,12 @@
 
 .strategy-card-grid {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: repeat(var(--strategy-card-columns, 4), minmax(0, 1fr));
 	gap: 10px;
+}
+
+.sequence-ordering-section {
+	--strategy-card-columns: 5;
 }
 
 .strategy-card-grid + .program-section-description {
@@ -400,10 +404,11 @@
 	position: relative;
 	min-height: 170px;
 	padding: 18px 12px;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
+	display: grid;
+	grid-row: span 3;
+	grid-template-rows: subgrid;
+	align-items: start;
+	justify-items: center;
 	gap: 10px;
 	border: 1px solid var(--line-bright);
 	border-radius: var(--radius-control);
@@ -445,6 +450,8 @@
 }
 
 .strategy-card-grid button > span:last-child {
+	// Keep the cards tall enough when the descriptions are short.
+	min-height: 4lh;
 	color: var(--muted-strong);
 	font-size: 0.71rem;
 	line-height: 1.45;

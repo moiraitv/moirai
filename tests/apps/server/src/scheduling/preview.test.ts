@@ -582,23 +582,24 @@ it('uses the configured horizon for worker materialization, XMLTV, and guide bou
 	await expect(f.workers.read({ kind: 'guide', ...request, days: guideDays + 1 })).rejects.toThrow(/committed/i);
 }, 30_000);
 
-it.each(['ordered', 'shuffled-blocks', 'shuffled-allocations', 'balanced-rotation'] as const)('previews fresh $0 sequences with distinct entry attribution and no writes', async type => {
+it.each(['ordered', 'shuffled-blocks', 'shuffled-allocations', 'balanced-rotation', 'chance'] as const)('previews fresh $0 sequences with distinct entry attribution and no writes', async type => {
 	const f = await setup();
 	const a = randomUUID();
 	const b = randomUUID();
+	const chance = type === 'chance';
 	const request: Extract<PreviewRequest, { kind: 'sequence' }> = { kind: 'sequence', timeZone: 'UTC', input: {
 		id: randomUUID(), startDate: '2026-09-19', config: {
 			type: 'sequence', repeat: false,
-			ordering: type === 'shuffled-blocks' || type === 'shuffled-allocations' ? { type, seed: 'fixture' } : { type },
-			entries: [{ id: a, programId: f.source.id, count: 2 }, { id: b, programId: f.source.id, count: 1 }],
+			ordering: type === 'shuffled-blocks' || type === 'shuffled-allocations' || type === 'chance' ? { type, seed: 'fixture' } : { type },
+			entries: [{ id: a, programId: f.source.id, count: chance ? 100 : 2 }, { id: b, programId: f.source.id, count: chance ? 100 : 1 }],
 		},
 	} };
 	const before = f.database.sqlite.serialize();
 	const result = await f.workers.preview(request);
 	const primary = result.segments.filter(segment => segment.role === 'primary');
-	expect(primary).toHaveLength(3);
+	expect(primary).toHaveLength(chance ? 2 : 3);
 	expect(timelinePreviewSchema.parse(result).segments.filter(segment => segment.role === 'primary').map(segment => segment.sequenceEntryPath)).toEqual(primary.map(segment => segment.sequenceEntryPath));
-	expect(primary.filter(segment => segment.sequenceEntryPath?.[0] === a)).toHaveLength(2);
+	expect(primary.filter(segment => segment.sequenceEntryPath?.[0] === a)).toHaveLength(chance ? 1 : 2);
 	expect(primary.filter(segment => segment.sequenceEntryPath?.[0] === b)).toHaveLength(1);
 	expect(result.segments.some(segment => segment.role === 'dead-air')).toBe(true);
 	expect(await f.workers.preview(request)).toEqual(result);
@@ -635,6 +636,31 @@ it.each([
 	expect(result.startDate).toBe(startDate);
 	expect(result.days).toBe(1);
 	expect(result.segments[0]!.start).toBe(midnight);
+}, 20_000);
+
+it.each([false, true])('preserves Sequence filler turns in preview responses with repeat = %s', async repeat => {
+	const f = await setup();
+	const shortId = f.ids[1]!;
+	f.database.sqlite.prepare('UPDATE media_items SET duration_seconds=60, duration_milliseconds=60000 WHERE id = ?').run(shortId);
+	f.repository.invalidateSchedulingCatalog();
+	const short = await f.repository.createProgram({ name: 'Short clip', config: {
+		type: 'content', source: { type: 'item', itemId: shortId }, strategy: { type: 'sequential' },
+	} });
+	const sequence = await f.repository.createProgram({ name: 'Filler sequence', config: { type: 'sequence', repeat,
+		entries: [f.source, short].map(child => ({ id: randomUUID(), programId: child.id, count: 1 })),
+	} });
+	const { preset } = await f.repository.fillerPresets.save({ kind: 'pre-roll', name: 'One minute', description: '',
+		budget: { type: 'duration', seconds: 60, policy: 'next-fit-only' } });
+	const request = await channel(f);
+	await f.repository.updateScheduleTemplate(request.input.schedule.defaultTemplateId!, { defaultPreRoll: { presetId: preset.id, programId: sequence.id } });
+
+	const result = await f.workers.preview(request);
+	const { proposedState } = timelinePreviewSchema.parse(result);
+	expect(result.segments.some(segment => segment.role === 'filler' && segment.mediaItemId === shortId)).toBe(true);
+	expect(proposedState.find(record => record.value.type === 'sequence')?.value).toMatchObject({
+		rotation: repeat ? { deferred: [1, 0] } : { waiting: [0], deferred: [0, 0] },
+	});
+	expect(proposedState).toEqual(result.proposedState);
 }, 20_000);
 
 it('reads roll warning tolerance once per preview and applies it in local and worker generation', async () => {

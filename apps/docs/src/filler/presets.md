@@ -43,9 +43,15 @@ Duration, clock padding, and remaining-slot budgets offer **Fitting Behavior**. 
 
 ### Keep filler varied
 
-Filler sources can use Content, Similar Items, or Theme Programs. Each filler assignment has its own queue, so one channel playing a filler item does not prevent another from using it too. Played items leave that queue and cannot repeat until its eligible items are exhausted.
+Filler sources can use Content, Similar Items, Theme, or Sequence Programs. Each filler assignment tracks its own progress, and each Sequence step has a separate queue. Within a queue, played items cannot repeat until its eligible items are exhausted.
 
 Items that are too long stay at their current queue positions. When no queued item fits the full break budget, Moirai appends a new eligible cycle behind them without including deferred items. A later, larger gap can potentially play those deferred clips. If an unused item fits the full budget but not the remainder of this break, it waits for a later break instead of starting a new cycle. A truncated clip counts as played.
+
+A [Sequence Program](/scheduling/programs#sequence-programs) lets you mix categories across breaks. With **Balanced rotation**, counts of 1/1/1/1 give each step one clip per full cycle. Counts of 3/1/1/1 give the first step three of six clips when all steps can supply clips that fit. With **Chance**, each step has its own chance to supply one clip per cycle.
+
+If a step’s clips do not fit, Moirai tries later steps and keeps the skipped turn pending. If none of the pending turns fit even a full break, a repeating Sequence can give shorter steps another turn while holding the oversized turns for a larger break. With **Allow Truncation**, Moirai tries complete clips across the pending steps before cutting a clip short.
+
+Deeply nested Sequences can reach the filler search limit and end a break early. Schedule diagnostics report when this happens. Simplify the nesting or use clips that fit the break.
 
 Pre-roll, mid-roll, post-roll, tail, and channel fallback retain independent progress for each slot assignment.
 

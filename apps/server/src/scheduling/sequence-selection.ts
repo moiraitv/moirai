@@ -1,16 +1,9 @@
-import { createHash } from 'node:crypto';
-import type { SchedulingProgram, SelectionStateRecord, SelectionStateValue } from '@moirai/shared';
+import type { SchedulingProgram, SelectionStateRecord } from '@moirai/shared';
+import { nextRotation, rotationEntry, type SequenceConfig, type SequenceState } from './sequence-rotation.js';
+import { selectFillerSequence } from './sequence-filler.js';
 import type { SelectionContext, SelectionFitMode, SelectionResult, selectProgram } from './selection.js';
 
-/** Persisted parent progress; child cursors remain independently keyed by entry identity. */
-type SequenceState = Extract<SelectionStateValue, { type: 'sequence' }>;
-
-/** Reproducible unit interval for parent selection, without mutable global randomness. */
-function randomUnit(seed: string): number {
-	return createHash('sha256').update(seed).digest().readUInt32BE(0) / 0x100000000;
-}
-
-/** Select counted child media while committing parent progress only with a successful result. */
+/** Select one leaf and advance the parent only with a successful result. */
 export function selectSequence(
 	program: SchedulingProgram,
 	consumerKey: string,
@@ -25,11 +18,17 @@ export function selectSequence(
 	if (program.config.type !== 'sequence') {
 		return null;
 	}
-	const value = record.value as Extract<SelectionStateValue, { type: 'sequence' }>;
+	const value = record.value as SequenceState;
 	if (value.completed) {
 		return null;
 	}
 
+	if (context.fillerSelection) {
+		return selectFillerSequence(program.config, consumerKey, state, record, context, fitSeconds, [...ancestry, program.id], selectChild);
+	}
+	if (program.config.ordering?.type === 'chance') {
+		return selectChance(program.config, consumerKey, state, record, context, fitSeconds, fitMode, [...ancestry, program.id], selectChild);
+	}
 	if (program.config.ordering && program.config.ordering.type !== 'ordered') {
 		return selectRotation(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectChild);
 	}
@@ -88,39 +87,6 @@ export function selectSequence(
 		}
 	}
 	return null;
-}
-
-/** Choose a quota-bearing entry using block order, random allocation, or proportional deficit. */
-function rotationEntry(
-	config: Extract<SchedulingProgram['config'], { type: 'sequence' }>,
-	rotation: NonNullable<SequenceState['rotation']>,
-	consumerKey: string,
-	excluded: Set<number>,
-): number | undefined {
-	let eligible = rotation.remaining.flatMap((count, index) => count > 0 && !excluded.has(index) ? [index] : []);
-	if (config.ordering?.type === 'shuffled-blocks') {
-		return rotation.order.find((index) => eligible.includes(index));
-	}
-	const total = config.entries.reduce((sum, entry) => sum + entry.count, 0);
-	const consumed = total - rotation.remaining.reduce((sum, count) => sum + count, 0);
-	if (config.ordering?.type === 'balanced-rotation') {
-		if (eligible.some((index) => index !== rotation.lastEntry)) {
-			eligible = eligible.filter((index) => index !== rotation.lastEntry);
-		}
-		return eligible.sort((a, b) => {
-			const deficit = (index: number): number => (consumed + 1) * config.entries[index]!.count
-				- (config.entries[index]!.count - rotation.remaining[index]!) * total;
-			return deficit(b) - deficit(a) || a - b;
-		})[0];
-	}
-
-	const seed = config.ordering && 'seed' in config.ordering ? config.ordering.seed : '';
-	let ticket = randomUnit(`${seed}:${consumerKey}:${rotation.cycle}:${consumed}`)
-		* eligible.reduce((sum, index) => sum + rotation.remaining[index]!, 0);
-	return eligible.find((index) => {
-		ticket -= rotation.remaining[index]!;
-		return ticket < 0;
-	});
 }
 
 /** Spend rotation quotas while preserving primary fit rejection and source blocking. */
@@ -197,20 +163,50 @@ function selectRotation(
 	return null;
 }
 
-/** Begin a cycle without resetting the independently persisted child selections. */
-function nextRotation(
-	config: Extract<SchedulingProgram['config'], { type: 'sequence' }>,
+/** Try successful Chance steps in order without rerolling a turn rejected for primary fit. */
+function selectChance(
+	config: SequenceConfig,
 	consumerKey: string,
-	prior: SequenceState['rotation'],
-): NonNullable<SequenceState['rotation']> {
-	const cycle = prior ? prior.cycle + 1 : 0;
-	const seed = config.ordering && 'seed' in config.ordering ? config.ordering.seed : '';
-	const order = config.entries.map((entry, index) => ({ index, key: randomUnit(`${seed}:${consumerKey}:${cycle}:${entry.id}`) }))
-		.sort((left, right) => left.key - right.key || left.index - right.index).map(entry => entry.index);
-	return {
-		cycle,
-		remaining: config.entries.map((entry) => entry.count),
-		order,
-		lastEntry: prior?.lastEntry ?? null,
-	};
+	state: Map<string, SelectionStateRecord>,
+	record: SelectionStateRecord,
+	context: SelectionContext,
+	fitSeconds: number | null,
+	fitMode: SelectionFitMode,
+	ancestry: string[],
+	selectChild: typeof selectProgram,
+): SelectionResult | null {
+	const value = record.value as SequenceState;
+	const unavailable = new Set<number>();
+	let rotation = value.rotation ?? nextRotation(config, consumerKey);
+
+	// An unsuccessful nonempty pass rules out at least one child for this selection.
+	while (true) {
+		for (const [index, entry] of config.entries.entries()) {
+			if (!rotation.remaining[index]) {
+				continue;
+			}
+
+			const priorFitRejections = context.fitRejectionCount;
+			const selected = selectChild(entry.programId, `${consumerKey}:entry:${entry.id}`, state, context, fitSeconds, fitMode, ancestry);
+			if (selected) {
+				rotation.remaining[index] = 0;
+				value.rotation = rotation;
+				value.completed = !config.repeat && rotation.remaining.every(count => count === 0);
+				record.updatedAt = context.now;
+				selected.sequenceEntryPath = [entry.id, ...(selected.sequenceEntryPath ?? [])];
+				selected.state.set(consumerKey, record);
+				return selected;
+			}
+			if (context.fitRejectionCount > priorFitRejections) {
+				return null;
+			}
+			rotation.remaining[index] = 0;
+			unavailable.add(index);
+		}
+
+		if (!config.repeat || !config.entries.some((entry, index) => entry.count > 0 && !unavailable.has(index))) {
+			return null;
+		}
+		rotation = nextRotation(config, consumerKey, rotation, unavailable);
+	}
 }

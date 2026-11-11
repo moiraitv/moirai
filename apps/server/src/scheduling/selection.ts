@@ -1,6 +1,5 @@
 import { candidateIndex } from './candidate-index.js';
 import { durationMilliseconds } from '@moirai/shared';
-import { assertFillerProgram } from './validation.js';
 import { selectFillerCandidate } from './filler-cycle.js';
 import { selectOrderedCandidate, sequentialCandidateOffset } from './candidate-selection.js';
 import { selectSequence } from './sequence-selection.js';
@@ -36,12 +35,18 @@ export interface SelectionResult {
 /** Constraint used when deciding whether primary content may cross a boundary. */
 export type SelectionFitMode = 'best-fit' | 'first-fit-arbitrary';
 
+/** Distinguish a deferred filler turn from one whose source cannot supply a clip. */
+export interface FillerFit {
+	playable: boolean;
+	wholeStage: boolean;
+}
+
 /** Immutable catalog indexes and mutable proposed state used during selection. */
 export interface SelectionContext {
 	/** Diagnostic tolerance only; never changes filler selection or its state. */
 	fillerShortfallWarningThresholdPercent?: number;
 	/** Filler-only membership and whole-stage budget, independent of the remainder. */
-	fillerSelection?: { fullBudgetSeconds: number; allowTruncation: boolean } | undefined;
+	fillerSelection?: { fullBudgetSeconds: number; allowTruncation: boolean; fit?: FillerFit; probes?: { remaining: number } | undefined } | undefined;
 	/** Cache semantic source membership for carried filler items within one generation. */
 	fillerSemanticSources?: Map<string, Set<string>>;
 	/** Immutable candidate lookups shared by speculative selections in one generation. */
@@ -773,10 +778,6 @@ export function selectProgram(
 	}
 
 	context.candidateIndexes ??= new WeakMap();
-	if (context.fillerSelection) {
-		assertFillerProgram({ programId }, context.programs);
-	}
-
 	const state = new Map(sourceState);
 
 	// Delegate leaf content programs to the configured selection strategy.

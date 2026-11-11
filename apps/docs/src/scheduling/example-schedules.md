@@ -7,7 +7,7 @@ contextual: false
 
 # Example schedules
 
-These recipes show how to turn a viewing idea into Programs, a Template, and a Channel Schedule. examples include a movie channel, genre double features, a sitcom rotation, or a cartoon lineup. The cartoon recipes compare all four Sequence ordering modes using the same counts.
+These recipes show how to turn a viewing idea into Programs, a Template, and a Channel Schedule. Examples include a movie channel, genre double features, a sitcom rotation, or a cartoon lineup. The cartoon recipes compare the four counted Sequence ordering modes using the same counts. See [Chance ordering](/scheduling/programs#use-chance-ordering) for steps that play with a configured probability.
 
 ## A shuffled movie channel
 

@@ -38,4 +38,24 @@ describe('scheduling catalog scopes', () => {
 		expect(scope.sourceLibraryIds).toEqual([libraryId]);
 		expect(scope.libraryIds).toEqual([]);
 	});
+
+	it('scopes catalog data to enabled Chance steps and independently scheduled sources', () => {
+		const libraryId = randomUUID();
+		const itemId = randomUUID();
+		const theme = program({ type: 'theme', libraryId, theme: 'Space', variety: 35, quantity: 3 });
+		const clip = program({ type: 'content', source: { type: 'item', itemId }, strategy: { type: 'sequential' } });
+		const chance = program({ type: 'sequence', repeat: true, ordering: { type: 'chance', seed: '' }, entries: [
+			{ id: randomUUID(), programId: theme.id, count: 0 },
+			{ id: randomUUID(), programId: clip.id, count: 30 },
+		] });
+		const root = program({ type: 'sequence', repeat: true, entries: [{ id: randomUUID(), programId: chance.id, count: 1 }] });
+		const programs = [root, chance, theme, clip];
+
+		expect(schedulingCatalogScope(programs, [root.id])).toMatchObject({
+			itemIds: [itemId],
+			libraryIds: [], sourceLibraryIds: [],
+		});
+		expect(schedulingCatalogScope(programs, [root.id, theme.id]).libraryIds)
+			.toEqual([libraryId]);
+	});
 });

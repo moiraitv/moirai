@@ -16,7 +16,7 @@ export function sequencePreviewSettings(config: ProgramConfig): SequencePreview[
 		type: 'sequence',
 		entries: config.entries.map(({ id, programId, count }) => ({ id, programId, count })),
 		repeat: config.repeat,
-		ordering: ordering?.type === 'shuffled-blocks' || ordering?.type === 'shuffled-allocations'
+		ordering: ordering?.type === 'shuffled-blocks' || ordering?.type === 'shuffled-allocations' || ordering?.type === 'chance'
 			? { type: ordering.type, seed: ordering.seed.trim() }
 			: { type: ordering?.type ?? 'ordered' },
 	};

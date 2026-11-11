@@ -8,6 +8,7 @@ import {
 	sourceAvailabilitySchema,
 } from './availability.js';
 import { MAX_LIBRARY_CONTENT_PREVIEW_ITEMS } from './catalog.js';
+import { MAX_SEQUENCE_STEPS, MAX_SEQUENCE_STEP_COUNT } from './sequence-config.js';
 import {
 	channelCreateSchema,
 	concreteHardwareAccelerationSchema,
@@ -395,6 +396,14 @@ export const timelineSegmentSchema = z.object({
 	fanartUrl: z.string().nullable().optional(),
 });
 
+/** Filler queue membership carried with the source cursor in timeline previews. */
+const fillerCycleSchema = z.object({
+	version: z.literal(1),
+	cycle: z.number().int().nonnegative(),
+	itemIds: z.array(idSchema),
+	remainingItemIds: z.array(idSchema),
+}).optional();
+
 /** Runtime selection cursor persisted separately from authored schedules. */
 export const selectionStateRecordSchema = z.object({
 	consumerKey: z.string(),
@@ -409,20 +418,23 @@ export const selectionStateRecordSchema = z.object({
 			}),
 			consumedItemIds: z.array(idSchema),
 			recentSeeds: z.array(z.array(idSchema).max(MAX_SIMILARITY_QUANTITY)).max(SEMANTIC_HISTORY_LIMIT).optional(),
+			fillerCycle: fillerCycleSchema,
 		}),
-		z.object({ type: z.literal('sequential'), nextIndex: z.number().int(), lastItemId: idSchema.nullable() }),
+		z.object({ type: z.literal('sequential'), nextIndex: z.number().int(), lastItemId: idSchema.nullable(), fillerCycle: fillerCycleSchema }),
 		z.object({
 			type: z.literal('shuffle'),
 			cycle: z.number().int(),
 			cycleItemIds: z.array(idSchema),
 			remainingItemIds: z.array(idSchema),
 			lastItemId: idSchema.nullable(),
+			fillerCycle: fillerCycleSchema,
 		}),
-		z.object({ type: z.literal('random'), counter: z.number().int(), lastItemId: idSchema.nullable() }),
+		z.object({ type: z.literal('random'), counter: z.number().int(), lastItemId: idSchema.nullable(), fillerCycle: fillerCycleSchema }),
 		z.object({
 			type: z.literal('weighted-random'),
 			counter: z.number().int(),
 			lastItemId: idSchema.nullable(),
+			fillerCycle: fillerCycleSchema,
 		}),
 		z.object({
 			type: z.literal('sequence'),
@@ -430,9 +442,11 @@ export const selectionStateRecordSchema = z.object({
 			selectedInEntry: z.number().int(),
 			rotation: z.object({
 				cycle: z.number().int().nonnegative(),
-				remaining: z.array(z.number().int().nonnegative()).max(100),
-				order: z.array(z.number().int().nonnegative()).max(100),
+				remaining: z.array(z.number().int().nonnegative()).max(MAX_SEQUENCE_STEPS),
+				order: z.array(z.number().int().nonnegative()).max(MAX_SEQUENCE_STEPS),
 				lastEntry: z.number().int().nonnegative().nullable(),
+				waiting: z.array(z.number().int().nonnegative().max(MAX_SEQUENCE_STEPS - 1)).max(MAX_SEQUENCE_STEPS).optional(),
+				deferred: z.array(z.number().int().nonnegative().max(MAX_SEQUENCE_STEP_COUNT)).max(MAX_SEQUENCE_STEPS).optional(),
 			}).optional(),
 			completed: z.boolean(),
 		}),

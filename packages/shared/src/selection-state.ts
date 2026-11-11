@@ -31,8 +31,12 @@ export type SelectionStateValue
 				remaining: number[];
 				order: number[];
 				lastEntry: number | null;
+				/** Active turns bypassed for fit, in the order they were first tried. */
+				waiting?: number[] | undefined;
+				/** Remaining allocations carried forward when a full break cannot fit them. */
+				deferred?: number[] | undefined;
 			} | undefined;
-		}) & { fillerCycle?: FillerCycle };
+		}) & { fillerCycle?: FillerCycle | undefined };
 
 /** Shared wire contract for selection state record. */
 export interface SelectionStateRecord {

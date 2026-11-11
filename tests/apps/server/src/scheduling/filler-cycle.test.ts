@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
-import type { FillerBudget, SchedulableMedia, SchedulingProgram, SelectionStateRecord } from '@moirai/shared';
+import type { FillerBudget, SchedulableMedia, SchedulingProgram, SelectionStateRecord, SequenceOrdering } from '@moirai/shared';
 import { planFiller } from '@server/scheduling/filler-plan.js';
+import { SEQUENCE_FILLER_PROBE_LIMIT } from '@server/scheduling/sequence-filler.js';
 import { indexSchedulingCatalog } from '@server/scheduling/catalog.js';
 import { hasSelectionCollision, indexOccupiedMedia, selectProgram, type SelectionContext } from '@server/scheduling/selection.js';
 import { selectOrderedCandidate } from '@server/scheduling/candidate-selection.js';
@@ -311,16 +312,114 @@ it('recovers full duration eligibility from older checkpoints without the option
 	expect(result.state).toEqual(f.state);
 });
 
-it('rejects Sequence filler before planning, including a zero-item random budget', () => {
-	const f = fixture();
-	const sequence: SchedulingProgram = { ...f.program, config: { type: 'sequence', repeat: true,
-		entries: [{ id: 'entry', programId: 'unused', count: 1 }] } };
-	f.context.programs.set(sequence.id, sequence);
-	expect(() => f.break(60)).toThrow('Sequence Programs cannot be used as filler');
-	expect(() => planFiller(sequence.id, { type: 'random-count', minimum: 0, maximum: 0 }, f.state, f.context, 'filler', 'UTC', 'zero')).toThrow('Sequence Programs');
-	f.context.fillerSelection = { fullBudgetSeconds: 60, allowTruncation: false };
-	expect(() => selectProgram(sequence.id, 'filler', f.state, f.context)).toThrow('Sequence Programs');
+function sequenceFixture(durations: number[], counts: number[], ordering: SequenceOrdering = { type: 'ordered' }, repeat = true) {
+	const f = fixture(durations);
+	const children: SchedulingProgram[] = f.media.map((item, index) => ({ ...f.program, id: `source-${index}`,
+		config: { type: 'content', source: { type: 'item', itemId: item.id }, strategy: { type: 'sequential' } } }));
+	for (const child of children) {
+		f.context.programs.set(child.id, child);
+	}
+	const config = { type: 'sequence', ordering, repeat,
+		entries: children.map((child, index) => ({ id: `entry-${index}`, programId: child.id, count: counts[index]! })) } as const;
+	const root: SchedulingProgram = { ...f.program, config };
+	f.context.programs.set(root.id, root);
+	return { ...f, root, config, children, get state() {
+		return f.state;
+	}, set state(value: Map<string, SelectionStateRecord>) {
+		f.state = value;
+	} };
+}
+
+it.each([
+	[[1, 1, 1, 1], [0, 1, 2, 3]],
+	[[3, 1, 1, 1], [0, 1, 0, 2, 3, 0]],
+])('disperses %j in a balanced rotation across one-item breaks', (counts, cycle) => {
+	const f = sequenceFixture([30, 30, 30, 30], counts, { type: 'balanced-rotation' });
+	const played = Array.from({ length: cycle.length * 2 }, () => f.break(30).spans[0]!.media.id);
+	expect(played.slice(0, cycle.length)).toEqual(cycle.map(index => f.media[index]!.id));
+	expect(played.slice(cycle.length).sort()).toEqual(cycle.map(index => f.media[index]!.id).sort());
+	expect(played.every((id, index) => index === 0 || id !== played[index - 1])).toBe(true);
+	expect(f.break(30, 'next-fit-only', 'another-stage').spans[0]?.media.id).toBe(f.media[0]!.id);
+});
+
+it('continues short categories while carrying only one allocation of an oversized category', () => {
+	const f = sequenceFixture([90, 30], [2, 1]);
+	for (let index = 0; index < 4; index += 1) {
+		expect(f.break(30).spans.map(span => span.media.id)).toEqual(['item-1']);
+	}
+	const before = structuredClone(f.state);
+	expect(f.break(180).spans.map(span => span.media.id)).toEqual(['item-0', 'item-0']);
+	expect(f.state.get('mid-roll:entry:entry-0')).toBeDefined();
+	expect(before.get('mid-roll:entry:entry-0')).toBeUndefined();
+});
+
+it('does not refill when a pending turn fits the full break but exceeds the remainder', () => {
+	const f = sequenceFixture([25, 40], [1, 1]);
+	expect(f.break(50).spans.map(span => span.media.id)).toEqual(['item-0']);
+	expect(f.break(50).spans.map(span => span.media.id)).toEqual(['item-1']);
+});
+
+it('gives a skipped turn priority over the active rotation once it fits', () => {
+	const f = sequenceFixture([90, 30, 30], [1, 3, 1], { type: 'balanced-rotation' });
+	expect(f.break(30).spans.map(span => span.media.id)).toEqual(['item-1']);
+	expect(f.break(30).spans.map(span => span.media.id)).toEqual(['item-2']);
+	expect(f.break(90).spans.map(span => span.media.id)).toEqual(['item-0']);
+});
+
+it('looks through nested Sequences for a whole clip before truncating a pending turn', () => {
+	const f = sequenceFixture([80, 30], [1, 1], { type: 'ordered' }, false);
+	const nested: SchedulingProgram = { ...f.root, id: 'nested', config: { ...f.config, entries: [{ ...f.config.entries[0]! }] } };
+	f.context.programs.set(nested.id, nested);
+	f.config.entries[0]!.programId = nested.id;
+
+	const first = f.break(30, 'next-truncate');
+	expect(first.spans.map(span => [span.media.id, span.truncated, span.sequenceEntryPath])).toEqual([['item-1', false, ['entry-1']]]);
+	const next = f.break(30, 'next-truncate');
+	expect(next.spans.map(span => [span.media.id, span.truncated, span.sequenceEntryPath])).toEqual([['item-0', true, ['entry-0', 'entry-0']]]);
+	expect(f.break(90).spans).toEqual([]);
+});
+
+it('bounds whole-clip searches across repeated nested references before considering truncation', () => {
+	const f = sequenceFixture([80], [1]);
+	let child = f.children[0]!.id;
+	for (let depth = 0; depth <= Math.ceil(Math.log2(SEQUENCE_FILLER_PROBE_LIMIT)); depth += 1) {
+		const nested: SchedulingProgram = { ...f.root, id: `nested-${depth}`, config: { type: 'sequence', repeat: false,
+			entries: ['first', 'second'].map(id => ({ id, programId: child, count: 1 })) } };
+		f.context.programs.set(nested.id, nested);
+		child = nested.id;
+	}
+	f.config.entries[0]!.programId = child;
+	expect(f.break(30, 'next-truncate').spans).toEqual([]);
 	expect(f.state.size).toBe(0);
+	expect(f.context.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'source-unavailable', programId: f.root.id })]));
+	expect(f.break(80).spans.map(span => span.media.id)).toEqual(['item-0']);
+});
+
+it('skips unavailable Sequence children and retains the source diagnostic', () => {
+	const f = sequenceFixture([30, 30], [1, 1], { type: 'ordered' }, false);
+	f.context.programs.delete(f.children[0]!.id);
+	expect(f.break(30).spans.map(span => span.media.id)).toEqual(['item-1']);
+	expect(f.context.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'program-missing' })]));
+});
+
+it('resumes an older Ordered tail cursor at the same turn', () => {
+	const f = sequenceFixture([30, 30], [1, 1]);
+	const before = selectProgram(f.root.id, 'mid-roll', f.state, f.context)!;
+	expect(before.media.id).toBe('item-0');
+	f.state = before.state;
+	expect(f.break(30).spans.map(span => span.media.id)).toEqual(['item-1']);
+});
+
+it('retains rolled filler turns across fit retries and serialized continuation', () => {
+	const f = sequenceFixture([80, 30, 30], [100, 30, 0], { type: 'chance', seed: 'ad-demo' }, false);
+	const first = f.break(30);
+	expect(first.spans.map(span => span.media.id)).toEqual(['item-1']);
+	const before = structuredClone(f.state);
+	expect(f.break(30).spans).toEqual([]);
+	expect(f.state).toEqual(before);
+	f.state = new Map(JSON.parse(JSON.stringify([...f.state])));
+	expect(f.break(80).spans.map(span => span.media.id)).toEqual(['item-0']);
+	expect(f.break(80).spans).toEqual([]);
 });
 
 it('returns independent initial and final progress for partial stage commitment', () => {

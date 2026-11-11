@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ChannelSchedule, ScheduleTemplate, SchedulingCatalog, SchedulingProgram, SchedulableMedia } from '@moirai/shared';
+import { eligibleSequenceEntries, type ChannelSchedule, type ScheduleTemplate, type SchedulingCatalog, type SchedulingProgram, type SchedulableMedia } from '@moirai/shared';
 import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { templatePlaybackInput } from './template-playback.js';
@@ -156,7 +156,7 @@ export function referencedPrograms(
 				continue;
 			}
 
-			for (const entry of program.config.entries) {
+			for (const entry of eligibleSequenceEntries(program.config)) {
 				if (!ids.has(entry.programId)) {
 					ids.add(entry.programId);
 					changed = true;

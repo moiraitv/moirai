@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from 'vue';
 import { Pencil } from '@lucide/vue';
-import { isFillerProgram, defaultMidRollConfig, defaultFillerAssignment, type FillerKind, type FillerAssignment, type AnyFillerPreset, type SchedulingProgram } from '@moirai/shared';
+import { defaultMidRollConfig, defaultFillerAssignment, type FillerKind, type FillerAssignment, type AnyFillerPreset, type SchedulingProgram } from '@moirai/shared';
 import { api } from '../../api';
 import { errorMessage } from '../../error-message';
 import LoadingState from '../LoadingState.vue';
@@ -11,12 +11,11 @@ const props = withDefaults(defineProps<{
 	modelValue: FillerAssignment | null | undefined; programs: SchedulingProgram[]; heading?: string; eyebrow?: string; kind?: FillerKind;
 }>(), { heading: 'Mid-Roll', eyebrow: 'Filler behavior', kind: 'mid-roll' });
 const emit = defineEmits<{ 'update:modelValue': [value: FillerAssignment | null]; 'edit-program': [programId: string] }>();
-const fillerPrograms = computed(() => props.programs.filter(isFillerProgram));
 const catalog = inject(fillerPresetContext, null);
 const presets = ref<AnyFillerPreset[]>([]);
 const loaded = ref(false);
 const error = ref('');
-const programId = computed(() => props.modelValue?.programId || fillerPrograms.value[0]?.id || '');
+const programId = computed(() => props.modelValue?.programId || props.programs[0]?.id || '');
 const presetId = computed(() => props.modelValue?.presetId ?? (props.kind === 'mid-roll' ? defaultMidRollConfig(programId.value) : defaultFillerAssignment(props.kind, programId.value)).presetId);
 
 /** Load saved presets before presenting assignment choices. */
@@ -73,7 +72,7 @@ onMounted(load);
 				<option v-if="loaded && modelValue && !presets.some(preset => preset.id === modelValue?.presetId)" :value="modelValue.presetId">Selected preset unavailable</option>
 				<option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option>
 			</select></label>
-			<label class="template-default-filler-field"><span>Source Program</span><span class="template-program-control"><select aria-label="Source Program" :value="programId" :disabled="!modelValue || fillerPrograms.length === 0" @change="selectProgram(($event.target as HTMLSelectElement).value)"><option v-for="program in fillerPrograms" :key="program.id" :value="program.id">{{ program.name }}</option></select><button type="button" class="template-edit-program-button" aria-label="Edit filler Program" :disabled="!modelValue || !programId" @click="emit('edit-program', programId)"><Pencil :size="16" />Edit</button></span></label>
+			<label class="template-default-filler-field"><span>Source Program</span><span class="template-program-control"><select aria-label="Source Program" :value="programId" :disabled="!modelValue || programs.length === 0" @change="selectProgram(($event.target as HTMLSelectElement).value)"><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.name }}</option></select><button type="button" class="template-edit-program-button" aria-label="Edit filler Program" :disabled="!modelValue || !programId" @click="emit('edit-program', programId)"><Pencil :size="16" />Edit</button></span></label>
 		</div>
 	</section>
 </template>

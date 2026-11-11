@@ -1,6 +1,9 @@
 import { graphicsAssignmentSchema } from './graphics.js';
 import { compareEpisodeOrder } from './episode-order.js';
 import type { SelectionStateRecord } from './selection-state.js';
+import { sequenceProgramConfigSchema } from './sequence-config.js';
+export { eligibleSequenceEntries, sequenceEntrySchema, sequenceOrderingSchema, sequenceProgramConfigSchema, sequencePreviewSchema,
+	type SequenceEntry, type SequenceOrdering, type SequencePreview } from './sequence-config.js';
 export type { ChannelTimelineMaterializationStatus, TimelineMaterializationHealth } from './timeline-status.js';
 export type { FillerCycle, SelectionStateRecord, SelectionStateValue } from './selection-state.js';
 import { fillerAssignmentSchema, slotFillerAssignmentSchema, type FillerSettings } from './filler-presets.js';
@@ -328,25 +331,6 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 /** Shared wire contract for content source. */
 export type ContentSource = z.infer<typeof contentSourceSchema>;
 
-/** Validate the sequence entry contract at runtime. */
-export const sequenceEntrySchema = z.object({
-	id: z.uuid(),
-	programId: z.uuid(),
-	count: z.number().int().min(1).max(10_000),
-});
-/** Shared wire contract for sequence entry. */
-export type SequenceEntry = z.infer<typeof sequenceEntrySchema>;
-
-/** Ordering of counted sequence steps, independent of child media selection. */
-export const sequenceOrderingSchema = z.discriminatedUnion('type', [
-	z.object({ type: z.literal('ordered') }),
-	z.object({ type: z.literal('shuffled-blocks'), seed: z.string().trim().max(200).default('') }),
-	z.object({ type: z.literal('shuffled-allocations'), seed: z.string().trim().max(200).default('') }),
-	z.object({ type: z.literal('balanced-rotation') }),
-]);
-/** Authored ordering rules; omitted configuration retains legacy ordered playback. */
-export type SequenceOrdering = z.infer<typeof sequenceOrderingSchema>;
-
 /** Maximum media entries embedded in one Program sample carousel. */
 export const PROGRAM_PREVIEW_ITEM_LIMIT = 12;
 
@@ -387,32 +371,6 @@ export const themeProgramConfigSchema = similarityProgramConfigSchema.omit({ sou
 
 /** Settings accepted by semantic previews and immutable recommendation decisions. */
 export const semanticProgramConfigSchema = z.discriminatedUnion('type', [similarityProgramConfigSchema, themeProgramConfigSchema]);
-
-/** Counted child Programs and their parent ordering and presentation preferences. */
-export const sequenceProgramConfigSchema = z.object({
-	type: z.literal('sequence'),
-	graphicsAssignment: graphicsAssignmentSchema.optional(),
-	subtitlePreferences: subtitlePreferencesSchema.optional(),
-	audioPreferences: audioPreferencesSchema.optional(),
-	entries: z
-		.array(sequenceEntrySchema)
-		.min(1)
-		.max(100)
-		.refine((entries) => new Set(entries.map((entry) => entry.id)).size === entries.length, {
-			message: 'Sequence entry identifiers must be unique',
-		}),
-	repeat: z.boolean().default(true),
-	ordering: sequenceOrderingSchema.optional(),
-});
-
-/** Scheduling-only inputs for a fresh sample day, independent of channel progress. */
-export const sequencePreviewSchema = z.object({
-	id: z.uuid(),
-	config: sequenceProgramConfigSchema.omit({ audioPreferences: true, subtitlePreferences: true }),
-	startDate: z.iso.date().optional(),
-});
-/** Validated request for a Sequence's illustrative guide preview. */
-export type SequencePreview = z.infer<typeof sequencePreviewSchema>;
 
 /** Validate the program config contract at runtime. */
 export const programConfigSchema = z.discriminatedUnion('type', [
