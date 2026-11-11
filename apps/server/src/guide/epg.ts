@@ -9,7 +9,8 @@ import {
 	effectiveChannelTvgId,
 	type Channel,
 	type GuideEntry,
-	type GuideTemplatePreviewValue,
+	type GuideTemplatePreviewResult,
+	type ProgramMetadata,
 	type GuideTemplateSources,
 	type ScheduleGuide,
 	type SchedulableMedia,
@@ -93,9 +94,13 @@ function noProgrammingSegment(
 export interface BuildXmltvOptions {
 	sourcesForChannel: (channel: Channel) => GuideTemplateSources;
 	minify?: boolean;
+	programMetadata?: ReadonlyMap<string, ProgramMetadata>;
 	fallback?: boolean;
 	warn?: GuideTemplateWarn;
 }
+
+/** A rendered listing and the values needed by the guide editor's inspector. */
+type ChannelListing = { entry: GuideEntry } & NonNullable<Awaited<ReturnType<typeof renderGuideListing>>>;
 
 /** Compile a template once and reuse it for every listing that shares those sources. */
 function compiledForSources(
@@ -125,7 +130,8 @@ async function renderChannelListings(
 	compiled: CompiledGuideTemplate,
 	mediaById: Map<string, SchedulingCatalog['media'][number]>,
 	renderOptions: { fallback: boolean; warn?: GuideTemplateWarn },
-): Promise<Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }>> {
+	programMetadata?: ReadonlyMap<string, ProgramMetadata>,
+): Promise<ChannelListing[]> {
 	const id = effectiveTvgId(channel);
 	const channelGuide = new Map(guide.channels.map((entry) => [entry.channelId, entry])).get(channel.id);
 	const configuredSegments = channelGuide?.preview.segments;
@@ -135,11 +141,11 @@ async function renderChannelListings(
 	segments.sort((left, right) => compareInstants(left.start, right.start));
 	const byId = new Map(segments.map((segment) => [segment.id, segment]));
 	const contextChannel = channelContext(channel, publicUrl, id);
-	const listings: Array<{ entry: GuideEntry; xml: string; context: Record<string, unknown> }> = [];
+	const listings: ChannelListing[] = [];
 	for (const entry of channelGuide?.entries ?? segments.filter(segment => !segment.airing || segment.id === segment.airing.primarySegmentId).map(itemGuideEntry)) {
 		const segment = entry.segmentId ? byId.get(entry.segmentId) : undefined;
 		const media = segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
-		const rendered = await renderGuideListing(entry, segment, media, catalog, contextChannel, guide.timeZone, publicUrl, compiled, renderOptions);
+		const rendered = await renderGuideListing(entry, segment, media, catalog, contextChannel, guide.timeZone, publicUrl, compiled, renderOptions, programMetadata);
 		if (rendered) {
 			listings.push({ entry, ...rendered });
 		}
@@ -201,6 +207,7 @@ export async function buildXmltv(
 			compiled,
 			mediaById,
 			renderOptions,
+			options.programMetadata,
 		)) {
 			if (listing.xml) {
 				lines.push(listing.xml);
@@ -286,6 +293,7 @@ export async function presentGuideListings(
 			),
 			mediaById,
 			renderOptions,
+			options.programMetadata,
 		);
 		const byEntryId = new Map(listings.map((listing) => [listing.entry.id, listing]));
 		const bySegmentId = new Map(
@@ -336,11 +344,8 @@ export async function previewGuideListings(
 	catalog: SchedulingCatalog,
 	publicUrl: string,
 	sources: GuideTemplateSources,
-): Promise<{
-	entries: GuideEntry[];
-	channelValues: GuideTemplatePreviewValue[];
-	listingValues: Record<string, GuideTemplatePreviewValue[]>;
-}> {
+	programMetadata?: ReadonlyMap<string, ProgramMetadata>,
+): Promise<Omit<GuideTemplatePreviewResult, 'startDate' | 'timeZone'>> {
 	const compiled = compileGuideTemplate(sources, { fallback: false });
 	const mediaById = new Map(catalog.media.map((media) => [media.id, media]));
 	const listings = await renderChannelListings(
@@ -351,13 +356,16 @@ export async function previewGuideListings(
 		compiled,
 		mediaById,
 		{ fallback: false },
+		programMetadata,
 	);
-	const listingValues: Record<string, GuideTemplatePreviewValue[]> = {};
+	const listingValues: GuideTemplatePreviewResult['listingValues'] = {};
+	const byId: Record<string, ProgramMetadata> = {};
+	const listingProgramIds: Record<string, string[]> = {};
 	const segmentsById = new Map(
 		(guide.channels.find((entry) => entry.channelId === channel.id)?.preview.segments ?? [])
 			.map((segment) => [segment.id, segment]),
 	);
-	const entries = listings.map(({ entry, xml, context }) => {
+	const entries = listings.map(({ entry, xml, context, programIds }) => {
 		const segment = entry.segmentId ? segmentsById.get(entry.segmentId) : undefined;
 		const media = segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
 		const previewEntry = {
@@ -365,6 +373,15 @@ export async function previewGuideListings(
 			segmentId: entry.segmentId && /^[0-9a-f-]{36}$/iu.test(entry.segmentId) ? entry.segmentId : null,
 		};
 		listingValues[previewEntry.id] = flattenLiquidPreviewValues(context);
+
+		// Send each Program's fields once, even when many listings inherit them in different combinations.
+		for (const id of programIds) {
+			const fields = programMetadata?.get(id);
+			if (fields) {
+				byId[id] ??= fields;
+				(listingProgramIds[previewEntry.id] ??= []).push(id);
+			}
+		}
 		return previewEntry;
 	});
 	return {
@@ -373,6 +390,7 @@ export async function previewGuideListings(
 			channel: channelContext(channel, publicUrl, effectiveTvgId(channel)),
 		}),
 		listingValues,
+		programMetadata: { byId, listingProgramIds },
 	};
 }
 
@@ -464,6 +482,7 @@ export class EpgService {
 				minify: true,
 				fallback: true,
 				warn: this.warn,
+				...(materialized.programMetadata ? { programMetadata: materialized.programMetadata } : {}),
 			},
 		);
 		return {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Locator } from '@playwright/test';
-import { graphicsExampleIds, MAX_GRAPHICS_TEXT_LENGTH } from '@moirai/shared';
+import { emptyGraphicsMedia, graphicsExampleIds, MAX_GRAPHICS_TEXT_LENGTH } from '@moirai/shared';
 import { parse } from 'yaml';
 import { authenticateAdministrator } from './authentication';
 
@@ -179,6 +179,38 @@ test('keeps the visual editor usable when a Liquid field would exceed the text l
 	await editor.getByRole('button', { name: 'Insert now.title' }).click();
 	await expect(text).toHaveValue(full);
 	await expect(editor.getByRole('button', { name: 'Visual' })).toBeEnabled();
+});
+
+test('finds and inserts music video fields and renders them in the channel preview', async ({ page }) => {
+	await authenticateAdministrator(page);
+	const channel = { id: randomUUID(), number: '48', name: 'Music TV', logo: null };
+	const artists = ['Indigo [credit]Coast[/credit]', 'Ava Reed'];
+	const album = 'Night Signals';
+	await page.route('**/api/v1/channels', route => route.fulfill({ json: [channel] }));
+	await page.route('**/api/v1/graphics/preview-context?**', route => route.fulfill({ json: {
+		availability: 'available', context: { channel, media: { ...emptyGraphicsMedia, kind: 'music-video', artists, album },
+			now: null, next: null, upcoming: [] },
+	} }));
+
+	await page.goto('/graphics/new');
+	const editor = page.getByRole('dialog', { name: 'New Graphics Preset' });
+	await addLayer(editor, 'text');
+	const openFields = editor.getByRole('button', { name: 'Insert Liquid field' });
+	const fields = page.getByRole('dialog', { name: 'Liquid values' });
+	const search = fields.getByRole('searchbox', { name: 'Search Liquid fields' });
+	await openFields.click();
+	await expect(search).toBeFocused();
+	await search.fill('credited song artists');
+	await expect(fields.getByRole('button', { name: 'Insert now.title' })).toHaveCount(0);
+	await fields.getByRole('button', { name: 'Insert media.artists', exact: true }).click();
+	await openFields.click();
+	await search.fill('media.album');
+	await fields.getByRole('button', { name: 'Insert media.album', exact: true }).click();
+	await expect(editor.getByRole('textbox', { name: 'Text or Liquid template' })).toHaveValue(/{{ media.artists \| join: ', ' }} {{ media.album }}/);
+
+	await editor.getByRole('combobox', { name: 'Preview channel' }).click();
+	await editor.getByRole('option', { name: /Music TV/ }).click();
+	await expect(editor.locator('.graphics-canvas')).toContainText(`${artists.join(', ')} ${album}`);
 });
 
 test('distinguishes preset loading failure from a preparation warning failure', async ({ page }) => {
@@ -633,7 +665,7 @@ test('uses the latest channel and scrub position for editable Liquid labels', as
 			input.value = '8500';
 			input.dispatchEvent(new Event('input', { bubbles: true }));
 		});
-		await expect(preview.getByRole('status')).toHaveText('Schedule gap');
+		await expect(preview.getByRole('status').filter({ hasText: 'Schedule gap' })).toBeVisible();
 		await expect(canvas).toContainText('48');
 		await expect(canvas).not.toContainText(/Alpine TV|Coastal TV at/);
 	}

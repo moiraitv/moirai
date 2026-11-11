@@ -1,8 +1,9 @@
 import {
 	effectiveChannelTvgId, emptyGraphicsContext, emptyGraphicsMedia, graphicsTimeFormatter, MAX_GRAPHICS_UPCOMING,
 	type Channel, type GraphicsAiring, type GraphicsContext, type GraphicsMedia, type SchedulableMedia,
-	type SchedulingCatalog, type TimelineSegment,
+	type ProgramMetadata, type ProgramTemplateContext, type SchedulingCatalog, type TimelineSegment,
 } from '@moirai/shared';
+import { metadataProgramIds, resolveProgramMetadata } from '../scheduling/program-metadata.js';
 import { renderGuideListing } from '../guide/listing.js';
 import { itemGuideEntry } from '../guide/projection.js';
 import { channelContext, compileGuideTemplate, seriesTitle, xmlProgrammeText } from '../guide/xmltv-template.js';
@@ -57,23 +58,51 @@ function airingReferences<T extends GraphicsSegment>(segments: T[], anchors: T[]
 }
 
 /** Expose raw catalog fields without any playback paths or internal identifiers. */
-function rawMedia(segment: GraphicsSegment, media?: SchedulableMedia, catalog?: SchedulingCatalog): GraphicsMedia {
+function rawMedia(
+	segment: GraphicsSegment,
+	media?: SchedulableMedia,
+	catalog?: SchedulingCatalog,
+	live?: SchedulableMedia,
+): GraphicsMedia {
+	const subtitle = segment.subtitle ?? null;
+	if (!media) {
+		return { ...emptyGraphicsMedia, subtitle };
+	}
+
+	// Only fields introduced for graphics borrow values absent from an older snapshot.
+	const {
+		displayMetadata = live?.displayMetadata, rating = live?.rating, userRating = live?.userRating,
+		tags = live?.tags, directors = live?.directors, artists = live?.artists,
+		trackNumber = live?.trackNumber, discNumber = live?.discNumber,
+	} = media;
+	const musicVideo = media.kind === 'music-video';
+	const genres = media.genreNames ?? live?.genreNames ?? [];
+	const genreKeys = media.genres ?? live?.genres ?? [];
+	const primaryGenreKey = media.primaryGenreKey === undefined ? live?.primaryGenreKey : media.primaryGenreKey;
+
 	return {
-		...emptyGraphicsMedia,
-		title: media?.title ?? null, subtitle: segment.subtitle ?? null, kind: media?.kind ?? null,
-		seriesTitle: media && catalog ? seriesTitle(media, catalog) : null,
-		seasonNumber: media?.seasonNumber ?? null, episodeNumber: media?.episodeNumber ?? null,
-		episodeEndNumber: media?.episodeEndNumber ?? null, year: media?.year ?? null,
-		releaseDate: media?.releaseDate ?? null, description: media?.plot ?? null, durationSeconds: media?.durationSeconds ?? null,
+		title: media.title ?? null, subtitle, kind: media.kind ?? null, seriesTitle: catalog ? seriesTitle(media, catalog) : null,
+		seasonNumber: media.seasonNumber ?? null, episodeNumber: media.episodeNumber ?? null,
+		episodeEndNumber: media.episodeEndNumber ?? null, year: media.year ?? null,
+		releaseDate: media.releaseDate ?? null, description: media.plot ?? null, durationSeconds: media.durationSeconds ?? null,
+		originalTitle: displayMetadata?.originalTitle ?? null, certification: displayMetadata?.certification ?? null,
+		genres, primaryGenre: primaryGenreKey ? genres[genreKeys.indexOf(primaryGenreKey)] ?? null : null,
+		tags: tags ?? [], rating: rating ?? null, userRating: userRating ?? null,
+		cast: displayMetadata?.cast ?? media.actors?.map(name => ({ name, role: null })) ?? [],
+		directors: directors ?? [], writers: displayMetadata?.writers ?? [], studios: displayMetadata?.studios ?? [],
+		countries: displayMetadata?.countries ?? [], edition: media.kind === 'movie' ? displayMetadata?.edition ?? null : null,
+		artist: musicVideo ? artists?.[0] ?? null : null, artists: musicVideo ? artists ?? [] : [],
+		album: musicVideo ? displayMetadata?.album ?? null : null,
+		trackNumber: musicVideo ? trackNumber ?? null : null, discNumber: musicVideo ? discNumber ?? null : null,
 	};
 }
 
 /** Keep the full airing envelope independently of individual playout spans. */
-function airingMetadata(segment: GraphicsSegment, formatter: Intl.DateTimeFormat, media: GraphicsMedia): GraphicsAiring {
+function airingMetadata(segment: GraphicsSegment, formatter: Intl.DateTimeFormat, media: GraphicsMedia, program?: ProgramTemplateContext): GraphicsAiring {
 	const start = segment.airing?.start ?? segment.start;
 	return {
 		title: segment.title, subtitle: null, start, finish: segment.airing?.finish ?? segment.finish,
-		startTime: formatter.format(Date.parse(start)), media,
+		startTime: formatter.format(Date.parse(start)), media, ...(program ? { program } : {}),
 	};
 }
 
@@ -84,10 +113,11 @@ function contextAt<T extends GraphicsSegment>(
 	reference: AiringReferences<T>,
 	media: (item: T) => GraphicsMedia,
 	airing: (item: T) => GraphicsAiring,
+	program?: ProgramTemplateContext,
 ): GraphicsContext {
 	const upcoming = reference.upcoming.map(airing);
 	return {
-		...emptyGraphicsContext(channel), media: media(segment),
+		...emptyGraphicsContext(channel), media: media(segment), ...(program ? { program } : {}),
 		now: reference.now ? airing(reference.now) : null, next: upcoming[0] ?? null, upcoming,
 	};
 }
@@ -128,10 +158,13 @@ async function loadMedia(repository: Repository, required: TimelineSegment[], ha
 		return null;
 	}
 	const current = new Map(catalog.media.map(item => [item.id, item]));
+	const currentMedia = (item: TimelineSegment): SchedulableMedia | undefined => item.mediaItemId
+		? current.get(catalog.mediaAliases?.[item.mediaItemId] ?? item.mediaItemId)
+		: undefined;
 	const media = new Map<string, SchedulableMedia>();
 	for (const item of required) {
 		const snapshot = snapshots.get(item.id);
-		const live = item.mediaItemId ? current.get(item.mediaItemId) : undefined;
+		const live = currentMedia(item);
 		if (snapshot) {
 			media.set(item.id, {
 				...snapshot, artworkUrl: live?.artworkUrl ?? snapshot.artworkUrl,
@@ -144,7 +177,7 @@ async function loadMedia(repository: Repository, required: TimelineSegment[], ha
 			media.set(item.id, live);
 		}
 	}
-	return { catalog, media };
+	return { catalog, media, currentMedia };
 }
 
 /** Bound metadata reads between playout deadline checks without querying per item. */
@@ -180,6 +213,8 @@ export async function prepareGraphicsContexts(
 	const formatter = graphicsTimeFormatter(timeZone);
 	const guideChannel = channelContext(channel, publicUrl, effectiveChannelTvgId(channel));
 	const airings = new Map<string, GraphicsAiring>();
+	const programMetadata = new Map<string, ProgramMetadata>();
+	const loadedProgramIds = new Set<string>();
 
 	// Bound each catalog read and render the closest labels before loading more of the window.
 	for (let offset = 0; offset < targets.length && hasTime(); offset += GRAPHICS_CONTEXT_BATCH_SIZE) {
@@ -198,8 +233,25 @@ export async function prepareGraphicsContexts(
 			break;
 		}
 
-		const { catalog, media } = loaded;
-		const raw = (item: TimelineSegment): GraphicsMedia => rawMedia(item, media.get(item.id), catalog);
+		// Reuse Program values across batches, including lookahead and primary anchors.
+		const programIds = [...new Set([...required.values()].flatMap(item => metadataProgramIds(item)))]
+			.filter(id => !loadedProgramIds.has(id));
+		if (programIds.length) {
+			const fields = await repository.programMetadataForIds(programIds);
+			if (!hasTime()) {
+				break;
+			}
+			for (const id of programIds) {
+				loadedProgramIds.add(id);
+				const metadata = fields.get(id);
+				if (metadata) {
+					programMetadata.set(id, metadata);
+				}
+			}
+		}
+
+		const { catalog, media, currentMedia } = loaded;
+		const raw = (item: TimelineSegment): GraphicsMedia => rawMedia(item, media.get(item.id), catalog, currentMedia(item));
 		for (const target of batch) {
 			const reference = references.get(target.id);
 			if (!reference) {
@@ -213,7 +265,7 @@ export async function prepareGraphicsContexts(
 				if (!hasTime()) {
 					return contexts;
 				}
-				const airing = airingMetadata(item, formatter, raw(item));
+				const airing = airingMetadata(item, formatter, raw(item), resolveProgramMetadata(item, programMetadata));
 				let listing;
 				try {
 					listing = await renderGuideListing(
@@ -226,6 +278,7 @@ export async function prepareGraphicsContexts(
 						publicUrl,
 						compiled,
 						{ fallback: true, ...(remainingMs ? { remainingMs } : {}) },
+						programMetadata,
 					);
 				}
 				catch (error) {
@@ -245,7 +298,14 @@ export async function prepareGraphicsContexts(
 				return contexts;
 			}
 
-			contexts.set(target.id, contextAt(channel, target, reference, raw, item => airings.get(airingId(item))!));
+			contexts.set(target.id, contextAt(
+				channel,
+				target,
+				reference,
+				raw,
+				item => airings.get(airingId(item))!,
+				resolveProgramMetadata(target, programMetadata),
+			));
 		}
 	}
 	return contexts;

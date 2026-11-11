@@ -26,7 +26,7 @@ describe('playout synchronizer', () => {
 		['embedding progress', false], ['guide template', false], ['guide template with text graphics', true], ['watcher status', false],
 		['this channel timeline', true], ['this channel edit', true], ['this channel edit during decoration', true], ['scan reconciliation', true],
 		['global audio defaults', true], ['program preferences', true], ['credit template', true], ['library edit', true],
-		['compatibility mid-roll edit', true],
+		['compatibility mid-roll edit', true], ['program metadata', false], ['program metadata with text graphics', true],
 	] as const)('publishes live playout with the correct retry behavior during %s', async (change, retry) => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-playout-invalidation-'));
 		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Live' }), id: randomUUID(),
@@ -45,6 +45,9 @@ describe('playout synchronizer', () => {
 		}
 		else if (change === 'compatibility mid-roll edit') {
 			event = { type: 'scheduling.changed', data: { entity: 'mid-roll-preset', change: 'updated', id: otherId } };
+		}
+		else if (change.startsWith('program metadata')) {
+			event = { type: 'scheduling.changed', data: { entity: 'program', change: 'updated', id: otherId, affectsProgramming: false } };
 		}
 		else if (change === 'global audio defaults') {
 			event = { type: 'playback.changed', data: { channelId: null, reason: 'settings-changed' } };
@@ -81,7 +84,7 @@ describe('playout synchronizer', () => {
 					await expect(access(destination)).rejects.toMatchObject({ code: 'ENOENT' });
 					return { channel, guide, programs: [], graphics: { presets: new Map(), segments: [] } };
 				}
-				return { channel, guide, programs: [], ...(change === 'guide template with text graphics'
+				return { channel, guide, programs: [], ...(change.endsWith('with text graphics')
 					? { graphics: { presets: new Map(), segments: [], contexts: new Map() } } : {}) };
 			}
 			documentReads += 1;
@@ -108,11 +111,11 @@ describe('playout synchronizer', () => {
 			expect(documentReads).toBe(passes);
 			expect(read).toHaveBeenCalledTimes(passes * 2);
 			expect(await readFile(destination, 'utf8')).toBe(JSON.stringify({ pass: passes, items: [] }));
-			if (change === 'compatibility mid-roll edit') {
+			if (change === 'compatibility mid-roll edit' || change === 'program metadata with text graphics') {
 				const sync = vi.spyOn(synchronizer, 'syncChannel').mockResolvedValue(path.dirname(destination));
 				synchronizer.handleEvent({ ...event, protocolVersion: LIVE_EVENT_PROTOCOL_VERSION,
 					eventId: randomUUID(), occurredAt: channel.updatedAt });
-				expect(channelsUsingScope).toHaveBeenCalledExactlyOnceWith('filler', otherId);
+				expect(channelsUsingScope).toHaveBeenCalledExactlyOnceWith(change.startsWith('program') ? 'program' : 'filler', otherId);
 				expect(sync).toHaveBeenCalledExactlyOnceWith(channel.id);
 			}
 		}

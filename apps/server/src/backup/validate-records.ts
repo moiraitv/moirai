@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { scheduleTemplates, scheduleSlots, scheduleBoundaries } from '../db/schema.js';
 import {
-	channelCreateSchema, programConfigSchema, encodingProfileCreateSchema, channelScheduleConfigSchema,
+	channelCreateSchema, programConfigSchema, programMetadataSchema, encodingProfileCreateSchema, channelScheduleConfigSchema,
 	fillerPresetCreateSchema, midRollPresetCreateSchema, guideTemplateSourcesSchema,
 	onDiskSourceConfigSchema, sourceIdentitySchema, scheduleTemplateCreateSchema,
 } from '@moirai/shared';
@@ -12,7 +12,7 @@ import {
 export function validateConfigurationRecords(sqlite: Database.Database): void {
 	const configurations: Array<[string, string, z.ZodType]> = [
 		['channels', 'config', channelCreateSchema],
-		['scheduling_programs', 'config', programConfigSchema],
+		['scheduling_programs', 'config', programConfigSchema.and(z.object({ metadata: programMetadataSchema.optional() }))],
 		['encoding_profiles', 'config', encodingProfileCreateSchema],
 		['channel_schedules', 'config', channelScheduleConfigSchema],
 		['guide_templates', 'sources', guideTemplateSourcesSchema],

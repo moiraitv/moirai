@@ -1,4 +1,5 @@
-import type { GuideEntry, SchedulableMedia, SchedulingCatalog, TimelineSegment } from '@moirai/shared';
+import { metadataProgramIds } from '../scheduling/program-metadata.js';
+import { mergeProgramMetadata, type GuideEntry, type ProgramMetadata, type SchedulableMedia, type SchedulingCatalog, type TimelineSegment } from '@moirai/shared';
 import {
 	channelContext, listingTitle, mediaItemContext, programmeContext, programmeKind, renderProgrammeFragment,
 	type CompiledGuideTemplate, type GuideRenderOptions,
@@ -15,7 +16,8 @@ export async function renderGuideListing(
 	publicUrl: string,
 	compiled: CompiledGuideTemplate,
 	options: GuideRenderOptions,
-): Promise<{ xml: string; context: Record<string, unknown> } | null> {
+	programMetadata?: ReadonlyMap<string, ProgramMetadata>,
+): Promise<{ xml: string; context: Record<string, unknown>; programIds: readonly string[] } | null> {
 	const kind = programmeKind(entry, segment, media);
 	if (kind !== 'block' && !segment) {
 		return null;
@@ -34,5 +36,8 @@ export async function renderGuideListing(
 			artwork_url: entry.posterUrl ? new URL(entry.posterUrl, `${publicUrl}/`).href : null,
 		} : null,
 	});
-	return { xml: await renderProgrammeFragment(compiled, kind, context, options), context };
+	const programIds = metadataProgramIds(kind === 'block' ? entry : segment);
+	const program = { metadata: mergeProgramMetadata(programIds.map(id => programMetadata?.get(id))) };
+	const xml = await renderProgrammeFragment(compiled, kind, { ...context, program }, options);
+	return { xml, context, programIds };
 }

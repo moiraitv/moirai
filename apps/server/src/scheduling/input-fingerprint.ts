@@ -51,11 +51,12 @@ export class InputFingerprintContext {
 		return value;
 	}
 
-	/** Share normalized catalog rows across channels while ignoring transient availability. */
+	/** Share catalog inputs while excluding transient availability and graphics-only fields. */
 	media(value: SchedulableMedia): SchedulableMedia {
 		let result = this.normalized.get(value);
 		if (!result) {
 			result = { ...value, availability: 'ignored' as SchedulableMedia['availability'] };
+			delete result.displayMetadata;
 			this.normalized.set(value, result);
 		}
 		return result;
@@ -244,7 +245,14 @@ export function inputFingerprint(
 		...(fillerPresetIds.length ? { fillerProvenance: 1 } : {}),
 		schedule: { ...schedule, avoidCrossChannelDuplicates: schedule.avoidCrossChannelDuplicates ?? true },
 		templates: selectedTemplates.map(template => context.playback(template)),
-		programs: selectedPrograms,
+		programs: selectedPrograms.map(program => {
+			if (program.metadata === undefined) {
+				return program;
+			}
+			const programming = { ...program };
+			delete programming.metadata;
+			return programming;
+		}),
 		catalog: {
 			...(Object.keys(exclusionAliases).length ? { exclusionAliases } : {}),
 			midRollPresets: Object.fromEntries(fillerPresetIds

@@ -37,6 +37,18 @@ The editor preview shows one local day of the selected channel as a guide. Click
 
 If there are no channels, you'll need to create one before previewing. A failed refresh (e.g,. due to a template syntax error) displays the error so you can correct the draft before saving.
 
+## Use Program metadata
+
+Fields set in a Program’s [Guide and graphics metadata](/scheduling/programs#guide-and-graphics-metadata) section are available as `program.metadata` on listings. Each item uses the fields of the Program that selected it, with fields inherited from enclosing Sequences. A Block listing uses the Program assigned to the slot, while a Filler listing uses the filler’s Program when available. Missing custom fields render as blank text.
+
+For example, to prefix a movie title with its showcase actor, replace the title in the Movie tab with the line below. Movies without a value still show their regular title.
+
+```liquid
+<title>{% if program.metadata.showcase_actor and program.metadata.showcase_actor != blank %}{{ program.metadata.showcase_actor }} Showcase: {% endif %}{{ item.title }}</title>
+```
+
+Click a listing in the preview to inspect its resolved fields. Use the full field path shown in the inspector, such as `program.metadata.showcase_actor`, to print that field’s text. If you edit a Program’s metadata, reload the guide in your TV client to see the updated listings.
+
 ## Assign a template to a channel
 
 Edit a [Channel](/scheduling/channels), expand **Guide template override**, and choose a template. Leave it on **Default** to follow **Default for XMLTV**.

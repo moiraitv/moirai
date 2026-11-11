@@ -1,9 +1,10 @@
 import { assertGraphicsScale, validateGraphicsScale } from './dimensions.js';
 import { graphicsFontAlias, renderWithGraphicsFonts } from './fonts.js';
 import { createHash } from 'node:crypto';
+import { Context } from 'liquidjs';
 import { createBoundedLiquid } from '../liquid-template.js';
 import sharp from 'sharp';
-import { escapeGraphicsTextValue, unescapeGraphicsTextValue, graphicsShapeSvg, graphicsTextRuns, type Channel, type GraphicsAsset, type GraphicsLayer, type GraphicsContext, type GraphicsTextStyle } from '@moirai/shared';
+import { useProgramMetadataLookup, escapeGraphicsTextValue, unescapeGraphicsTextValue, graphicsShapeSvg, graphicsTextRuns, type Channel, type GraphicsAsset, type GraphicsLayer, type GraphicsContext, type GraphicsTextStyle } from '@moirai/shared';
 import type { EtvMediaGraphicsLayer } from '@moirai/ersatztv-contract';
 import type { GraphicsSnapshots } from './snapshots.js';
 import { graphicsAssetPath, publishGraphicsFile } from './assets.js';
@@ -90,7 +91,9 @@ export async function prepareGraphicsLayer(root: string, layer: GraphicsLayer, a
 		});
 	}
 	else {
-		const text = String(await liquid.parseAndRender(layer.text, context));
+		const scope = new Context(context, liquid.options, {}, { liquid });
+		useProgramMetadataLookup(scope, context);
+		const text = String(await liquid.render(liquid.parse(layer.text), scope));
 		if (!text.trim()) {
 			return null;
 		}

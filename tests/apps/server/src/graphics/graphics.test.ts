@@ -83,19 +83,30 @@ it('uses the channel guide item labels for split airings and raw snapshot metada
 			name: 'Alpine TV', number: '72.2', guideTemplateId: assigned.id, graphicsPresetId: graphicsExamples[1]!.id,
 		}));
 		const start = Date.now() + 30_000;
+		const rule = { type: 'content', source: { type: 'library-query', libraryId: randomUUID(), filter: {} },
+			strategy: { type: 'sequential' } } as const;
+		const primaryProgram = await repository.createProgram(programCreateSchema.parse({ name: 'Main feature', config: rule,
+			metadata: { showcase_actor: 'A & <B>' },
+		}));
+		const fillerProgram = await repository.createProgram(programCreateSchema.parse({ name: 'Interstitials', config: rule,
+			metadata: { showcase_actor: 'Station' },
+		}));
+		const nextProgram = await repository.createProgram(programCreateSchema.parse({ name: 'Next feature', config: rule,
+			metadata: { showcase_actor: 'C' },
+		}));
 		const episodeId = randomUUID();
 		const fillerId = randomUUID();
 		const movieId = randomUUID();
-		const primary = segment(start, start + 1000, { channelId: channel.id, mediaItemId: episodeId, title: 'Committed Title' });
+		const primary = segment(start, start + 1000, { channelId: channel.id, mediaItemId: episodeId, title: 'Committed Title', programId: primaryProgram.id });
 		const airing = { id: randomUUID(), primarySegmentId: primary.id, start: primary.start,
 			finish: new Date(start + 3000).toISOString(), truncated: false };
 		primary.airing = airing;
-		const attached = segment(start + 1000, start + 2000, { channelId: channel.id, role: 'filler', mediaItemId: fillerId, airing });
+		const attached = segment(start + 1000, start + 2000, { channelId: channel.id, role: 'filler', mediaItemId: fillerId, airing, programId: fillerProgram.id });
 		const split = segment(start + 2000, start + 3000, { ...primary, id: randomUUID(),
 			start: new Date(start + 2000).toISOString(), finish: airing.finish });
 		const gap = segment(start + 3000, start + 4000, { role: 'dead-air' });
 		const standalone = segment(start + 4000, start + 5000, { channelId: channel.id, role: 'filler', mediaItemId: fillerId });
-		const future = segment(start + 5000, start + 6000, { channelId: channel.id, mediaItemId: movieId, title: 'Committed Movie' });
+		const future = segment(start + 5000, start + 6000, { channelId: channel.id, mediaItemId: movieId, title: 'Committed Movie', programId: nextProgram.id });
 		const spans = [primary, attached, split, gap, standalone, future];
 		const makeMedia = (id: string, kind: string, title: string): SchedulableMedia => ({
 			id, kind, title, sortTitle: title, libraryId: randomUUID(), groupId: null, playbackPath: '/private/catalog.mp4',
@@ -118,9 +129,10 @@ it('uses the channel guide item labels for split airings and raw snapshot metada
 		const inRoll = contexts.get(attached.id)!;
 		expect(inRoll).toMatchObject({
 			channel: { name: 'Alpine TV', number: '72.2' }, media: { title: 'Station Ident', subtitle: null },
-			now: { title: 'Alpine Series & Friends', subtitle: 'Raw Episode & Beyond', start: primary.start, finish: airing.finish,
+			program: { metadata: { showcase_actor: 'Station' } },
+			now: { program: { metadata: { showcase_actor: 'A & <B>' } }, title: 'Alpine Series & Friends', subtitle: 'Raw Episode & Beyond', start: primary.start, finish: airing.finish,
 				media: { title: 'Raw Episode', episodeEndNumber: 3, description: 'Catalog synopsis' } },
-			next: { title: 'Raw Movie Premiere', subtitle: null, media: { title: 'Raw Movie' } },
+			next: { program: { metadata: { showcase_actor: 'C' } }, title: 'Raw Movie Premiere', subtitle: null, media: { title: 'Raw Movie' } },
 		});
 		expect(inRoll.next).toBe(inRoll.upcoming[0]);
 		expect(contexts.get(split.id)?.now).toEqual(inRoll.now);
@@ -155,11 +167,21 @@ it('uses the channel guide item labels for split airings and raw snapshot metada
 
 		const { contexts: labels } = (await preparePlayoutGraphicsLabels(repository, channel, spans, zone, publicUrl, 1000))!;
 		expect(labels?.get(split.id)?.now).toEqual(inRoll.now);
+		const text = shapedFixture.layers[1]!;
+		if (text.kind !== 'text') {
+			throw new Error('Expected a text layer');
+		}
+		const snapshot = await GraphicsSnapshots.open(path.join(state.root, 'snapshots'));
+		const missingSize = { ...text, text: '{{ now.program.metadata.size }}' };
+		expect(await prepareGraphicsLayer(state.root, missingSize, new Map(), inRoll, 1000, snapshot, channel.video)).toBeNull();
+		const layer = { ...text, text: '{{ now.program.metadata.showcase_actor }}' };
+		expect(await prepareGraphicsLayer(state.root, layer, new Map(), inRoll, 1000, snapshot, channel.video)).not.toBeNull();
+		await repository.updateProgram(primaryProgram.id, { metadata: { showcase_actor: 'Updated' } });
 		await repository.guideTemplates.save({ name: assigned.name, description: '', sources: {
 			...assigned.sources, episode: base + '<title></title></programme>',
 		} }, assigned.id);
 		const { contexts: refreshed } = (await preparePlayoutGraphicsLabels(repository, channel, spans, zone, publicUrl, 1000))!;
-		expect(refreshed?.get(split.id)?.now).toMatchObject({ title: 'Committed Title', subtitle: null });
+		expect(refreshed?.get(split.id)?.now).toMatchObject({ title: 'Committed Title', subtitle: null, program: { metadata: { showcase_actor: 'Updated' } } });
 		await repository.guideTemplates.setDefault(assigned.id);
 		const unassigned = { ...channel, guideTemplateId: null };
 		const defaults = await prepareGraphicsContexts(repository, unassigned, spans, [split], zone, publicUrl);
@@ -170,6 +192,16 @@ it('uses the channel guide item labels for split airings and raw snapshot metada
 		expect(snapshots).not.toHaveBeenCalled();
 		const delayed = await preparePlayoutGraphicsLabels(repository, channel, spans, zone, publicUrl, 0);
 		expect(delayed?.contexts?.size).toBe(0);
+		const readMetadata = repository.programMetadataForIds.bind(repository);
+		let budget = graphicsPreparationBudget.live;
+		vi.spyOn(repository, 'programMetadataForIds').mockImplementationOnce(async ids => {
+			const result = await readMetadata(ids);
+			budget = 0;
+			return result;
+		});
+		const expired = await preparePlayoutGraphicsLabels(repository, channel, spans, zone, publicUrl, () => budget);
+		expect(expired?.contexts?.size).toBe(0);
+		expect(expired?.segments.some(item => item.id === primary.id)).toBe(true);
 	}
 	finally {
 		await state.close();

@@ -20,6 +20,7 @@ import type {
 } from './availability.js';
 
 export * from './scheduling.js';
+export * from './program-metadata.js';
 export * from './template-defaults.js';
 export * from './guide.js';
 export * from './normalization.js';
@@ -321,6 +322,7 @@ export const schedulingEventDataSchema = z.object({
 	entity: z.enum(['program', 'template', 'assignment', 'credit-template', 'guide-template', 'mid-roll-preset', 'filler-preset']),
 	change: z.enum(['created', 'updated', 'deleted']),
 	id: idSchema,
+	affectsProgramming: z.literal(false).optional().describe('A metadata-only Program update; committed selections remain valid.'),
 });
 /** Validate the timeline event data contract at runtime. */
 export const timelineEventDataSchema = z.object({

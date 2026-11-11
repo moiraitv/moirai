@@ -49,9 +49,15 @@ it.skipIf(!engine || !existsSync(engine)).each([
 		const asset = await storeGraphicsAsset(graphicsFolder(root), path.basename(animation), await readFile(animation), config.ffprobePath);
 		repository.graphics.addAsset(asset);
 		const [layer] = parseGraphics(graphicsExamples[0]!.yaml).layers;
-		const layers = [{ ...layer, assetId: asset.id, rotation }, ...(clockMode === 'none' ? [] : parseGraphics(graphicsExamples[4]!.yaml).layers)];
+		const textLayer = {
+			id: randomUUID(), kind: 'text', anchor: 'top_left', horizontalMargin: 2, verticalMargin: 3,
+			opacity: 100, withinSource: true, timing: { mode: 'always' }, style: { size: 20, color: '#FFFFFF' },
+			text: '{{ now.program.metadata.showcase_actor }}',
+		};
+		const layers = [{ ...layer, assetId: asset.id, rotation },
+			...(clockMode === 'none' ? [textLayer] : parseGraphics(graphicsExamples[4]!.yaml).layers)];
 		const preset = repository.graphics.save({ name: 'Animated watermark', yaml: `version: 1\nlayers: ${JSON.stringify(layers)}` });
-		const program = await repository.createProgram(programCreateSchema.parse({ name: 'Fixture Program', config: {
+		const program = await repository.createProgram(programCreateSchema.parse({ name: 'Fixture Program', metadata: { showcase_actor: 'A & <B>' }, config: {
 			type: 'content', source: { type: 'library-query', libraryId: randomUUID(), filter: {} },
 			strategy: { type: 'sequential' }, graphicsAssignment: { mode: 'add', presetId: preset.id },
 		} }));
@@ -95,7 +101,13 @@ it.skipIf(!engine || !existsSync(engine)).each([
 		}
 		playback = new PlaybackEngine(repository, sync, events, logger, new HardwareAccelerationResolver(logger), engine!, config.playbackStreamDir, 'http://127.0.0.1', 15_000, 2000);
 		await playback.start();
-		if (rotation) {
+		if (clockMode === 'none') {
+			await expect.poll(async () => {
+				await sync.syncChannel(channel.id);
+				return sync.graphicsIssues.get(channel.id);
+			}, { timeout: 12_000 }).toBeUndefined();
+		}
+		else if (rotation) {
 			await sync.syncChannel(channel.id);
 			expect(sync.graphicsIssues.get(channel.id)).toBe(clockMode === 'unavailable' ? 'The live clock could not be prepared.' : undefined);
 		}
@@ -125,6 +137,10 @@ it.skipIf(!engine || !existsSync(engine)).each([
 		const laterCorner = await sharp(later).extract(region).raw().toBuffer();
 		expect(laterCorner.equals(corner)).toBe(false);
 
+		if (clockMode === 'none') {
+			const text = await frame.clone().extract({ left: 0, top: 0, width: 120, height: 40 }).raw().toBuffer();
+			expect(Math.max(...text)).toBeGreaterThan(180);
+		}
 		if (clockMode === 'live') {
 			const clockRegion = { left: 246, top: 6, width: 65, height: 20 };
 			const firstClock = await frame.clone().extract(clockRegion).raw().toBuffer();

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { guideEntrySchema } from './guide.js';
+import { programMetadataSchema } from './program-metadata.js';
 
 /** Largest Liquid source accepted for one XMLTV template tab. */
 export const MAX_GUIDE_TEMPLATE_SOURCE_LENGTH = 65_536;
@@ -107,6 +108,10 @@ export const guideTemplatePreviewResultSchema = z.object({
 	entries: z.array(guideEntrySchema),
 	channelValues: z.array(guideTemplatePreviewValueSchema),
 	listingValues: z.record(z.string(), z.array(guideTemplatePreviewValueSchema)),
+	programMetadata: z.object({
+		byId: z.record(z.uuid(), programMetadataSchema),
+		listingProgramIds: z.record(z.string(), z.array(z.uuid())),
+	}).meta({ description: 'Program fields keyed once by Program ID, with each listing’s Program IDs ordered from parent to child.' }).optional(),
 });
 
 /** Authored tab map stored with a guide template. */
@@ -155,6 +160,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 
@@ -199,6 +205,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 
@@ -245,6 +252,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 
@@ -286,6 +294,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 
@@ -327,6 +336,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 
@@ -369,6 +379,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 
@@ -391,6 +402,7 @@ Available values:
   - item.season_number, item.episode_number, item.xmltv_episode_num, item.artwork_url
   - item.artists, item.artist_names, item.album_names, item.track_number, item.directors
   - item.release_date, item.rating, item.actors, item.availability
+  - program.metadata (custom fields from the selected Program)
   - slot.start, slot.finish, slot.role, slot.title, slot.program_id, slot.truncated
   - block.title, block.description, block.artwork_url (block listings only)
 

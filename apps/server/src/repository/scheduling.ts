@@ -46,6 +46,7 @@ import {
 } from './catalog.js';
 import { SchedulingConfigurationRepository } from './scheduling-config.js';
 import { resolveSchedulingMediaAliases, withSchedulingCursorAliases } from './scheduling-cursor-aliases.js';
+import { catalogDisplayMetadata } from './catalog-records.js';
 
 /** Bound multi-row timeline writes below SQLite statement parameter limits. */
 const TIMELINE_COMMIT_BATCH_SIZE = 500;
@@ -447,6 +448,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 						seasonNumber: mediaItems.seasonNumber,
 						episodeNumber: mediaItems.episodeNumber,
 						episodeEndNumber: mediaItems.episodeEndNumber,
+						edition: mediaItems.edition,
 						artists: mediaItems.artists,
 						trackNumber: mediaItems.trackNumber,
 						discNumber: mediaItems.discNumber,
@@ -634,6 +636,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 					userRating: metadataNumber(metadata, 'userRating'),
 					actors: metadataPersonNames(metadata, 'actors'),
 					directors: metadataStrings(metadata, 'directors'),
+					displayMetadata: catalogDisplayMetadata(metadata, item.kind, item.edition),
 					artworkUrl: artworkUrl(
 						'items',
 						item.id,
@@ -920,7 +923,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 		includeSnapshots = false,
 	): Promise<MaterializedSegmentRecord[]> {
 		const columns = includeSnapshots
-			? { ...guideListSegmentColumns, mediaSnapshot: materializedTimelineSegments.mediaSnapshot }
+			? { ...guideListSegmentColumns, programAncestry: materializedTimelineSegments.programAncestry,
+				mediaSnapshot: materializedTimelineSegments.mediaSnapshot }
 			: guideListSegmentColumns;
 		// Budget only intersecting spans, then recover their complete airings in the same query.
 		const airingId = sql<string>`json_extract(${materializedTimelineSegments.airing}, '$.id')`;

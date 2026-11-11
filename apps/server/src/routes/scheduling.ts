@@ -277,7 +277,7 @@ export function registerSchedulingRoutes(
 			operationId: 'updateProgram',
 			tags: ['Programs'],
 			summary: 'Update mutable program settings',
-			description: 'Program type, content source type, and source library are fixed after creation.',
+			description: 'Program type, content source type, and source library are fixed after creation. A metadata-only update preserves the programming revision and refreshes presentation.',
 			params: idParamsSchema,
 			body: programUpdateSchema,
 			response: { 200: responseContent('Updated program', 'application/json', schedulingProgramSchema) },
@@ -302,7 +302,10 @@ export function registerSchedulingRoutes(
 
 		events.publish({
 			type: 'scheduling.changed',
-			data: { entity: 'program', change: 'updated', id: program.id },
+			data: {
+				entity: 'program', change: 'updated', id: program.id,
+				...(input.metadata !== undefined && input.config === undefined && input.name === undefined ? { affectsProgramming: false as const } : {}),
+			},
 		});
 		return program;
 	});

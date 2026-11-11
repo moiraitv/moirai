@@ -3,6 +3,15 @@ import { nextRotation, rotationEntry, type SequenceConfig, type SequenceState } 
 import { selectFillerSequence } from './sequence-filler.js';
 import type { SelectionContext, SelectionFitMode, SelectionResult, selectProgram } from './selection.js';
 
+/** Cap entry probes below the first primary Chance Sequence in one selection. */
+export const PRIMARY_CHANCE_PROBE_LIMIT = 512;
+
+/** A shared budget follows nested entry paths even when ordering modes differ. */
+export interface SequenceProbeBudget {
+	remaining: number;
+	unavailable: Set<string>;
+}
+
 /** Select one leaf and advance the parent only with a successful result. */
 export function selectSequence(
 	program: SchedulingProgram,
@@ -14,6 +23,7 @@ export function selectSequence(
 	fitMode: SelectionFitMode,
 	ancestry: string[],
 	selectChild: typeof selectProgram,
+	probes?: SequenceProbeBudget,
 ): SelectionResult | null {
 	if (program.config.type !== 'sequence') {
 		return null;
@@ -27,14 +37,14 @@ export function selectSequence(
 		return selectFillerSequence(program.config, consumerKey, state, record, context, fitSeconds, [...ancestry, program.id], selectChild);
 	}
 	if (program.config.ordering?.type === 'chance') {
-		return selectChance(program.config, consumerKey, state, record, context, fitSeconds, fitMode, [...ancestry, program.id], selectChild);
+		return selectChance(program.config, consumerKey, state, record, context, fitSeconds, fitMode, [...ancestry, program.id], selectChild, probes ?? { remaining: PRIMARY_CHANCE_PROBE_LIMIT, unavailable: new Set() });
 	}
 	if (program.config.ordering && program.config.ordering.type !== 'ordered') {
-		return selectRotation(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectChild);
+		return selectRotation(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectChild, probes);
 	}
 
 	// Walk composite entries until one selects media or the sequence becomes blocked.
-	for (let attempts = 0; attempts < program.config.entries.length; attempts += 1) {
+	for (let attempts = 0; attempts < program.config.entries.length && probes?.remaining !== 0; attempts += 1) {
 		const entry = program.config.entries[value.entryIndex];
 		if (!entry) {
 			return null;
@@ -48,6 +58,7 @@ export function selectSequence(
 			fitSeconds,
 			fitMode,
 			[...ancestry, program.id],
+			probes,
 		);
 		if (selected) {
 			selected.sequenceEntryPath = [entry.id, ...(selected.sequenceEntryPath ?? [])];
@@ -100,6 +111,7 @@ function selectRotation(
 	fitMode: SelectionFitMode,
 	ancestry: string[],
 	selectChild: typeof selectProgram,
+	probes?: SequenceProbeBudget,
 ): SelectionResult | null {
 	const config = program.config;
 	if (config.type !== 'sequence') {
@@ -113,7 +125,7 @@ function selectRotation(
 	// Try each eligible child at most once; rejected candidates do not spend quotas.
 	let rotation = value.rotation!;
 	const excluded = new Set<number>();
-	for (let attempts = 0; attempts < config.entries.length; attempts += 1) {
+	for (let attempts = 0; attempts < config.entries.length && probes?.remaining !== 0; attempts += 1) {
 		const index = rotationEntry(config, rotation, consumerKey, excluded);
 		if (index === undefined) {
 			break;
@@ -128,6 +140,7 @@ function selectRotation(
 			fitSeconds,
 			fitMode,
 			[...ancestry, program.id],
+			probes,
 		);
 		if (selected) {
 			selected.sequenceEntryPath = [entry.id, ...(selected.sequenceEntryPath ?? [])];
@@ -174,20 +187,24 @@ function selectChance(
 	fitMode: SelectionFitMode,
 	ancestry: string[],
 	selectChild: typeof selectProgram,
+	probes: SequenceProbeBudget,
 ): SelectionResult | null {
 	const value = record.value as SequenceState;
 	const unavailable = new Set<number>();
 	let rotation = value.rotation ?? nextRotation(config, consumerKey);
 
 	// An unsuccessful nonempty pass rules out at least one child for this selection.
-	while (true) {
+	while (probes.remaining > 0) {
 		for (const [index, entry] of config.entries.entries()) {
+			if (probes.remaining === 0) {
+				return null;
+			}
 			if (!rotation.remaining[index]) {
 				continue;
 			}
 
 			const priorFitRejections = context.fitRejectionCount;
-			const selected = selectChild(entry.programId, `${consumerKey}:entry:${entry.id}`, state, context, fitSeconds, fitMode, ancestry);
+			const selected = selectChild(entry.programId, `${consumerKey}:entry:${entry.id}`, state, context, fitSeconds, fitMode, ancestry, probes);
 			if (selected) {
 				rotation.remaining[index] = 0;
 				value.rotation = rotation;
@@ -209,4 +226,5 @@ function selectChance(
 		}
 		rotation = nextRotation(config, consumerKey, rotation, unavailable);
 	}
+	return null;
 }

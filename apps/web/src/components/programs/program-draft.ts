@@ -5,10 +5,31 @@ import { api } from '../../api';
 import { useResourceDraft } from '../../composables/useResourceDraft';
 import { legacyAiProgramDraftSchema } from './ai-program-draft';
 
+/** A draft step retains blank quantities so the editor can recover incomplete edits. */
+export interface SequenceDraftEntry {
+	id: string;
+	programId: string;
+	count: number | '';
+	chance: number | '';
+}
+
 /** Retain every Program source plus paid generation ownership, importing earlier AI-only drafts. */
-export function useProgramDraft<T extends object>(form: T, identity: () => string, legacyKey: () => string, dirty: () => boolean) {
+export function useProgramDraft<T extends { metadataRows: unknown[] }>(
+	form: T,
+	identity: () => string,
+	legacyKey: () => string,
+	dirty: () => boolean,
+	metadataDirty: () => boolean,
+) {
 	const generation = ref<string | null>(null);
 	let baselineFields = '';
+	let baselineProgramming = '';
+
+	/** Compare the full scheduling draft, including browser-only options. */
+	function programmingSnapshot(): string {
+		return JSON.stringify({ ...form, metadataRows: undefined });
+	}
+
 	const retained = useResourceDraft({
 		kind: 'program', identity,
 		nullableSchema: z.object({ form: z.object({
@@ -16,10 +37,25 @@ export function useProgramDraft<T extends object>(form: T, identity: () => strin
 			filter: catalogProgramItemFilterSchema,
 			audioPreferences: audioPreferencesSchema, subtitlePreferences: subtitlePreferencesSchema,
 		}) }),
-		capture: () => ({ form, generation: generation.value }),
+		// An unrelated draft must not reapply metadata from an older saved Program.
+		capture: () => ({
+			form: {
+				...form,
+				metadataRows: metadataDirty() ? form.metadataRows : undefined,
+				programmingEdited: programmingSnapshot() !== baselineProgramming,
+			},
+			generation: generation.value,
+		}),
 		restore: fields => {
-			Object.assign(form, fields.form);
-			if ('sourceType' in fields.form && fields.form.sourceType === 'ai'
+			const { metadataRows, programmingEdited, ...programming } = fields.form;
+			// Older envelopes do not record intent and retain their existing recovery behavior.
+			if (programmingEdited !== false) {
+				Object.assign(form, programming);
+			}
+			if (Array.isArray(metadataRows)) {
+				form.metadataRows = metadataRows;
+			}
+			if (programmingEdited !== false && 'sourceType' in fields.form && fields.form.sourceType === 'ai'
 				&& !Object.hasOwn(fields.form, 'contentExclusions') && 'excludedItemIds' in fields.form) {
 				const itemIds = excludedItemIdsSchema.safeParse(fields.form.excludedItemIds);
 				if (itemIds.success) {
@@ -37,6 +73,7 @@ export function useProgramDraft<T extends object>(form: T, identity: () => strin
 		generation.value = null;
 		reset();
 		baselineFields = JSON.stringify(form);
+		baselineProgramming = programmingSnapshot();
 		await retained.open(version, restore);
 		if (!restore) {
 			return;

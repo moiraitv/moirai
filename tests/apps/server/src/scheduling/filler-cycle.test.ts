@@ -1,6 +1,7 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type { FillerBudget, SchedulableMedia, SchedulingProgram, SelectionStateRecord, SequenceOrdering } from '@moirai/shared';
 import { planFiller } from '@server/scheduling/filler-plan.js';
+import { PRIMARY_CHANCE_PROBE_LIMIT } from '@server/scheduling/sequence-selection.js';
 import { SEQUENCE_FILLER_PROBE_LIMIT } from '@server/scheduling/sequence-filler.js';
 import { indexSchedulingCatalog } from '@server/scheduling/catalog.js';
 import { hasSelectionCollision, indexOccupiedMedia, selectProgram, type SelectionContext } from '@server/scheduling/selection.js';
@@ -393,6 +394,41 @@ it('bounds whole-clip searches across repeated nested references before consider
 	expect(f.state.size).toBe(0);
 	expect(f.context.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'source-unavailable', programId: f.root.id })]));
 	expect(f.break(80).spans.map(span => span.media.id)).toEqual(['item-0']);
+});
+
+it.each([true, false])('bounds nested primary Chance searches when the leaf is known empty: %s', knownEmpty => {
+	const ordering = { type: 'chance', seed: 'test' } as const;
+	const f = sequenceFixture([30, 30], [100, 100], ordering);
+	const leaf = f.children[0]!;
+	if (knownEmpty) {
+		f.context.programs.delete(leaf.id);
+	}
+	else {
+		f.context.programs.set(leaf.id, { ...leaf,
+			config: { type: 'theme', libraryId: 'library', theme: 'Unprepared', quantity: 1, variety: 0 },
+		});
+	}
+
+	let child = leaf.id;
+	for (let depth = 0; depth < Math.ceil(Math.log2(PRIMARY_CHANCE_PROBE_LIMIT)) + 2; depth += 1) {
+		const nested: SchedulingProgram = { ...f.root, id: `nested-${depth}`, config: { type: 'sequence', repeat: true,
+			ordering, entries: ['first', 'second'].map(id => ({ id, programId: child, count: 100 })) } };
+		f.context.programs.set(nested.id, nested);
+		child = nested.id;
+	}
+	f.config.entries[0]!.programId = child;
+
+	const get = vi.spyOn(f.context.programs, 'get');
+	const selected = selectProgram(f.root.id, 'primary', f.state, f.context);
+	expect(get.mock.calls.length).toBeLessThanOrEqual(1 + 2 * PRIMARY_CHANCE_PROBE_LIMIT);
+	expect(f.state.size).toBe(0);
+	if (knownEmpty) {
+		expect(selected?.media.id).toBe('item-1');
+		expect(get.mock.calls.filter(([id]) => id === leaf.id)).toHaveLength(1);
+	}
+	else {
+		expect(selected).toBeNull();
+	}
 });
 
 it('skips unavailable Sequence children and retains the source diagnostic', () => {

@@ -5,6 +5,8 @@ import { channelCreateSchema, type ScheduleGuide, type SchedulingCatalog } from 
 import { BUILTIN_GUIDE_TEMPLATE } from '@moirai/shared';
 import { buildXmltv, effectiveTvgId, minifyXmltv, presentGuideListings, previewGuideListings, xmltvTimestamp } from '@server/guide/epg.js';
 
+import { validateGuideTemplateSources } from '@server/guide/xmltv-template.js';
+
 const builtinXmltv = {
 	sourcesForChannel: () => BUILTIN_GUIDE_TEMPLATE.sources,
 	fallback: true,
@@ -101,6 +103,52 @@ function guide(channelId: string, mediaId: string): ScheduleGuide {
 }
 
 describe('XMLTV EPG', () => {
+	it('uses the same Program metadata interpolation in validation, preview, and published XMLTV', async () => {
+		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Showcase' }),
+			id: randomUUID(), createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' };
+		const source = catalog();
+		const output = guide(channel.id, source.media[0]!.id);
+		const programId = output.channels[0]!.preview.segments[0]!.programId!;
+		const url = 'https://moirai.example.test';
+		const sources = { ...BUILTIN_GUIDE_TEMPLATE.sources,
+			episode: '<programme start="{{ start }}" stop="{{ stop }}" channel="{{ channel.id }}">'
+				+ '<title>Showcase {{ program.metadata }}</title><sub-title>{{ program.metadata.label }}</sub-title></programme>',
+		};
+		await expect(validateGuideTemplateSources(sources)).resolves.toBeUndefined();
+
+		const programMetadata = new Map([[programId, { label: 'A & <B>' }]]);
+		const preview = await previewGuideListings(channel, output, source, url, sources, programMetadata);
+		expect(preview.entries[0]).toMatchObject({ title: 'Showcase [object Object]', subtitle: 'A & <B>' });
+		const xml = await buildXmltv([channel], output, source, url, { sourcesForChannel: () => sources, fallback: true, programMetadata });
+		expect(xml).toContain('<title>Showcase [object Object]</title><sub-title>A &amp; &lt;B&gt;</sub-title>');
+	});
+
+	it('renders optional custom fields while keeping strict guide variables and valid XML text', async () => {
+		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Showcase' }),
+			id: randomUUID(), createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' };
+		const source = catalog();
+		const output = guide(channel.id, source.media[0]!.id);
+		const programId = output.channels[0]!.preview.segments[0]!.programId!;
+		const episode = '<programme start="{{ start }}" stop="{{ stop }}" channel="{{ channel.id }}">'
+			+ '<title>Showcase {{ title }}</title><sub-title>{{ program.metadata.size | default: "No size" }}</sub-title>'
+			+ '<desc>{{ program.metadata.feature_label }}</desc></programme>';
+		const sources = { ...BUILTIN_GUIDE_TEMPLATE.sources, episode };
+		await expect(validateGuideTemplateSources(sources)).resolves.toBeUndefined();
+		await expect(validateGuideTemplateSources({ ...sources, episode: episode.replace('program.metadata.feature_label', 'item.misspelled') }))
+			.rejects.toThrow(/item.misspelled/u);
+
+		const url = 'https://moirai.example.test';
+		const preview = await previewGuideListings(channel, output, source, url, sources);
+		expect(preview.entries[0]?.title).toBe('Showcase Example Show');
+		const absent = await buildXmltv([channel], output, source, url, { sourcesForChannel: () => sources, fallback: true });
+		expect(absent).toContain('<title>Showcase Example Show</title><sub-title>No size</sub-title><desc></desc>');
+		const present = await buildXmltv([channel], output, source, url, {
+			sourcesForChannel: () => sources,
+			programMetadata: new Map([[programId, { feature_label: 'A\u0000 & <B> 🎬' }]]),
+		});
+		expect(present).toContain('<sub-title>No size</sub-title><desc>A� &amp; &lt;B&gt; 🎬</desc>');
+	});
+
 	it('exports an elapsed subsecond prefix before the following media listing', async () => {
 		const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Midnight' }),
 			id: randomUUID(), createdAt: '2026-11-01T07:00:00Z', updatedAt: '2026-11-01T07:00:00Z' };

@@ -2888,6 +2888,41 @@ it('applies the configured encoding default only to new channels without manual 
 	}
 }, 15_000);
 
+it('validates and persists Program metadata through the API while distinguishing metadata-only edits', async () => {
+	const { MAX_PROGRAM_METADATA_FIELDS, MAX_PROGRAM_METADATA_VALUE_LENGTH } = await import('@moirai/shared');
+	const { app, services } = await fixture();
+	const config = { type: 'content', source: { type: 'library-query', libraryId: randomUUID(), filter: {} }, strategy: { type: 'sequential' } };
+	const metadata = { showcase_actor: 'Sigourney Weaver', Showcase_Actor: '', tagline: 'A & <B>' };
+	const created = await app.inject({ method: 'POST', url: '/api/v1/programs', payload: { name: 'Showcase', config, metadata } });
+	expect(created.statusCode).toBe(201);
+	const program = created.json();
+	expect(program.metadata).toEqual(metadata);
+	expect(program.config).not.toHaveProperty('metadata');
+
+	const url = `/api/v1/programs/${program.id}`;
+	const rename = await app.inject({ method: 'PATCH', url, payload: { name: 'Renamed showcase', config: program.config } });
+	expect(rename.statusCode).toBe(200);
+	expect(rename.json().metadata).toEqual(metadata);
+	for (const invalid of [
+		{ '1actor': 'Name' }, { constructor: 'Name' }, JSON.parse('{"__proto__":"Name"}'),
+		{ actor: 1 }, { actor: 'a'.repeat(MAX_PROGRAM_METADATA_VALUE_LENGTH + 1) },
+		Object.fromEntries(Array.from({ length: MAX_PROGRAM_METADATA_FIELDS + 1 }, (_, index) => [`key_${index}`, ''])),
+	]) {
+		const rejected = await app.inject({ method: 'PATCH', url, payload: { metadata: invalid } });
+		expect(rejected.statusCode, JSON.stringify(Object.keys(invalid))).toBe(400);
+	}
+	expect((await app.inject(url)).json().metadata).toEqual(metadata);
+
+	const handle = vi.spyOn(services.timelineMaterializer, 'handleEvent');
+	const cleared = await app.inject({ method: 'PATCH', url, payload: { metadata: {} } });
+	expect(cleared.statusCode).toBe(200);
+	expect(cleared.json()).toMatchObject({ config: program.config, metadata: {}, updatedAt: rename.json().updatedAt });
+	expect(handle).toHaveBeenCalledWith(expect.objectContaining({
+		type: 'scheduling.changed', data: { entity: 'program', change: 'updated', id: program.id, affectsProgramming: false },
+	}));
+	expect((await app.inject(url)).json().metadata).toEqual({});
+}, 20_000);
+
 describe('guide template API', () => {
 	it('preserves the overload response when guide template previews exhaust the worker queue', async () => {
 		const { BUILTIN_GUIDE_TEMPLATE } = await import('@moirai/shared');

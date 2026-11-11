@@ -1,7 +1,7 @@
 import { GraphicsRepository } from './graphics.js';
 import { FillerPresetRepository } from './filler-presets.js';
 import { templatePlaybackInput } from '../scheduling/template-playback.js';
-import { preserveLegacyAiCursor, type CursorCompatibleProgram } from '../scheduling/ai-cursor.js';
+import { preserveLegacyAiCursor, publicSchedulingProgram, type CursorCompatibleProgram } from '../scheduling/ai-cursor.js';
 import { stableJsonFingerprint } from '../stable-json.js';
 import { validateCreditReference } from './subtitle-validation.js';
 import { normalizeContentExclusions, validateContentExclusions } from './content-exclusions.js';
@@ -13,6 +13,7 @@ import type {
 	ContentSource,
 	ProgramCreate,
 	ProgramConfig,
+	ProgramMetadata,
 	ProgramUpdate,
 	ScheduleTemplate,
 	ScheduleTemplateCreate,
@@ -25,6 +26,7 @@ import {
 	DEFAULT_MAX_EXPLICIT_MEDIA_ITEMS,
 	PROGRAM_ITEM_ADDITION_CONFIRMATION_THRESHOLD,
 	programConfigSchema,
+	programMetadataSchema,
 	updateSelectedMediaAdditionOrder,
 } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
@@ -68,14 +70,15 @@ function programItemAdditionConfirmationToken(itemIds: string[], orderSensitive:
 		.digest('hex');
 }
 
-/** Keep cursor migration metadata in storage alongside the authored Program JSON. */
-type StoredProgramConfig = ProgramConfig & { legacyAiCursorFingerprint?: string };
+/** Store custom text fields and cursor compatibility alongside the scheduling config. */
+type StoredProgramConfig = ProgramConfig & { legacyAiCursorFingerprint?: string; metadata?: ProgramMetadata };
 
-/** Decode authored config separately from the server-owned legacy cursor fingerprint. */
+/** Decode scheduling config and metadata while retaining private cursor compatibility. */
 function programFromRow(row: typeof schedulingPrograms.$inferSelect): CursorCompatibleProgram {
-	const { legacyAiCursorFingerprint } = row.config as StoredProgramConfig;
+	const { legacyAiCursorFingerprint, metadata } = row.config as StoredProgramConfig;
 	return { id: row.id, name: row.name, config: programConfigSchema.parse(row.config),
 		createdAt: row.createdAt, updatedAt: row.updatedAt,
+		...(metadata === undefined ? {} : { metadata: programMetadataSchema.parse(metadata) }),
 		...(typeof legacyAiCursorFingerprint === 'string' && /^[a-f0-9]{64}$/.test(legacyAiCursorFingerprint) ? { legacyAiCursorFingerprint } : {}) };
 }
 
@@ -100,6 +103,19 @@ export class SchedulingConfigurationRepository {
 			.from(schedulingPrograms)
 			.where(eq(schedulingPrograms.id, id));
 		return program ? programFromRow(program) : null;
+	}
+
+	/** Read only authored metadata for Program IDs needed by a graphics preparation batch. */
+	async programMetadataForIds(ids: readonly string[]): Promise<Map<string, ProgramMetadata>> {
+		if (!ids.length) {
+			return new Map();
+		}
+		const rows = await this.db.select({
+			id: schedulingPrograms.id, metadata: sql<string>`json_extract(${schedulingPrograms.config}, '$.metadata')`,
+		}).from(schedulingPrograms).where(sql`
+			${schedulingPrograms.id} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))
+			AND json_type(${schedulingPrograms.config}, '$.metadata') = 'object'`);
+		return new Map(rows.map(row => [row.id, programMetadataSchema.parse(JSON.parse(row.metadata))]));
 	}
 
 	/** Persist a reusable scheduling program. */
@@ -128,7 +144,8 @@ export class SchedulingConfigurationRepository {
 		this.db.transaction(tx => {
 			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
 			validateContentExclusions(tx, undefined, config);
-			tx.insert(schedulingPrograms).values({ ...program, nameKey }).run();
+			const storedConfig: StoredProgramConfig = { ...config, ...(input.metadata === undefined ? {} : { metadata: input.metadata }) };
+			tx.insert(schedulingPrograms).values({ ...program, nameKey, config: storedConfig }).run();
 		});
 		return program;
 	}
@@ -255,6 +272,14 @@ export class SchedulingConfigurationRepository {
 
 	/** Replace a program configuration while preserving its identity. */
 	async updateProgram(id: string, input: ProgramUpdate): Promise<SchedulingProgram | null> {
+		// Keep the programming revision and cursor inputs intact for presentation-only edits.
+		if (input.metadata !== undefined && input.name === undefined && input.config === undefined) {
+			const row = this.db.update(schedulingPrograms).set({
+				config: sql`json_set(${schedulingPrograms.config}, '$.metadata', json(${JSON.stringify(input.metadata)}))`,
+			}).where(eq(schedulingPrograms.id, id)).returning().get();
+			return row ? publicSchedulingProgram(programFromRow(row)) : null;
+		}
+
 		const current = await this.getProgram(id);
 		if (!current) {
 			return null;
@@ -292,14 +317,19 @@ export class SchedulingConfigurationRepository {
 		const legacyAiCursorFingerprint = input.config ? preserveLegacyAiCursor(current, config) : current.legacyAiCursorFingerprint;
 		const storedConfig: StoredProgramConfig = { ...config, ...(legacyAiCursorFingerprint ? { legacyAiCursorFingerprint } : {}) };
 
-		this.db.transaction(tx => {
+		// Carry forward the latest metadata when an older client replaces only the scheduling config.
+		const configForWrite = input.metadata === undefined ? sql`
+			CASE WHEN json_type(${schedulingPrograms.config}, '$.metadata') = 'object'
+				THEN json_set(${JSON.stringify(storedConfig)}, '$.metadata', json_extract(${schedulingPrograms.config}, '$.metadata'))
+				ELSE ${JSON.stringify(storedConfig)} END` : { ...storedConfig, metadata: input.metadata };
+		return this.db.transaction(tx => {
 			new GraphicsRepository(tx).validateAssignments([config.graphicsAssignment]);
 			validateContentExclusions(tx, current.config, config);
-			tx.update(schedulingPrograms)
-				.set({ name: updated.name, nameKey, config: storedConfig, updatedAt: updated.updatedAt })
-				.where(eq(schedulingPrograms.id, id)).run();
+			const row = tx.update(schedulingPrograms)
+				.set({ name: updated.name, nameKey, config: configForWrite, updatedAt: updated.updatedAt })
+				.where(eq(schedulingPrograms.id, id)).returning().get();
+			return row ? publicSchedulingProgram(programFromRow(row)) : null;
 		});
-		return updated;
 	}
 
 	/** Atomically append canonical items to a compatible same-library collection program. */
@@ -426,13 +456,7 @@ export class SchedulingConfigurationRepository {
 			) {
 				return {
 					status: 'updated',
-					program: {
-						id: row.id,
-						name: row.name,
-						config,
-						createdAt: row.createdAt,
-						updatedAt: row.updatedAt,
-					},
+					program: publicSchedulingProgram(programFromRow(row)),
 					changed: false,
 					addedItemCount: 0,
 					alreadySelectedCount,
@@ -441,8 +465,7 @@ export class SchedulingConfigurationRepository {
 
 			const timestamp = currentTimestamp();
 			const updated: SchedulingProgram = {
-				id: row.id,
-				name: row.name,
+				...publicSchedulingProgram(programFromRow(row)),
 				config: {
 					...config,
 					source: {
@@ -464,7 +487,8 @@ export class SchedulingConfigurationRepository {
 				updatedAt: timestamp,
 			};
 			tx.update(schedulingPrograms)
-				.set({ config: updated.config, updatedAt: timestamp })
+				.set({ config: { ...updated.config, ...(updated.metadata === undefined ? {} : { metadata: updated.metadata }) },
+					updatedAt: timestamp })
 				.where(eq(schedulingPrograms.id, id)).run();
 			return {
 				status: 'updated',

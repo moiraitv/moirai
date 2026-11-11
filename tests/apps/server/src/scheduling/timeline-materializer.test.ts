@@ -1241,6 +1241,27 @@ it('loads warning tolerance once per pass, forwards it to generation, and retain
 });
 
 
+it('keeps committed programming when new graphics display fields become available', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	const materialization = structuredClone(test.materialization());
+	const segments = structuredClone(test.segments());
+	const commits = vi.mocked(test.repository.commitMaterializedTimeline).mock.calls.length;
+
+	for (const certification of [null, 'PG']) {
+		test.catalog.media[0]!.displayMetadata = {
+			originalTitle: null, edition: null, album: null, certification, cast: [], writers: [], studios: [], countries: [],
+		};
+		await materializer.runNow(true);
+		expect(test.materialization()).toEqual(materialization);
+		expect(test.segments()).toEqual(segments);
+	}
+	expect(test.repository.commitMaterializedTimeline).toHaveBeenCalledTimes(commits);
+});
+
 it('stages duplicate-avoidance changes at midnight without resetting selection progress', async () => {
 	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));

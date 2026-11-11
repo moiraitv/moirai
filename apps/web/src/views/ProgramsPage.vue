@@ -60,7 +60,8 @@ function refreshOverview(): void {
 	}, 1_000);
 }
 const unsubscribeEmbeddingProgress = liveEvents.subscribe((event) => {
-	if (event.type === 'embeddings.changed' || event.type === 'timeline.changed') {
+	if (event.type === 'embeddings.changed' || event.type === 'timeline.changed'
+		|| (event.type === 'scheduling.changed' && event.data.entity === 'program' && event.data.affectsProgramming === false)) {
 		refreshOverview();
 	}
 });

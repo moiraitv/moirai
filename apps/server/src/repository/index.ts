@@ -352,6 +352,11 @@ export class Repository extends LibraryRepository {
 		return this.scheduling.listPrograms();
 	}
 
+	/** Read custom text fields for the Programs used by a graphics preparation batch. */
+	programMetadataForIds(ids: readonly string[]) {
+		return this.scheduling.programMetadataForIds(ids);
+	}
+
 	/** Return one reusable scheduling program. */
 	async getProgram(id: string): Promise<CursorCompatibleProgram | null> {
 		return this.scheduling.getProgram(id);

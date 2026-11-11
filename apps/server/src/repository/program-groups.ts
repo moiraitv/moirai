@@ -1,5 +1,5 @@
 import { eq, inArray, and } from 'drizzle-orm';
-import { MAX_EXPLICIT_MEDIA_GROUPS, programConfigSchema, type ProgramGroupAdditionResult } from '@moirai/shared';
+import { MAX_EXPLICIT_MEDIA_GROUPS, programConfigSchema, programMetadataSchema, type ProgramMetadata, type ProgramGroupAdditionResult } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import { mediaGroups, schedulingPrograms } from '../db/schema.js';
 import { currentTimestamp } from '../time.js';
@@ -33,12 +33,16 @@ export function appendProgramGroups(db: MoiraiDatabase, id: string, libraryId: s
 		}
 		config.source.groupIds.push(...additions);
 		const updatedAt = additions.length ? currentTimestamp() : row.updatedAt;
+		const metadata = (row.config as { metadata?: ProgramMetadata }).metadata;
 		if (additions.length) {
-			tx.update(schedulingPrograms).set({ config, updatedAt }).where(eq(schedulingPrograms.id, id)).run();
+			tx.update(schedulingPrograms).set({
+				config: { ...config, ...(metadata === undefined ? {} : { metadata }) }, updatedAt,
+			}).where(eq(schedulingPrograms.id, id)).run();
 		}
 		return {
 			status: 'updated', created: false,
-			program: { id: row.id, name: row.name, config, createdAt: row.createdAt, updatedAt },
+			program: { id: row.id, name: row.name, config, createdAt: row.createdAt, updatedAt,
+				...(metadata === undefined ? {} : { metadata: programMetadataSchema.parse(metadata) }) },
 			addedGroupCount: additions.length, alreadySelectedCount: incoming.length - additions.length,
 		};
 	});

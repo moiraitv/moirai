@@ -1,6 +1,7 @@
 import { graphicsAssignmentSchema } from './graphics.js';
 import { compareEpisodeOrder } from './episode-order.js';
 import type { SelectionStateRecord } from './selection-state.js';
+import { programMetadataSchema } from './program-metadata.js';
 import { sequenceProgramConfigSchema } from './sequence-config.js';
 export { eligibleSequenceEntries, sequenceEntrySchema, sequenceOrderingSchema, sequenceProgramConfigSchema, sequencePreviewSchema,
 	type SequenceEntry, type SequenceOrdering, type SequencePreview } from './sequence-config.js';
@@ -29,6 +30,7 @@ import {
 	catalogProgramItemFilterSchema,
 	catalogProgramItemQuerySchema,
 	sortDirectionSchema,
+	type CatalogDisplayMetadata,
 	validateMediaGenreRules,
 	validateMediaDurationRange,
 } from './catalog.js';
@@ -393,6 +395,7 @@ export type ProgramConfig = z.infer<typeof programConfigSchema>;
 export const programCreateSchema = z.object({
 	name: z.string().trim().min(1).max(120),
 	config: programConfigSchema,
+	metadata: programMetadataSchema.optional(),
 });
 /** Validate the program update contract at runtime. */
 export const programUpdateSchema = programCreateSchema.partial();
@@ -963,6 +966,8 @@ export interface SchedulableMedia {
 	userRating?: number | null;
 	actors?: string[];
 	directors?: string[];
+	/** Present on new snapshots, including when the catalog has no values for these fields. */
+	displayMetadata?: CatalogDisplayMetadata;
 	artworkUrl: string | null;
 	posterUrl?: string | null;
 	landscapeUrl?: string | null;

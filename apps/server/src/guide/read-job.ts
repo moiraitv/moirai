@@ -69,6 +69,7 @@ export async function guideRead(repository: Repository, request: GuideReadReques
 			materialized.catalog,
 			request.publicUrl,
 			request.preview!.sources,
+			materialized.programMetadata,
 		));
 		return timePhase('serialize', () => {
 			const value = { timeZone: materialized.guide.timeZone, startDate: materialized.guide.startDate, ...preview };
@@ -81,6 +82,7 @@ export async function guideRead(repository: Repository, request: GuideReadReques
 		sourcesForChannel: (channel: typeof channels[number]) => channel.guideTemplateId
 			? templates.byId.get(channel.guideTemplateId) ?? templates.defaultSources : templates.defaultSources,
 		fallback: true,
+		...(materialized.programMetadata ? { programMetadata: materialized.programMetadata } : {}),
 		warn: (message: string, extra?: Record<string, unknown>) => {
 			if (warnings.length < 10) {
 				warnings.push({ message, ...(extra ? { extra } : {}) });

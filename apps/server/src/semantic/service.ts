@@ -41,7 +41,7 @@ export class EmbeddingService {
 	/** Schedule reconciliation after catalog edits, including ancestor metadata changes. */
 	handleEvent(event: LiveEvent): void {
 		const changedScan = event.type === 'scan.changed' && event.data.status === 'complete' && event.data.affectsProgramming;
-		if (changedScan || event.type === 'library.changed' || event.type === 'scheduling.changed') {
+		if (changedScan || event.type === 'library.changed' || (event.type === 'scheduling.changed' && event.data.affectsProgramming !== false)) {
 			this.dirty = true;
 			if (this.timer && this.timerDueAt <= Date.now() + 2_000) {
 				return;

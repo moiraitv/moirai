@@ -1543,3 +1543,45 @@
 	border-radius: 6px;
 	font-size: 0.75rem;
 }
+
+.program-metadata-disclosure {
+	.program-section-heading {
+		flex: 1;
+		margin: 0;
+	}
+
+	> .form-disclosure-content {
+		padding: 1rem;
+	}
+}
+
+.program-metadata-fields {
+	display: grid;
+	gap: 0.75rem;
+	justify-items: start;
+
+	> p {
+		margin: 0;
+		color: var(--muted-strong);
+		font-size: 0.8rem;
+		overflow-wrap: anywhere;
+	}
+}
+
+.program-metadata-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+	align-items: start;
+	gap: 0.65rem;
+	width: 100%;
+
+	input {
+		min-width: 0;
+		width: 100%;
+	}
+
+	> button {
+		align-self: start;
+		margin-block-start: 1.4rem;
+	}
+}

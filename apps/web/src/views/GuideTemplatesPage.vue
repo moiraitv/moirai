@@ -6,7 +6,7 @@ import { readWithRetry } from '../read-recovery';
 import ResourceUsage from '../components/ResourceUsage.vue';
 import { useDraftProtection } from '../draft-protection';
 import PageHelpButton from '../components/PageHelpButton.vue';
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
 import { Copy, Eye, FileCode, Info, Pencil, Plus } from '@lucide/vue';
 import { useResourceEditorRoute } from '../composables/useResourceEditorRoute';
 import {
@@ -16,9 +16,11 @@ import {
 	MAX_GUIDE_TEMPLATE_SOURCE_LENGTH,
 	emptyGuideTemplateSources,
 	guideTemplateCreateSchema,
+	mergeProgramMetadata,
 	type Channel,
 	type GuideEntry,
 	type GuideTemplate,
+	type GuideTemplatePreviewResult,
 	type GuideTemplatePreviewValue,
 	type GuideTemplateSources,
 	type ScheduleGuide,
@@ -47,6 +49,7 @@ const previewError = ref('');
 const previewEntries = ref<GuideEntry[]>([]);
 const previewChannelValues = ref<GuideTemplatePreviewValue[]>([]);
 const previewListingValues = ref<Record<string, GuideTemplatePreviewValue[]>>({});
+const previewProgramMetadata = shallowRef<GuideTemplatePreviewResult['programMetadata']>();
 const inspectedId = ref<string | null>(null);
 const previewTimeZone = ref('');
 const previewStartDate = ref('');
@@ -104,7 +107,22 @@ const inspectedValues = computed(() => {
 	if (inspectedId.value === 'channel') {
 		return previewChannelValues.value;
 	}
-	return inspectedId.value ? previewListingValues.value[inspectedId.value] ?? [] : [];
+	if (!inspectedId.value) {
+		return [];
+	}
+
+	const rows = previewListingValues.value[inspectedId.value] ?? [];
+	const metadata = previewProgramMetadata.value;
+	if (!metadata) {
+		return rows;
+	}
+
+	const ids = metadata.listingProgramIds[inspectedId.value] ?? [];
+	const fields = Object.entries(mergeProgramMetadata(ids.map(id => metadata.byId[id])));
+	const programRows = fields.length
+		? fields.map(([key, value]) => ({ name: `program.metadata.${key}`, value: value || '""' }))
+		: [{ name: 'program.metadata', value: '{}' }];
+	return [...rows, ...programRows];
 });
 const inspectedLabel = computed(() => {
 	if (inspectedId.value === 'channel') {
@@ -178,6 +196,7 @@ async function openDraft(template?: GuideTemplate, duplicate = false): Promise<v
 	previewEntries.value = [];
 	previewChannelValues.value = [];
 	previewListingValues.value = {};
+	previewProgramMetadata.value = undefined;
 	inspectedId.value = null;
 	previewStartDate.value = '';
 	open.value = true;
@@ -361,6 +380,7 @@ async function runPreview(): Promise<void> {
 		previewEntries.value = [];
 		previewChannelValues.value = [];
 		previewListingValues.value = {};
+		previewProgramMetadata.value = undefined;
 		inspectedId.value = null;
 		previewStartDate.value = '';
 		previewError.value = channels.value.length ? '' : 'Create a channel to preview XMLTV output.';
@@ -381,6 +401,7 @@ async function runPreview(): Promise<void> {
 			previewEntries.value = result.entries;
 			previewChannelValues.value = result.channelValues;
 			previewListingValues.value = result.listingValues;
+			previewProgramMetadata.value = result.programMetadata;
 			if (inspectedId.value && inspectedId.value !== 'channel' && !result.listingValues[inspectedId.value]) {
 				inspectedId.value = null;
 			}

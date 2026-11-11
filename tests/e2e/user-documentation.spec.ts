@@ -332,6 +332,85 @@ test('saves new template defaults with unlimited finish-left boundaries', async 
 	await expect(editor.getByRole('button', { name: 'No Limit', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('captures Program metadata and verifies save and reset', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
+	const { sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
+	const programId = sequenceProgramIds[0]!;
+	await page.goto(`/schedules/programs/${programId}`);
+	const editor = page.getByRole('dialog', { name: 'Edit Program' });
+	const fields = editor.locator('.program-metadata-disclosure');
+	await fields.getByRole('button', { name: /Guide and graphics metadata/ }).click();
+	await fields.getByRole('button', { name: 'Add field' }).click();
+	await fields.getByRole('textbox', { name: 'Key' }).fill('showcase_actor');
+	await fields.getByRole('textbox', { name: 'Value' }).fill('Sigourney Weaver');
+	await fields.getByRole('textbox', { name: 'Value' }).blur();
+	await captureSection(page, fields, 'program-guide-metadata.png');
+
+	const saved = page.waitForResponse(response => response.request().method() === 'PATCH'
+		&& response.url().endsWith(`/api/v1/programs/${programId}`));
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	const response = await saved;
+	expect(response.ok()).toBe(true);
+	expect(response.request().postDataJSON()).toEqual({ metadata: { showcase_actor: 'Sigourney Weaver' } });
+	await expect(editor.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
+	await fields.getByRole('textbox', { name: 'Value' }).fill('Different actor');
+	await editor.getByRole('button', { name: 'Reset', exact: true }).click();
+	await editor.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+	await expect(fields.getByRole('textbox', { name: 'Value' })).toHaveValue('Sigourney Weaver');
+});
+
+test('recovers blank Sequence quantities and preserves newer independent Program edits', async ({ page, documentationServer }) => {
+	const { sequenceProgramIds, requestHeaders } = await seedSchedule(page, documentationServer.directory);
+	const created = await page.request.post('/api/v1/programs', { headers: requestHeaders, data: {
+		name: 'Showcase rotation',
+		metadata: { showcase_actor: 'Original actor' },
+		config: { type: 'sequence', entries: [{ id: randomUUID(), programId: sequenceProgramIds[0], count: 2 }] },
+	} });
+	expect(created.ok()).toBe(true);
+	const { id } = await created.json();
+	const url = `/api/v1/programs/${id}`;
+	await page.goto(`/schedules/programs/${id}`);
+	const editor = page.getByRole('dialog', { name: 'Edit Program' });
+	const name = editor.getByPlaceholder('e.g. Evening Lineup');
+	const count = editor.getByRole('spinbutton', { name: 'Step 1 count', exact: true });
+	const save = editor.getByRole('button', { name: 'Save', exact: true });
+	await name.fill('Recovered showcase rotation');
+	await count.fill('');
+	await expect(save).toBeDisabled();
+
+	const changed = await page.request.patch(url, { headers: requestHeaders, data: { metadata: { showcase_actor: 'New actor' } } });
+	expect(changed.ok()).toBe(true);
+	await page.reload();
+	await expect(name).toHaveValue('Recovered showcase rotation');
+	await expect(count).toHaveValue('');
+	await expect(save).toBeDisabled();
+	await editor.getByRole('button', { name: /Guide and graphics metadata/ }).click();
+	await expect(editor.getByRole('textbox', { name: 'Value' })).toHaveValue('New actor');
+
+	const saved = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().endsWith(url));
+	await count.fill('3');
+	await save.click();
+	const response = await saved;
+	expect(response.ok()).toBe(true);
+	expect(response.request().postDataJSON()).not.toHaveProperty('metadata');
+	expect((await response.json()).metadata).toEqual({ showcase_actor: 'New actor' });
+
+	await expect(editor.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
+	await editor.getByRole('textbox', { name: 'Value' }).fill('Draft actor');
+	const renamed = await page.request.patch(url, { headers: requestHeaders, data: { name: 'Newer rotation name' } });
+	expect(renamed.ok()).toBe(true);
+	await page.reload();
+	await expect(name).toHaveValue('Newer rotation name');
+	await editor.getByRole('button', { name: /Guide and graphics metadata/ }).click();
+	await expect(editor.getByRole('textbox', { name: 'Value' })).toHaveValue('Draft actor');
+
+	const metadataSaved = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().endsWith(url));
+	await save.click();
+	const metadataResponse = await metadataSaved;
+	expect(metadataResponse.ok()).toBe(true);
+	expect(metadataResponse.request().postDataJSON()).toEqual({ metadata: { showcase_actor: 'Draft actor' } });
+	expect((await metadataResponse.json()).name).toBe('Newer rotation name');
+});
+
 test('captures Templates', { tag: '@docs-screenshot' }, async ({ page, documentationServer }) => {
 	const { sequenceProgramIds } = await seedSchedule(page, documentationServer.directory);
 	await page.goto('/schedules/templates');

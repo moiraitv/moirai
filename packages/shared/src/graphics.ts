@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { programTemplateContextSchema } from './program-metadata.js';
 
 /** How a scheduling scope modifies its inherited graphics stack. */
 export const graphicsAssignmentSchema = z.discriminatedUnion('mode', [
@@ -184,15 +185,23 @@ export const graphicsMediaSchema = z.object({
 	seriesTitle: z.string().nullable(), seasonNumber: z.number().nullable(), episodeNumber: z.number().nullable(),
 	episodeEndNumber: z.number().nullable(), year: z.number().nullable(), releaseDate: z.string().nullable(),
 	description: z.string().nullable(), durationSeconds: z.number().nullable(),
+	originalTitle: z.string().nullable(), edition: z.string().nullable(), certification: z.string().nullable(),
+	rating: z.number().nullable(), userRating: z.number().nullable(), primaryGenre: z.string().nullable(),
+	genres: z.array(z.string()), tags: z.array(z.string()),
+	cast: z.array(z.object({ name: z.string(), role: z.string().nullable() })), directors: z.array(z.string()),
+	writers: z.array(z.string()), studios: z.array(z.string()), countries: z.array(z.string()),
+	artist: z.string().nullable(), artists: z.array(z.string()), album: z.string().nullable(),
+	trackNumber: z.number().nullable(), discNumber: z.number().nullable(),
 });
 
-/** Raw graphics metadata with unknown values represented by null. */
+/** Raw graphics metadata with null scalars and empty lists for unavailable fields. */
 export type GraphicsMedia = z.infer<typeof graphicsMediaSchema>;
 
 /** Committed airing times and guide labels with separate raw catalog metadata. */
 export const graphicsAiringSchema = z.object({
 	title: z.string(), subtitle: z.string().nullable(), start: z.iso.datetime({ offset: true }),
 	finish: z.iso.datetime({ offset: true }), startTime: z.string(), media: graphicsMediaSchema,
+	program: programTemplateContextSchema.optional(),
 });
 
 /** One complete primary airing exposed to Liquid. */
@@ -204,6 +213,7 @@ export const MAX_GRAPHICS_UPCOMING = 8;
 /** Path-free Liquid context shared by both previews and playback. */
 export const graphicsContextSchema = z.object({
 	channel: z.object({ name: z.string(), number: z.string() }), media: graphicsMediaSchema.nullable(),
+	program: programTemplateContextSchema.optional(),
 	now: graphicsAiringSchema.nullable(), next: graphicsAiringSchema.nullable(),
 	upcoming: z.array(graphicsAiringSchema).max(MAX_GRAPHICS_UPCOMING),
 });
@@ -211,10 +221,13 @@ export const graphicsContextSchema = z.object({
 /** Complete graphics Liquid values at one point in the broadcast. */
 export type GraphicsContext = z.infer<typeof graphicsContextSchema>;
 
-/** Null defaults keep the raw media shape stable when catalog metadata is absent. */
+/** Defaults keep the raw media shape stable when catalog metadata is absent. */
 export const emptyGraphicsMedia: GraphicsMedia = {
 	title: null, subtitle: null, kind: null, seriesTitle: null, seasonNumber: null, episodeNumber: null,
 	episodeEndNumber: null, year: null, releaseDate: null, description: null, durationSeconds: null,
+	originalTitle: null, edition: null, certification: null, rating: null, userRating: null, primaryGenre: null,
+	genres: [], tags: [], cast: [], directors: [], writers: [], studios: [], countries: [],
+	artist: null, artists: [], album: null, trackNumber: null, discNumber: null,
 };
 
 /** Keep channel identity available while no item can be resolved. */
@@ -225,6 +238,7 @@ export function emptyGraphicsContext(channel: GraphicsContext['channel']): Graph
 /** Use the same representative guide and catalog values in every sample preview. */
 const sampleAirings = graphicsSampleSchedule.map((airing, index): GraphicsAiring => ({
 	...airing,
+	program: { metadata: { showcase_actor: ['Sigourney Weaver', 'Michelle Yeoh', 'Tony Leung'][index]! } },
 	media: { ...emptyGraphicsMedia, title: airing.title, kind: 'episode', seriesTitle: 'The Alpine Expedition',
 		seasonNumber: 1, episodeNumber: index + 1, year: 2026, durationSeconds: index === 0 ? 1800 : 3600 },
 }));
@@ -232,6 +246,7 @@ const sampleAirings = graphicsSampleSchedule.map((airing, index): GraphicsAiring
 /** Shared deterministic sample Liquid values. */
 export const sampleGraphicsContext: GraphicsContext = {
 	channel: { name: 'Moirai TV', number: '12' }, media: sampleAirings[0]!.media,
+	program: { metadata: { showcase_actor: 'Sigourney Weaver' } },
 	now: sampleAirings[0]!, next: sampleAirings[1]!, upcoming: sampleAirings.slice(1),
 };
 

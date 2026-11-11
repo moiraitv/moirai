@@ -140,7 +140,7 @@ export class SchedulingWorkerPool {
 	private localReader: DatabaseJobReader | null = null;
 	private readRevision = 0;
 	private sharedPlayoutRevision = 0;
-	private guideTemplateRevision = 0;
+	private guideLabelRevision = 0;
 	private readonly channelPlayoutRevisions = new Map<string, number>();
 	private interactiveStreak = 0;
 	private readonly previews = new Map<string, SharedRead<PreviewResults[PreviewRequest['kind']]>>();
@@ -155,8 +155,9 @@ export class SchedulingWorkerPool {
 		else if (event?.type === 'scheduling.changed' && event.data.entity === 'assignment' && event.data.id) {
 			this.channelPlayoutRevisions.set(event.data.id, this.readRevision);
 		}
-		else if (event?.type === 'scheduling.changed' && event.data.entity === 'guide-template' && event.data.change === 'updated') {
-			this.guideTemplateRevision = this.readRevision;
+		else if (event?.type === 'scheduling.changed' && event.data.change === 'updated'
+			&& (event.data.entity === 'guide-template' || (event.data.entity === 'program' && event.data.affectsProgramming === false))) {
+			this.guideLabelRevision = this.readRevision;
 		}
 		else if (!event || (event.type === 'library.changed' && event.data.change !== 'watcher-status' && event.data.change !== 'change-detected')
 			|| (event.type === 'scan.changed' && event.data.affectsProgramming)
@@ -169,7 +170,7 @@ export class SchedulingWorkerPool {
 
 	/** Validate publication against this channel and shared playback inputs, excluding read-only progress. */
 	playoutRevision(channelId: string, withGuideLabels = false): string {
-		return `${this.sharedPlayoutRevision}:${this.channelPlayoutRevisions.get(channelId) ?? 0}:${withGuideLabels ? this.guideTemplateRevision : 0}`;
+		return `${this.sharedPlayoutRevision}:${this.channelPlayoutRevisions.get(channelId) ?? 0}:${withGuideLabels ? this.guideLabelRevision : 0}`;
 	}
 
 	/** File-backed databases can be read independently without transferring their catalogs. */

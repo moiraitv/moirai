@@ -2,7 +2,7 @@ import { candidateIndex } from './candidate-index.js';
 import { durationMilliseconds } from '@moirai/shared';
 import { selectFillerCandidate } from './filler-cycle.js';
 import { selectOrderedCandidate, sequentialCandidateOffset } from './candidate-selection.js';
-import { selectSequence } from './sequence-selection.js';
+import { selectSequence, type SequenceProbeBudget } from './sequence-selection.js';
 import { chooseSimilarity } from '../semantic/selection.js';
 import { createHash } from 'node:crypto';
 import {
@@ -754,7 +754,15 @@ export function selectProgram(
 	fitSeconds: number | null = null,
 	fitMode: SelectionFitMode = 'best-fit',
 	ancestry: string[] = [],
+	probes?: SequenceProbeBudget,
 ): SelectionResult | null {
+	if (probes) {
+		if (probes.remaining <= 0 || probes.unavailable.has(programId)) {
+			return null;
+		}
+		probes.remaining -= 1;
+	}
+
 	if (ancestry.includes(programId)) {
 		addIssue(context, {
 			code: 'program-cycle',
@@ -774,6 +782,7 @@ export function selectProgram(
 			mediaItemId: null,
 		});
 		context.blockedPrograms.add(programId);
+		probes?.unavailable.add(programId);
 		return null;
 	}
 
@@ -784,8 +793,12 @@ export function selectProgram(
 	if (program.config.type === 'content') {
 		const media = chooseContent(program, consumerKey, state, context, fitSeconds, fitMode);
 		// A nonempty playable pool can fail content selection only on the requested fit limit.
-		if (!media && fitSeconds !== null && (context.candidateCache.get(programId)?.playable.length ?? 0) > 0) {
+		const playable = context.candidateCache.get(programId)?.playable.length;
+		if (!media && fitSeconds !== null && playable) {
 			context.fitRejectionCount += 1;
+		}
+		if (playable === 0) {
+			probes?.unavailable.add(programId);
 		}
 		return media ? { media, state, programAncestry: [...ancestry, programId] } : null;
 	}
@@ -804,5 +817,10 @@ export function selectProgram(
 		context.now,
 		fingerprints.compatible,
 	);
-	return selectSequence(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectProgram);
+	const selected = selectSequence(program, consumerKey, state, record, context, fitSeconds, fitMode, ancestry, selectProgram, probes);
+	// Only memoize subtrees whose eligible children cannot play under any consumer cursor.
+	if (!selected && probes && program.config.entries.every(entry => entry.count === 0 || probes.unavailable.has(entry.programId))) {
+		probes.unavailable.add(programId);
+	}
+	return selected;
 }

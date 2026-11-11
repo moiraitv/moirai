@@ -290,6 +290,18 @@ export interface MediaPerson {
 	sortOrder: number | null;
 }
 
+/** Descriptive catalog fields captured together for graphics on committed airings. */
+export interface CatalogDisplayMetadata {
+	originalTitle: string | null;
+	edition: string | null;
+	album: string | null;
+	certification: string | null;
+	cast: Array<Pick<MediaPerson, 'name' | 'role'>>;
+	writers: string[];
+	studios: string[];
+	countries: string[];
+}
+
 /** Bounded indexed metadata displayed beside compact media cards. */
 export interface MediaCardPreview {
 	id: string;

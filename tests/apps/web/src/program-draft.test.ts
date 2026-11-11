@@ -27,10 +27,10 @@ function editor() {
 	const form = reactive({ type: 'content', sourceType: 'ai', name: '', libraryId: '', aiPrompt: '',
 		aiSelectionPrompt: null, aiResultLimit: AI_DEFAULT_RESULT_COUNT, selectedItemIds: [], selectedItemSort: 'name',
 		selectedItemSortDirection: 'asc', manualItemIds: [], strategy: 'sequential', seed: '',
-		audioPreferences: {}, subtitlePreferences: {} });
+		audioPreferences: {}, subtitlePreferences: {}, metadataRows: [] });
 	const scope = effectScope();
 	scopes.push(scope);
-	const draft = scope.run(() => useProgramDraft(form, () => 'saved', () => 'legacy', () => Boolean(form.name)))!;
+	const draft = scope.run(() => useProgramDraft(form, () => 'saved', () => 'legacy', () => Boolean(form.name), () => false))!;
 	return { form, draft, scope };
 }
 

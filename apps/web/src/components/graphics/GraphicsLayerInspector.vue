@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Upload } from '@lucide/vue';
 import { computed, nextTick, ref, useId } from 'vue';
-import { graphicsAnchors, graphicsShapes, MAX_GRAPHICS_LAYER_NAME_LENGTH, MAX_GRAPHICS_TEXT_LENGTH, MIN_GRAPHICS_FADE_MS, type GraphicsAsset, type GraphicsLayer } from '@moirai/shared';
+import { graphicsAnchors, graphicsShapes, MAX_GRAPHICS_LAYER_NAME_LENGTH, MAX_GRAPHICS_TEXT_LENGTH, MIN_GRAPHICS_FADE_MS, type GraphicsAsset, type GraphicsLayer, type GraphicsMedia, type GuideTemplatePreviewValue } from '@moirai/shared';
 import GraphicsPicker from './GraphicsPicker.vue';
 import GraphicsMediaThumbnail from './GraphicsMediaThumbnail.vue';
 import GuideTemplateValuesPopover from '../GuideTemplateValuesPopover.vue';
@@ -35,14 +35,30 @@ const rawFields = {
 	title: 'Raw item title', subtitle: 'Raw subtitle (usually blank)', kind: 'episode', seriesTitle: 'The Alpine Expedition',
 	seasonNumber: '1', episodeNumber: '3', episodeEndNumber: '4', year: '2026', releaseDate: '2026-01-01',
 	description: 'Catalog synopsis', durationSeconds: '1800',
-};
+	originalTitle: 'Original title', edition: 'Movie edition', certification: 'Content certification',
+	rating: 'Catalog rating', userRating: 'User rating', genres: 'Genre names', primaryGenre: 'Primary genre name',
+	tags: 'Catalog tags', cast: 'Cast names', 'cast[0].name': 'First credited cast member', 'cast[0].role': 'First cast member’s role',
+	directors: 'Director names', writers: 'Writer names', studios: 'Production studios', countries: 'Production countries',
+	artist: 'First credited song artist', artists: 'All credited song artists', album: 'Song album',
+	trackNumber: 'Song track number', discNumber: 'Song disc number',
+} satisfies Record<keyof GraphicsMedia | 'cast[0].name' | 'cast[0].role', string>;
+
+/** String lists insert a comma-separated caption. */
+const listFields = new Set(['genres', 'tags', 'directors', 'writers', 'studios', 'countries', 'artists']);
 
 /** Liquid fields shown in the insertion picker. */
-const fields = [
+const fields: Array<GuideTemplatePreviewValue & { expression?: string }> = [
+	...['program', 'now.program', 'next.program', 'upcoming[0].program'].map(scope => ({
+		name: `${scope}.metadata.showcase_actor`, value: 'Example Program field. Replace showcase_actor with your field key.',
+	})),
 	{ name: 'channel.name', value: 'Moirai TV' }, { name: 'channel.number', value: '12' },
 	...['now', 'next', 'upcoming[0]'].flatMap(scope => Object.entries(airingFields).map(([field, value]) => ({ name: `${scope}.${field}`, value }))),
 	...['media', 'now.media', 'next.media', 'upcoming[0].media'].flatMap(scope => Object.entries(rawFields)
-		.map(([field, value]) => ({ name: `${scope}.${field}`, value }))),
+		.map(([field, value]) => {
+			const name = `${scope}.${field}`;
+			const filter = field === 'cast' ? " | map: 'name' | join: ', '" : listFields.has(field) ? " | join: ', '" : '';
+			return { name, value, expression: `${name}${filter}` };
+		})),
 ];
 
 const hasDependents = computed(() => props.layers.some(layer => layer.attachment?.layerId === props.layer.id));
@@ -107,7 +123,8 @@ function setMode(mode: string): void {
 /** Insert a supported Liquid field in the text layer. */
 function insertField(field: string): void {
 	if (props.layer.kind === 'text') {
-		const text = `${props.layer.text} {{ ${field} }}`;
+		const expression = fields.find(({ name }) => name === field)?.expression ?? field;
+		const text = `${props.layer.text} {{ ${expression} }}`;
 		if (text.length <= MAX_GRAPHICS_TEXT_LENGTH) {
 			emit('patch', { text });
 		}
@@ -263,7 +280,7 @@ function patchGradientStop(stop: 'start' | 'end', change: { color: string } | { 
 				<label class="graphics-full-row"><span>Text or Liquid template</span><textarea ref="textInput" :value="layer.text" :maxlength="MAX_GRAPHICS_TEXT_LENGTH" rows="2" @input="emit('patch', { text: ($event.target as HTMLTextAreaElement).value })" /></label>
 				<div class="form-actions graphics-full-row">
 					<button type="button" class="button secondary" @click="fieldPicker?.show($event.currentTarget as HTMLElement)">Insert Liquid field</button>
-					<GuideTemplateValuesPopover ref="fieldPicker" title="Graphics template fields" :values="fields" insertable @insert="insertField" />
+					<GuideTemplateValuesPopover ref="fieldPicker" title="Graphics template fields" :values="fields" insertable searchable @insert="insertField" />
 				</div>
 			</fieldset>
 			<fieldset class="graphics-settings-group form-grid graphics-full-row">

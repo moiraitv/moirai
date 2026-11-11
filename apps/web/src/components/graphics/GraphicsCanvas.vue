@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Liquid } from 'liquidjs';
+import { Context, Liquid } from 'liquidjs';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import sampleStill from '../../../../server/assets/graphics-preview.jpg';
-import { escapeGraphicsTextValue, unescapeGraphicsTextValue, graphicsClockSize, graphicsClockSvg, sampleGraphicsContext, graphicsSampleStart, graphicsTimeFormatter, graphicsShapeSvg, graphicsTextRuns, resolveGraphicsGeometry, type GraphicsContext, type GraphicsGeometry, type GraphicsSize, type GraphicsAsset, type GraphicsLayer, type GraphicsTextStyle } from '@moirai/shared';
+import { useProgramMetadataLookup, escapeGraphicsTextValue, unescapeGraphicsTextValue, graphicsClockSize, graphicsClockSvg, sampleGraphicsContext, graphicsSampleStart, graphicsTimeFormatter, graphicsShapeSvg, graphicsTextRuns, resolveGraphicsGeometry, type GraphicsContext, type GraphicsGeometry, type GraphicsSize, type GraphicsAsset, type GraphicsLayer, type GraphicsTextStyle } from '@moirai/shared';
 
 const props = defineProps<{ layers: GraphicsLayer[]; assets: GraphicsAsset[]; selected?: string; disabled?: boolean; elapsedMs: number; frame?: string; context?: GraphicsContext | undefined; thumbnail?: boolean }>();
 const emit = defineEmits<{ select: [id: string]; patch: [id: string, changes: Record<string, unknown>] }>();
@@ -267,7 +267,10 @@ onBeforeUnmount(() => {
 /** Substitute committed or sample fields and styles in the immediate placement preview. */
 function sampleRuns(layer: Extract<GraphicsLayer, { kind: 'text' }>) {
 	try {
-		const text = sampleLiquid.parseAndRenderSync(layer.text, props.context ?? sampleGraphicsContext);
+		const context = props.context ?? sampleGraphicsContext;
+		const scope = new Context(context, sampleLiquid.options, {}, { liquid: sampleLiquid });
+		useProgramMetadataLookup(scope, context);
+		const text = sampleLiquid.renderSync(sampleLiquid.parse(layer.text), scope);
 		return graphicsTextRuns(text, layer.style, layer.styles).map(run => ({ ...run, text: unescapeGraphicsTextValue(run.text) }));
 	}
 	catch {

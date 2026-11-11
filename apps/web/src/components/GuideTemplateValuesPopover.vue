@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import { X } from '@lucide/vue';
 import type { GuideTemplatePreviewValue } from '@moirai/shared';
 
@@ -7,13 +7,21 @@ const props = defineProps<{
 	title: string;
 	values: GuideTemplatePreviewValue[];
 	insertable?: boolean;
+	searchable?: boolean;
 }>();
 const emit = defineEmits<{ close: []; insert: [name: string] }>();
 const panel = ref<HTMLElement>();
+const search = ref<HTMLInputElement>();
+const query = ref('');
 const visible = ref(false);
 const teleportTarget = ref<HTMLElement | string>('body');
 const position = ref({ left: '0px', top: '0px' });
 let anchor: HTMLElement | null = null;
+
+const matches = computed(() => {
+	const term = query.value.trim().toLowerCase();
+	return term ? props.values.filter(({ name, value }) => `${name} ${value}`.toLowerCase().includes(term)) : props.values;
+});
 
 /** Keep the panel inside the viewport, preferring space below the listing. */
 function place(): void {
@@ -65,10 +73,11 @@ function insert(name: string): void {
 async function show(target: HTMLElement): Promise<void> {
 	anchor = target;
 	teleportTarget.value = target.closest<HTMLElement>('.moirai-dialog-backdrop') ?? 'body';
+	query.value = '';
 	visible.value = true;
 	await nextTick();
 	place();
-	panel.value?.focus();
+	(search.value ?? panel.value)?.focus();
 }
 
 /** Hide the popover and optionally restore focus to the listing. */
@@ -115,8 +124,10 @@ defineExpose({ show, close });
 					<X :size="18" aria-hidden="true" />
 				</button>
 			</header>
+			<input v-if="searchable" ref="search" v-model="query" class="guide-template-values-search" type="search" aria-label="Search Liquid fields" placeholder="Search fields" />
+			<p v-if="!matches.length" role="status">No matching fields.</p>
 			<dl>
-				<div v-for="row in props.values" :key="row.name">
+				<div v-for="row in matches" :key="row.name">
 					<dt><code>{{ row.name }}</code></dt>
 					<dd>{{ row.value }} <button v-if="insertable" class="button secondary" type="button" :aria-label="`Insert ${row.name}`" @click="insert(row.name)">Insert</button></dd>
 				</div>

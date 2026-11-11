@@ -1,7 +1,7 @@
 import { guideProgramNames } from './preview.js';
 import { projectGuideEntries } from './projection.js';
 import { recoverGuideOccurrences } from './occurrences.js';
-import type { ScheduleGuide, SchedulingCatalog, TimelinePreview } from '@moirai/shared';
+import type { ProgramMetadata, ScheduleGuide, SchedulingCatalog, TimelinePreview } from '@moirai/shared';
 import { compareInstants, MAX_GUIDE_TIMELINE_SEGMENTS, XMLTV_EPG_DAYS } from '@moirai/shared';
 import { Temporal } from '@js-temporal/polyfill';
 import type { Repository } from '../repository/index.js';
@@ -19,6 +19,7 @@ export { GuideMaterializationLimitError } from './window.js';
 export interface MaterializedGuide {
 	guide: ScheduleGuide;
 	catalog: SchedulingCatalog;
+	programMetadata?: ReadonlyMap<string, ProgramMetadata>;
 }
 
 /** Signal that a guide request falls outside the durable materialized window. */
@@ -264,7 +265,10 @@ export async function readCommittedScheduleGuide(
 	const hasDirectAssignments = schedules.some((schedule) => schedule.defaultProgramId
 		|| schedule.layers?.some((layer) => layer.programId));
 	const hasGuideBlocks = templates.some((template) => template.slots.some((slot) => slot.guide?.mode === 'block'));
-	const programs = needsProgramNames || (hasDirectAssignments && hasGuideBlocks)
+	const needsProgramMetadata = options.includeMediaCatalog && (requestedRows.some(({ segment }) => segment.role !== 'dead-air'
+		&& (segment.programId !== null || segment.programAncestry?.length))
+	|| templates.some(template => template.slots.some(slot => slot.programId && slot.guide?.mode === 'block')));
+	const programs = needsProgramMetadata || needsProgramNames || (hasDirectAssignments && hasGuideBlocks)
 		? await repository.listPrograms() : [];
 	const programNames = new Map(programs.map((program) => [program.id, program.name] as const));
 
@@ -406,6 +410,7 @@ export async function readCommittedScheduleGuide(
 			channels,
 		},
 		catalog: { ...catalog, media: [...snapshots.values()] },
+		programMetadata: new Map(programs.flatMap(program => program.metadata ? [[program.id, program.metadata] as const] : [])),
 	};
 	if (committedGuideGeneration === generation) {
 		committedGuideCache.set(repository, {

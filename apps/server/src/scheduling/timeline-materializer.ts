@@ -233,7 +233,8 @@ export class TimelineMaterializer {
 		const relevantScan = event.type === 'scan.changed' && event.data.affectsProgramming;
 		const relevantReconciliation
 			= event.type === 'library.changed' && event.data.affectsProgramming;
-		if (event.type === 'scheduling.changed' && event.data.entity === 'guide-template') {
+		if (event.type === 'scheduling.changed'
+			&& (event.data.entity === 'guide-template' || (event.data.entity === 'program' && event.data.affectsProgramming === false))) {
 			return;
 		}
 

@@ -2,7 +2,7 @@
 import type { GraphicsAssignment } from '@moirai/shared';
 import GraphicsAssignmentEditor from '../graphics/GraphicsAssignmentEditor.vue';
 import ProgramAiSource from './ProgramAiSource.vue';
-import { useProgramDraft } from './program-draft';
+import { useProgramDraft, type SequenceDraftEntry } from './program-draft';
 import { useAuthenticationStore } from '../../stores/authentication';
 import SequenceGuidePreview from './SequenceGuidePreview.vue';
 import { AI_DEFAULT_RESULT_COUNT, type AiResultCount, type SequenceOrdering } from '@moirai/shared';
@@ -11,6 +11,7 @@ import ResourceUsage from '../ResourceUsage.vue';
 import { useDraftProtection } from '../../draft-protection';
 import PageHelpButton from '../PageHelpButton.vue';
 import { useDisclosureState } from '../../disclosure-state';
+import ProgramMetadataEditor from './ProgramMetadataEditor.vue';
 import ProgramPlaybackPreferences from './ProgramPlaybackPreferences.vue';
 import type { AudioPreferences, SubtitlePreferences } from '@moirai/shared';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
@@ -18,6 +19,7 @@ import {
 	catalogProgramItemFilterSchema,
 	mergeContentExclusions,
 	MAX_EXPLICIT_MEDIA_GROUPS,
+	programMetadataSchema,
 	type ContentExclusions,
 	type MediaGenreFacet,
 	type MediaGroup,
@@ -117,6 +119,7 @@ const editingId = computed(() => savedIdentity.value ?? (
 			? null
 			: String(route.params.id ?? '')));
 const programs = computed(() => scheduling.overview?.programs ?? []);
+const editorBaseline = computed(() => programs.value.find(candidate => candidate.id === editingId.value));
 const statuses = computed(
 	() =>
 		new Map(
@@ -225,6 +228,7 @@ const form = reactive({
 	graphicsAssignment: undefined as GraphicsAssignment | undefined,
 	audioPreferences: {} as AudioPreferences,
 	name: '',
+	metadataRows: [] as Array<{ id: string; key: string; value: string }>,
 	type: 'content' as 'content' | 'sequence' | 'similarity' | 'theme',
 	sourceProgramId: '',
 	theme: '',
@@ -257,18 +261,25 @@ const form = reactive({
 	seed: '',
 	sequenceOrdering: 'ordered' as SequenceOrdering['type'],
 	repeat: true,
-	entries: [] as Array<{ id: string; programId: string; count: number; chance: number }>,
+	entries: [] as SequenceDraftEntry[],
 });
 const supportsContentExclusions = computed(() => form.sourceType !== 'item' && form.sourceType !== 'group');
-const aiDraft = useProgramDraft(form, () => editingId.value ?? 'new', () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${editingId.value ?? 'new'}`, () => isDirty.value);
-const { generation: aiGeneration, warning: aiDraftWarning } = aiDraft;
+const draftIdentity = computed(() => editingId.value ?? 'new');
+const metadata = computed(() => Object.fromEntries(form.metadataRows.map(({ key, value }) => [key, value])));
+const originalMetadata = ref(JSON.stringify(metadata.value));
+const metadataDirty = computed(() => JSON.stringify(metadata.value) !== originalMetadata.value
+	|| form.metadataRows.length !== Object.keys(metadata.value).length);
+const metadataValid = computed(() => form.metadataRows.length === Object.keys(metadata.value).length
+	&& programMetadataSchema.safeParse(metadata.value).success);
 const originalSnapshot = ref(draftSnapshot());
 const previewProgramNames = computed(() => new Map(programs.value.map(program => [program.id, program.name])));
-const isDirty = computed(() => draftSnapshot() !== originalSnapshot.value);
+const isDirty = computed(() => metadataDirty.value || draftSnapshot() !== originalSnapshot.value);
+const aiDraft = useProgramDraft(form, () => draftIdentity.value, () => `moirai:ai-draft:${authentication.state?.identity?.id ?? 'anonymous'}:${draftIdentity.value}`, () => isDirty.value, () => metadataDirty.value);
+const { generation: aiGeneration, warning: aiDraftWarning } = aiDraft;
 
 /** Compare the active draft while retaining alternate Sequence quantities for mode switches. */
 function draftSnapshot(): string {
-	const draft = { ...form, aiResultLimit: AI_DEFAULT_RESULT_COUNT };
+	const draft = { ...form, metadataRows: undefined, aiResultLimit: AI_DEFAULT_RESULT_COUNT };
 	if (form.type === 'sequence') {
 		const ordering = sequenceOrdering();
 		return JSON.stringify({ ...draft, entries: sequenceEntries(), seed: 'seed' in ordering ? ordering.seed : '' });
@@ -283,6 +294,8 @@ function resetForm(program?: SchedulingProgram): void {
 	selectedItemSearch.value = '';
 	selectedOrderChosen.value = false;
 	form.name = program?.name ?? '';
+	form.metadataRows = Object.entries(program?.metadata ?? {}).map(([key, value]) => ({ id: randomUuid(), key, value }));
+	originalMetadata.value = JSON.stringify(metadata.value);
 	form.audioPreferences = cloneContractValue(program?.config.audioPreferences ?? {});
 	form.graphicsAssignment = program?.config.graphicsAssignment;
 	form.subtitlePreferences = cloneContractValue(program?.config.subtitlePreferences ?? {});
@@ -396,9 +409,16 @@ function resetForm(program?: SchedulingProgram): void {
 	originalSnapshot.value = draftSnapshot();
 }
 
-/** Restore browser-owned AI work after loading the current saved program. */
+/** Detect changes to saved metadata independently of the Program's scheduling revision. */
+function draftVersion(program?: SchedulingProgram): string {
+	const revision = program?.updatedAt ?? '';
+	const entries = Object.entries(program?.metadata ?? {}).sort(([left], [right]) => left.localeCompare(right));
+	return entries.length ? `${revision}:${JSON.stringify(entries)}` : revision;
+}
+
+/** Restore browser-owned Program work after loading the current saved program. */
 async function openDraft(program?: SchedulingProgram, restore = true): Promise<void> {
-	await aiDraft.open(program?.updatedAt ?? '', () => resetForm(program), restore);
+	await aiDraft.open(draftVersion(program), () => resetForm(program), restore);
 }
 
 /** Load genre facets or paged source choices while discarding superseded responses. */
@@ -801,7 +821,10 @@ function sequenceOrdering(): SequenceOrdering {
 
 /** Serialize only the quantities belonging to the active Sequence mode. */
 function sequenceEntries() {
-	return form.entries.map(({ id, programId, count, chance }) => ({ id, programId, count: form.sequenceOrdering === 'chance' ? chance : count }));
+	return form.entries.map(({ id, programId, count, chance }) => {
+		const quantity = form.sequenceOrdering === 'chance' ? chance : count;
+		return { id, programId, count: quantity === '' ? NaN : quantity };
+	});
 }
 
 /** Append a sequence entry using the first program other than the one being edited. */
@@ -909,7 +932,7 @@ function payload(): ProgramCreate {
 	return { name: form.name, config: { type: 'content', source: contentSource, strategy, graphicsAssignment: form.graphicsAssignment, subtitlePreferences: form.subtitlePreferences, audioPreferences: form.audioPreferences } };
 }
 const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
-	program: () => programs.value.find((candidate) => candidate.id === editingId.value),
+	program: () => editorBaseline.value,
 	embedded: () => props.embedded,
 	saving: () => saving.value,
 	resetDraft: (program) => {
@@ -930,7 +953,7 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 
 const subtitlesInvalid = ref(false);
 const programSaveDisabled = computed(() =>
-	saving.value || deleting.value || Boolean(aiGeneration.value) || subtitlesInvalid.value || !isProgramDraftValid(payload)
+	saving.value || deleting.value || Boolean(aiGeneration.value) || subtitlesInvalid.value || !metadataValid.value || !isProgramDraftValid(payload)
 	|| (Boolean(editingId.value) && !isDirty.value));
 
 /** Commit the Program, leaving navigation to the active route guard when requested. */
@@ -942,9 +965,10 @@ async function save(stayOnPage = false): Promise<boolean> {
 	saving.value = true;
 	error.value = '';
 	try {
+		const fields = metadataDirty.value ? { metadata: metadata.value } : {};
 		const operation = editingId.value
-			? api.updateProgram(editingId.value, payload())
-			: api.createProgram(payload());
+			? api.updateProgram(editingId.value, draftSnapshot() === originalSnapshot.value ? fields : { ...payload(), ...fields })
+			: api.createProgram({ ...payload(), ...fields });
 		const saved = await operation;
 		aiDraft.clear();
 		const requestedCount = form.aiResultLimit;
@@ -961,7 +985,7 @@ async function save(stayOnPage = false): Promise<boolean> {
 				allowRouteLeave = false;
 			}
 		}
-		await aiDraft.open(saved.updatedAt, () => {}, false);
+		await aiDraft.open(draftVersion(saved), () => {}, false);
 		await scheduling.load();
 		if (!stayOnPage) {
 			await Promise.all([loadSelectedItems(), loadSelectedGroups()]);
@@ -1020,8 +1044,7 @@ watch(
 			return;
 		}
 		savedIdentity.value = null;
-		const program = programs.value.find((candidate) => candidate.id === editingId.value);
-		await openDraft(program);
+		await openDraft(editorBaseline.value);
 		void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	},
 );
@@ -1053,7 +1076,7 @@ onMounted(async () => {
 				? Promise.resolve()
 				: channelsStore.loadCapabilities(),
 		]);
-		await openDraft(programs.value.find((program) => program.id === editingId.value));
+		await openDraft(editorBaseline.value);
 		await Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
 	}
 	catch (cause) {
@@ -1270,6 +1293,7 @@ watch(() => [form.type, form.sourceType], () => {
 							<SequenceGuidePreview v-if="form.type === 'sequence'" :config="payload().config" :program-id="editingId ?? undefined" :program-names="previewProgramNames" />
 							<ProgramPlaybackPreferences v-model:open="subtitlesOpen" v-model:audio="form.audioPreferences" v-model:subtitles="form.subtitlePreferences" :program-id="editingId" :reset-revision="draftRevision" :step="form.type === 'content' || form.type === 'sequence' ? 3 : 2" @validation-change="subtitlesInvalid = $event" />
 							<GraphicsAssignmentEditor v-model="form.graphicsAssignment" description="These graphics follow this Program wherever it plays." />
+							<ProgramMetadataEditor v-model="form.metadataRows" :disabled="saving || deleting" :step="form.type === 'content' || form.type === 'sequence' ? 4 : 3" />
 						</div>
 					</div></ResourceUsage>
 				</div>
@@ -1277,7 +1301,7 @@ watch(() => [form.type, form.sourceType], () => {
 					v-if="!initialLoading" :pending="!editingId || isDirty"
 					:draft-warning="aiDraftWarning" :draft-restored="aiDraft.recovered.value" :save-label="editingId ? 'Save' : 'Add'"
 					resource-type="Program"
-					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : ''"
+					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : !metadataValid ? 'Correct the metadata keys before saving.' : ''"
 					:show-delete="!embedded && Boolean(editingId)"
 					:busy="saving || deleting" :deleting="deleting"
 					:reset-disabled="!isDirty && !aiGeneration" :save-disabled="programSaveDisabled"

@@ -140,7 +140,7 @@ Choose **Linear gradient** under **Fill mode** to blend between two colors or fa
 
 ## Text layers
 
-A text layer displays authored text, schedule information, or a mixture of both. Enter text in **Text or Liquid template** and use **Insert Liquid field** to insert a placeholder. Placeholders use Moirai’s Liquid syntax, such as <code v-pre>{{ now.title }}</code>. Templates can contain up to 4,096 characters, including line breaks, expressions, and style tags.
+A text layer displays authored text, schedule information, or a mixture of both. Enter text in **Text or Liquid template** and use **Insert Liquid field** to search by field name or description and insert a placeholder. Placeholders use Moirai’s Liquid syntax, such as <code v-pre>{{ now.title }}</code>. Templates can contain up to 4,096 characters, including line breaks, expressions, and style tags.
 
 ### Channel and schedule placeholders
 
@@ -161,9 +161,22 @@ The selected preview channel and live playback use committed schedule data. The 
 
 Titles and subtitles follow the channel’s assigned [guide template](/playback/guide-templates), or the default template when none is assigned. If the guide groups content into a block, graphics still uses the template for the individual airing. Use `now.media.title` when you want the raw catalog title instead of the guide’s display title.
 
+### Program metadata placeholders
+
+Use fields from a Program’s [Guide and graphics metadata](/scheduling/programs#guide-and-graphics-metadata) section in any graphics text layer. The field picker includes `showcase_actor` as an example. Replace that key with your own field name.
+
+| Liquid example | What it shows |
+| --- | --- |
+| <code v-pre>{{ program.metadata.showcase_actor }}</code> | The field for the clip actually playing, including filler |
+| <code v-pre>{{ now.program.metadata.showcase_actor }}</code> | The field for the current main airing, including during its attached filler |
+| <code v-pre>{{ next.program.metadata.showcase_actor }}</code> | The field for the next main airing |
+| <code v-pre>{{ upcoming[0].program.metadata.showcase_actor }}</code> | The field for the first upcoming airing, the same as `next` |
+
+Each airing resolves its own fields. Fields from a Sequence are inherited, and a child’s field takes precedence. The sample preview supplies example actor names. A channel preview uses the fields on its committed airings. Missing fields render as blank text. Changes apply when graphics are next prepared.
+
 ### Raw media placeholders
 
-`media` describes the clip actually playing, including filler. `now.media`, `next.media`, and `upcoming[n].media` provide the same fields for their respective airings. Values come from the committed catalog snapshot, with a catalog lookup when the snapshot is missing. Unknown values are null.
+`media` describes the clip actually playing, including filler. `now.media`, `next.media`, and `upcoming[n].media` provide the same fields for their respective airings. Values come from the committed catalog snapshot. A catalog lookup supplies missing snapshots and newly available fields that older snapshots did not capture. Unavailable text and numbers are null, and unavailable lists are empty.
 
 | Field on each media object | What it contains | Liquid example | Example output |
 | --- | --- | --- | --- |
@@ -178,15 +191,48 @@ Titles and subtitles follow the channel’s assigned [guide template](/playback/
 | `releaseDate` | Catalog release date | <code v-pre>{{ media.releaseDate }}</code> | `2026-01-01` |
 | `description` | Catalog synopsis | <code v-pre>{{ next.media.description }}</code> | A rescue team crosses the Alps. |
 | `durationSeconds` | Catalog item duration in seconds | <code v-pre>{{ now.media.durationSeconds }}</code> | 1800 |
+| `originalTitle` | Imported original title | <code v-pre>{{ media.originalTitle }}</code> | Die Alpenexpedition |
+| `edition` | Movie edition | <code v-pre>{{ next.media.edition }}</code> | Director’s Cut |
+| `genres`, `primaryGenre` | Genre names and the primary genre name | <code v-pre>{{ media.genres \| join: ', ' }}</code> | Adventure, Drama |
+| `tags` | Catalog tags | <code v-pre>{{ media.tags \| join: ', ' }}</code> | Mountains, Rescue |
+| `certification`, `rating`, `userRating` | Content certification, catalog rating, and user rating | <code v-pre>{{ media.certification }}</code> | PG |
+| `cast` | Cast entries in billing order, each with `name` and `role` | <code v-pre>{{ media.cast[0].name }}</code> | Ana Rivera |
+| `directors`, `writers` | Lists of credited directors and writers | <code v-pre>{{ media.directors \| join: ', ' }}</code> | Alex Chen |
+| `studios`, `countries` | Lists of studios and countries | <code v-pre>{{ media.studios \| join: ', ' }}</code> | Alpine Pictures |
+| `artist`, `artists` | First artist and list of all credited artists on a music video | <code v-pre>{{ media.artists \| join: ', ' }}</code> | Indigo Coast, Ava Reed |
+| `album` | Music video’s indexed album | <code v-pre>{{ media.album }}</code> | Night Signals |
+| `trackNumber`, `discNumber` | Music video’s track and disc numbers | <code v-pre>{{ media.trackNumber }}</code> | 4 |
 
 During attached filler, `now` continues to identify the main airing while `media` identifies the filler clip. Standalone filler has no `now`, but can still have `next`. At gaps or unavailable positions, the editable preview keeps the real channel name and number and clears item values, with a status message.
 
-Missing values print blank. Use `default` for a fallback, or a conditional to hide a line when its value is absent:
+Missing values print blank. Use `default` for a fallback or a conditional to hide a line when its value is absent.
 
 ```liquid
 Now playing: {{ now.title | default: media.title }}
 {% if now.subtitle %}{{ now.subtitle }}{% endif %}
 Up next: {{ next.title | default: 'Schedule to be announced' }}
+```
+
+For a music-video overlay, use `media` to show the song and its credits even when it plays as filler.
+
+```liquid
+{{ media.title }}
+{{ media.artists | join: ', ' }}
+{% if media.album %}{{ media.album }}{% endif %}
+```
+
+For a movie, append the edition when it is available. Use `map: 'name'` to display cast names as a list.
+
+```liquid
+{{ media.title }}{% if media.edition %} · {{ media.edition }}{% endif %}
+{{ media.cast | map: 'name' | join: ', ' }}
+```
+
+For an episode, use `now.media` to keep the episode details visible during its attached filler.
+
+```liquid
+{{ now.media.seriesTitle }}
+{% if now.media.episodeNumber %}S{{ now.media.seasonNumber }}E{{ now.media.episodeNumber }} · {% endif %}{{ now.media.title }}
 ```
 
 To list several upcoming airings, loop over `upcoming`. This example shows at most three:

@@ -207,6 +207,11 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		);
 	}
 
+	// The secure JSON parser rejects unsafe object keys before route validation.
+	if (normalized.statusCode === 400 && normalized.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+		return response(requestId, 400, 'validation_error', 'Invalid JSON request body', true);
+	}
+
 	if (normalized.statusCode === 413
 		&& (normalized.code === 'FST_ERR_CTP_BODY_TOO_LARGE' || normalized.code === 'FST_REQ_FILE_TOO_LARGE')) {
 		return response(

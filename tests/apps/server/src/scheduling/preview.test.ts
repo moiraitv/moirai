@@ -8,8 +8,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
-	channelCreateSchema, channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
-	SECONDS_PER_SCHEDULING_DAY,
+	BUILTIN_GUIDE_TEMPLATE, programCreateSchema, channelCreateSchema, channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
+	guideTemplatePreviewResultSchema, mergeProgramMetadata, SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide,
 } from '@moirai/shared';
 import { timelinePreviewSchema, quickChannelSetupPreviewResultSchema } from '@moirai/shared/api-contracts';
 import { createDatabase } from '@server/db/index.js';
@@ -581,6 +581,77 @@ it('uses the configured horizon for worker materialization, XMLTV, and guide bou
 	expect(stops.sort().at(-1)).toBe(`${end.toString().replaceAll('-', '')}000000`);
 	await expect(f.workers.read({ kind: 'guide', ...request, days: guideDays + 1 })).rejects.toThrow(/committed/i);
 }, 30_000);
+
+it('renders Program metadata from committed pairs and refreshes presentation without reselection', async () => {
+	const f = await setup();
+	const actor = (name: string, metadata: Record<string, string>) => f.repository.createProgram(programCreateSchema.parse({
+		name, metadata, config: { type: 'content', source: {
+			type: 'collection', libraryId: f.library.id, itemIds: f.ids.slice(0, 2),
+		}, strategy: { type: 'sequential' } },
+	}));
+	const firstActor = await actor('First actor', { showcase_actor: 'A & <B>', tagline: '' });
+	const secondActor = await actor('Second actor', { showcase_actor: 'C' });
+	const pairSequence = (name: string, programIds: string[], count: number, metadata: Record<string, string>) =>
+		f.repository.createProgram(programCreateSchema.parse({ name, metadata, config: {
+			type: 'sequence', entries: programIds.map(programId => ({ id: randomUUID(), programId, count })),
+		} }));
+	const rotation = await pairSequence('Actor rotation', [firstActor.id, secondActor.id], 2, {});
+	const outer = await pairSequence('Double Feature', [rotation.id], 4, { tagline: 'Double Feature' });
+	const movie = '<programme start="{{ start }}" stop="{{ stop }}" channel="{{ channel.id }}">'
+		+ '<title>{{ program.metadata.showcase_actor }}: {{ item.title }}</title><sub-title>{{ program.metadata.tagline }}</sub-title></programme>';
+	const sources = { ...BUILTIN_GUIDE_TEMPLATE.sources, movie };
+	const layout = await f.repository.guideTemplates.save({ name: 'Showcase', description: '', sources });
+	await f.repository.guideTemplates.setDefault(layout.id);
+	await f.repository.setChannelSchedule(f.channel.id, { defaultProgramId: outer.id, defaultTemplateId: null, layers: [], defaultFiller: null });
+
+	const guideDays = 2;
+	const materializer = new TimelineMaterializer(f.repository, { publish: () => {} }, 'UTC', undefined, undefined, guideDays);
+	await materializer.runNow();
+	const materialization = await f.repository.getTimelineMaterialization(f.channel.id);
+	const state = await f.repository.getSelectionState(f.channel.id);
+	expect(state).not.toHaveLength(0);
+	const startDate = Temporal.Now.plainDateISO('UTC').add({ days: 1 }).toString();
+	const request = { timeZone: 'UTC', publicUrl: 'http://localhost:3000', startDate, days: 1, guideDays };
+	const readGuide = async () => (JSON.parse((await f.workers.read({ kind: 'guide', ...request })).body) as ScheduleGuide).channels[0]!;
+	const initial = await readGuide();
+	const titles = initial.preview.segments.map(segment => segment.title);
+	expect(titles.map((title: string) => title.split(':')[0])).toEqual(['A & <B>', 'A & <B>', 'C', 'C']);
+	expect(initial.preview.segments.map(segment => segment.subtitle)).toEqual(['', '', 'Double Feature', 'Double Feature']);
+	const selection = (value: typeof initial) => value.preview.segments.map(({ id, mediaItemId }) => [id, mediaItemId]);
+	expect(selection(initial).slice(0, 2).map(([, mediaId]) => mediaId))
+		.toEqual(selection(initial).slice(2).map(([, mediaId]) => mediaId));
+	const xml = (await f.workers.read({ kind: 'xmltv', ...request })).body;
+	expect(xml).toContain('A &amp; &lt;B&gt;');
+	const preview = guideTemplatePreviewResultSchema.parse(JSON.parse((await f.workers.read({ kind: 'guide-template', ...request,
+		preview: { channelId: f.channel.id, sources },
+	})).body));
+	const { byId, listingProgramIds } = preview.programMetadata!;
+	expect(byId).toEqual({
+		[outer.id]: { tagline: 'Double Feature' },
+		[rotation.id]: {},
+		[firstActor.id]: { showcase_actor: 'A & <B>', tagline: '' },
+		[secondActor.id]: { showcase_actor: 'C' },
+	});
+	for (const entry of preview.entries) {
+		expect(preview.listingValues[entry.id]?.some(value => value.name.startsWith('program.metadata'))).toBe(false);
+	}
+	const inspectionFields = preview.entries.map(entry => mergeProgramMetadata(listingProgramIds[entry.id]!.map(id => byId[id])));
+	expect(inspectionFields).toEqual([
+		{ showcase_actor: 'A & <B>', tagline: '' }, { showcase_actor: 'A & <B>', tagline: '' },
+		{ showcase_actor: 'C', tagline: 'Double Feature' }, { showcase_actor: 'C', tagline: 'Double Feature' },
+	]);
+
+	await f.repository.updateProgram(firstActor.id, { metadata: { showcase_actor: 'Updated actor' } });
+	const event = { type: 'scheduling.changed', data: { entity: 'program', change: 'updated', id: firstActor.id, affectsProgramming: false } } as const;
+	f.workers.invalidateReads(event);
+	const refreshed = await readGuide();
+	expect(refreshed.preview.segments[0]!.title).toContain('Updated actor');
+	expect(refreshed.preview.segments[0]!.subtitle).toBe('Double Feature');
+	expect(selection(refreshed)).toEqual(selection(initial));
+	await materializer.runNow(true);
+	expect(await f.repository.getTimelineMaterialization(f.channel.id)).toEqual(materialization);
+	expect(await f.repository.getSelectionState(f.channel.id)).toEqual(state);
+}, 20_000);
 
 it.each(['ordered', 'shuffled-blocks', 'shuffled-allocations', 'balanced-rotation', 'chance'] as const)('previews fresh $0 sequences with distinct entry attribution and no writes', async type => {
 	const f = await setup();

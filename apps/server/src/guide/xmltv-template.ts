@@ -7,11 +7,13 @@ import {
 	MAX_GUIDE_TEMPLATE_SOURCE_LENGTH,
 	MAX_XMLTV_DESCRIPTION_LENGTH,
 	resolvedGuideTemplateSources,
+	useProgramMetadataLookup,
 	type Channel,
 	type GuideEntry,
 	type GuideProgrammeKind,
 	type GuideTemplateSourceKey,
 	type GuideTemplateSources,
+	type ProgramTemplateContext,
 	type SchedulableMedia,
 	type SchedulingCatalog,
 	type TimelineSegment,
@@ -44,9 +46,10 @@ export function xmltvTimestamp(value: string, timeZone: string): string {
 	return `${dateTime} ${offset}`;
 }
 
-/** Escape interpolated values so catalog text cannot inject XML markup. */
+/** Replace characters outside XML 1.0 text and escape markup in interpolated values. */
 export function escapeXmlText(value: unknown): string {
 	return String(value ?? '')
+		.replace(/[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, '\ufffd')
 		.replaceAll('&', '&amp;')
 		.replaceAll('<', '&lt;')
 		.replaceAll('>', '&gt;')
@@ -218,6 +221,7 @@ function validationContextFor(key: GuideTemplateSourceKey): Record<string, unkno
 		stop_iso: '2026-01-01T01:00:00Z',
 		channel: VALIDATION_CHANNEL,
 		item,
+		program: { metadata: key === 'dead-air' ? {} : { showcase_actor: 'Sigourney Weaver' } },
 		slot: {
 			start: '2026-01-01T00:00:00Z',
 			finish: '2026-01-01T01:00:00Z',
@@ -235,7 +239,7 @@ export async function validateGuideTemplateSources(sources: GuideTemplateSources
 	for (const key of GUIDE_TEMPLATE_SOURCE_KEYS) {
 		const source = sources[key];
 		if (source.trim()) {
-			await engine.parseAndRender(source, validationContextFor(key));
+			await engine.render(engine.parse(source), guideRenderScope(validationContextFor(key)));
 		}
 	}
 }
@@ -475,13 +479,19 @@ export interface GuideRenderOptions {
 	remainingMs?: () => number;
 }
 
-/** Check the current playout deadline during rendering, including promotion on another thread. */
+/** Allow optional Program fields while retaining strict variables and the current playout deadline. */
 function guideRenderScope(values: Record<string, unknown>, remainingMs?: () => number): object {
-	if (!remainingMs) {
+	const program = values.program as ProgramTemplateContext | undefined;
+	if (!program && !remainingMs) {
 		return values;
 	}
 
 	const scope = new Context(values, engine.options, {}, { liquid: engine });
+	useProgramMetadataLookup(scope, { program });
+	if (!remainingMs) {
+		return scope;
+	}
+
 	const limiter = scope.renderLimit;
 	const check = limiter.check.bind(limiter);
 	limiter.check = elapsed => {

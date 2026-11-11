@@ -218,6 +218,17 @@ The editor preview is safe to explore. Save only when the draft is valid and mat
 
 All Program types retain pending edits automatically in this browser. Close the editor, navigate elsewhere, or reload, then reopen the same Program or New Program to continue. **Add** creates a new Program; **Save** commits pending changes. **Reset**, once confirmed, discards pending changes and restores the latest saved values.
 
+## Guide and graphics metadata
+
+Open **Guide and graphics metadata** in any Program editor and choose **Add field**. For example, an actor showcase Program might enter `showcase_actor` as the key and the actor’s name as the value. Use letters, digits, and underscores in keys. Keys are case sensitive and must be unique within the Program. Each Program can have up to 16 fields, with keys up to 64 characters and values up to 256 characters.
+
+![A Program with a showcase actor field for guide templates and graphics](/screenshots/program-guide-metadata.png)
+
+Using this example, you'd use <code v-pre>{{ program.metadata.showcase_actor }}</code> in a [guide template](/playback/guide-templates) or <code v-pre>{{ now.program.metadata.showcase_actor }}</code> in a [graphics text layer](/playback/graphics). Editing just the metadata updates existing guide listings and future graphics preparation while keeping the current rotation and selected movies.
+
+Fields from a Sequence also apply to its children. A child can replace an inherited field by using the same key, or suppress it with a blank value. Removing the child’s field restores inheritance.
+
+
 ## Audio and subtitles
 
 Programs can have their own audio and subtitle preferences, independently of the Channel they appear on. Set an override to use the Program's preference wherever it plays, or leave a field set to inherit so it follows the enclosing Sequence Program or Channel, including any [global audio defaults](/settings/playback#audio-selection-defaults) inherited by the Channel.

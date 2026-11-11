@@ -1113,7 +1113,8 @@ another remains, breaking proportional-deficit ties by authored order. Counts me
 including nested sequences. Parent cycle state is bounded by entry count and persists independently
 of child cursors. Chance yields at most one leaf selection per step in authored order. Repeating
 Chance samples past empty passes in work bounded by entry count, and fit probes preserve the
-current pass. Primary shuffled blocks retain their existing handoff rules. Explicit Ordered and legacy
+current pass. A primary Chance search reuses proven empty subtrees and stops after 512 nested
+entry probes without committing progress if no leaf was selected. Primary shuffled blocks retain their existing handoff rules. Explicit Ordered and legacy
 omitted ordering preserve existing progress, including preference-bearing legacy fingerprints; ordering
 changes restart the parent cycle without resetting child episode progress. User-guide example schedules
 cover movie shuffles, genre double features, sitcom rotations, the four counted sequence modes, and a weekend
@@ -1662,7 +1663,16 @@ blank tabs inherit the current built-in layout.
 Published XMLTV is minified after a successful render. The Guide timeline uses the same per-channel
 templates for listing titles and optional subtitles. The Channels timeline keeps program-source
 labels. The template editor preview renders the unpublished draft. Invalid live sources fall back to
-the built-in layout for that type.
+the built-in layout for that type. Guide and graphics templates use authored Program metadata.
+A Program stores up to 16 case-sensitive text fields in its configuration JSON. The renderer
+resolves current fields along the committed Program ancestry, with children overriding inherited
+values. Older segments fall back to their stored Program ID. Block listings use the assigned
+Program and dead air has no metadata. Missing Program fields render as blank in Liquid while
+other guide variables stay strict. Save validation and rendering use the same Liquid object behavior.
+Interpolation replaces invalid XML text characters before escaping markup. The preview response
+includes each referenced Program’s field map once and provides ordered Program IDs for each listing.
+The inspector resolves those fields when the listing is opened. Metadata-only edits invalidate
+presentation reads and preserve the programming revision and committed selection state.
 
 Channel identifiers use this stable format:
 
@@ -1674,8 +1684,8 @@ For example: `C601.1.a1b2c3d4.moirai.tv`.
 
 Every XMLTV icon URL contains a source or channel version query parameter so clients can refresh
 changed artwork without disabling caching. Conditional requests use ETags. Only committed timeline
-or channel-presentation, guide-template, or default-template changes invalidate the cached XMLTV
-document.
+or channel-presentation, Program metadata, guide-template, or default-template changes invalidate
+the cached XMLTV document.
 
 A scheduled channel must have a healthy, contiguous committed window before its guide and playback
 are authoritative. Incomplete output returns a retryable unavailable response instead of pretending
@@ -1767,8 +1777,17 @@ the full-width YAML editor share a draft. Existing channels opt in through a nul
 assignment. Managed files resolve by stable ID and protected examples use named layers and bundled
 artwork. Text templates use bounded Liquid with channel, media, and adjacent primary airing
 metadata, including up to eight upcoming primary airings. Airing titles and subtitles use the
-channel’s EPG item renderer. Raw clip and airing fields use committed catalog snapshots, with a
-batched catalog fallback for missing snapshots. The preparation worker scopes label work to text
+channel’s EPG item renderer. Raw clip and airing fields expose descriptive catalog metadata,
+including cast and production credits, ratings and genres, movie editions, episode coordinates,
+and music video credits. They use committed catalog snapshots with the existing batched lookup
+for absent snapshots or fields introduced after the snapshot was captured. The programming
+fingerprint excludes the additional graphics display fields captured in these snapshots. Missing
+scalars are null and missing lists are empty. The field picker searches names and descriptions. Program fields
+describe the physical clip at
+`program.metadata` and each main airing at `now.program.metadata`, `next.program.metadata`, or
+`upcoming[n].program.metadata`. Text preparation reads referenced Program fields in batches within
+the existing deadline. Metadata-only edits resynchronize graphics for affected channels.
+The preparation worker scopes label work to text
 overlays and their lookahead, with budget-limited rendering and retries through normal playout
 synchronization. Guide template and channel assignment changes invalidate prepared playout.
 Generated transparent images and managed media are published as native Next graphics layers on
