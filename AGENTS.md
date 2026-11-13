@@ -5,6 +5,12 @@ guidance before running commands. It does not replace these repository guideline
 
 ## Working Practices
 
+- Track temporary files and folders created during a task, including scratch scripts, test fixtures,
+  captures, logs, and temporary checkouts inside or outside the repository. Remove them when they are
+  no longer needed and before reporting the task complete. Stop any task-owned processes using them
+  first, preserve requested deliverables and unrelated or active work, and report anything that could
+  not be safely cleaned up. Use automatic cleanup such as `finally` blocks or shell traps where
+  practical so failed or interrupted commands do not leave temporary folders behind.
 - Keep changes focused on the requested behavior. Preserve unrelated behavior, public interfaces, configuration, and manually maintained documentation unless the task requires changing them.
 - Use the simplest implementation that fully satisfies the requested behavior and established
   repository constraints. Do not add speculative lifecycle management, configurability, abstraction,
