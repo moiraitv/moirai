@@ -634,6 +634,10 @@
 	grid-template-columns: 42px minmax(220px, 1.2fr) minmax(180px, 1fr);
 	align-items: end;
 	gap: 12px;
+
+	&.has-frequency {
+		grid-template-columns: 42px minmax(0, 1.2fr) minmax(0, 1fr) minmax(120px, 0.65fr);
+	}
 }
 
 .template-default-filler-description {

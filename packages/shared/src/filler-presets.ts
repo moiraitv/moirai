@@ -41,8 +41,16 @@ export type FillerPresetCreate = z.infer<typeof fillerPresetCreateSchema>;
 export const fillerPresetSchema = fillerPresetCreateSchema.safeExtend({ id: z.uuid(), isBuiltin: z.boolean(), createdAt: z.string(), updatedAt: z.string() });
 /** Persisted non-mid-roll preset. */
 export type FillerPreset = z.infer<typeof fillerPresetSchema>;
+/** How often an assigned pre-roll or post-roll plays within a programmed slot. */
+export const rollFrequencySchema = z.enum(['per-item', 'once-per-slot']);
+/** Frequency of an assigned pre-roll or post-roll. */
+export type RollFrequency = z.infer<typeof rollFrequencySchema>;
 /** Preset and independently authored filler source. */
-export const fillerAssignmentSchema = z.object({ programId: z.uuid(), presetId: z.uuid() });
+export const fillerAssignmentSchema = z.object({
+	programId: z.uuid(),
+	presetId: z.uuid(),
+	frequency: rollFrequencySchema.optional().describe('Pre-roll or post-roll frequency. Defaults to per-item when omitted.'),
+});
 /** Authored stage assignment. */
 export type FillerAssignment = z.infer<typeof fillerAssignmentSchema>;
 /** Inheritance and explicit stage overrides. */
@@ -58,8 +66,8 @@ export function legacyTailPresetId(policy: FillerSelectionPolicy): string {
 }
 /** Protected examples and legacy tail fitting behaviors. */
 export const BUILTIN_FILLER_PRESETS: Array<FillerPresetCreate & { id: string }> = [
-	{ id: 'a40c0000-0000-4000-8000-000000000001', kind: 'pre-roll', name: 'One-item introduction', description: 'One complete filler item before each primary item.', budget: { type: 'count', count: 1 } },
-	{ id: 'a40c0000-0000-4000-8000-000000000002', kind: 'post-roll', name: 'One-item closing', description: 'One complete filler item after each primary item.', budget: { type: 'count', count: 1 } },
+	{ id: 'a40c0000-0000-4000-8000-000000000001', kind: 'pre-roll', name: 'One-item introduction', description: 'One complete filler item at the start of the item or slot.', budget: { type: 'count', count: 1 } },
+	{ id: 'a40c0000-0000-4000-8000-000000000002', kind: 'post-roll', name: 'One-item closing', description: 'One complete filler item at the end of the item or slot.', budget: { type: 'count', count: 1 } },
 	...fillerSelectionPolicySchema.options.map(policy => ({ id: legacyTailPresetId(policy), kind: 'tail' as const, name: `Remaining slot: ${policy}`, description: 'Fill the remaining slot using the selected fitting policy.', budget: { type: 'remaining' as const, policy } })),
 ];
 /** Enable the maintained default preset for a non-mid-roll stage. */

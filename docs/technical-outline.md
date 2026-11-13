@@ -1206,7 +1206,9 @@ The Filler navigation section owns Pre-Rolls, Mid-Rolls, Post-Rolls, and Tail Fi
 behavior separate from source Programs and have case-insensitive names unique within their immutable
 kind. Protected examples can be duplicated; referenced presets cannot be deleted.
 
-Pre-roll and post-roll surround each primary item and share its airing envelope with mid-roll.
+Per-item pre-roll and post-roll surround each primary item and share its airing envelope with
+mid-roll. Pre/post assignments optionally store a frequency in their existing JSON. The winning
+slot, template, or channel assignment supplies the frequency with its preset and source.
 Expanded durations participate in fitting and collision checks. Filler state is independently scoped
 by stage, and speculative selection is committed only for scheduled spans. Tail runs once after
 primary programming within the resolved slot boundary, followed by independent channel fallback.
@@ -1216,6 +1218,18 @@ clears fallback. A compatibility flag on that migrated assignment retains filler
 under the original `filler` consumer key. Explicitly replacing the assignment adopts the new behavior.
 Migration 0041 repairs the duplicated legacy assignments created by the earlier development migration,
 leaving distinct fallback assignments, committed spans, and selection records unchanged.
+
+Once-per-slot rolls bookend each effective interval, including intervals split by a conditional
+layer. The scheduler plans the closing clips before primary selection, fits primary airings up to
+the reserved start, and puts tail and channel fallback before the outro. A playable outro holds
+the scheduled handoff. If a reservation prevents the first primary airing, selection retries once
+without the bookends. Only emitted clips advance roll state. Standalone filler spans retain preset
+provenance and participate in slot guide blocks. Existing per-segment checkpoints retain intro or
+outro progress and the reserved closing window across continuation. When inputs change, a rebuild
+uses committed playback from the matching interval and plans the closing with the new inputs.
+The scheduler measures a playable closing before checking for duplicates at the end-aligned
+playback time. If duplicate avoidance cannot supply the reserved duration, it keeps a playable
+closing within that window.
 
 Filler selects the first fitting unused item in source order instead of the longest fit. Independent
 stage/slot queues persist versioned membership in selection-value JSON without a schema migration.
@@ -1266,6 +1280,8 @@ remain until their coverage is replaced.
 Budgets support fixed duration, clock padding, fixed count, and an inclusive random count of 0–100.
 Tail additionally supports remaining-slot budgets. Each clock pad resolves independently at its actual
 start in the channel's time zone, including DST transitions; exact boundaries require no filler.
+Once-per-slot post-roll clock padding has a budget of up to one configured interval before the
+scheduled handoff, capped by available time.
 Whole-item policies can stop early, while truncating policies reach time budgets when media is
 available. Random quantities use deterministic generation and break identities. Tail continuation
 retains remaining quantities or seconds and original stage capacity to avoid resampling,
@@ -1869,8 +1885,8 @@ is interrupted.
 
 When local viewing preferences are enabled, each approximate client and media encounter must remain
 active for two minutes before it is recorded. The initial item in a tune session contributes two
-points and later items contribute one. Pre-roll, mid-roll, and post-roll spans belong to the primary
-airing's encounter, so breaks and resumed content do not earn additional scores. The observer caches
+points and later items contribute one. Per-item pre-roll, mid-roll, and post-roll spans belong to
+the primary airing's encounter, so breaks and resumed content do not earn additional scores. The observer caches
 the primary item through the airing's finish; joining during inserted filler requires one anchor
 lookup, while joining during primary content requires none. Only media and show references, encounter
 type, points, and time are persisted; network addresses and User-Agents are not. Effective scores use a 180-day

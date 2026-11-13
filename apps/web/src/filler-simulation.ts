@@ -46,6 +46,8 @@ function exampleBudgetSeconds(budget: FillerBudget, elapsed: number): number {
 export function simulateFiller(assignments: FillerAssignments, presets: AnyFillerPreset[]): FillerExampleSpan[] {
 	const spans: FillerExampleSpan[] = [];
 	let elapsed = 0;
+	const post = assignments['post-roll'];
+	const reservedOutro = post && 'frequency' in post && post.frequency === 'once-per-slot';
 	const byId = new Map(presets.map(preset => [preset.id, preset]));
 	const presetFor = (kind: FillerKind): AnyFillerPreset | undefined => {
 		const preset = byId.get(assignments[kind]?.presetId ?? '');
@@ -54,7 +56,8 @@ export function simulateFiller(assignments: FillerAssignments, presets: AnyFille
 	const insert = (kind: FillerKind, point: number): void => {
 		const preset = presetFor(kind);
 		const active = !!assignments[kind];
-		const seconds = preset ? exampleBudgetSeconds(preset.budget, elapsed) : 120;
+		const seconds = preset ? reservedOutro && kind === 'post-roll' && preset.budget.type === 'pad'
+			? preset.budget.minutes * 60 : exampleBudgetSeconds(preset.budget, elapsed) : 120;
 		spans.push({ kind, seconds, point, active });
 		if (active) {
 			elapsed += seconds;
@@ -92,7 +95,12 @@ export function simulateFiller(assignments: FillerAssignments, presets: AnyFille
 		}
 		sourceStart = point;
 	}
-	insert('post-roll', EXAMPLE_MOVIE_SECONDS);
+	if (!reservedOutro) {
+		insert('post-roll', EXAMPLE_MOVIE_SECONDS);
+	}
 	insert('tail', EXAMPLE_MOVIE_SECONDS);
+	if (reservedOutro) {
+		insert('post-roll', EXAMPLE_MOVIE_SECONDS);
+	}
 	return spans;
 }

@@ -34,9 +34,12 @@ async function load(): Promise<void> {
 
 /** Describe inherited decisions without confusing them with an explicit slot override. */
 function status(kind: FillerKind): string {
-	const active = !!assignments.value[kind];
-	return props.overrides && (!props.overrides[kind] || props.overrides[kind]?.mode === 'inherit')
-		? `Inherited · ${active ? 'active' : 'inactive'}` : active ? 'Active' : 'Inactive';
+	const assignment = assignments.value[kind];
+	const inherited = props.overrides && (!props.overrides[kind] || props.overrides[kind]?.mode === 'inherit');
+	if (assignment && 'frequency' in assignment && assignment.frequency === 'once-per-slot') {
+		return inherited ? 'Inherited · once per slot' : 'Once per slot';
+	}
+	return inherited ? `Inherited · ${assignment ? 'active' : 'inactive'}` : assignment ? 'Active' : 'Inactive';
 }
 
 /** Show the source-content location and illustrative filler duration of a selectable gap. */

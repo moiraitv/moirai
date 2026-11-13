@@ -1,17 +1,16 @@
-import { planFiller, type FillerProgress } from './filler-plan.js';
+import { planFiller } from './filler-plan.js';
 import { legacyTailPresetId, type FillerSettings } from '@moirai/shared';
 import { TimelineMaterializationLimitError } from './limits.js';
 export { TimelineMaterializationLimitError } from './limits.js';
-import { planAiring, type AiringPlan } from './mid-roll.js';
+import { proposePrimaryAiring } from './primary-airing.js';
+import { commitStandaloneFiller, planSlotRoll, reportSlotRoll, reserveSlotOutro } from './slot-rolls.js';
 import { durationBetween, plusSeconds, segment } from './timeline-segment.js';
 import { commitAiring } from './airing-commit.js';
-import { durationMilliseconds, spanDurationMilliseconds } from '@moirai/shared';
 import { resolveAiringFiller, resolveTailFiller } from './filler-assignment.js';
 import { Temporal } from '@js-temporal/polyfill';
 import type {
 	ChannelSchedule,
 	FillerConfig,
-	ScheduleBoundary,
 	ScheduleSlot,
 	ScheduleTemplate,
 	SchedulingCatalog,
@@ -21,17 +20,15 @@ import type {
 	TimelineSegment,
 	ViewingPreferenceScores,
 } from '@moirai/shared';
-import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, countLabel, MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
+import { DEFAULT_FILLER_SHORTFALL_WARNING_THRESHOLD_PERCENT, durationMilliseconds, MAX_TIMELINE_SEGMENTS } from '@moirai/shared';
 import { instantFor, resolveScheduleDay, type ResolvedScheduleSlot } from './schedule-day.js';
 import { guideOccurrence } from '../guide/occurrences.js';
 import type { GuideOccurrence } from '@moirai/shared';
 import { publicTimelineIssue, type RecordedTimelineIssue } from './timeline-issues.js';
-import type { BoundaryRejection, TimelineContinuation } from './continuation.js';
+import type { BoundaryRejection, RetainedSlotPlayback, TimelineContinuation } from './continuation.js';
 import {
 	addIssue,
 	indexOccupiedMedia,
-	selectProgram,
-	type SelectionResult,
 	type SelectionContext,
 } from './selection.js';
 
@@ -51,8 +48,8 @@ export interface GenerateTimelineInput {
 	state: SelectionStateRecord[];
 	/** Continue a committed range at this instant instead of the first local midnight. */
 	initialCursor?: string;
-	/** Resume the unfinished slot recorded at initialCursor, when the schedule is unchanged. */
-	initialContinuation?: TimelineContinuation | null;
+	/** Resume a matching interval or use retained playback to replan it after a schedule change. */
+	initialContinuation?: TimelineContinuation | RetainedSlotPlayback | null;
 	/** Immutable decayed preference scores captured for this generation pass. */
 	viewingPreferences?: ViewingPreferenceScores;
 	/** Exact media intervals already committed or generated on other channels. */
@@ -86,47 +83,6 @@ function consumerKey(
 ): string {
 	const base = `${role}:${input.channelId}:${template.id}:${slot.id}:${programId}`;
 	return slot.stateScope === 'occurrence' ? `${base}:${date.toString()}` : base;
-}
-
-/** Returns whether an overrun satisfies a finite boundary or an explicit unlimited finish. */
-function isWithinBoundaryDrift(boundary: ScheduleBoundary, overrunSeconds: number): boolean {
-	return boundary.maxDriftSeconds === null || overrunSeconds <= boundary.maxDriftSeconds;
-}
-
-/** Return whether a finite finish-left boundary may hand off before its nominal time. */
-function canStartIncomingEarly(
-	boundary: ScheduleBoundary,
-	cursor: Temporal.Instant,
-	nominalEnd: Temporal.Instant,
-): boolean {
-	return boundary.policy === 'finish-left'
-		&& boundary.maxDriftSeconds !== null
-		&& boundary.fallback === 'favor-right'
-		&& Temporal.Instant.compare(cursor, nominalEnd) <= 0
-		&& durationBetween(cursor, nominalEnd) <= (boundary.earlyStartMaxDriftSeconds ?? 0);
-}
-
-/** Bound late-first selection without changing legacy template or explicit truncation behavior. */
-function primaryFitSeconds(
-	slot: ScheduleSlot,
-	boundary: ScheduleBoundary,
-	layerTransition: boolean,
-	availableSeconds: number,
-): number | null {
-	if (boundary.policy !== 'finish-left' || boundary.maxDriftSeconds === null) {
-		return null;
-	}
-	if (layerTransition) {
-		return availableSeconds + boundary.maxDriftSeconds;
-	}
-	if (boundary.fallback !== 'favor-right' || slot.startEligibility.type === 'allow-truncate') {
-		return null;
-	}
-
-	const slotDrift = slot.startEligibility.type === 'allow-overrun'
-		? boundary.maxDriftSeconds
-		: slot.startEligibility.type === 'within-drift' ? slot.startEligibility.maxDriftSeconds : 0;
-	return availableSeconds + Math.min(slotDrift, boundary.maxDriftSeconds);
 }
 
 /** Apply the channel regeneration seed only to programs without an explicit authored seed. */
@@ -218,7 +174,8 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			if (activeOccurrence) {
 				guideOccurrences.push(activeOccurrence);
 			}
-			if (resume && Temporal.Instant.compare(nominalStart, resume.intervalStart) < 0) {
+			if (resume && (template.id !== resume.templateId || slot.id !== resume.slotId || layerId !== resume.scheduleLayerId
+				|| !nominalStart.equals(resume.intervalStart) || !nominalEnd.equals(resume.intervalEnd))) {
 				continue;
 			}
 			let cursor: Temporal.Instant = carriedStart ?? nominalStart;
@@ -252,15 +209,20 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				occupiedMediaIndex,
 				avoidCrossChannelDuplicates: input.schedule.avoidCrossChannelDuplicates ?? true,
 			};
-			let primaryCount = resume?.hadPrimary ? 1 : 0;
-			let boundaryRejection: BoundaryRejection | null = resume?.boundaryRejection ?? null;
-			const resumingFiller = Boolean(resume && resume.phase !== 'primary');
-			const resumedStage = resume?.phase;
-			const resumedProgress = resume?.fillerProgress;
+			const checkpoint = resume?.phase === undefined ? null : resume;
+			const replanning = resume !== null && !checkpoint;
+			const retainedPrimary = replanning && resume?.hadPrimary;
+			let primaryCount = checkpoint?.hadPrimary ? 1 : 0;
+			let boundaryRejection: BoundaryRejection | null = checkpoint?.boundaryRejection ?? null;
+			const resumingFiller = Boolean(checkpoint && checkpoint.phase !== 'primary' && checkpoint.phase !== 'intro');
+			const resumedStage = checkpoint?.phase;
+			const resumedProgress = checkpoint?.fillerProgress;
 			activeContinuation = {
 				at: cursor.toString(), date: date.toString(), templateId: template.id, slotId: slot.id,
 				scheduleLayerId: layerId, intervalStart: nominalStart.toString(), intervalEnd: nominalEnd.toString(),
-				boundaryOrigin, phase: resumedStage ?? 'primary', ...(resumedProgress ? { fillerProgress: resumedProgress } : {}), hadPrimary: primaryCount > 0, boundaryRejection,
+				boundaryOrigin, phase: resumedStage ?? 'primary', ...(resumedProgress ? { fillerProgress: resumedProgress } : {}),
+				...(checkpoint?.slotOutro !== undefined ? { slotOutro: checkpoint.slotOutro } : {}), hadPrimary: resume?.hadPrimary ?? false,
+				boundaryRejection,
 			};
 			resume = null;
 			let resolvedEnd = nominalEnd;
@@ -288,164 +250,146 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				continue;
 			}
 
-			// Select primary media until the slot is full or its boundary rejects another start.
-			while (!resumingFiller && slot.programId !== null && Temporal.Instant.compare(cursor, nominalEnd) < 0
-				&& Temporal.Instant.compare(cursor, windowEnd) < 0) {
-				context.selectionStart = cursor.toString();
-				const primaryConsumerKey = consumerKey(
-					'primary',
-					input,
-					template,
-					slot,
-					slot.programId,
-					date,
-				);
-				const layerTransition = boundaryOrigin !== 'template';
-				const layerFinishesOutgoing = layerTransition && boundary.policy === 'finish-left';
-				const fitSeconds = primaryFitSeconds(slot, boundary, layerTransition, durationBetween(cursor, nominalEnd));
-				const { midRoll, pre, post, midRollConsumerKey } = resolveAiringFiller(
-					slot,
-					template,
-					input.schedule,
-					input.catalog,
-					(kind, programId) => consumerKey(kind, input, template, slot, programId, date),
-				);
-				const plans = new Map<string, AiringPlan>();
-				const planned = (media: SelectionResult['media']): AiringPlan | null => {
-					if (!midRoll && !pre && !post) {
-						return null;
-					}
-					let plan = plans.get(media.id);
-					if (!plan) {
-						plan = planAiring(
-							media,
-							slot.programId!,
-							midRoll,
-							state,
-							context,
-							midRollConsumerKey,
-							input.timeZone,
-							{ ...(pre ? { pre } : {}), ...(post ? { post } : {}), ...(input.schedule.generationSeed ? { seed: input.schedule.generationSeed } : {}) },
-						);
-						plans.set(media.id, plan);
-					}
-					return plan;
-				};
-				context.mediaDuration = midRoll || pre || post ? media => planned(media)!.durationSeconds : undefined;
-				const previousFitRejections = context.fitRejectionCount;
-				let selected = selectProgram(
-					slot.programId,
-					primaryConsumerKey,
+			// Resolve the interval's bookends before selecting primary items. Only emit the intro
+			// after finding a primary airing that can start behind it.
+			const commitContext = { channelId: input.channelId, state, appendSegment };
+			const rolls = slot.programId === null ? null : resolveAiringFiller(
+				slot,
+				template,
+				input.schedule,
+				input.catalog,
+				(kind, programId) => consumerKey(kind, input, template, slot, programId, date),
+			);
+			const slotPre = rolls?.pre?.frequency === 'once-per-slot' ? rolls.pre : undefined;
+			const slotPost = rolls?.post?.frequency === 'once-per-slot' ? rolls.post : undefined;
+			const identity = `${input.schedule.generationSeed ?? ''}:${input.channelId}:${template.id}:${slot.id}:${layerId ?? ''}:${date}:${resolved.startSeconds}:${resolved.endSeconds}`;
+			const startInside = replanning
+				|| (!resumedStage && initialCursor?.equals(cursor) && Temporal.Instant.compare(cursor, nominalStart) > 0);
+			let intro = slotPre && !startInside && (!resumedStage || resumedStage === 'intro')
+				? planSlotRoll(
+					slotPre,
+					slotPre.budget,
 					state,
 					context,
-					fitSeconds,
-					'first-fit-arbitrary',
+					cursor,
+					durationBetween(cursor, nominalEnd),
+					input.timeZone,
+					identity,
+					resumedStage === 'intro' ? resumedProgress : undefined,
+				)
+				: undefined;
+			const afterIntro = plusSeconds(cursor, intro?.durationSeconds ?? 0);
+			let outro = slotPost && activeContinuation.slotOutro !== null && (!resumingFiller || primaryCount > 0)
+				? reserveSlotOutro(
+					slotPost,
+					state,
+					context,
+					afterIntro,
+					nominalEnd,
+					input.timeZone,
+					identity,
+					activeContinuation.slotOutro,
+					resumedStage === 'outro' ? resumedProgress : undefined,
+				)
+				: undefined;
+			let reserved = outro?.reservation ? Temporal.Instant.from(outro.reservation.start) : null;
+			if (slotPost) {
+				activeContinuation.slotOutro = outro?.reservation ?? null;
+			}
+
+			// Retry the first primary selection without bookends if they prevent an airing.
+			const primaryKey = slot.programId ? consumerKey('primary', input, template, slot, slot.programId, date) : '';
+			const itemRolls = rolls && { ...rolls, pre: slotPre ? undefined : rolls.pre, post: slotPost ? undefined : rolls.post };
+			const rules = itemRolls && { slot, boundary, boundaryLayerId, primaryConsumerKey: primaryKey,
+				rolls: itemRolls, timeZone: input.timeZone, seed: input.schedule.generationSeed };
+			let first = true;
+			while (!resumingFiller && rules && (first || Temporal.Instant.compare(cursor, reserved ?? nominalEnd) < 0)
+				&& Temporal.Instant.compare(cursor, windowEnd) < 0) {
+				const withBookends = first && !retainedPrimary && primaryCount === 0 && Boolean(intro?.durationSeconds || reserved);
+				const trial = withBookends ? { ...context, blockedPrograms: new Set(context.blockedPrograms),
+					issues: [], issueKeys: new Set<string>(), issueIndex: new Map<string, RecordedTimelineIssue>() } : context;
+				let airing = proposePrimaryAiring(
+					rules,
+					intro?.state ?? state,
+					trial,
+					first ? afterIntro : cursor,
+					reserved ?? nominalEnd,
+					Boolean(reserved),
 				);
-				if (
-					!selected
-					&& layerFinishesOutgoing
-					&& boundary.maxDriftSeconds !== null
-					&& boundary.fallback === 'truncate-left'
-				) {
-					selected = selectProgram(slot.programId, primaryConsumerKey, state, context);
-				}
-				if (!selected) {
-					if (canStartIncomingEarly(boundary, cursor, nominalEnd)) {
-						resolvedEnd = cursor;
-						break;
-					}
-
-					if (fitSeconds !== null && context.fitRejectionCount > previousFitRejections) {
-						boundaryRejection = {
-							code: 'boundary-start-rejected',
-							message: layerTransition ? `No outgoing item can finish within ${countLabel(
-								Math.round(boundary.maxDriftSeconds! / 60),
-								'minute',
-							)} of the conditional boundary. Selection state was preserved.`
-								: 'No outgoing item satisfies this template boundary. Review start eligibility, '
-									+ 'drift, or fallback behavior. Selection state was preserved.',
-							programId: slot.programId,
-							mediaItemId: null,
-							scheduleLayerId: boundaryLayerId,
-						};
-					}
-					break;
-				}
-
-				const plan = planned(selected.media);
-				context.mediaDuration = undefined;
-				const naturalFinish = plusSeconds(cursor, plan?.durationSeconds ?? selected.media.durationSeconds!);
-				const crossesBoundary = Temporal.Instant.compare(naturalFinish, nominalEnd) > 0;
-				if (!crossesBoundary) {
-					if (plan) {
-						for (const issue of plan.issues) {
-							for (const occurrence of issue.occurrences ?? []) {
-								addIssue(context, { ...issue, occurrence });
-							}
-						}
-					}
-					commitAiring({ channelId: input.channelId, state, appendSegment }, selected, plan, cursor, naturalFinish, template, slot, layerId);
-					cursor = naturalFinish;
-					primaryCount += 1;
-					continue;
-				}
-
-				const overrunSeconds = durationBetween(nominalEnd, naturalFinish);
-				const eligibleForOverrun
-					= slot.startEligibility.type === 'allow-overrun'
-						|| (slot.startEligibility.type === 'within-drift'
-							&& overrunSeconds <= slot.startEligibility.maxDriftSeconds);
-				const finishLeft
-					= boundary.policy === 'finish-left'
-						&& (layerTransition || eligibleForOverrun)
-						&& isWithinBoundaryDrift(boundary, overrunSeconds);
-				const truncate = layerTransition
-					? boundary.fallback === 'truncate-left'
-					: slot.startEligibility.type === 'allow-truncate'
-						|| (eligibleForOverrun && boundary.fallback === 'truncate-left');
-				const firstPrimaryIndex = plan?.spans.findIndex(span => span.role === 'primary') ?? 0;
-				const preDurationMilliseconds = plan?.spans.slice(0, firstPrimaryIndex).reduce((milliseconds, span) => milliseconds + spanDurationMilliseconds(span.sourceStartSeconds, span.sourceFinishSeconds), 0) ?? 0;
-				if (!finishLeft && truncate && preDurationMilliseconds >= nominalEnd.epochMilliseconds - cursor.epochMilliseconds) {
-					boundaryRejection = { code: 'boundary-start-rejected', message: 'Pre-roll would consume the entire remaining slot without primary content.',
-						programId: slot.programId, mediaItemId: selected.media.id, scheduleLayerId: boundaryLayerId };
-					break;
-				}
-				if (!finishLeft && !truncate) {
-					if (canStartIncomingEarly(boundary, cursor, nominalEnd)) {
-						resolvedEnd = cursor;
-						break;
-					}
-
-					const boundaryLabel = layerTransition ? 'conditional boundary' : 'template boundary';
-					boundaryRejection = {
-						code: 'boundary-start-rejected',
-						message: `The next outgoing item cannot satisfy the ${boundaryLabel} and was `
-							+ 'left unconsumed. Review start eligibility, drift, or fallback behavior.',
-						programId: slot.programId,
-						mediaItemId: selected.media.id,
-						scheduleLayerId: boundaryLayerId,
-					};
-					break;
-				}
-
-				const finish = finishLeft ? naturalFinish : nominalEnd;
-				if (plan) {
-					for (const issue of plan.issues) {
+				if (airing.selected && withBookends) {
+					for (const issue of trial.issues) {
 						for (const occurrence of issue.occurrences ?? []) {
 							addIssue(context, { ...issue, occurrence });
 						}
 					}
 				}
-				commitAiring({ channelId: input.channelId, state, appendSegment }, selected, plan, cursor, finish, template, slot, layerId);
-				cursor = finish;
+				if (!airing.selected && withBookends) {
+					intro = undefined;
+					outro = undefined;
+					reserved = null;
+					if (slotPost) {
+						activeContinuation.slotOutro = null;
+					}
+					airing = proposePrimaryAiring(rules, state, context, cursor, nominalEnd, false);
+					if (airing.selected) {
+						addIssue(context, { code: 'slot-roll-skipped', message: 'Once-per-slot filler was skipped to make room for primary content.',
+							programId: slot.programId, mediaItemId: null });
+					}
+				}
+				if (!airing.selected) {
+					resolvedEnd = airing.handoff;
+					boundaryRejection = airing.rejection ?? boundaryRejection;
+					break;
+				}
+
+				// Publish only the accepted airing and its opener. An early intro can cross midnight
+				// before the first primary item starts, so retain its progress at the window edge.
+				if (first) {
+					if (intro && slotPre) {
+						reportSlotRoll(context, intro, slotPre, 'pre-roll', cursor);
+						cursor = commitStandaloneFiller(commitContext, activeContinuation, 'intro', slotPre.presetId, intro, cursor, windowEnd);
+						intro = undefined;
+						if (Temporal.Instant.compare(cursor, windowEnd) >= 0) {
+							carriedStart = cursor;
+							break generation;
+						}
+					}
+					activeContinuation.phase = 'primary';
+					delete activeContinuation.fillerProgress;
+					first = false;
+				}
+				for (const issue of airing.plan?.issues ?? []) {
+					for (const occurrence of issue.occurrences ?? []) {
+						addIssue(context, { ...issue, occurrence });
+					}
+				}
+				commitAiring(commitContext, airing.selected, airing.plan, cursor, airing.finish, template, slot, layerId);
+				cursor = airing.finish;
 				primaryCount += 1;
-				resolvedEnd = finish;
-				break;
+				if (airing.endsPrimary) {
+					resolvedEnd = airing.finish;
+					break;
+				}
+			}
+
+			if (outro && slotPost && (primaryCount > 0 || retainedPrimary)) {
+				reportSlotRoll(context, outro.plan, slotPost, 'post-roll', reserved ?? cursor);
+				if (reserved) {
+					resolvedEnd = reserved;
+				}
+			}
+			else {
+				outro = undefined;
+				reserved = null;
+				if (slotPost) {
+					activeContinuation.slotOutro = null;
+				}
 			}
 
 			// Let a favor-right boundary end at the final primary item within its drift allowance.
 			if (
 				boundary.policy === 'favor-right'
+				&& !reserved
 				&& !resumingFiller
 				&& Temporal.Instant.compare(cursor, windowEnd) < 0
 				&& boundary.maxDriftSeconds !== null
@@ -461,7 +405,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 			activeContinuation!.boundaryRejection = boundaryRejection;
 			const tail = resolveTailFiller(slot, template, input.schedule);
 			const stages: Array<{ phase: 'tail' | 'fallback'; config: FillerConfig; settings: FillerSettings }> = [];
-			if (tail && resumedStage !== 'fallback') {
+			if (tail && resumedStage !== 'fallback' && resumedStage !== 'outro') {
 				const settings = input.catalog.fillerPresets?.[tail.presetId ?? legacyTailPresetId(tail.policy)]
 					?? (!tail.presetId ? { budget: { type: 'remaining' as const, policy: tail.policy } } : null);
 				if (!settings) {
@@ -469,7 +413,7 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				}
 				stages.push({ phase: 'tail', config: tail, settings });
 			}
-			if (input.schedule.defaultFiller) {
+			if (input.schedule.defaultFiller && resumedStage !== 'outro') {
 				stages.push({ phase: 'fallback', config: input.schedule.defaultFiller,
 					settings: { budget: { type: 'remaining', policy: input.schedule.defaultFiller.policy } } });
 			}
@@ -490,58 +434,41 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 					available,
 					resumedStage === stage.phase ? resumedProgress : undefined,
 				);
-				activeContinuation!.phase = stage.phase;
-				const progress: FillerProgress = { ...result.initialProgress };
-				activeContinuation!.fillerProgress = { ...progress };
-				for (const span of result.spans) {
-					if (Temporal.Instant.compare(cursor, windowEnd) >= 0) {
-						break;
-					}
-					const finish = plusSeconds(cursor, span.sourceFinishSeconds);
-					progress.remaining = progress.unit === 'count' ? progress.remaining - 1
-						: Math.max(0, durationMilliseconds(progress.remaining) - durationMilliseconds(span.sourceFinishSeconds)) / 1_000;
-					activeContinuation!.fillerProgress = { ...progress };
-					appendSegment(segment({ role: 'filler', fillerStage: stage.phase, fillerPresetId: stage.phase === 'tail' ? stage.config.presetId : undefined, channelId: input.channelId, scheduleLayerId: layerId, templateId: template.id,
-						slotId: slot.id, programId: span.programId, mediaItemId: span.media.id, title: span.media.title,
-						playbackPath: span.media.playbackPath, playbackParts: span.media.playbackParts ?? [{ playbackPath: span.media.playbackPath, durationSeconds: span.media.durationSeconds! }],
-						start: cursor, finish, sourceStartSeconds: 0, sourceFinishSeconds: span.sourceFinishSeconds,
-						truncated: span.truncated, programAncestry: span.programAncestry, sequenceEntryPath: span.sequenceEntryPath }), span.stateDelta);
-					for (const record of span.stateDelta) {
-						state.set(record.consumerKey, record);
-					}
-					cursor = finish;
-				}
-			}
-			// Materialize any remaining gap explicitly so downstream output stays continuous.
-			const gapEnd = Temporal.Instant.compare(resolvedEnd, windowEnd) < 0 ? resolvedEnd : windowEnd;
-			if (Temporal.Instant.compare(cursor, gapEnd) < 0) {
-				if (boundaryRejection) {
-					addIssue(context, {
-						...boundaryRejection,
-						occurrence: { start: cursor.toString(), finish: gapEnd.toString(), boundaryOrigin },
-					});
-				}
-				appendSegment(
-					segment({
-						role: 'dead-air',
-						channelId: input.channelId,
-						scheduleLayerId: layerId,
-						templateId: template.id,
-						slotId: slot.id,
-						programId: null,
-						mediaItemId: null,
-						title: 'Dead air',
-						playbackPath: null,
-						playbackParts: [],
-						start: cursor,
-						finish: gapEnd,
-						sourceStartSeconds: 0,
-						sourceFinishSeconds: null,
-						truncated: false,
-					}),
+				cursor = commitStandaloneFiller(
+					commitContext,
+					activeContinuation,
+					stage.phase,
+					stage.phase === 'tail' ? stage.config.presetId : undefined,
+					result,
+					cursor,
+					windowEnd,
 				);
 			}
-			carriedStart = Temporal.Instant.compare(cursor, gapEnd) > 0 ? cursor : gapEnd;
+
+			// Fill any remaining gap before the closing, then emit it against the fixed handoff.
+			const appendGap = (end: Temporal.Instant): void => {
+				const finish = Temporal.Instant.compare(end, windowEnd) < 0 ? end : windowEnd;
+				if (Temporal.Instant.compare(cursor, finish) >= 0) {
+					return;
+				}
+				if (boundaryRejection) {
+					addIssue(context, { ...boundaryRejection, occurrence: { start: cursor.toString(), finish: finish.toString(), boundaryOrigin } });
+					boundaryRejection = null;
+				}
+				appendSegment(segment({
+					role: 'dead-air', channelId: input.channelId, scheduleLayerId: layerId, templateId: template.id,
+					slotId: slot.id, programId: null, mediaItemId: null, title: 'Dead air', playbackPath: null, playbackParts: [],
+					start: cursor, finish, sourceStartSeconds: 0, sourceFinishSeconds: null, truncated: false,
+				}));
+				cursor = finish;
+			};
+			appendGap(resolvedEnd);
+			if (reserved && outro && slotPost) {
+				const start = nominalEnd.subtract({ milliseconds: durationMilliseconds(outro.plan.durationSeconds) });
+				appendGap(start);
+				cursor = commitStandaloneFiller(commitContext, activeContinuation, 'outro', slotPost.presetId, outro.plan, cursor, windowEnd);
+			}
+			carriedStart = cursor;
 			carriedBoundary = Temporal.Instant.compare(resolvedEnd, nominalEnd) > 0
 				? { boundaryOrigin, boundaryLayerId }
 				: null;

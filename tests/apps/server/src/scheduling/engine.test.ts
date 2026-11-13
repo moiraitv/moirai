@@ -12,6 +12,7 @@ import type {
 } from '@moirai/shared';
 import {
 	catalogProgramItemFilterSchema,
+	defaultFillerAssignment,
 	MAX_MEDIA_DURATION_MILLISECONDS,
 	MAX_TIMELINE_ISSUE_OCCURRENCES,
 	MAX_TIMELINE_SEGMENTS,
@@ -2409,4 +2410,263 @@ it('checkpoints fallback progress independently when an exhausted tail hands off
 	expect(continued.segments.slice(0, 4).map(entry => entry.fillerStage)).toEqual(Array(4).fill('fallback'));
 	expect(continued.segments[0]!.start).toBe('2026-01-06T00:00:00Z');
 	expect(continued.segments[3]!.finish).toBe('2026-01-06T01:00:00Z');
+});
+
+function slotRollFixture() {
+	const videos = program(10, { type: 'content', source: {
+		type: 'collection', libraryId: uuid(900), itemIds: [1, 2, 3, 4, 5].map(uuid), sort: { type: 'name', direction: 'asc' },
+	}, strategy: { type: 'sequential' } });
+	const opener = contentProgram(11, 6);
+	const closer = contentProgram(12, 7);
+	const pad = contentProgram(13, 8);
+	const daily = template([
+		{ programId: null, startSeconds: 0, filler: { mode: 'disabled' } },
+		{ programId: videos.id, startSeconds: 15 * 3600 },
+		{ programId: null, startSeconds: 18 * 3600, filler: { mode: 'disabled' } },
+	]);
+	const args = input([videos, opener, closer, pad], [
+		...Array.from({ length: 5 }, (_, index) => media(index + 1, 2_400)),
+		media(6, 60), media(7, 60), media(8, 1_200),
+	], daily);
+	const pre = { ...defaultFillerAssignment('pre-roll', opener.id), frequency: 'once-per-slot' as const };
+	const post = { ...defaultFillerAssignment('post-roll', closer.id), frequency: 'once-per-slot' as const };
+	daily.defaultPreRoll = pre;
+	daily.defaultPostRoll = post;
+	args.catalog.fillerPresets = { [pre.presetId]: { budget: { type: 'count', count: 1 } },
+		[post.presetId]: { budget: { type: 'count', count: 1 } } };
+	return { args, daily, videos, opener, closer, pad, pre, post, slot: daily.slots[1]! };
+}
+
+describe('once-per-slot rolls', () => {
+	it('reserves the 6 PM handoff and covers the gap ahead of the outro with tail and fallback', () => {
+		const { args, daily, videos, pad, post, slot } = slotRollFixture();
+		slot.startEligibility = { type: 'allow-overrun' };
+		daily.boundaries[1] = { ...daily.boundaries[1]!, policy: 'finish-left', maxDriftSeconds: null };
+		const tailPresetId = uuid(400);
+		args.catalog.fillerPresets![tailPresetId] = { budget: { type: 'duration', seconds: 120, policy: 'next-truncate' } };
+		slot.filler = { mode: 'configured', config: { programId: pad.id, policy: 'next-truncate', presetId: tailPresetId } };
+		args.schedule.defaultFiller = { programId: pad.id, policy: 'next-truncate' };
+
+		const result = generateTimelineDetailed(args);
+		const segments = result.segments.filter(segment => segment.slotId === slot.id);
+		expect(segments.map(segment => [segment.fillerStage ?? segment.role, segment.start.slice(11), segment.finish.slice(11)])).toEqual([
+			['pre-roll', '15:00:00Z', '15:01:00Z'],
+			['primary', '15:01:00Z', '15:41:00Z'],
+			['primary', '15:41:00Z', '16:21:00Z'],
+			['primary', '16:21:00Z', '17:01:00Z'],
+			['primary', '17:01:00Z', '17:41:00Z'],
+			['tail', '17:41:00Z', '17:43:00Z'],
+			['fallback', '17:43:00Z', '17:59:00Z'],
+			['post-roll', '17:59:00Z', '18:00:00Z'],
+		]);
+		expect(segments.at(-1)).toMatchObject({ fillerPresetId: post.presetId, truncated: false });
+		expect(result.proposedState.find(record => record.consumerKey.endsWith(videos.id))?.value)
+			.toMatchObject({ lastItemId: uuid(4) });
+	});
+
+	it.each(['pre-roll', 'post-roll'] as const)('configures %s independently from the other roll', stage => {
+		const { args, daily, pre, post, slot } = slotRollFixture();
+		args.schedule.defaultPreRoll = daily.defaultPreRoll = { ...pre, frequency: 'per-item' };
+		args.schedule.defaultPostRoll = daily.defaultPostRoll = { programId: post.programId, presetId: post.presetId };
+		if (stage === 'pre-roll') {
+			slot.preRoll = { mode: 'configured', config: pre };
+		}
+		else {
+			slot.postRoll = { mode: 'configured', config: post };
+		}
+		const segments = generateTimeline(args).segments.filter(segment => segment.slotId === slot.id);
+		const other = stage === 'pre-roll' ? 'post-roll' : 'pre-roll';
+		expect(segments.filter(segment => segment.fillerStage === stage)).toHaveLength(1);
+		expect(segments.filter(segment => segment.fillerStage === other)).toHaveLength(4);
+		expect(segments.find(segment => segment.fillerStage === other)?.airing).toBeTruthy();
+	});
+
+	it.each([true, false])('discards bookends and keeps filler cursors untouched when primary playable is %s', playable => {
+		const { args, daily, videos, opener, closer, slot } = slotRollFixture();
+		daily.slots[2]!.startSeconds = daily.boundaries[1]!.targetSeconds = 15 * 3600 + 2_400;
+		if (!playable) {
+			args.catalog.media.slice(0, 5).forEach(item => {
+				item.durationSeconds = null;
+			});
+		}
+
+		const result = generateTimelineDetailed(args);
+		const segments = result.segments.filter(segment => segment.slotId === slot.id);
+		expect(segments.map(segment => segment.role)).toEqual([playable ? 'primary' : 'dead-air']);
+		expect(result.issues.some(issue => issue.code === 'slot-roll-skipped')).toBe(playable);
+		expect(result.proposedState.some(record => [opener.id, closer.id].includes(record.consumerKey.split(':').at(-1)!))).toBe(false);
+		expect(result.proposedState.some(record => record.consumerKey.endsWith(videos.id))).toBe(playable);
+	});
+
+	it('keeps boundary drift when a whole-clip outro cannot fit and respects shortfall tolerance', () => {
+		const { args, daily, post, slot } = slotRollFixture();
+		daily.defaultPreRoll = null;
+		slot.startEligibility = { type: 'allow-overrun' };
+		daily.boundaries[1] = { ...daily.boundaries[1]!, policy: 'finish-left', maxDriftSeconds: null };
+		args.catalog.media.find(item => item.id === uuid(7))!.durationSeconds = 10_801;
+		for (const threshold of [0, 100]) {
+			const result = generateTimelineDetailed({ ...args, fillerShortfallWarningThresholdPercent: threshold });
+			const segments = result.segments.filter(segment => segment.slotId === slot.id);
+			expect(segments.at(-1)?.finish).toBe('2026-01-05T18:20:00Z');
+			expect(segments.some(segment => segment.fillerPresetId === post.presetId)).toBe(false);
+			expect(result.issues.some(issue => issue.code === 'slot-roll-shortfall')).toBe(threshold === 100);
+		}
+	});
+
+	it('reserves one clock interval and truncates the primary at its start when allowed', () => {
+		const { args, daily, post, slot } = slotRollFixture();
+		daily.defaultPreRoll = null;
+		slot.startEligibility = { type: 'allow-truncate' };
+		args.catalog.fillerPresets![post.presetId]!.budget = { type: 'pad', minutes: 5, policy: 'next-truncate' };
+		const result = generateTimeline(args);
+		const segments = result.segments.filter(segment => segment.slotId === slot.id);
+		expect(segments.filter(segment => segment.fillerStage === 'post-roll')).toHaveLength(5);
+		expect(segments.find(segment => segment.fillerStage === 'post-roll')?.start).toBe('2026-01-05T17:55:00Z');
+		expect(segments.findLast(segment => segment.role === 'primary')).toMatchObject({ finish: '2026-01-05T17:55:00Z', truncated: true });
+		expect(segments.at(-1)?.finish).toBe('2026-01-05T18:00:00Z');
+	});
+
+	it('bookends each base interval when another layer takes the channel for an hour', () => {
+		const { args, daily, videos } = slotRollFixture();
+		const overlay = template([{ programId: videos.id, startSeconds: 0, startEligibility: { type: 'allow-truncate' } }], null, 101);
+		args.templates = [daily, overlay];
+		args.schedule.layers = [{
+			id: uuid(500), templateId: overlay.id, programId: null,
+			predicate: { type: 'time-range', startSeconds: 16 * 3600, endSeconds: 17 * 3600, negated: false },
+			entryBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left' },
+			exitBoundary: { policy: 'hard', maxDriftSeconds: 0, fallback: 'truncate-left' },
+		}];
+		const rolls = generateTimeline(args).segments.filter(segment => segment.fillerStage);
+		expect(rolls.map(segment => [segment.fillerStage, segment.start.slice(11), segment.finish.slice(11)])).toEqual([
+			['pre-roll', '15:00:00Z', '15:01:00Z'], ['post-roll', '15:59:00Z', '16:00:00Z'],
+			['pre-roll', '17:00:00Z', '17:01:00Z'], ['post-roll', '17:59:00Z', '18:00:00Z'],
+		]);
+	});
+
+	it('restores the exact remaining schedule from inside the intro, primary, tail, and outro', () => {
+		const { args, pre, post, pad, slot } = slotRollFixture();
+		args.catalog.fillerPresets![pre.presetId]!.budget = { type: 'count', count: 2 };
+		args.catalog.fillerPresets![post.presetId]!.budget = { type: 'random-count', minimum: 2, maximum: 3 };
+		args.schedule.defaultFiller = { programId: pad.id, policy: 'next-truncate' };
+		const full = generateTimelineDetailed(args);
+		const state = new Map<string, SelectionStateRecord>();
+		const phases = new Set<string>();
+		for (const [index, transition] of full.stateTransitions.entries()) {
+			for (const record of transition.stateDelta) {
+				state.set(record.consumerKey, record);
+			}
+			const { continuation } = transition;
+			if (continuation?.slotId !== slot.id || phases.has(continuation.phase)) {
+				continue;
+			}
+			phases.add(continuation.phase);
+			const rest = generateTimelineDetailed({ ...args, state: [...state.values()],
+				initialCursor: continuation.at, initialContinuation: continuation });
+			expect(rest.segments.filter(segment => segment.slotId === slot.id)).toEqual(
+				full.segments.slice(index + 1).filter(segment => segment.slotId === slot.id),
+			);
+		}
+		expect(phases).toEqual(new Set(['intro', 'primary', 'fallback', 'outro']));
+		const rebuilt = generateTimelineDetailed({ ...args, initialCursor: '2026-01-05T15:10:00Z' });
+		expect(rebuilt.segments.some(segment => segment.fillerStage === 'pre-roll')).toBe(false);
+		expect(rebuilt.segments.filter(segment => segment.fillerStage === 'post-roll').at(-1)?.finish)
+			.toBe('2026-01-05T18:00:00Z');
+	});
+});
+
+it('continues an early-started intro across the rolling window without losing its reserved outro', () => {
+	const video = contentProgram(10, 1);
+	const evening = contentProgram(11, 2);
+	const bumper = contentProgram(12, 3);
+	const daily = template([
+		{ programId: video.id, startSeconds: 0 },
+		{ programId: evening.id, startSeconds: 3600, boundary: { policy: 'finish-left', maxDriftSeconds: 0,
+			fallback: 'favor-right', earlyStartMaxDriftSeconds: 300 } },
+	]);
+	const pre = { ...defaultFillerAssignment('pre-roll', bumper.id), frequency: 'once-per-slot' as const };
+	const post = { ...defaultFillerAssignment('post-roll', bumper.id), frequency: 'once-per-slot' as const };
+	daily.slots[0]!.preRoll = { mode: 'configured', config: pre };
+	daily.slots[0]!.postRoll = { mode: 'configured', config: post };
+	const args = input([video, evening, bumper], [media(1, 900), media(2, 22 * 3600 + 58 * 60), media(3, 180)], daily);
+	args.catalog.fillerPresets = { [pre.presetId]: { budget: { type: 'count', count: 2 } }, [post.presetId]: { budget: { type: 'count', count: 1 } } };
+
+	const first = generateTimelineDetailed(args);
+	expect(first.segments.at(-1)).toMatchObject({ fillerStage: 'pre-roll', start: '2026-01-05T23:58:00Z', finish: '2026-01-06T00:01:00Z' });
+	expect(first.continuation).toMatchObject({ phase: 'intro', fillerProgress: { unit: 'count', remaining: 1 },
+		slotOutro: { start: '2026-01-06T00:57:00Z' } });
+	const continued = generateTimelineDetailed({ ...args, startDate: '2026-01-06', initialCursor: first.continuationAt,
+		initialContinuation: first.continuation, state: first.proposedState });
+	expect(continued.segments[0]).toMatchObject({ fillerStage: 'pre-roll', start: '2026-01-06T00:01:00Z', finish: '2026-01-06T00:04:00Z' });
+	const whole = generateTimelineDetailed({ ...args, days: 2 });
+	expect([...first.segments, ...continued.segments]).toEqual(whole.segments);
+});
+
+it.each([
+	{ initialOverlap: '15:00', resumedOverlap: '15:00' },
+	{ initialOverlap: '17:59', resumedOverlap: '17:59' },
+	{ initialOverlap: '15:00', resumedOverlap: '17:59' },
+])('keeps a fitting outro with overlaps at $initialOverlap during planning and $resumedOverlap during recovery', ({ initialOverlap, resumedOverlap }) => {
+	const { args, daily, closer, slot } = slotRollFixture();
+	daily.defaultPreRoll = null;
+	closer.config = { type: 'content', source: {
+		type: 'collection', libraryId: uuid(900), itemIds: [uuid(7), uuid(8)], sort: { type: 'name', direction: 'asc' },
+	}, strategy: { type: 'shuffle', seed: 'closing' } };
+	args.catalog.media.find(item => item.id === uuid(8))!.durationSeconds = 11_000;
+	const occupied = (time: string) => {
+		const overlap = new Date(`2026-01-05T${time}:00Z`);
+		return [{ mediaItemId: uuid(7), start: overlap.toISOString(), finish: new Date(+overlap + 60_000).toISOString() }];
+	};
+	args.occupiedMedia = occupied(initialOverlap);
+
+	const result = generateTimelineDetailed(args);
+	const closing = result.segments.find(segment => segment.slotId === slot.id && segment.fillerStage === 'post-roll');
+	expect(closing).toMatchObject({ mediaItemId: uuid(7), start: '2026-01-05T17:59:00Z', finish: '2026-01-05T18:00:00Z' });
+
+	const cut = result.segments.findLastIndex(segment => segment.slotId === slot.id && segment.role === 'primary');
+	const state = new Map(result.stateTransitions.slice(0, cut + 1).flatMap(transition =>
+		transition.stateDelta.map(record => [record.consumerKey, record] as const)));
+	const resumed = generateTimelineDetailed({ ...args, state: [...state.values()], occupiedMedia: occupied(resumedOverlap),
+		initialCursor: result.segments[cut]!.finish, initialContinuation: result.stateTransitions[cut]!.continuation ?? null });
+	expect(resumed.segments.find(segment => segment.fillerStage === 'post-roll')).toEqual(closing);
+});
+
+it('prefers a nonconflicting outro at the actual handoff when a same-length clip fits', () => {
+	const { args, daily, closer, slot } = slotRollFixture();
+	daily.defaultPreRoll = null;
+	closer.config = { type: 'content', source: {
+		type: 'collection', libraryId: uuid(900), itemIds: [uuid(7), uuid(8)], sort: { type: 'name', direction: 'asc' },
+	}, strategy: { type: 'shuffle', seed: 'closing' } };
+	args.catalog.media.find(item => item.id === uuid(8))!.durationSeconds = 60;
+	const initial = generateTimeline(args).segments.find(segment => segment.slotId === slot.id && segment.fillerStage === 'post-roll')!;
+	args.occupiedMedia = [{ mediaItemId: initial.mediaItemId!, start: initial.start, finish: initial.finish }];
+	const replacement = generateTimeline(args).segments.find(segment => segment.slotId === slot.id && segment.fillerStage === 'post-roll');
+	expect(replacement).toMatchObject({ start: initial.start, finish: initial.finish });
+	expect(replacement?.mediaItemId).not.toBe(initial.mediaItemId);
+});
+
+it('uses retained primary playback only for the matching slot when spring-forward slots share an instant', () => {
+	const { args, videos, post } = slotRollFixture();
+	const daily = template([
+		{ programId: null, startSeconds: 0, filler: { mode: 'disabled' } },
+		{ programId: videos.id, startSeconds: 2 * 3600 },
+		{ programId: videos.id, startSeconds: 3 * 3600 },
+		{ programId: null, startSeconds: 4 * 3600, filler: { mode: 'disabled' } },
+	]);
+	daily.defaultPostRoll = post;
+	args.template = daily;
+	args.schedule.defaultTemplateId = daily.id;
+	args.startDate = '2026-03-08';
+	args.timeZone = 'America/Los_Angeles';
+	const full = generateTimelineDetailed(args);
+	const cut = full.segments.findIndex(segment => segment.role === 'primary');
+	const { at, date, templateId, slotId, scheduleLayerId, intervalStart, intervalEnd, hadPrimary } = full.stateTransitions[cut]!.continuation!;
+	const input = { ...args, initialCursor: at, initialContinuation: { at, date, templateId, slotId, scheduleLayerId, intervalStart, intervalEnd, hadPrimary },
+		state: full.stateTransitions[cut]!.stateDelta };
+	expect(generateTimeline(input).segments.find(segment => segment.fillerStage === 'post-roll')).toMatchObject({
+		slotId: daily.slots[2]!.id, start: '2026-03-08T10:59:00Z', finish: '2026-03-08T11:00:00Z',
+	});
+
+	daily.slots[3]!.startSeconds += 60;
+	daily.boundaries[2]!.targetSeconds += 60;
+	expect(generateTimeline(input).segments.some(segment => segment.fillerStage === 'post-roll')).toBe(false);
 });

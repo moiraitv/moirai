@@ -1,7 +1,7 @@
-import type { ChannelSchedule, FillerConfig, FillerAssignment, FillerSettings, ResolvedMidRollConfig, ScheduleSlot, ScheduleTemplate, SchedulingCatalog } from '@moirai/shared';
+import type { ChannelSchedule, FillerConfig, FillerAssignment, FillerSettings, ResolvedMidRollConfig, RollFrequency, ScheduleSlot, ScheduleTemplate, SchedulingCatalog } from '@moirai/shared';
 
 /** One resolved introduction or closing with an independently scoped source cursor. */
-export type AiringFillerStage = FillerSettings & { programId: string; consumerKey: string; presetId: string };
+export type AiringFillerStage = FillerSettings & { programId: string; consumerKey: string; presetId: string; frequency: RollFrequency };
 
 /** Effective pre/mid/post behavior for one programmed slot. */
 export interface ResolvedAiringFiller {
@@ -34,7 +34,8 @@ export function resolveAiringFiller(
 		if (!preset) {
 			throw new Error('Selected filler preset is unavailable');
 		}
-		return { ...preset, programId: config.programId, presetId: config.presetId, consumerKey: key(kind, config.programId) };
+		return { ...preset, programId: config.programId, presetId: config.presetId, consumerKey: key(kind, config.programId),
+			frequency: config.frequency ?? 'per-item' };
 	};
 	const pre = slot.preRoll?.mode === 'disabled' ? null : slot.preRoll?.mode === 'configured'
 		? slot.preRoll.config : template.defaultPreRoll ?? schedule.defaultPreRoll;

@@ -140,9 +140,9 @@ See [Example schedules](/scheduling/example-schedules) for movie channels, genre
 
 Under **Template default filler**, select a type in the movie illustration or the type selector:
 
-- **Pre-Roll** plays before each episode or movie.
+- **Pre-Roll** plays before each item by default. Choose **Once per slot** for a single intro.
 - **Mid-Roll** plays at allowed breaks within an episode or movie.
-- **Post-Roll** plays after each episode or movie.
+- **Post-Roll** plays after each item by default. Choose **Once per slot** for an outro that ends at the next scheduled handoff.
 - **Tail Filler** fills time left after the slot’s main programming, before the next slot.
 
 Check the selected type’s checkbox to enable it, then choose a **Preset** and **Source Program**. The preset sets how much filler to play, and the Source Program chooses the clips. Uncheck the checkbox to remove that template default. Create presets under **Filler**; see [Filler presets](/filler/presets) for budgets and fitting, and [Mid-Roll break conditions](/filler/presets#mid-roll-break-conditions) for choosing breaks.
@@ -151,6 +151,10 @@ Each type inherits separately. A programmed slot uses its template default when 
 
 Only the selected type’s settings are shown. Configured gaps appear active; unconfigured gaps remain inactive. The 137-minute movie illustration adjusts timed mid-roll points to the selected preset. Use the resolved preview to check your actual media.
 
-The complete episode or movie, including its pre-roll, mid-roll, and post-roll filler, must satisfy the slot’s item-start and boundary rules. A 20-minute episode with 30 seconds of filler needs 20 minutes 30 seconds to fit. A hard boundary may cut content or filler; a finish-outgoing rule considers the whole airing. The guide shows one episode or movie entry spanning this filler, with individual spans available in its details.
+The complete episode or movie, including its per-item pre-roll, mid-roll, and post-roll filler, must satisfy the slot’s item-start and boundary rules. A 20-minute episode with 30 seconds of filler needs 20 minutes 30 seconds to fit. A hard boundary may cut content or filler; a finish-outgoing rule considers the whole airing. The guide shows one episode or movie entry spanning this filler, with individual spans available in its details.
+
+For a bookended block, you would set both rolls to **Once per slot** and choose intro and outro clips as their sources. Moirai starts with the intro, schedules the content in the available time, and reserves enough room for the outro to end at 6 PM. Tail and channel fallback can still fill time before the outro when applicable.
+
+![Template post-roll assignment set to Once per slot](/screenshots/template-slot-roll.png)
 
 Tail filler runs within the time left in the slot and never extends it. Channel fallback filler runs afterward if a gap remains. Disabling tail does not disable channel fallback. Pre-roll, mid-roll, and post-roll apply only to slots with a main Program.

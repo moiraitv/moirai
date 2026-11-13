@@ -23,6 +23,7 @@ import type {
 	TimelineMaterializationRecord,
 } from '../repository/contracts.js';
 import { generateTimelineDetailed } from './engine.js';
+import type { RetainedSlotPlayback, TimelineContinuation } from './continuation.js';
 import { mergeTimelineIssues } from './timeline-issues.js';
 import type { SchedulingWorkerPool } from './worker-pool.js';
 import { indexSchedulingCatalog, schedulingRootProgramIds } from './catalog.js';
@@ -104,6 +105,54 @@ function committedCatalog(catalog: SchedulingCatalog): SchedulingCatalog {
 			]),
 		),
 	});
+}
+
+/** Keep the active airing or a closing already in progress before replacing future coverage. */
+function finishActiveProgramming(existing: MaterializedSegmentRecord[], at: string): string {
+	const active = existing.find(({ segment }) =>
+		(compareInstants(segment.start, at) < 0
+			|| (segment.airing && compareInstants(segment.start, at) === 0 && compareInstants(segment.airing.start, at) < 0))
+		&& compareInstants(segment.finish, at) > 0
+		&& segment.role !== 'dead-air');
+	// A cut exactly between closing clips is still within the committed outro.
+	const checkpoint = active ? active.continuation
+		: existing.findLast(({ segment }) => compareInstants(segment.finish, at) === 0)?.continuation;
+	const committedEnd = existing.at(-1)?.segment.finish;
+	if (checkpoint?.phase === 'outro' && committedEnd && compareInstants(checkpoint.intervalEnd, committedEnd) <= 0) {
+		return checkpoint.intervalEnd;
+	}
+	return active?.segment.airing?.finish ?? active?.segment.finish ?? at;
+}
+
+/** Keep exact continuation for the same plan, or recover only committed playback for a rebuild. */
+function replacementContinuation(
+	existing: MaterializedSegmentRecord[],
+	at: string,
+	samePlan: boolean,
+): TimelineContinuation | RetainedSlotPlayback | null {
+	const retained = existing.findLast(({ segment }) => compareInstants(segment.finish, at) <= 0
+		|| (segment.role === 'dead-air' && compareInstants(segment.start, at) <= 0));
+	let checkpoint = retained?.continuation;
+	if (!checkpoint && retained?.segment.role === 'dead-air' && compareInstants(retained.segment.finish, at) > 0) {
+		// A gap ending at the handoff has no checkpoint of its own. Recover its prior playback.
+		const previous = existing.findLast(({ segment }) => compareInstants(segment.finish, at) <= 0)?.continuation;
+		if (previous?.templateId === retained.segment.templateId && previous.slotId === retained.segment.slotId
+			&& previous.scheduleLayerId === retained.segment.scheduleLayerId) {
+			checkpoint = previous;
+		}
+	}
+	if (!checkpoint || compareInstants(checkpoint.intervalEnd, at) <= 0) {
+		return null;
+	}
+	if (samePlan && compareInstants(checkpoint.at, at) === 0) {
+		return checkpoint;
+	}
+	if (!checkpoint.hadPrimary && checkpoint.phase !== 'intro') {
+		return null;
+	}
+
+	const { date, templateId, slotId, scheduleLayerId, intervalStart, intervalEnd, hadPrimary } = checkpoint;
+	return { at, date, templateId, slotId, scheduleLayerId, intervalStart, intervalEnd, hadPrimary };
 }
 
 /**
@@ -535,18 +584,7 @@ export class TimelineMaterializer {
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
 			else if (current.applyAfter && !recoveringEmptyTimeline) {
-				replaceFrom = current.applyAfter;
-				const active = existing.find(
-					({ segment }) =>
-						(Date.parse(segment.start) < Date.parse(replaceFrom)
-							|| (segment.airing && Date.parse(segment.start) === Date.parse(replaceFrom)
-								&& Date.parse(segment.airing.start) < Date.parse(replaceFrom)))
-							&& Date.parse(segment.finish) > Date.parse(replaceFrom)
-							&& segment.role !== 'dead-air',
-				);
-				if (active) {
-					replaceFrom = active.segment.airing?.finish ?? active.segment.finish;
-				}
+				replaceFrom = finishActiveProgramming(existing, current.applyAfter);
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
 			else if (retryImmediately) {
@@ -554,17 +592,7 @@ export class TimelineMaterializer {
 					= Temporal.Instant.compare(now, Temporal.Instant.from(desiredStart)) > 0
 						? now.toString()
 						: desiredStart;
-				const active = existing.find(
-					({ segment }) =>
-						(Date.parse(segment.start) < Date.parse(replaceFrom)
-							|| (segment.airing && Date.parse(segment.start) === Date.parse(replaceFrom)
-								&& Date.parse(segment.airing.start) < Date.parse(replaceFrom)))
-							&& Date.parse(segment.finish) > Date.parse(replaceFrom)
-							&& segment.role !== 'dead-air',
-				);
-				if (active) {
-					replaceFrom = active.segment.airing?.finish ?? active.segment.finish;
-				}
+				replaceFrom = finishActiveProgramming(existing, replaceFrom);
 				initialState = stateAfter(current.baseState, existing, replaceFrom);
 			}
 			else if (Temporal.Instant.compare(current.windowEnd, desiredEnd) < 0
@@ -590,9 +618,7 @@ export class TimelineMaterializer {
 		const generationDate = localDate(replaceFrom, this.timeZone);
 		const days = Math.max(1, generationDate.until(desiredEndDate, { largestUnit: 'days' }).days);
 		const catalog = committedCatalog(await this.repository.withSchedulingCursorAliases(sourceCatalog, initialState));
-		const initialContinuation = current?.inputFingerprint === currentFingerprint
-			? existing.findLast((record) => Temporal.Instant.compare(record.segment.finish, replaceFrom) === 0)?.continuation ?? null
-			: null;
+		const initialContinuation = replacementContinuation(existing, replaceFrom, current?.inputFingerprint === currentFingerprint);
 		const generated = this.workers
 			? await this.workers.generate({
 				channelId: schedule.channelId,

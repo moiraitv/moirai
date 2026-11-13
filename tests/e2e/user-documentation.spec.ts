@@ -5,6 +5,7 @@ import './documentation/playback-progress';
 import './documentation/subtitle-preview';
 import './documentation/subtitle-language';
 import './documentation/mid-roll';
+import './documentation/slot-roll';
 import './documentation/filler-settings';
 import './documentation/sequence-preview';
 import './documentation/duration-filters';

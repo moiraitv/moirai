@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
-	BUILTIN_GUIDE_TEMPLATE, programCreateSchema, channelCreateSchema, channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
+	BUILTIN_GUIDE_TEMPLATE, defaultFillerAssignment, programCreateSchema, channelCreateSchema, channelScheduleDraftPreviewSchema, quickChannelSetupCreateSchema, scheduleTemplateCreateSchema, timelineDraftPreviewSchema,
 	guideTemplatePreviewResultSchema, mergeProgramMetadata, SECONDS_PER_SCHEDULING_DAY, type ScheduleGuide,
 } from '@moirai/shared';
 import { timelinePreviewSchema, quickChannelSetupPreviewResultSchema } from '@moirai/shared/api-contracts';
@@ -756,3 +756,44 @@ it('reads roll warning tolerance once per preview and applies it in local and wo
 		}
 	}
 });
+
+it('matches a committed slot outro to preview and preserves roll frequency through repository reads', async () => {
+	const f = await setup();
+	const request = await channel(f);
+	const base = await f.repository.getScheduleTemplate(request.input.schedule.defaultTemplateId!);
+	const fillerItemId = f.ids[1]!;
+	f.database.sqlite.prepare('UPDATE media_items SET duration_seconds=60, duration_milliseconds=60000 WHERE id = ?').run(fillerItemId);
+	f.repository.invalidateSchedulingCatalog();
+	const source = await f.repository.createProgram({ name: 'Slot bumper', config: {
+		type: 'content', source: { type: 'item', itemId: fillerItemId }, strategy: { type: 'sequential' },
+	} });
+	const pre = { ...defaultFillerAssignment('pre-roll', source.id), frequency: 'once-per-slot' as const };
+	const post = { ...defaultFillerAssignment('post-roll', source.id), frequency: 'once-per-slot' as const };
+	await f.repository.updateScheduleTemplate(base!.id, {
+		slots: [{ ...base!.slots[0]!, preRoll: { mode: 'configured', config: pre },
+			guide: { mode: 'block', boundary: 'scheduled', title: 'Daily block', description: '' } }],
+		defaultPostRoll: post,
+	});
+	await f.repository.setChannelSchedule(f.channel.id, { ...request.input.schedule, defaultPreRoll: pre });
+	const reloaded = await f.repository.getScheduleTemplate(base!.id);
+	expect(reloaded?.defaultPostRoll).toEqual(post);
+	expect(reloaded?.slots[0]?.preRoll).toEqual({ mode: 'configured', config: pre });
+	const schedule = await f.repository.getChannelSchedule(f.channel.id);
+	expect(schedule?.defaultPreRoll).toEqual(pre);
+
+	const date = Temporal.Now.plainDateISO('UTC');
+	request.input.startDate = date.toString();
+	const preview = await f.workers.preview({ ...request, input: { ...request.input, schedule: { ...request.input.schedule, defaultPreRoll: pre } } });
+	expect(preview.entries?.find(entry => entry.kind === 'block')?.title).toBe('Daily block');
+	await new TimelineMaterializer(f.repository, { publish: () => {} }, 'UTC', undefined, undefined, 1).runNow();
+	const start = date.toZonedDateTime('UTC').toInstant().toString();
+	const end = date.add({ days: 1 }).toZonedDateTime('UTC').toInstant().toString();
+	const committed = await f.repository.listMaterializedTimelineSegments(start, end, f.channel.id);
+	const rolls = preview.segments.filter(segment => segment.fillerStage === 'pre-roll' || segment.fillerStage === 'post-roll');
+	expect(rolls.map(segment => [segment.fillerStage, segment.fillerPresetId])).toEqual([['pre-roll', pre.presetId], ['post-roll', post.presetId]]);
+	expect(rolls[0]?.start).toBe(start);
+	expect(rolls[1]?.finish).toBe(end);
+	expect(committed.filter(record => record.segment.role === 'filler')
+		.map(({ segment }) => [segment.id, segment.fillerPresetId, segment.start, segment.finish]))
+		.toEqual(rolls.map(segment => [segment.id, segment.fillerPresetId, segment.start, segment.finish]));
+}, 30_000);

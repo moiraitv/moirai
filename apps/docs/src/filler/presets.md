@@ -9,7 +9,7 @@ contextual: true
 
 Open **Filler** in the sidebar, then choose the **Pre-Rolls**, **Mid-Rolls**, **Post-Rolls**, or **Tail Fillers** tab. A preset defines the amount and fitting behavior only. You choose the **Source Program** separately when assigning it.
 
-**Pre-Rolls** play before each primary item, **Post-Rolls** play after each primary item, and **Tail Fillers** run once after primary programming ends within the remaining slot time. **Mid-Rolls** insert breaks inside an item based on the [break conditions](#mid-roll-break-conditions).
+**Pre-Rolls** play before a primary item or open a schedule slot. **Post-Rolls** play after a primary item or close a schedule slot. **Tail Fillers** run once after primary programming ends within the remaining slot time. **Mid-Rolls** insert breaks inside an item based on the [break conditions](#mid-roll-break-conditions).
 
 ::: info What the settings mean
 
@@ -82,14 +82,14 @@ Rules can contain up to 100 conditions and groups, nested up to eight levels. Ea
 
 In a template or channel schedule, the combined filler interface shows a 137-minute example movie with sample gaps before, during, and after the content. Select **Pre-Roll**, **Mid-Roll**, **Post-Roll**, or **Tail Filler** to highlight the corresponding location it refers to and show its controls. You can also select a gap directly.
 
-To activate a type of filler, check the selected type’s checkbox, then choose its **Preset** and **Source Program**. Unchecking it deactivates it. Each programmed slot can inherit, disable, or override each filler type independently. Template defaults take precedence over channel defaults.
+To activate a type of filler, check the selected type’s checkbox, then choose its **Preset** and **Source Program**. Unchecking it deactivates it. Each programmed slot can inherit, disable, or override each filler type independently. Template defaults take precedence over channel defaults. For pre-roll and post-roll, choose **Frequency → Per item** to play filler around each video or **Once per slot** to bookend the programming block.
 
 For a slot override, open **Advanced scheduling behavior**, select the filler type under **Slot filler**, and choose **Slot override**. Unchecking its assignment returns that type to inheritance. See [Templates](/scheduling/templates) and [Channel schedules](/scheduling/channel-schedules). **Apply after current item** waits for the episode or movie and its pre-roll, mid-roll, and post-roll filler to finish. Renaming a preset or changing its description does not change playback.
 
-The movie illustration uses the selected Mid-Roll’s timed interval and guided conditions. It has no chapters, so chapter-name conditions may produce no matching breaks. Quantity budgets use example 30-second items; random quantities show the midpoint of the configured range. Clock padding assumes a 20:03 start, and remaining-slot tail ends at the next half-hour.
+The movie illustration uses the selected Mid-Roll’s timed interval and guided conditions. It has no chapters, so chapter-name conditions may produce no matching breaks. Quantity budgets use example 30-second items; random quantities show the midpoint of the configured range. Clock padding assumes a 20:03 start, and remaining-slot tail ends at the next half-hour. A once-per-slot post-roll using **Pad to clock** can reserve up to one configured interval, capped by the time available.
 
-Pre-roll, mid-roll, and post-roll time count toward the primary item’s fit and appear with that item in the guide. Tail filler never postpones incoming programming. No-program slots use channel fallback only.
+Per-item pre-roll, mid-roll, and post-roll count toward the primary item’s fit and appear with that item in the guide. A slot outro reserves the time its selected clips need and ends at the next scheduled handoff. Tail and channel fallback can fill a gap before it. If bookends leave too little room for any main content, Moirai retries without them and reports the skip in the preview when that makes room for programming.
 
-After tail finishes, **Channel fallback filler** can cover the remaining gap. Disabling tail does not disable fallback. The managed playback fallback video remains available for playback gaps and errors.
+After tail finishes, **Channel fallback filler** can cover the remaining gap. No-program slots use channel fallback only. Disabling tail does not disable fallback. The managed playback fallback video remains available for playback gaps and errors.
 
 If filler leaves a gap, schedule diagnostics point to the applicable filler assignment.

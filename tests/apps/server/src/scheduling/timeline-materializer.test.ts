@@ -1282,3 +1282,80 @@ it('stages duplicate-avoidance changes at midnight without resetting selection p
 	const expected = before.filter(entry => entry.segment.start === '2026-08-23T00:00:00Z')[0]!.segment;
 	expect(test.segments().find(entry => entry.segment.start === expected.start)!.segment.mediaItemId).toBe(expected.mediaItemId);
 });
+
+it('finishes a committed slot outro before applying a schedule change between its clips', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	const setup = fixture();
+	const fillerId = randomUUID();
+	const presetId = randomUUID();
+	setup.catalog.media[1]!.durationSeconds = 60;
+	setup.programs.push({ ...setup.programs[0]!, id: fillerId, name: 'Closing',
+		config: { type: 'content', source: { type: 'item', itemId: setup.catalog.media[1]!.id }, strategy: { type: 'sequential' } } });
+	setup.template.defaultPostRoll = { programId: fillerId, presetId, frequency: 'once-per-slot' };
+	setup.catalog.fillerPresets = { [presetId]: { budget: { type: 'count', count: 2 } } };
+	const materializer = new TimelineMaterializer(setup.repository, setup.events, 'UTC', undefined, undefined, 1);
+	await materializer.runNow(true);
+	const first = setup.segments().filter(record => record.segment.fillerStage === 'post-roll').slice(0, 2);
+	expect(first).toHaveLength(2);
+	vi.setSystemTime(new Date(first[0]!.segment.finish));
+	setup.template.defaultPostRoll = null;
+	setup.template.updatedAt = first[0]!.segment.finish;
+	await materializer.applyNow(setup.channelId);
+	const commit = vi.mocked(setup.repository.commitMaterializedTimeline).mock.calls.at(-1)![0];
+	expect(commit.replaceFrom).toBe(first[1]!.segment.finish);
+	expect(setup.segments().filter(record => record.segment.fillerStage === 'post-roll')).toEqual(first);
+});
+
+it.each([
+	{ gap: false, updatedClip: false },
+	{ gap: true, updatedClip: true },
+])('replans an outro after retained primary playback (gap=$gap, updated clip=$updatedClip)', async ({ gap, updatedClip }) => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	const setup = fixture();
+	const fillerId = randomUUID();
+	const updatedFillerId = randomUUID();
+	const presetId = randomUUID();
+	setup.catalog.media[0]!.durationSeconds = SECONDS_PER_SCHEDULING_DAY - (gap ? 120 : 60);
+	setup.catalog.media[1]!.durationSeconds = 60;
+	setup.catalog.media[2]!.durationSeconds = 45;
+	setup.programs[0]!.config = { type: 'content', source: { type: 'item', itemId: setup.catalog.media[0]!.id }, strategy: { type: 'sequential' } };
+	setup.programs.push(
+		{ ...setup.programs[0]!, id: fillerId, name: 'Closing',
+			config: { type: 'content', source: { type: 'item', itemId: setup.catalog.media[1]!.id }, strategy: { type: 'sequential' } } },
+		{ ...setup.programs[0]!, id: updatedFillerId, name: 'New closing',
+			config: { type: 'content', source: { type: 'item', itemId: setup.catalog.media[2]!.id }, strategy: { type: 'sequential' } } },
+	);
+	setup.template.defaultPostRoll = { programId: fillerId, presetId, frequency: 'once-per-slot' };
+	setup.catalog.fillerPresets = { [presetId]: { budget: { type: 'count', count: 1 } } };
+	const materializer = new TimelineMaterializer(setup.repository, setup.events, 'UTC', undefined, undefined, 1);
+	await materializer.runNow(true);
+	const firstDayClosing = () => setup.segments().find(record => record.segment.fillerStage === 'post-roll');
+	expect(firstDayClosing()?.segment).toMatchObject({
+		start: '2026-08-23T23:59:00Z', finish: '2026-08-24T00:00:00Z', programId: fillerId,
+	});
+
+	vi.setSystemTime(new Date('2026-08-23T23:58:30Z'));
+	if (updatedClip) {
+		setup.template.defaultPostRoll.programId = updatedFillerId;
+	}
+	else {
+		setup.schedule.avoidCrossChannelDuplicates = false;
+	}
+	await materializer.applyNow(setup.channelId);
+
+	expect(firstDayClosing()?.segment).toMatchObject({
+		start: updatedClip ? '2026-08-23T23:59:15Z' : '2026-08-23T23:59:00Z',
+		finish: '2026-08-24T00:00:00Z', programId: updatedClip ? updatedFillerId : fillerId,
+	});
+	if (gap) {
+		// The earlier edit committed a shortened prefix of this gap without a checkpoint.
+		vi.setSystemTime(new Date('2026-08-23T23:58:45Z'));
+		setup.schedule.avoidCrossChannelDuplicates = false;
+		await materializer.applyNow(setup.channelId);
+		expect(firstDayClosing()?.segment).toMatchObject({
+			start: '2026-08-23T23:59:15Z', finish: '2026-08-24T00:00:00Z', programId: updatedFillerId,
+		});
+	}
+});

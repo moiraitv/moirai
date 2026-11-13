@@ -644,7 +644,8 @@
 		grid-template-columns: 1fr;
 	}
 
-	.template-default-filler-row {
+	.template-default-filler-row,
+	.template-default-filler-row.has-frequency {
 		grid-template-columns: 42px minmax(0, 1fr);
 	}
 
