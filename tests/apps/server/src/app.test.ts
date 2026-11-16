@@ -3035,6 +3035,21 @@ it('validates duration query bounds and forwards unrestricted and inclusive valu
 	}
 });
 
+it('accepts explicit top-billed boolean query strings without coercing false to true', async () => {
+	const { app, services } = await fixture();
+	vi.spyOn(services.schedulingWorkers, 'databaseBacked', 'get').mockReturnValue(false);
+	const libraryId = randomUUID();
+	const browse = vi.spyOn(services.repository, 'browseMedia');
+	for (const [query, expected] of [['', undefined], ['&actorTopBilledOnly=true', true], ['&actorTopBilledOnly=false', false]] as const) {
+		const response = await app.inject(`/api/v1/libraries/${libraryId}/media?actor=Guest${query}`);
+		expect(response.statusCode).toBe(200);
+		expect(browse.mock.lastCall?.[1].actorTopBilledOnly).toBe(expected);
+	}
+	for (const value of ['', '1', 'yes', 'FALSE']) {
+		expect((await app.inject(`/api/v1/libraries/${libraryId}/media?actorTopBilledOnly=${value}`)).statusCode).toBe(400);
+	}
+}, 20_000);
+
 it('defaults newly added episode programs and resolves the same hierarchy for review and scheduling', async () => {
 	const { app, services, root, database } = await fixture();
 	const library = await services.repository.createLibrary(libraryCreateSchema.parse({ name: 'Episode order', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: root }, watcherEnabled: false }));

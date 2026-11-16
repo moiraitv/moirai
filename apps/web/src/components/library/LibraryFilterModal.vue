@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, useId, useTemplateRef, watch } from 'vue';
 import { CalendarDays, Check, Filter, Search, Star, UserRound, X } from '@lucide/vue';
-import { MAX_MEDIA_GENRE_RULES, type MediaGenreFacet } from '@moirai/shared';
+import { MAX_MEDIA_GENRE_RULES, TOP_BILLED_ACTOR_COUNT, type MediaGenreFacet } from '@moirai/shared';
 import DurationFilterInput from './DurationFilterInput.vue';
 import { durationFilterError } from './duration-filter';
 import { api } from '../../api';
@@ -31,6 +31,7 @@ const localDraft = reactive<LibraryFilterDraft>({
 	excludedGenres: [...props.draft.excludedGenres],
 });
 const durationErrorId = useId();
+const actorInputId = useId();
 const durationError = computed(() => durationFilterError(localDraft.minimumDuration, localDraft.maximumDuration));
 const contextualGenres = ref<MediaGenreFacet[] | null>(null);
 const genreCountsLoading = ref(false);
@@ -167,6 +168,11 @@ async function refreshGenreCounts(): Promise<void> {
 }
 
 onMounted(() => genreMatchInput.value?.focus());
+watch(() => localDraft.actor, (actor) => {
+	if (!actor.trim()) {
+		localDraft.actorTopBilledOnly = false;
+	}
+}, { flush: 'sync' });
 watch(() => localDraft.genreMatch, (value) => {
 	if (value === 'any') {
 		localDraft.excludedGenres = [];
@@ -294,10 +300,13 @@ onUnmounted(() => genreCountsController?.abort());
 					</div>
 
 					<div class="filter-people-grid">
-						<label class="filter-field">
-							<span>Actor</span>
-							<span class="filter-input"><input v-model="localDraft.actor" placeholder="Partial actor name" /><UserRound :size="20" aria-hidden="true" /></span>
-						</label>
+						<div class="filter-field">
+							<div class="filter-actor-heading">
+								<label :for="actorInputId">Actor</label>
+								<label class="filter-actor-toggle"><input v-model="localDraft.actorTopBilledOnly" type="checkbox" :disabled="!localDraft.actor.trim()" />Top {{ TOP_BILLED_ACTOR_COUNT }} only</label>
+							</div>
+							<span class="filter-input"><input :id="actorInputId" v-model="localDraft.actor" placeholder="Partial actor name" /><UserRound :size="20" aria-hidden="true" /></span>
+						</div>
 						<label class="filter-field">
 							<span>Director</span>
 							<span class="filter-input"><input v-model="localDraft.director" placeholder="Partial director name" /><UserRound :size="20" aria-hidden="true" /></span>

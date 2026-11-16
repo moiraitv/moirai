@@ -94,6 +94,10 @@ const mediaBrowseQuerySchema = z.object({
 	excludedGenres: genreKeysQuerySchema,
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
+	actorTopBilledOnly: z.preprocess(
+		value => value === 'true' ? true : value === 'false' ? false : value,
+		z.boolean().optional(),
+	),
 	director: z.string().trim().max(120).default(''),
 }).superRefine(validateMediaGenreRules).superRefine(validateMediaDurationRange);
 

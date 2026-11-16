@@ -4,6 +4,7 @@ import type {
 	SchedulableMedia,
 } from '@moirai/shared';
 import { musicTextMatches } from '../media/music-search.js';
+import { orderedCast, topBilledActorMatches } from '../media/cast.js';
 import { normalizeSearchText } from '../scanner/catalog-metadata.js';
 import { compareInstants, timestampBoundaryMilliseconds } from '@moirai/shared';
 
@@ -23,6 +24,9 @@ export function libraryQueryStateSource(source: LibraryQuerySource): Record<stri
 			return false;
 		}
 		if (key === 'genreMatch' && value === 'all') {
+			return false;
+		}
+		if (key === 'actorTopBilledOnly' && (!value || !source.actor)) {
 			return false;
 		}
 		if (key === 'sort' && source.sort?.type === 'name' && source.sort.direction === 'asc') {
@@ -124,6 +128,10 @@ export function mediaMatchesLibraryQuery(
 		return false;
 	}
 	if (!personMatches(media.actors, source.actor ?? '')) {
+		return false;
+	}
+	if (source.actor && source.actorTopBilledOnly
+		&& !topBilledActorMatches(media.displayMetadata?.cast ?? orderedCast(media.actors), source.actor)) {
 		return false;
 	}
 	if (!personMatches(media.directors, source.director ?? '')) {

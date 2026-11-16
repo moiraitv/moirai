@@ -128,20 +128,20 @@
       }
     },
     "libraries.browse": {
-      "digest": "cbb4e354448183860c2b1d03974f944d6e6832697f614862eb1fe34ab497b8ce",
-      "reviewedAt": "2026-11-05T20:04:13.668Z",
+      "digest": "a9dccd7d0f7d789d3bc0161b12169797829d6fc5e8b1aa4a18a59e29b5a95c6d",
+      "reviewedAt": "2026-11-16T20:21:38.367Z",
       "components": {
         "text": {
-          "digest": "103fbb241f0cc86a7f341dc56aaf438bf1bfaead2ee77173fe5abd78984f5e68",
-          "reviewedAt": "2026-11-05T20:04:13.668Z"
+          "digest": "53202fbab8f4cadcc65481983cd6f4c5d583dbfecd78503bf18e822b45ae0884",
+          "reviewedAt": "2026-11-16T20:21:38.367Z"
         },
         "screenshots": {
-          "digest": "10e42c8650d9d580cb40c83d17f38be32842796c87708aafdf5f9ed2e5407a8b",
-          "reviewedAt": "2026-11-05T20:04:13.668Z"
+          "digest": "41004010088c1f97ef4c07c3c57d42d7670e581d5f2198434ad1e672a6775915",
+          "reviewedAt": "2026-11-16T20:21:38.367Z"
         },
         "icons": {
           "digest": "3079781336ef3296ee88b0a293c4b8b0375eb3a70b0fb77fb3b2841f6da63982",
-          "reviewedAt": "2026-11-05T20:04:13.668Z"
+          "reviewedAt": "2026-11-16T20:21:38.367Z"
         }
       }
     },

@@ -161,6 +161,47 @@
 	gap: 28px;
 }
 
+.filter-people-grid .filter-field {
+	align-content: start;
+}
+
+.filter-actor-heading,
+.filter-people-grid .filter-field > span:first-child {
+	min-height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.filter-actor-toggle {
+	display: inline-flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.filter-actor-heading > label:first-child {
+	color: inherit;
+	font: inherit;
+}
+
+.filter-actor-toggle:has(input:disabled) {
+	color: var(--muted);
+	cursor: default;
+}
+
+.filter-actor-toggle input {
+	width: 14px;
+	height: 14px;
+	margin: 0;
+	accent-color: var(--accent);
+}
+
 .filter-genres-header {
 	display: grid;
 	grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.1fr);

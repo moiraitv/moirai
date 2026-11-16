@@ -1,6 +1,6 @@
-import { MAX_METADATA_PEOPLE_ITEMS, type CatalogDisplayMetadata, type MediaGroup, type MediaItem, type MediaItemDetail, type MediaPerson } from '@moirai/shared';
+import type { CatalogDisplayMetadata, MediaGroup, MediaItem, MediaItemDetail } from '@moirai/shared';
 import { normalizedReleaseDate } from '../media/release-date.js';
-import { normalizePeople } from '../scanner/catalog-metadata.js';
+import { orderedCast } from '../media/cast.js';
 
 /** Base catalog projection for a media item aliased as `i`. */
 export const CATALOG_ITEM_COLUMNS = `i.id, i.library_id AS libraryId, i.group_id AS groupId,
@@ -148,28 +148,6 @@ export function metadataPersonNames(metadata: Record<string, unknown>, key: stri
 	});
 }
 
-/** Read cast credits in billing order and retain source order for equally billed names. */
-function metadataCast(value: unknown): CatalogDisplayMetadata['cast'] {
-	if (!Array.isArray(value)) {
-		return [];
-	}
-
-	const credits = value.slice(0, MAX_METADATA_PEOPLE_ITEMS).flatMap<MediaPerson>((entry: unknown) => {
-		if (typeof entry === 'string' && entry.trim()) {
-			return [{ name: entry, role: null, sortOrder: null }];
-		}
-		if (!entry || typeof entry !== 'object' || !('name' in entry) || typeof entry.name !== 'string') {
-			return [];
-		}
-
-		const credit = entry as Record<string, unknown>;
-		return [{ name: entry.name, role: metadataString(credit, 'role'), sortOrder: metadataNumber(credit, 'sortOrder') }];
-	});
-	return normalizePeople([], credits)
-		.sort((left, right) => (left.sortOrder ?? Number.MAX_SAFE_INTEGER) - (right.sortOrder ?? Number.MAX_SAFE_INTEGER))
-		.map(({ name, role }) => ({ name, role }));
-}
-
 /** Capture display fields from the same indexed rows used for scheduling. */
 export function catalogDisplayMetadata(metadata: Record<string, unknown>, kind: string, edition: string | null): CatalogDisplayMetadata {
 	return {
@@ -177,7 +155,7 @@ export function catalogDisplayMetadata(metadata: Record<string, unknown>, kind: 
 		edition: kind === 'movie' ? edition : null,
 		album: kind === 'music-video' ? metadataString(metadata, 'album') : null,
 		certification: metadataString(metadata, 'certification'),
-		cast: metadataCast(metadata.actors),
+		cast: orderedCast(metadata.actors),
 		writers: metadataStrings(metadata, 'writers'),
 		studios: metadataStrings(metadata, 'studio'),
 		countries: metadataStrings(metadata, 'countries'),

@@ -1,3 +1,4 @@
+import { registerCastFunctions } from './cast-functions.js';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { foldMusicSearchText } from '../media/music-search.js';
@@ -9,6 +10,7 @@ export function openWriteDatabase(databasePath: string) {
 	const sqlite = new Database(databasePath, { fileMustExist: true });
 	sqlite.function('moirai_music_fold', { deterministic: true }, value =>
 		typeof value === 'string' ? foldMusicSearchText(value) : null);
+	registerCastFunctions(sqlite);
 	sqlite.pragma('foreign_keys = ON');
 	sqlite.pragma('busy_timeout = 5000');
 	const db = drizzle(sqlite, { schema: { ...schema, ...semanticSchema } });

@@ -1,7 +1,8 @@
-import type {
-	CatalogProgramItemFilter,
-	CatalogProgramItemQuery,
-	GenreMatch,
+import {
+	TOP_BILLED_ACTOR_COUNT,
+	type CatalogProgramItemFilter,
+	type CatalogProgramItemQuery,
+	type GenreMatch,
 } from '@moirai/shared';
 import type { MediaQuery } from '../../api';
 import { durationFilterDraft, durationFilterSeconds, durationFilterLabel, type DurationFilterDraft } from './duration-filter';
@@ -24,6 +25,7 @@ export interface LibraryFilterDraft {
 	excludedGenres: string[];
 	genreMatch: GenreMatch;
 	actor: string;
+	actorTopBilledOnly: boolean;
 	director: string;
 }
 
@@ -55,6 +57,7 @@ export function emptyLibraryFilterDraft(): LibraryFilterDraft {
 		excludedGenres: [],
 		genreMatch: 'all',
 		actor: '',
+		actorTopBilledOnly: false,
 		director: '',
 	};
 }
@@ -159,7 +162,7 @@ export function catalogProgramItemFilterSummary(
 		labels.push(`Album: ${compactFilterValue(filter.album)}`);
 	}
 	if (filter.actor) {
-		labels.push(`Actor: ${compactFilterValue(filter.actor)}`);
+		labels.push(`Actor: ${compactFilterValue(filter.actor)}${filter.actorTopBilledOnly ? ` · Top ${TOP_BILLED_ACTOR_COUNT}` : ''}`);
 	}
 	if (filter.director) {
 		labels.push(`Director: ${compactFilterValue(filter.director)}`);
@@ -216,6 +219,7 @@ export function libraryFilterDraft(filter: CatalogProgramItemFilter): LibraryFil
 		excludedGenres: [...filter.excludedGenres],
 		genreMatch: filter.genreMatch,
 		actor: filter.actor,
+		actorTopBilledOnly: Boolean(filter.actor && filter.actorTopBilledOnly),
 		director: filter.director,
 	};
 }
@@ -241,6 +245,7 @@ export function catalogProgramItemFilter(
 		excludedGenres: draft.genreMatch === 'all' ? [...draft.excludedGenres] : [],
 		genreMatch: draft.genreMatch,
 		actor: draft.actor.trim(),
+		...(draft.actor.trim() && draft.actorTopBilledOnly ? { actorTopBilledOnly: true } : {}),
 		director: draft.director.trim(),
 	};
 }
@@ -268,6 +273,7 @@ export function catalogProgramQuery(query: MediaQuery): CatalogProgramItemQuery 
 		excludedGenres: query.excludedGenres ?? [],
 		genreMatch: query.genreMatch ?? 'all',
 		actor: query.actor ?? '',
+		...(query.actor?.trim() && query.actorTopBilledOnly ? { actorTopBilledOnly: true } : {}),
 		director: query.director ?? '',
 	};
 }

@@ -277,6 +277,7 @@ export const contentSourceSchema = z.discriminatedUnion('type', [
 		excludedGenres: catalogProgramItemFilterShape.excludedGenres.optional(),
 		genreMatch: catalogProgramItemFilterShape.genreMatch.removeDefault().optional(),
 		actor: catalogProgramItemFilterShape.actor.removeDefault().optional(),
+		actorTopBilledOnly: catalogProgramItemFilterShape.actorTopBilledOnly,
 		director: catalogProgramItemFilterShape.director.removeDefault().optional(),
 		sort: libraryQuerySortSchema.optional(),
 		itemLimit: z.number().int().min(1).max(MAX_LIBRARY_QUERY_ITEMS).nullable().optional(),

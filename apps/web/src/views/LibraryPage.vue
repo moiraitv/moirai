@@ -433,6 +433,7 @@ function currentMediaQuery(): MediaQuery {
 		excludedGenres: queryStrings('excludeGenre'),
 		genreMatch: queryString('genreMatch') === 'any' ? 'any' : 'all',
 		actor: queryString('actor') || undefined,
+		actorTopBilledOnly: queryString('actor').trim() && queryString('actorTopBilledOnly') === 'true' ? true : undefined,
 		director: queryString('director') || undefined,
 	};
 }
@@ -974,6 +975,7 @@ function openFilters(): void {
 	filterDraft.excludedGenres = queryStrings('excludeGenre');
 	filterDraft.genreMatch = queryString('genreMatch') === 'any' ? 'any' : 'all';
 	filterDraft.actor = queryString('actor');
+	filterDraft.actorTopBilledOnly = Boolean(filterDraft.actor.trim() && queryString('actorTopBilledOnly') === 'true');
 	filterDraft.director = queryString('director');
 	showFilter.value = true;
 }
@@ -999,7 +1001,8 @@ async function applyFilters(draft: LibraryFilterDraft): Promise<void> {
 		excludeGenre: draft.excludedGenres.length ? draft.excludedGenres : undefined,
 		genreMatch: (draft.genres.length || draft.primaryGenres.length || draft.excludedGenres.length)
 			&& draft.genreMatch === 'any' ? 'any' : undefined,
-		actor: draft.actor || undefined,
+		actor: draft.actor.trim() || undefined,
+		actorTopBilledOnly: draft.actor.trim() && draft.actorTopBilledOnly ? 'true' : undefined,
 		director: draft.director || undefined,
 		page: undefined,
 	});

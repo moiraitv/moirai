@@ -1,7 +1,12 @@
 import path from 'node:path';
-import { catalogProgramItemQuerySchema, orderSelectedMedia, type SelectedMediaSortable } from '@moirai/shared';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { catalogProgramItemQuerySchema, TOP_BILLED_ACTOR_COUNT, orderSelectedMedia, type MediaPerson, type SelectedMediaSortable } from '@moirai/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
+import { openReadOnlyDatabase } from '@server/db/read-only.js';
+import { openWriteDatabase } from '@server/db/write-connection.js';
+import { normalizePeople } from '@server/scanner/catalog-metadata.js';
 import { Repository, type DiscoveredGroup, type DiscoveredItem } from '@server/repository/index.js';
 import { withCatalogSearchDefer } from '@server/repository/catalog-search-sql.js';
 import { mediaMatchesLibraryQuery } from '@server/scheduling/content-query.js';
@@ -274,6 +279,73 @@ it('filters exact playback durations consistently in catalog counts and recursiv
 		const selection = repository.resolveProgramItemSelection(library.id, { ...query, parentId: group.id });
 		expect(selection.itemIds).toEqual(expected);
 		expect(selection.matchedItemCount).toBe(expected.length);
+	}
+});
+
+it('shares top-billed cast matching across catalog reads, recursive selection, and scheduling', async () => {
+	const directory = await mkdtemp(path.join(tmpdir(), 'moirai-actor-filter-'));
+	const databasePath = path.join(directory, 'catalog.sqlite');
+	const database = createDatabase(databasePath, path.resolve('drizzle'));
+	const connections: Array<{ close: () => void }> = [database];
+	try {
+		const repository = new Repository(database.db);
+		const library = await repository.createLibrary({ name: 'Cast', typeKey: 'shows', sourceType: 'on-disk', sourceConfig: { scanRoot: '/shows', playbackRoot: '/media' }, scanIntervalMinutes: 15, watcherEnabled: false, enabled: true });
+		const group = show(crypto.randomUUID(), 'Show');
+		const guest = 'Renée %_ Guest';
+		const prefix = Array.from({ length: TOP_BILLED_ACTOR_COUNT - 1 }, (_, index) => ({ name: `Actor ${index}`, role: null, sortOrder: index * 10 }));
+		const target = { name: guest, role: 'Lead', sortOrder: TOP_BILLED_ACTOR_COUNT * 10 };
+		const fixtures: Array<{ label: string; cast: Array<string | MediaPerson>; top: boolean }> = [
+			{ label: 'Tenth', cast: [...prefix, target], top: true },
+			{ label: 'Eleventh', cast: [...prefix, { name: 'Another', role: null, sortOrder: target.sortOrder! - 1 }, target], top: false },
+			{ label: 'Short', cast: [target], top: true },
+			{ label: 'Empty', cast: [], top: false },
+			{ label: 'Unordered tenth', cast: [...prefix.map(({ name }) => name), guest], top: true },
+			{ label: 'Unordered eleventh', cast: [...prefix.map(({ name }) => name), 'Another', guest], top: false },
+			{ label: 'Explicit before missing', cast: [...prefix.map(({ name }) => name), 'Another', target], top: true },
+			{ label: 'Missing after explicit', cast: [guest, ...prefix, { name: 'Another', role: null, sortOrder: 500 }], top: false },
+			{ label: 'Tied tenth', cast: [...prefix, { ...target, sortOrder: prefix.at(-1)!.sortOrder }, 'Another'], top: true },
+			{ label: 'Tied eleventh', cast: [...prefix, { name: 'Another', role: null, sortOrder: target.sortOrder }, target], top: false },
+			{ label: 'Duplicate before tenth', cast: [prefix[0]!, ...prefix, target], top: true },
+			{ label: 'Duplicate earlier billing', cast: [...prefix, { ...target, name: guest.toUpperCase(), sortOrder: 0 }, 'Another', target], top: true },
+		];
+		const items = fixtures.map(({ label, cast }) => ({
+			...episode(group.id, `Episode ${label}`),
+			metadata: { actors: cast },
+			people: normalizePeople([], cast.map(entry => typeof entry === 'string' ? { name: entry, role: null, sortOrder: null } : entry)),
+		}));
+		await repository.reconcileScan(await repository.beginScan(library.id, 'initial'), [group], items, [], true);
+		const catalog = await repository.getSchedulingCatalogForItems(items.map(item => item.id));
+		const readOnly = openReadOnlyDatabase(databasePath);
+		connections.push(readOnly);
+		const write = openWriteDatabase(databasePath);
+		connections.push(write);
+
+		for (const connection of [database, readOnly, write]) {
+			const reader = new Repository(connection.db);
+			for (const actorTopBilledOnly of [undefined, false, true]) {
+				const query = catalogProgramItemQuerySchema.parse({ actor: 'renee %_ gUe', actorTopBilledOnly });
+				const expected = items.filter((_, index) => fixtures[index]!.cast.length > 0 && (!actorTopBilledOnly || fixtures[index]!.top))
+					.map(item => item.id).sort();
+				const result = await reader.browseMedia(library.id, { ...query, page: 1, pageSize: 100 });
+				expect(result.items.map(item => item.id).sort()).toEqual(expected);
+				expect(result.pagination.totalEntries).toBe(expected.length);
+				const selection = reader.resolveProgramItemSelection(library.id, { ...query, parentId: group.id });
+				expect(selection.itemIds.sort()).toEqual(expected);
+				expect(selection.matchedItemCount).toBe(expected.length);
+				const source = { ...query, type: 'library-query' as const, libraryId: library.id, kinds: [], sort: { type: 'name' as const, direction: 'asc' as const } };
+				expect(catalog.media.filter(media => mediaMatchesLibraryQuery(media, source)).map(media => media.id).sort()).toEqual(expected);
+			}
+			const query = catalogProgramItemQuerySchema.parse({ name: 'Episode' });
+			const unrestricted = await reader.browseMedia(library.id, { ...query, page: 1, pageSize: 100 });
+			const actorless = await reader.browseMedia(library.id, { ...query, actorTopBilledOnly: true, page: 1, pageSize: 100 });
+			expect(actorless).toEqual(unrestricted);
+		}
+	}
+	finally {
+		for (const connection of connections.reverse()) {
+			connection.close();
+		}
+		await rm(directory, { recursive: true, force: true });
 	}
 });
 

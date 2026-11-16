@@ -10,6 +10,25 @@ import {
 } from '@web/components/library/library-filter';
 
 describe('shared library query filter controls', () => {
+	it('round-trips top-billed Actor filters and summarizes the cutoff', () => {
+		const filter = catalogProgramItemFilter({ ...emptyLibraryFilterDraft(), actor: ' Guest ', actorTopBilledOnly: true });
+		expect(filter).toMatchObject({ actor: 'Guest', actorTopBilledOnly: true });
+		expect(libraryFilterDraft(filter)).toMatchObject({ actor: 'Guest', actorTopBilledOnly: true });
+		expect(catalogProgramItemFilterSummary(filter)).toEqual(['Actor: Guest · Top 10']);
+		expect(catalogProgramQuery({ page: 1, pageSize: 100, sort: 'title', direction: 'asc', actor: 'Guest', actorTopBilledOnly: true }))
+			.toMatchObject({ actor: 'Guest', actorTopBilledOnly: true });
+	});
+
+	it('omits inactive and actorless flags from persisted and recursive filters', () => {
+		for (const [actor, actorTopBilledOnly] of [['Guest', false], ['', true], ['  ', true]] as const) {
+			const filter = catalogProgramItemFilter({ ...emptyLibraryFilterDraft(), actor, actorTopBilledOnly });
+			expect(filter).not.toHaveProperty('actorTopBilledOnly');
+			expect(catalogProgramQuery({ page: 1, pageSize: 100, sort: 'title', direction: 'asc', actor, actorTopBilledOnly }))
+				.not.toHaveProperty('actorTopBilledOnly');
+		}
+		expect(libraryFilterDraft(emptyCatalogProgramItemFilter()).actorTopBilledOnly).toBe(false);
+	});
+
 	it('round-trips every persisted filter through date and numeric form fields', () => {
 		const filter = catalogProgramItemFilter({
 			...emptyLibraryFilterDraft(),

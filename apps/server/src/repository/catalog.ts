@@ -206,6 +206,10 @@ export class MediaCatalogRepository {
 				conditionParams.push(type, `%${escapeLike(normalizeSearchText(value))}%`);
 			}
 		}
+		if (query.actor && query.actorTopBilledOnly) {
+			conditions.push('moirai_top_billed_actor_matches(i.metadata, ?) = 1');
+			conditionParams.push(query.actor);
+		}
 
 		return {
 			scopeCte,

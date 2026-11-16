@@ -9,6 +9,7 @@ import './documentation/slot-roll';
 import './documentation/filler-settings';
 import './documentation/sequence-preview';
 import './documentation/duration-filters';
+import './documentation/actor-filters';
 import './documentation/sequence-ordering';
 import './documentation/example-schedules';
 import './documentation/weekend-schedule';
@@ -126,6 +127,10 @@ test('captures libraries and scanning', { tag: '@docs-screenshot' }, async ({ pa
 	await filters.locator('.filter-modal-body').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }));
 	await expect(filters.locator('.genre-choice-name').first()).toBeVisible();
 	await capture(page, 'library-filters.png');
+	await filters.getByRole('textbox', { name: 'Actor', exact: true }).fill('Alex Morgan');
+	await filters.getByRole('checkbox', { name: 'Top 10 only', exact: true }).check();
+	await filters.locator('.filter-modal-body').evaluate(element => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
+	await capture(page, 'library-actor-filter.png');
 	await filters.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await expect(filters).toBeHidden();
 

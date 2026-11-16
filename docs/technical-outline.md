@@ -708,6 +708,13 @@ recursive selection, dynamic programs, similarity candidate filters, and Quick S
 queries and in-memory scheduling apply the same rules, without additional per-item queries. Existing
 saved filters omit the bounds and remain unrestricted without migration.
 
+Actor filters optionally restrict matches to the first ten normalized, deduplicated cast credits.
+Explicit billing order sorts first; tied and missing billing values retain metadata order. The shared
+cast helper supplies display metadata and a deterministic SQLite predicate, without additional
+queries, schema changes, or rescanning. Scheduling uses snapshot display cast, falling back to the
+actor sequence for older snapshots. The option persists through Library URLs, recursive selection,
+Programs, similarity filters, and Quick Setup; inactive flags do not alter playback identities.
+
 Indexed-date filters normalize accepted UTC and offset timestamps to canonical UTC bounds before SQL
 comparison. Shared boundary math rounds finer-than-millisecond bounds upward, preserving inclusive
 starts and exclusive ends against millisecond catalog records. Browsing, recursive selection, and

@@ -1,3 +1,4 @@
+import { registerCastFunctions } from './cast-functions.js';
 import { registerPrimaryGenreMigration } from './primary-genre-migration.js';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -24,6 +25,7 @@ export function createDatabase(databasePath: string, migrationsDir: string) {
 	const sqlite = new Database(databasePath);
 	sqlite.function('moirai_music_fold', { deterministic: true }, value =>
 		typeof value === 'string' ? foldMusicSearchText(value) : null);
+	registerCastFunctions(sqlite);
 	sqlite.pragma('foreign_keys = ON');
 	sqlite.pragma('busy_timeout = 5000');
 	if (databasePath !== ':memory:') {

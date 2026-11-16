@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { programConfigSchema, type SchedulableMedia } from '@moirai/shared';
+import { programConfigSchema, TOP_BILLED_ACTOR_COUNT, type SchedulableMedia } from '@moirai/shared';
 import {
 	compareLibraryQueryMedia,
 	libraryQueryStateSource,
@@ -52,6 +52,22 @@ function source(overrides: Record<string, unknown> = {}) {
 }
 
 describe('dynamic scheduling content filters', () => {
+	it('uses source-order cast in older snapshots and ignores an actorless cutoff', () => {
+		const actors = Array.from({ length: TOP_BILLED_ACTOR_COUNT + 1 }, (_, index) => `Actor ${index}`);
+		const legacy = { ...media, actors };
+		expect(mediaMatchesLibraryQuery(legacy, source({ actor: actors[TOP_BILLED_ACTOR_COUNT - 1], actorTopBilledOnly: true }))).toBe(true);
+		expect(mediaMatchesLibraryQuery(legacy, source({ actor: actors[TOP_BILLED_ACTOR_COUNT], actorTopBilledOnly: true }))).toBe(false);
+		expect(mediaMatchesLibraryQuery(legacy, source({ actor: actors[TOP_BILLED_ACTOR_COUNT] }))).toBe(true);
+		expect(mediaMatchesLibraryQuery(legacy, source({ actorTopBilledOnly: true }))).toBe(true);
+	});
+
+	it('ignores inactive actor cutoffs in playback state identities', () => {
+		const actor = source({ actor: 'Guest' });
+		expect(libraryQueryStateSource({ ...actor, actorTopBilledOnly: false })).toEqual(libraryQueryStateSource(actor));
+		expect(libraryQueryStateSource(source({ actorTopBilledOnly: true }))).toEqual(libraryQueryStateSource(source()));
+		expect(libraryQueryStateSource({ ...actor, actorTopBilledOnly: true })).toHaveProperty('actorTopBilledOnly', true);
+	});
+
 	it('omits neutral state defaults but preserves meaningful filters and ordering', () => {
 		const baseline = libraryQueryStateSource(source());
 		expect(libraryQueryStateSource(source({

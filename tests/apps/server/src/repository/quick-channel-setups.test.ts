@@ -41,6 +41,17 @@ afterEach(() => {
 });
 
 describe('quick channel setup repository', () => {
+	it('preserves top-billed Actor filters in preview and persisted programs', async () => {
+		const subject = repository();
+		const baseline = await fixture(subject);
+		const request = quickChannelSetupCreateSchema.parse({ ...baseline,
+			source: { ...baseline.source, actor: 'Guest', actorTopBilledOnly: true } });
+		const preview = subject.previewQuickChannelSetup(request, 5_000);
+		expect(preview.program.config).toMatchObject({ source: { actor: 'Guest', actorTopBilledOnly: true } });
+		const created = subject.createQuickChannelSetup(request, 5_000);
+		expect((await subject.listPrograms()).find(program => program.id === created.program.id)?.config).toEqual(preview.program.config);
+	});
+
 	it('prepares preview resources without writes or reserving conflicting names', async () => {
 		const subject = repository();
 		const request = await fixture(subject);

@@ -142,6 +142,7 @@ export interface MediaQuery {
 	excludedGenres?: string[] | undefined;
 	genreMatch?: GenreMatch | undefined;
 	actor?: string | undefined;
+	actorTopBilledOnly?: boolean | undefined;
 	director?: string | undefined;
 }
 

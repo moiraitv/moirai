@@ -50,6 +50,7 @@ export const screenshotNames = [
 	'library-scan-history.png',
 	'library-search.png',
 	'library-filters.png',
+	'library-actor-filter.png',
 	'library-offline.png',
 	'library-selection.png',
 	'logs.png',

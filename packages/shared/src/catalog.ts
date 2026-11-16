@@ -2,6 +2,9 @@ import { z } from 'zod';
 import type { MediaAvailability } from './availability.js';
 import { canonicalGenreKey } from './normalization.js';
 
+/** Number of ordered cast credits considered by the top-billed Actor filter. */
+export const TOP_BILLED_ACTOR_COUNT = 10;
+
 /** Hierarchy kinds used to organize episodic and music-video libraries. */
 export type MediaGroupKind = 'show' | 'season' | 'artist' | 'album';
 
@@ -181,6 +184,7 @@ export const catalogProgramItemFilterShape = {
 	excludedGenres: catalogGenreKeysSchema,
 	genreMatch: genreMatchSchema.default('all'),
 	actor: z.string().trim().max(120).default(''),
+	actorTopBilledOnly: z.boolean().optional(),
 	director: z.string().trim().max(120).default(''),
 };
 /** Validate reusable library filters independently of hierarchy and presentation ordering. */
