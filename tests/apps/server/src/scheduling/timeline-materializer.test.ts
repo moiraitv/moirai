@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	SECONDS_PER_SCHEDULING_DAY,
 	XMLTV_EPG_DAYS,
+	TOP_BILLED_ACTOR_COUNT,
 	type ChannelSchedule,
 	type ScheduleTemplate,
 	type SchedulingCatalog,
@@ -1260,6 +1261,43 @@ it('keeps committed programming when new graphics display fields become availabl
 		expect(test.segments()).toEqual(segments);
 	}
 	expect(test.repository.commitMaterializedTimeline).toHaveBeenCalledTimes(commits);
+});
+
+it('rebuilds future actor-filtered programming after cast billing changes', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-08-22T12:00:00Z'));
+	const test = fixture();
+	const program = test.programs[0]!;
+	if (program.config.type !== 'content' || program.config.source.type !== 'library-query') {
+		throw new Error('Expected a library-query fixture');
+	}
+	program.config.source.actor = 'Featured actor';
+	program.config.source.actorTopBilledOnly = true;
+	for (const media of test.catalog.media) {
+		media.actors = ['Featured actor', ...Array.from({ length: TOP_BILLED_ACTOR_COUNT }, (_, index) => `Actor ${index}`)];
+		media.displayMetadata = {
+			originalTitle: null, edition: null, album: null, certification: null,
+			cast: media.actors.map(name => ({ name, role: null })), writers: [], studios: [], countries: [],
+		};
+	}
+	const materializer = new TimelineMaterializer(test.repository, test.events, 'UTC');
+	await materializer.runNow();
+	const originalFingerprint = test.materialization()!.inputFingerprint;
+	const originalSegments = structuredClone(test.segments());
+	const demoted = test.catalog.media[0]!;
+	const cast = demoted.displayMetadata!.cast;
+	demoted.displayMetadata = { ...demoted.displayMetadata!, cast: [...cast.slice(1), cast[0]!] };
+	await materializer.runNow(true);
+
+	expect(test.materialization()!.health).toBe('pending');
+	expect(test.segments()).toEqual(originalSegments);
+	vi.setSystemTime(new Date('2026-08-23T00:00:00Z'));
+	await materializer.runNow(true);
+	const future = test.segments().filter(({ segment }) => segment.start >= '2026-08-23T00:00:00Z' && segment.role === 'primary');
+	expect(future.length).toBeGreaterThan(0);
+	expect(future.every(({ segment }) => segment.mediaItemId !== demoted.id)).toBe(true);
+	expect(test.materialization()!.inputFingerprint).not.toBe(originalFingerprint);
+	expect(test.repository.resetChannelScheduleState).not.toHaveBeenCalled();
 });
 
 it('stages duplicate-avoidance changes at midnight without resetting selection progress', async () => {

@@ -5,22 +5,28 @@ import { semanticSchedulingFingerprint } from '../semantic/fingerprint.js';
 import { templatePlaybackInput } from './template-playback.js';
 import { directProgramTemplates } from './direct-program-templates.js';
 import { sourceExclusions } from './content-source.js';
+import { orderedCast } from '../media/cast.js';
 
 /** Stage semantic batch rollover and order-preserving collision policy at the daily boundary. */
 const DUPLICATE_AVOIDANCE_POLICY_VERSION = 3;
 
+/** Preserve cast order used by actor filters without retaining presentation-only credit roles. */
+interface FingerprintMedia extends SchedulableMedia {
+	actorBillingOrder?: string[];
+}
+
 /** Immutable catalog projection shared by channels with identical source scopes. */
 interface FingerprintCatalogScope {
-	media: SchedulableMedia[];
+	media: FingerprintMedia[];
 	groupParents: Record<string, string | null>;
 	groupTitles: Record<string, string | null>;
 	libraryNames: Record<string, string | null>;
 	libraryEnabled: Record<string, boolean>;
 }
 
-/** Cache immutable canonical inputs for one pass without changing persisted fingerprint bytes. */
+/** Cache immutable canonical inputs within one materialization pass. */
 export class InputFingerprintContext {
-	private readonly normalized = new WeakMap<SchedulableMedia, SchedulableMedia>();
+	private readonly normalized = new WeakMap<SchedulableMedia, FingerprintMedia>();
 	private readonly serialized = new WeakMap<object, string>();
 	private readonly scopes = new WeakMap<SchedulingCatalog, Map<string, FingerprintCatalogScope>>();
 	private readonly playbackInputs = new WeakMap<ScheduleTemplate, ScheduleTemplate>();
@@ -51,12 +57,19 @@ export class InputFingerprintContext {
 		return value;
 	}
 
-	/** Share catalog inputs while excluding transient availability and graphics-only fields. */
-	media(value: SchedulableMedia): SchedulableMedia {
+	/** Retain actor eligibility and billing order while excluding availability and graphics-only fields. */
+	media(value: SchedulableMedia): FingerprintMedia {
 		let result = this.normalized.get(value);
 		if (!result) {
 			result = { ...value, availability: 'ignored' as SchedulableMedia['availability'] };
 			delete result.displayMetadata;
+			const castNames = value.displayMetadata?.cast.map(credit => credit.name);
+			if (castNames) {
+				const fallbackNames = orderedCast(value.actors).map(credit => credit.name);
+				if (JSON.stringify(castNames) !== JSON.stringify(fallbackNames)) {
+					result.actorBillingOrder = castNames;
+				}
+			}
 			this.normalized.set(value, result);
 		}
 		return result;
@@ -265,7 +278,7 @@ export function inputFingerprint(
 
 
 
-/** Select stable media, ancestor labels, and library attributes without changing fingerprint bytes. */
+/** Select stable media, ancestor labels, and library attributes that affect programming. */
 function catalogScope(catalog: SchedulingCatalog, libraryIds: Set<string>, itemIds: Set<string>, groupIds: Set<string>, context: InputFingerprintContext): FingerprintCatalogScope {
 	// Include matching media while ignoring transient availability in the durable fingerprint.
 	const selectedMedia = catalog.media

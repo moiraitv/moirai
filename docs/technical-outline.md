@@ -714,6 +714,9 @@ cast helper supplies display metadata and a deterministic SQLite predicate, with
 queries, schema changes, or rescanning. Scheduling uses snapshot display cast, falling back to the
 actor sequence for older snapshots. The option persists through Library URLs, recursive selection,
 Programs, similarity filters, and Quick Setup; inactive flags do not alter playback identities.
+Scheduling input fingerprints retain ordered cast names when they differ from the legacy actor
+sequence, so billing edits invalidate future programming without treating role or display-only edits
+as programming changes. Existing committed output keeps its normal application boundary and cursors.
 
 Indexed-date filters normalize accepted UTC and offset timestamps to canonical UTC bounds before SQL
 comparison. Shared boundary math rounds finer-than-millisecond bounds upward, preserving inclusive

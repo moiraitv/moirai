@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
-import type { SchedulingProgram } from '@moirai/shared';
+import { TOP_BILLED_ACTOR_COUNT, type SchedulableMedia, type SchedulingCatalog, type SchedulingProgram } from '@moirai/shared';
 import { inputFingerprint, InputFingerprintContext } from '@server/scheduling/input-fingerprint.js';
+import { mediaMatchesLibraryQuery } from '@server/scheduling/content-query.js';
 import { stableJsonFingerprint } from '@server/stable-json.js';
 
 it('retains canonical fingerprint bytes with shared objects, array order and optional values', () => {
@@ -15,6 +16,43 @@ it('retains canonical fingerprint bytes with shared objects, array order and opt
 
 it('retains rejection of a non-JSON root value', () => {
 	expect(() => new InputFingerprintContext().fingerprint(undefined)).toThrow(TypeError);
+});
+
+it('invalidates programming when cast billing changes Top 10 actor eligibility', () => {
+	const actors = Array.from({ length: TOP_BILLED_ACTOR_COUNT + 1 }, (_, index) => `Actor ${index}`);
+	const source: Parameters<typeof mediaMatchesLibraryQuery>[1] = { type: 'library-query', libraryId: 'library', kinds: ['movie'], genres: [], actor: actors.at(-1)!, actorTopBilledOnly: true };
+	const program: SchedulingProgram = { id: 'program', name: 'Actor films', createdAt: '', updatedAt: '', config: {
+		type: 'content', source, strategy: { type: 'sequential' },
+	} };
+	const schedule = { channelId: 'channel', defaultTemplateId: null, defaultProgramId: program.id, layers: [], defaultFiller: null, createdAt: '', updatedAt: '' };
+	const media: SchedulableMedia = {
+		id: 'item', libraryId: 'library', groupId: null, kind: 'movie', title: 'Film', sortTitle: 'film',
+		playbackPath: '/media/film.mkv', durationSeconds: 3600, seasonNumber: null, episodeNumber: null,
+		genres: [], genreNames: [], plot: null, year: null, artworkUrl: null, availability: 'available' as const,
+		actors, displayMetadata: {
+			originalTitle: null, edition: null, album: null, certification: null,
+			cast: actors.map(name => ({ name, role: null })), writers: [], studios: [], countries: [],
+		},
+	};
+	const catalog: SchedulingCatalog = { media: [media], groupParents: {}, groupTitles: {}, libraryNames: {}, libraryAvailability: {} };
+	const promoted = { ...media, displayMetadata: { ...media.displayMetadata!, cast: [media.displayMetadata!.cast.at(-1)!, ...media.displayMetadata!.cast.slice(0, -1)] } };
+	const context = new InputFingerprintContext();
+	const fingerprint = (value: SchedulableMedia) => inputFingerprint(schedule, [], [program], { ...catalog, media: [value] }, context);
+
+	expect(mediaMatchesLibraryQuery(media, source)).toBe(false);
+	expect(mediaMatchesLibraryQuery(promoted, source)).toBe(true);
+	expect(promoted.actors).toBe(media.actors);
+	expect(fingerprint(promoted)).not.toBe(fingerprint(media));
+	const legacy = { ...media };
+	delete legacy.displayMetadata;
+	expect(fingerprint(legacy)).toBe(fingerprint(media));
+
+	// Roles and other display facts do not change eligibility or programming.
+	const presentationEdit = { ...promoted, displayMetadata: { ...promoted.displayMetadata, certification: 'PG', cast: promoted.displayMetadata.cast.map(credit => ({ ...credit, role: 'Updated role' })) } };
+	expect(fingerprint(presentationEdit)).toBe(fingerprint(promoted));
+	const membershipEdit = { ...promoted, actors: [] };
+	expect(mediaMatchesLibraryQuery(membershipEdit, source)).toBe(false);
+	expect(fingerprint(membershipEdit)).not.toBe(fingerprint(promoted));
 });
 
 it('reuses identical catalog scopes across channels without inspecting media again', () => {
