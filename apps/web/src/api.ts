@@ -516,6 +516,8 @@ export const api = {
 			method: 'DELETE',
 		}),
 	schedulingOverview: () => request<SchedulingOverview>('/api/v1/scheduling/overview'),
+	schedulingConfiguration: () => request<SchedulingOverview>('/api/v1/scheduling/overview?includeProgramStatuses=false'),
+	programs: () => request<SchedulingProgram[]>('/api/v1/programs'),
 	aiStatus: () => request<AiStatus>('/api/v1/ai'),
 	aiSettings: () => request<AiSettingsStatus>('/api/v1/ai/settings'),
 	saveAiSettings: (body: AiSettingsSave) => request<AiSettingsStatus>('/api/v1/ai/settings', { method: 'PUT', body: JSON.stringify(body) }),

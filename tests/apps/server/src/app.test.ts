@@ -7,6 +7,7 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
 import { ChildProcess } from 'node:child_process';
 import { Readable } from 'node:stream';
+import { gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, rm, writeFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -37,6 +38,7 @@ import { openWriteDatabase } from '@server/db/write-connection.js';
 import { createDatabase } from '@server/db/index.js';
 import { authenticationSessions, mediaItemAliases, mediaItems } from '@server/db/schema.js';
 import { Repository } from '@server/repository/index.js';
+import { schedulingRead } from '@server/scheduling/read-jobs.js';
 
 const transparentPng = await sharp({
 	create: { width: 1, height: 1, channels: 4, background: '#00000000' },
@@ -1549,6 +1551,21 @@ describe('API', () => {
 			],
 			programStatuses: [{ programId, health: 'missing' }],
 		});
+		const configuration = await app.inject({ url: '/api/v1/scheduling/overview?includeProgramStatuses=false' });
+		const expectedConfiguration = { ...overview, programStatuses: [] };
+		expect(configuration.statusCode).toBe(200);
+		expect(configuration.json()).toEqual(expectedConfiguration);
+		expect((await app.inject({ url: '/api/v1/scheduling/overview?includeProgramStatuses=invalid' })).statusCode).toBe(400);
+
+		const catalog = vi.spyOn(services.repository, 'getSchedulingCatalog');
+		try {
+			const result = await schedulingRead(services.repository, { kind: 'overview', includeProgramStatuses: false });
+			expect(JSON.parse(result.body)).toEqual(expectedConfiguration);
+			expect(catalog).not.toHaveBeenCalled();
+		}
+		finally {
+			catalog.mockRestore();
+		}
 		const draft = (
 			await app.inject({
 				method: 'POST',
@@ -2782,11 +2799,19 @@ describe('API', () => {
 		const committedState = await services.repository.getSelectionState(channel.id);
 		expect(committedState.length).toBeGreaterThan(0);
 		const committedGuide = await app.inject({ url: '/api/v1/schedule-guide?days=1' });
-		const repeatedGuide = await app.inject({ url: '/api/v1/schedule-guide?days=1' });
+		const workerRead = vi.spyOn(services.schedulingWorkers, 'read');
+		const repeatedGuide = await app.inject({ url: '/api/v1/schedule-guide?days=1', headers: { 'accept-encoding': 'gzip' } })
+			.finally(() => {
+				const guideReads = workerRead.mock.calls.filter(([request]) => request.kind === 'guide');
+				workerRead.mockRestore();
+				expect(guideReads).toHaveLength(0);
+			});
 		expect(committedGuide.statusCode).toBe(200);
-		expect(committedGuide.json().channels[0].preview.segments).toEqual(
-			repeatedGuide.json().channels[0].preview.segments,
-		);
+		expect(repeatedGuide.statusCode).toBe(200);
+		expect(repeatedGuide.headers['content-encoding']).toBe('gzip');
+		expect(repeatedGuide.headers.vary).toContain('accept-encoding');
+		expect(committedGuide.headers['content-encoding']).toBeUndefined();
+		expect(JSON.parse(gunzipSync(repeatedGuide.rawPayload).toString())).toEqual(committedGuide.json());
 		expect((await app.inject({ url: '/epg.xml' })).payload).toContain('Scheduled Film');
 		const previewUrl = `/api/v1/channels/${channel.id}/timeline-preview?startDate=2026-01-05&days=1`;
 		const first = await app.inject({ url: previewUrl });

@@ -4,9 +4,17 @@ import {
 	compileGuideTemplate,
 	escapeXmlText,
 	flattenLiquidPreviewValues,
+	guideTimestampFormatter,
 	renderProgrammeFragment,
 	validateGuideTemplateSources,
 } from '@server/guide/xmltv-template.js';
+
+it('preserves distinct local offsets across the repeated hour in guide presentation', () => {
+	const format = guideTimestampFormatter('America/Los_Angeles');
+	expect(format('2026-11-01T08:30:00Z')).toBe('20261101013000 -0700');
+	expect(format('2026-11-01T09:30:00Z')).toBe('20261101013000 -0800');
+	expect(format('2026-11-01T08:30:00Z')).toBe('20261101013000 -0700');
+});
 
 it('escapes interpolated XML and rejects invalid Liquid on preview validation', async () => {
 	expect(escapeXmlText('A <title> & "quote"')).toBe('A &lt;title&gt; &amp; &quot;quote&quot;');

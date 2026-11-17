@@ -115,15 +115,37 @@ export const useChannelsStore = defineStore('channels', () => {
 	}
 
 	let capabilitiesStale = false;
+	let pendingCapabilities: { promise: Promise<void>; resolve: () => void; reject: (cause: unknown) => void } | undefined;
 
 	/** Require fresh runtime settings before the next guide read after a server reconnect. */
 	function invalidateCapabilities(): void {
 		capabilitiesStale = true;
-		capabilitySequence += 1;
+		if (pendingCapabilities) {
+			void loadCapabilities().catch(() => undefined);
+		}
+	}
+
+	/** Optionally reuse a pending read and resolve callers with the latest runtime settings. */
+	function loadCapabilities(reusePending = false): Promise<void> {
+		if (reusePending && pendingCapabilities) {
+			return pendingCapabilities.promise;
+		}
+		if (!pendingCapabilities) {
+			let resolve!: () => void;
+			let reject!: (cause: unknown) => void;
+			const promise = new Promise<void>((complete, fail) => {
+				resolve = complete;
+				reject = fail;
+			});
+			pendingCapabilities = { promise, resolve, reject };
+		}
+		const { promise } = pendingCapabilities;
+		void performCapabilitiesLoad();
+		return promise;
 	}
 
 	/** Load capabilities from the authoritative source and update the shared UI store. */
-	async function loadCapabilities(): Promise<void> {
+	async function performCapabilitiesLoad(): Promise<void> {
 		const sequence = ++capabilitySequence;
 		try {
 			const result = await api.capabilities();
@@ -139,13 +161,19 @@ export const useChannelsStore = defineStore('channels', () => {
 			capabilitiesLoaded.value = true;
 			capabilitiesStale = false;
 			error.value = '';
+			pendingCapabilities?.resolve();
 		}
 		catch (cause) {
 			if (sequence !== capabilitySequence) {
 				return;
 			}
 			error.value = errorMessage(cause);
-			throw cause;
+			pendingCapabilities?.reject(cause);
+		}
+		finally {
+			if (sequence === capabilitySequence) {
+				pendingCapabilities = undefined;
+			}
 		}
 	}
 
@@ -192,7 +220,7 @@ export const useChannelsStore = defineStore('channels', () => {
 		}
 		try {
 			if (capabilitiesStale) {
-				await loadCapabilities();
+				await loadCapabilities(true);
 				if (sequence !== guideSequence) {
 					return;
 				}

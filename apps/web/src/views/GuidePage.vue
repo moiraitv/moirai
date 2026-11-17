@@ -124,12 +124,13 @@ async function loadInitial(): Promise<void> {
 	}
 	error.value = '';
 	try {
-		await Promise.all([channelsStore.loadChannels(), channelsStore.loadCapabilities()]);
-		const today = dateKey(new Date(), timeZone.value);
-		if (!weekStart.value || weekStart.value < today) {
-			weekStart.value = today;
-		}
-		await loadGuide(true);
+		await Promise.all([channelsStore.loadChannels(), channelsStore.loadCapabilities(true).then(async () => {
+			const today = dateKey(new Date(), timeZone.value);
+			if (!weekStart.value || weekStart.value < today) {
+				weekStart.value = today;
+			}
+			await loadGuide(true);
+		})]);
 		guideRoute.activate();
 	}
 	catch (cause) {

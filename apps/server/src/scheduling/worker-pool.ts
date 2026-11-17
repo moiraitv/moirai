@@ -20,6 +20,7 @@ import { SchedulingValidationError } from './validation.js';
 import { PreviewExecutor, type PreviewJob, type PreviewRequest, type PreviewResults } from './preview.js';
 import type { MoiraiDatabase } from '../db/index.js';
 import type { Repository } from '../repository/index.js';
+import type { GuideReadRequest } from '../guide/read-job.js';
 
 /** Report bounded scheduling work rejected because every worker slot is occupied. */
 export class SchedulingQueueFullError extends Error {
@@ -53,6 +54,7 @@ interface Job {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
 	background: boolean;
+	prewarm?: true;
 	playback: boolean;
 	live: boolean;
 	queuedAt: number;
@@ -179,7 +181,7 @@ export class SchedulingWorkerPool {
 	}
 
 	/** Coalesce identical reads while preserving independent cancellation for every caller. */
-	read(request: DatabaseReadRequest, signal?: AbortSignal): Promise<DatabaseReadResult> {
+	read(request: DatabaseReadRequest, signal?: AbortSignal, prewarm = false): Promise<DatabaseReadResult> {
 		if (this.closing || !this.previewContext) {
 			return Promise.reject(new Error('Scheduling reads are unavailable'));
 		}
@@ -189,7 +191,11 @@ export class SchedulingWorkerPool {
 		if (!shared || shared.controller.signal.aborted) {
 			const controller = new AbortController();
 			const promise = this.databaseBacked
-				? this.enqueue<DatabaseReadResult>({ kind: 'read', input: { request, revision } }, controller.signal)
+				? this.enqueue<DatabaseReadResult>(
+					{ kind: 'read', input: { request, revision } },
+					controller.signal,
+					prewarm ? { prewarm: true } : {},
+				)
 				: (this.localReader ??= new DatabaseJobReader(this.previewContext.db)).read(request, revision);
 			shared = { promise, controller, consumers: 0 };
 			const owned = shared;
@@ -201,6 +207,21 @@ export class SchedulingWorkerPool {
 			}).catch(() => undefined);
 		}
 		return consumeRead(shared, signal);
+	}
+
+	/** Warm a guide only when it can start immediately and leave a worker available for live playback. */
+	async warmGuide(request: GuideReadRequest): Promise<DatabaseReadResult | undefined> {
+		const active = this.slots.filter(slot => slot.job).length;
+		if (!this.canWarmGuide || this.closing || this.queue.length
+			|| active >= Math.min(this.workerCount - 1, this.queueLimit)) {
+			return undefined;
+		}
+		return this.read(request, undefined, true);
+	}
+
+	/** Background guide work needs a spare database-backed scheduling worker. */
+	get canWarmGuide(): boolean {
+		return this.databaseBacked && this.workerCount > 1;
 	}
 
 	/** Keep the complete background preparation pass off-thread and acknowledge ordered writes. */
@@ -324,7 +345,7 @@ export class SchedulingWorkerPool {
 	private enqueue<T>(
 		task: JobInput,
 		signal?: AbortSignal,
-		callbacks: Pick<Job, 'write' | 'event'> = {},
+		callbacks: Pick<Job, 'write' | 'event' | 'prewarm'> = {},
 		live = false,
 	): Promise<T> {
 		if (this.closing) {
@@ -339,7 +360,7 @@ export class SchedulingWorkerPool {
 		this.ensureWorkers();
 		return new Promise<T>((resolve, reject) => {
 			const job: Job = { id: this.nextId++, task, resolve: (value) => resolve(value as T), reject,
-				background: task.kind === 'materialize' || (!live && (task.kind === 'playout' || task.kind === 'playout-read')),
+				background: Boolean(callbacks.prewarm) || task.kind === 'materialize' || (!live && (task.kind === 'playout' || task.kind === 'playout-read')),
 				playback: task.kind === 'playout' || task.kind === 'playout-read', live, queuedAt: performance.now(), ...callbacks };
 			const abort = (): void => {
 				const index = this.queue.indexOf(job);
@@ -474,17 +495,22 @@ export class SchedulingWorkerPool {
 		});
 	}
 
-	/** Serve live tunes first and reserve a worker from periodic playout and materialization work. */
+	/** Serve live tunes first and keep a worker free for them during speculative guide builds. */
 	private dispatch(): void {
 		for (const slot of this.slots) {
 			if (slot.job) {
 				continue;
 			}
 
+			const live = this.queue.findIndex(entry => entry.live);
+			if (live === -1 && this.slots.some(entry => entry.job?.prewarm)
+				&& this.slots.filter(entry => !entry.job).length === 1) {
+				return;
+			}
+
 			const backgroundAllowed = this.workerCount === 1
 				|| this.slots.filter(entry => entry.job?.background).length < this.workerCount - 1;
 			const interactive = this.queue.findIndex(entry => !entry.background);
-			const live = this.queue.findIndex(entry => entry.live);
 			const playback = backgroundAllowed ? this.queue.findIndex(entry => entry.playback) : -1;
 			const background = backgroundAllowed ? this.queue.findIndex(entry => entry.background) : -1;
 			const index = live !== -1 ? live : playback !== -1 ? playback

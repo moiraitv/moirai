@@ -17,6 +17,7 @@ export async function renderGuideListing(
 	compiled: CompiledGuideTemplate,
 	options: GuideRenderOptions,
 	programMetadata?: ReadonlyMap<string, ProgramMetadata>,
+	formatTime?: (instant: string) => string,
 ): Promise<{ xml: string; context: Record<string, unknown>; programIds: readonly string[] } | null> {
 	const kind = programmeKind(entry, segment, media);
 	if (kind !== 'block' && !segment) {
@@ -35,7 +36,7 @@ export async function renderGuideListing(
 			title: entry.title, description: entry.description,
 			artwork_url: entry.posterUrl ? new URL(entry.posterUrl, `${publicUrl}/`).href : null,
 		} : null,
-	});
+	}, formatTime);
 	const programIds = metadataProgramIds(kind === 'block' ? entry : segment);
 	const program = { metadata: mergeProgramMetadata(programIds.map(id => programMetadata?.get(id))) };
 	const xml = await renderProgrammeFragment(compiled, kind, { ...context, program }, options);

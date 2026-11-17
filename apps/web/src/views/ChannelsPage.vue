@@ -75,28 +75,10 @@ const {
 	guide,
 	timeZone,
 	guideWeekStart: weekStart,
-	guideDays,
 	loaded: channelsLoaded,
 	capabilitiesLoaded,
-	guideLoaded,
 } = storeToRefs(channelsStore);
-const initialLoading = ref(
-	!(channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 1),
-);
-
-/** Drop the full-page spinner as soon as a committed day is in the store. */
-function dismissInitialLoadingWhenGuidePaints(): void {
-	if (channelsLoaded.value && capabilitiesLoaded.value && guideLoaded.value && guideDays.value >= 1) {
-		initialLoading.value = false;
-	}
-}
-
-watch(
-	[channelsLoaded, capabilitiesLoaded, guideLoaded, guideDays],
-	() => {
-		dismissInitialLoadingWhenGuidePaints();
-	},
-);
+const initialLoading = ref(!(channelsLoaded.value && capabilitiesLoaded.value && weekStart.value));
 
 const editorLinksReady = ref(false);
 const scheduling = useSchedulingStore();
@@ -203,7 +185,7 @@ const { prediction: accelerationPrediction, text: accelerationPredictionText } =
 const scheduleByChannel = computed(
 	() =>
 		new Map(
-			(scheduling.overview?.channelSchedules ?? []).map((schedule) => [
+			(scheduling.configuration?.channelSchedules ?? []).map((schedule) => [
 				schedule.channelId,
 				schedule,
 			]),
@@ -214,8 +196,8 @@ const scheduleByChannel = computed(
 function scheduleSummary(channelId: string): string {
 	return channelScheduleSummary(
 		scheduleByChannel.value.get(channelId),
-		scheduling.overview?.templates ?? [],
-		scheduling.overview?.programs ?? [],
+		scheduling.configuration?.templates ?? [],
+		scheduling.configuration?.programs ?? [],
 	);
 }
 
@@ -593,6 +575,7 @@ async function loadGuide(reusePending = false): Promise<void> {
 	const target = guideRoute.requestedDate();
 	if (await guideRoute.load(() => channelsStore.loadGuide(target, requestedDaysFor(target), 'preserve', reusePending))) {
 		guideRefreshError.value = '';
+		guideRoute.activate();
 	}
 }
 
@@ -600,35 +583,36 @@ useGuideDateRefresh(channelsStore, loadGuide, (cause) => {
 	guideRefreshError.value = errorMessage(cause);
 });
 
-/** Load channel, capability, schedule, and guide data without discarding cached state. */
-async function loadInitial(): Promise<void> {
-	const hasCachedPage
-		= channelsLoaded.value
-			&& capabilitiesLoaded.value
-			&& guideLoaded.value
-			&& guideDays.value >= 1
-			&& Boolean(weekStart.value);
-	if (!hasCachedPage) {
-		initialLoading.value = true;
-	}
-	error.value = '';
+/** Initialize or retry the guide independently of the channel list and schedule summaries. */
+async function loadInitialGuide(): Promise<void> {
 	try {
-		const metadata = Promise.all([loadChannels(), channelsStore.loadCapabilities()]).then(() => {
-			editorLinksReady.value = true;
-		});
-		await Promise.all([metadata, scheduling.load()]);
-		if (!weekStart.value) {
-			weekStart.value = dateKey(new Date(), timeZone.value);
-		}
+		await channelsStore.loadCapabilities(true);
+		weekStart.value ||= dateKey(new Date(), timeZone.value);
 		await loadGuide(true);
-		guideRoute.activate();
+	}
+	catch (cause) {
+		guideRefreshError.value = errorMessage(cause);
+	}
+}
+
+/** Release channel controls as metadata arrives while the guide and assignments load independently. */
+async function loadInitial(): Promise<void> {
+	initialLoading.value = !(channelsLoaded.value && capabilitiesLoaded.value && weekStart.value);
+	error.value = '';
+	void scheduling.loadConfiguration();
+	const channelsReady = loadChannels().then(() => {
+		editorLinksReady.value = true;
+	}).finally(() => {
+		initialLoading.value = false;
+	});
+	const guideReady = loadInitialGuide();
+	try {
+		await channelsReady;
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
 	}
-	finally {
-		initialLoading.value = false;
-	}
+	await guideReady;
 }
 
 /** Move the guide window within the committed range and load the resulting week. */
@@ -862,7 +846,7 @@ async function deleteChannel(): Promise<void> {
 		await api.deleteChannel(id);
 		retained.clear();
 		finishCloseForm();
-		await Promise.all([loadChannels(), scheduling.load()]);
+		await Promise.all([loadChannels(), scheduling.loadConfiguration()]);
 		await loadGuide();
 	}
 	catch (cause) {
@@ -891,7 +875,7 @@ const unsubscribe = liveEvents.subscribe((event) => {
 			const refreshScheduling = schedulingRefreshPending;
 			schedulingRefreshPending = false;
 			void Promise.all([channelsStore.loadChannels(true),
-				...(refreshScheduling ? [scheduling.load()] : []), loadGuide()]).catch(cause => {
+				...(refreshScheduling ? [scheduling.loadConfiguration()] : []), loadGuide()]).catch(cause => {
 				guideRefreshError.value = errorMessage(cause);
 			});
 		}, 180);
@@ -948,9 +932,10 @@ useDraftProtection(() => showForm.value && channelFormDirty.value && retained.un
 		><button class="button" @click="add"><Plus :size="18" />New Channel</button></PageHeader
 		>
 		<p v-if="error && !showForm" class="notice error">{{ error }} <button class="button secondary" type="button" @click="loadInitial">Retry</button></p>
-		<p v-if="guideRefreshError && !showForm" class="notice error">{{ guideRefreshError }} <button class="button secondary" type="button" @click="loadGuide()">Retry guide</button></p>
+		<p v-if="guideRefreshError && !showForm" class="notice error">{{ guideRefreshError }} <button class="button secondary" type="button" @click="loadInitialGuide">Retry guide</button></p>
+		<p v-if="scheduling.configurationError && !showForm" class="notice error" role="alert">{{ scheduling.configurationError }} <button class="button secondary" type="button" @click="scheduling.loadConfiguration()">Retry schedules</button></p>
 		<LoadingState v-if="initialLoading" label="Loading channels and guide…" />
-		<div v-else class="async-state-surface">
+		<div v-else-if="channelsLoaded" class="async-state-surface">
 			<div class="guide-toolbar">
 				<div class="guide-week-controls">
 					<button
@@ -988,7 +973,7 @@ useDraftProtection(() => showForm.value && channelFormDirty.value && retained.un
 				:refreshing="channelsStore.guideRefreshing"
 				:row-states="channelsStore.guideRowStates"
 				:time-zone="timeZone"
-				:start-date="weekStart"
+				:start-date="weekStart || dateKey(new Date(), timeZone)"
 				:days="displayedDays"
 				empty-message="No template assigned"
 				show-technical-details
@@ -996,10 +981,10 @@ useDraftProtection(() => showForm.value && channelFormDirty.value && retained.un
 				@retry="loadGuide()"
 			>
 				<template #detail="{ channel }">
-					<small class="channel-schedule-summary">{{ scheduleSummary(channel.id) }}</small>
+					<small class="channel-schedule-summary">{{ scheduling.configuration ? scheduleSummary(channel.id) : scheduling.configurationError ? 'Schedule unavailable' : 'Loading schedule…' }}</small>
 				</template>
 				<template #actions="{ channel }">
-					<ChannelRegenerateButton :channel="channel" :disabled="!scheduling.loaded || !scheduleByChannel.has(channel.id)" @completed="loadGuide()" @error="error = $event" />
+					<ChannelRegenerateButton :channel="channel" :disabled="!scheduling.configuration || !scheduleByChannel.has(channel.id)" @completed="loadGuide()" @error="error = $event" />
 					<button
 						class="icon-button guide-channel-edit"
 						:aria-label="`Edit ${channel.name}`"

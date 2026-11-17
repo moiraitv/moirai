@@ -48,6 +48,27 @@ it('uses the reserved idle worker for playback while materialization is awaiting
 	}
 });
 
+it('holds the last worker for a live tune while prewarming the guide', async () => {
+	const owner = pool(2);
+	const window = { timeZone: 'UTC', startDate: '2026-10-02', days: 1 };
+	const warm = owner.warmGuide({ ...window, kind: 'guide', publicUrl: 'http://localhost', snapshot: true });
+	const overview = owner.read({ kind: 'overview' });
+	const playback = owner.playoutRead({ ...window, kind: 'playout-preparation', channelId: 'channel' }, true);
+	const settled = Promise.allSettled([warm, overview, playback]);
+	try {
+		const warmJob = workers[0]!.messages[0]!;
+		expect(warmJob).toMatchObject({ kind: 'read', input: { request: { kind: 'guide' } } });
+		expect(workers[1]!.messages).toMatchObject([{ kind: 'playout-read' }]);
+
+		workers[0]!.emit('message', { id: warmJob.id, result: { body: '{}' } });
+		expect(workers[0]!.messages[1]).toMatchObject({ kind: 'read', input: { request: { kind: 'overview' } } });
+	}
+	finally {
+		await owner.close();
+		await settled;
+	}
+});
+
 it('dispatches queued playback ahead of guide work when the only worker becomes available', async () => {
 	const owner = pool(1);
 	const materialization = owner.materialize('UTC', async () => {}, () => {});

@@ -11,7 +11,7 @@ test('retains scheduling refreshes when a channel event follows in the debounce 
 		socket = ws;
 	});
 	let reads = 0;
-	await page.route('**/api/v1/scheduling/overview', route => {
+	await page.route('**/api/v1/scheduling/overview?includeProgramStatuses=false', route => {
 		reads += 1;
 		return route.fulfill({ json: { programs: [], templates: [], channelSchedules: [], programStatuses: [] } });
 	});

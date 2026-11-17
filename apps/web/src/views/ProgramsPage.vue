@@ -160,7 +160,7 @@ async function deleteProgram(program: SchedulingProgram): Promise<void> {
 async function load(): Promise<void> {
 	error.value = '';
 	try {
-		await Promise.all([scheduling.load(), librariesStore.load()]);
+		await Promise.all([scheduling.load(), librariesStore.ensureLoaded()]);
 	}
 	catch (cause) {
 		error.value = errorMessage(cause);
@@ -177,7 +177,9 @@ watch([selectedId, programs], () => {
 onMounted(() => {
 	media.addEventListener('change', updateViewport);
 	window.addEventListener('resize', measureWorkspace);
-	void load();
+	if (!props.embedded) {
+		void load();
+	}
 });
 onUnmounted(() => {
 	media.removeEventListener('change', updateViewport);
@@ -207,6 +209,6 @@ onUnmounted(() => {
 				</Transition>
 			</Teleport>
 		</div>
-		<ProgramEditor v-if="editorOpen && !initialLoading" :embedded="embedded" :program-id="programId" @close="emit('close')" @saved="id => emit('saved', id)" />
+		<ProgramEditor v-if="editorOpen" :embedded="embedded" :program-id="programId" @close="emit('close')" @saved="id => emit('saved', id)" />
 	</section>
 </template>

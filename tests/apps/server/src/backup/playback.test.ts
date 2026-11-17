@@ -10,11 +10,11 @@ import { createDatabase } from '@server/db/index.js';
 import { buildApp } from '@server/app.js';
 
 // Opt in with the real playback engine and FFmpeg; ordinary CI does not require native binaries.
-it.skipIf(!process.env.MOIRAI_TEST_PLAYBACK_ENGINE || !process.env.MOIRAI_TEST_FFMPEG)(
-	'delivers decodable HLS while backup capture waits on a write and scans, guide, and preparation contend',
-	async () => {
+it.skipIf(!process.env.MOIRAI_TEST_PLAYBACK_ENGINE || !process.env.MOIRAI_TEST_FFMPEG).each([1, 2])(
+	'delivers decodable HLS with %i worker(s) while backup, scans, guide, and preparation contend',
+	async (schedulingWorkerCount) => {
 		const root = await mkdtemp(path.join(tmpdir(), 'moirai-backup-playback-'));
-		const config = loadConfig({ dataDir: root, logLevel: 'silent', timeZone: 'UTC', schedulingWorkerCount: 1,
+		const config = loadConfig({ dataDir: root, logLevel: 'silent', timeZone: 'UTC', schedulingWorkerCount,
 			playbackEnginePath: process.env.MOIRAI_TEST_PLAYBACK_ENGINE!, ffprobePath: path.join(path.dirname(process.env.MOIRAI_TEST_FFMPEG!), 'ffprobe'),
 			playbackReadyTimeoutMs: 60_000, migrationsDir: path.resolve('drizzle'), guideDays: 1 });
 		const database = createDatabase(config.databasePath, config.migrationsDir);
@@ -47,7 +47,14 @@ it.skipIf(!process.env.MOIRAI_TEST_PLAYBACK_ENGINE || !process.env.MOIRAI_TEST_F
 				backupComplete = true; 
 			});
 			const started = performance.now();
-			background = Promise.allSettled([services.scanner.scan(library.id, 'manual'), services.playout.syncAll(), app.inject('/epg.xml')]);
+			background = Promise.allSettled([
+				services.schedulingWorkers.warmGuide({ kind: 'guide', timeZone: 'UTC', publicUrl: config.publicUrl,
+					startDate: new Date().toISOString().slice(0, 10), days: 1, guideDays: config.guideDays, snapshot: true }),
+				services.scanner.scan(library.id, 'manual'),
+				services.playout.syncAll(),
+				app.inject('/epg.xml'),
+				services.schedulingWorkers.read({ kind: 'catalog', operation: 'genres', args: [library.id, null] }),
+			]);
 			const master = await app.inject('/iptv/channel/1.m3u8');
 			expect(master.statusCode, master.body).toBe(200);
 			const playlist = await app.inject(`/iptv/session/${channel.id}/live.m3u8`);

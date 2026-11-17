@@ -38,11 +38,9 @@ import {
 } from '../quick-setup';
 import { useChannelsStore } from '../stores/channels';
 import { useLibrariesStore } from '../stores/libraries';
-import { useSchedulingStore } from '../stores/scheduling';
 
 const librariesStore = useLibrariesStore();
 const channelsStore = useChannelsStore();
-const schedulingStore = useSchedulingStore();
 const { libraries } = storeToRefs(librariesStore);
 const { channels } = storeToRefs(channelsStore);
 const loading = ref(true);
@@ -231,10 +229,7 @@ async function finish(): Promise<void> {
 		result.value = await api.createQuickChannelSetup(request.value);
 		stage.value = 5;
 		await uploadLogo();
-		await Promise.allSettled([
-			channelsStore.loadChannels(),
-			schedulingStore.load(),
-		]);
+		await channelsStore.loadChannels(true).catch(() => undefined);
 	}
 	catch (cause) {
 		setupError.value = errorMessage(cause);
@@ -339,12 +334,11 @@ async function loadInitial(): Promise<void> {
 	initialError.value = '';
 	try {
 		await Promise.all([
-			librariesStore.load(),
+			librariesStore.ensureLoaded(),
 			channelsStore.loadChannels(),
-			channelsStore.capabilitiesLoaded ? Promise.resolve() : channelsStore.loadCapabilities(),
-			schedulingStore.load(),
+			channelsStore.capabilitiesLoaded ? Promise.resolve() : channelsStore.loadCapabilities(true),
 		]);
-		if (librariesStore.error) {
+		if (!librariesStore.loaded && librariesStore.error) {
 			initialError.value = librariesStore.error;
 		}
 	}

@@ -27,6 +27,7 @@ test.beforeEach(async ({ page }) => {
 		entries: items.map(item => ({ key: item.id, item, group: null, matches: [] })), pagination: { page: 1, totalPages: 1, total: items.length, pageSize: 20 },
 	} }));
 	await page.route('**/api/v1/quick-channel-setups/query-preview', route => route.fulfill({ json: { items: [], indexedItemCount: 0, nextCursor: null } }));
+	await page.route('**/api/v1/programs', route => route.fulfill({ json: [program] }));
 	await page.route('**/api/v1/scheduling/overview', route => route.fulfill({ json: { programs: [program], templates: [], channelSchedules: [], programStatuses: [] } }));
 	await page.route('**/api/v1/resource-usage/program/**', route => route.fulfill({ json: { total: 0, items: [] } }));
 	await page.route('**/api/v1/libraries/*/media-selection', route => failSelection
@@ -107,7 +108,9 @@ test('keeps specific group review cards available after saving the open editor',
 		{ id: showId, libraryId, kind: 'show', title: 'Space Station', year: 2026, yearEnd: null, childCount: 1, artworkUrl: null },
 	] }));
 	await page.goto(`/schedules/programs/${programId}`);
-	await expect(page.locator('.selected-collection-summary')).toContainText('Maximum');
+	await expect(page.locator('.selected-collection-summary').filter({
+		has: page.getByRole('button', { name: 'Review Selection' }),
+	})).toContainText('Maximum');
 	await page.getByRole('textbox', { name: /^Name/u }).fill('Updated group Program');
 	await expect(page.getByRole('textbox', { name: /^Name/u })).toHaveValue('Updated group Program');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();

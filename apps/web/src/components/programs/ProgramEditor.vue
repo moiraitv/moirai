@@ -58,6 +58,7 @@ import { useSelectedMediaOrderState } from './selected-media-order-state';
 import { subscribeToSelectedMediaRefresh } from './selected-media-refresh';
 import { isProgramDraftValid } from './program-save-state';
 import { useProgramResourceActions } from './program-resource-actions';
+import { useProgramEditorBootstrap } from './program-editor-bootstrap';
 import ProgramLibraryQuery from './ProgramLibraryQuery.vue';
 import ProgramExclusions from './ProgramExclusions.vue';
 import { emptyCatalogProgramItemFilter } from '../library/library-filter';
@@ -78,7 +79,6 @@ const router = useRouter();
 const scheduling = useSchedulingStore();
 const librariesStore = useLibrariesStore();
 const channelsStore = useChannelsStore();
-const initialLoading = ref(true);
 const saving = ref(false);
 let allowRouteLeave = false;
 const error = ref('');
@@ -110,23 +110,36 @@ let selectedGroupsLoadSequence = 0;
 let unsubscribeLiveEvents: (() => void) | undefined;
 const genres = ref<MediaGenreFacet[]>([]);
 const queryPreviewRevision = ref(0);
-const editorOpen = computed(() =>
-	props.embedded ? Boolean(props.programId) : route.params.id !== undefined);
-const savedIdentity = ref<string | null>(null);
-const editingId = computed(() => savedIdentity.value ?? (
-	props.embedded
-		? props.programId
-		: route.params.id === 'new'
-			? null
-			: String(route.params.id ?? '')));
-const programs = computed(() => scheduling.overview?.programs ?? []);
-const editorBaseline = computed(() => programs.value.find(candidate => candidate.id === editingId.value));
+const { editingId, savedIdentity, editorReady, editorOpen, initialLoading, initialError, missingProgram, programs, editorBaseline, loadEditor }
+	= useProgramEditorBootstrap({
+		identity: () => props.embedded ? props.programId ?? undefined
+			: route.params.id === 'new' ? null : typeof route.params.id === 'string' ? route.params.id : undefined,
+		onStart: () => {
+			sourceLoadSequence += 1;
+			selectedItemsLoadSequence += 1;
+			selectedGroupsLoadSequence += 1;
+			aiDraft.pause();
+			error.value = '';
+		},
+		restoreDraft: openDraft,
+		onDraftReady: baseline => {
+			void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
+			if (props.embedded && baseline && !statuses.value.has(baseline.id)
+				&& (baseline.config.type === 'similarity' || baseline.config.type === 'theme'
+					|| (baseline.config.type === 'content' && ['item', 'group'].includes(baseline.config.source.type)))) {
+				void scheduling.load();
+			}
+		},
+	});
 const statuses = computed(
 	() =>
 		new Map(
 			(scheduling.overview?.programStatuses ?? []).map((status) => [status.programId, status]),
 		),
 );
+const sourceDisplayLabel = computed(() => selectedSourceLabel.value
+	|| (editingId.value ? statuses.value.get(editingId.value)?.sourceLabel : undefined)
+	|| (editingId.value && form.sourceType === 'item' ? 'Selected item' : editingId.value && form.sourceType === 'group' ? 'Selected group' : ''));
 const selectedIdSet = computed(() => new Set(form.selectedItemIds));
 const selectedGroupIdSet = computed(() => new Set(form.selectedGroupIds));
 const selectingGroups = computed(() => form.sourceType === 'group-collection');
@@ -389,12 +402,10 @@ function resetForm(program?: SchedulingProgram): void {
 				break;
 			case 'item':
 				form.sourceId = source.itemId;
-				selectedSourceLabel.value = statuses.value.get(program.id)?.sourceLabel ?? 'Selected item';
 				break;
 			case 'group':
 				form.sourceId = source.groupId;
 				form.includeDescendants = source.includeDescendants;
-				selectedSourceLabel.value = statuses.value.get(program.id)?.sourceLabel ?? 'Selected group';
 				break;
 			case 'group-collection':
 				form.libraryId = source.libraryId;
@@ -438,7 +449,8 @@ async function openDraft(program?: SchedulingProgram, restore = true): Promise<v
 /** Load genre facets or paged source choices while discarding superseded responses. */
 async function loadSourceOptions(): Promise<void> {
 	const sequence = ++sourceLoadSequence;
-	if (!form.libraryId) {
+	if (!form.libraryId || form.type === 'sequence' || form.type === 'similarity'
+		|| (form.type === 'content' && form.sourceType === 'ai')) {
 		sourceEntries.value = [];
 		genres.value = [];
 		sourceLoading.value = false;
@@ -508,12 +520,15 @@ async function loadSelectedItems(): Promise<void> {
 	selectedItemsLoading.value = true;
 	selectedItemsLoaded.value = false;
 	try {
-		const requestedIds = form.selectedItemSort === 'manual'
+		const requestedIds = [...(form.selectedItemSort === 'manual'
 			? form.manualItemIds
-			: selectedItemOrdering.additionOrder.value.itemIds;
+			: selectedItemOrdering.additionOrder.value.itemIds)];
 		const items = await api.mediaSelection(form.libraryId, requestedIds);
 		if (sequence === selectedItemsLoadSequence) {
-			selectedItems.value = items;
+			const requested = new Set(requestedIds);
+			const added = selectedItems.value.filter(item => !requested.has(item.id));
+			const ids = form.selectedItemSort === 'manual' ? form.manualItemIds : form.selectedItemIds;
+			selectedItems.value = itemsInReferenceOrder(ids, [...items, ...added]);
 			selectedItemsLoaded.value = true;
 		}
 	}
@@ -546,9 +561,16 @@ async function loadSelectedGroups(): Promise<void> {
 	selectedGroupsLoading.value = true;
 	selectedGroupsLoaded.value = false;
 	try {
-		const groups = await api.mediaGroupSelection(form.libraryId, form.selectedGroupIds);
+		const requestedIds = [...form.selectedGroupIds];
+		const groups = await api.mediaGroupSelection(form.libraryId, requestedIds);
 		if (sequence === selectedGroupsLoadSequence) {
-			selectedGroups.value = groups;
+			const requested = new Set(requestedIds);
+			const added = selectedGroups.value.filter(group => !requested.has(group.id));
+			const byId = new Map([...groups, ...added].map(group => [group.id, group]));
+			selectedGroups.value = form.selectedGroupIds.flatMap(id => {
+				const group = byId.get(id);
+				return group ? [group] : [];
+			});
 			selectedGroupsLoaded.value = true;
 		}
 	}
@@ -607,7 +629,7 @@ function toggleSelectedItem(item: MediaItem): void {
 		form.manualItemIds.push(item.id);
 	}
 	selectedItems.value.push(item);
-	selectedItemsLoaded.value = true;
+	selectedItemsLoaded.value = !selectedItemsLoading.value;
 }
 
 /** Add or remove a media group while enforcing the group-selection limit. */
@@ -625,7 +647,7 @@ function toggleSelectedGroup(group: MediaGroup): void {
 
 	form.selectedGroupIds.push(group.id);
 	selectedGroups.value.push(group);
-	selectedGroupsLoaded.value = true;
+	selectedGroupsLoaded.value = !selectedGroupsLoading.value;
 }
 
 /** Remove one explicit item from both the request identifiers and review cards. */
@@ -967,7 +989,7 @@ const { deleting, resetProgram, deleteProgram } = useProgramResourceActions({
 
 const subtitlesInvalid = ref(false);
 const programSaveDisabled = computed(() =>
-	saving.value || deleting.value || Boolean(aiGeneration.value) || subtitlesInvalid.value || !metadataValid.value || !isProgramDraftValid(payload)
+	!editorReady.value || saving.value || deleting.value || Boolean(aiGeneration.value) || subtitlesInvalid.value || !metadataValid.value || !isProgramDraftValid(payload)
 	|| (Boolean(editingId.value) && !isDirty.value));
 
 /** Commit the Program, leaving navigation to the active route guard when requested. */
@@ -985,6 +1007,7 @@ async function save(stayOnPage = false): Promise<boolean> {
 			: api.createProgram({ ...payload(), ...fields });
 		const saved = await operation;
 		aiDraft.clear();
+		programs.value = [...programs.value.filter(program => program.id !== saved.id), saved];
 		const requestedCount = form.aiResultLimit;
 		resetForm(saved);
 		form.aiResultLimit = requestedCount;
@@ -1029,6 +1052,15 @@ async function leaveEditor(): Promise<void> {
 
 /** Retain the Program on close, protecting pending work if browser recovery fails. */
 async function closeEditor(): Promise<void> {
+	if (!editorReady.value) {
+		if (props.embedded) {
+			emit('close');
+		}
+		else {
+			await leaveEditor();
+		}
+		return;
+	}
 	await closeUnsavedEditor({
 		blocked: saving.value || deleting.value, dirty: isDirty.value || Boolean(aiGeneration.value),
 		retainedDraft: aiDraft, isDirty: () => isDirty.value,
@@ -1039,7 +1071,7 @@ async function closeEditor(): Promise<void> {
 
 /** Retain the current draft before navigating to another resource or page. */
 async function confirmRouteLeave(): Promise<boolean> {
-	if (allowRouteLeave || !editorOpen.value) {
+	if (allowRouteLeave || !editorOpen.value || !editorReady.value) {
 		return true;
 	}
 	return confirmDraftNavigation({
@@ -1051,22 +1083,15 @@ async function confirmRouteLeave(): Promise<boolean> {
 onBeforeRouteLeave(confirmRouteLeave);
 onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await confirmRouteLeave());
 
-watch(
-	() => [route.params.id, props.programId],
-	async () => {
-		if (String(route.params.id) === savedIdentity.value) {
-			return;
-		}
-		savedIdentity.value = null;
-		await openDraft(editorBaseline.value);
-		void Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
-	},
-);
-watch(() => [form.libraryId, form.type], () => void loadSourceOptions());
-onMounted(async () => {
+watch(() => [form.libraryId, form.type], () => {
+	if (editorReady.value) {
+		void loadSourceOptions();
+	}
+});
+onMounted(() => {
 	unsubscribeLiveEvents = subscribeToSelectedMediaRefresh(
 		() => form.libraryId,
-		() => form.type === 'theme' || form.sourceType === 'collection' || form.sourceType === 'library-query',
+		() => editorReady.value && (form.type === 'theme' || form.sourceType === 'collection' || form.sourceType === 'library-query'),
 		() => {
 			if (form.type !== 'theme' && form.sourceType === 'collection') {
 				void loadSelectedItems();
@@ -1077,33 +1102,14 @@ onMounted(async () => {
 			}
 		},
 	);
-	try {
-		void api.aiStatus().then((status) => {
-			aiConfigured.value = status.configured;
-		}).catch(() => {
-			aiConfigured.value = false;
-		});
-		await Promise.all([
-			scheduling.load(),
-			librariesStore.load(),
-			channelsStore.capabilitiesLoaded
-				? Promise.resolve()
-				: channelsStore.loadCapabilities(),
-		]);
-		await openDraft(editorBaseline.value);
-		await Promise.all([loadSourceOptions(), loadSelectedItems(), loadSelectedGroups()]);
-	}
-	catch (cause) {
-		error.value = errorMessage(cause);
-	}
-	finally {
-		initialLoading.value = false;
-	}
+	void api.aiStatus().then(status => {
+		aiConfigured.value = status.configured;
+	}).catch(() => undefined);
 });
 onBeforeUnmount(() => {
 	unsubscribeLiveEvents?.();
 });
-useDraftProtection(() => editorOpen.value && (isDirty.value || Boolean(aiGeneration.value)) && aiDraft.unsafe.value);
+useDraftProtection(() => editorOpen.value && editorReady.value && (isDirty.value || Boolean(aiGeneration.value)) && aiDraft.unsafe.value);
 watch(() => [form.type, form.sourceType], () => {
 	if (form.type !== 'content' || !supportsContentExclusions.value) {
 		form.contentExclusions = { itemIds: [], groupIds: [] };
@@ -1136,12 +1142,12 @@ watch(() => [form.type, form.sourceType], () => {
 			>
 				<ResourceEditorHeader close-label="Close program editor" :disabled="saving || deleting" @close="closeEditor">
 					<p class="eyebrow">
-						{{ initialLoading ? 'Program editor' : editingId ? `Edit ${form.type} rule` : 'New program' }}
+						{{ !editorReady ? 'Program editor' : editingId ? `Edit ${form.type} rule` : 'New program' }}
 					</p>
 					<div class="resource-editor-title-with-help"><h2 id="program-editor-title">
 						{{ initialLoading ? 'Loading Program' : editingId ? 'Edit Program' : 'Create Program' }}
 					</h2><PageHelpButton label="Programs" topic-id="scheduling.programs" /></div>
-					<p v-if="!initialLoading">
+					<p v-if="editorReady">
 						{{
 							form.type === 'content'
 								? 'Define what content can play and how it should be selected.'
@@ -1150,7 +1156,12 @@ watch(() => [form.type, form.sourceType], () => {
 					</p>
 				</ResourceEditorHeader>
 				<LoadingState v-if="initialLoading" label="Loading program editor…" />
-				<div v-if="!initialLoading" :inert="saving || deleting" class="program-editor-scroll">
+				<div v-else-if="initialError || missingProgram" class="program-editor-scroll">
+					<p class="notice error" role="alert">{{ initialError || 'Program not found. It may have been deleted.' }}
+						<button v-if="initialError" type="button" class="button secondary" @click="loadEditor">Retry</button>
+					</p>
+				</div>
+				<div v-else :inert="saving || deleting" class="program-editor-scroll">
 					<ResourceUsage kind="program" :resource-id="editingId ?? undefined"><div class="program-editor-layout">
 						<ProgramTypeRail v-model="form.type" :disabled="Boolean(editingId)" />
 						<div class="program-editor-main">
@@ -1259,7 +1270,7 @@ watch(() => [form.type, form.sourceType], () => {
 												"
 												class="selected-source"
 											>
-												Selected: {{ selectedSourceLabel || 'None' }}
+												Selected: {{ sourceDisplayLabel || 'None' }}
 											</p>
 											<ProgramSelectionSummary v-else ref="selectionSummary" v-bind="selectionReviewProps" @review="openSelectionDrawer" />
 											<label v-if="form.sourceType === 'group'" class="check-row"
@@ -1283,7 +1294,7 @@ watch(() => [form.type, form.sourceType], () => {
 								<SelectionStrategyEditor v-model="form.strategy" v-model:seed="form.seed">
 									<ProgramPlaybackOrder
 										v-if="form.strategy === 'sequential'" v-bind="selectionReviewProps"
-										:source-type="form.sourceType" :query-sort="form.querySort" :source-label="selectedSourceLabel" :reset-revision="draftRevision"
+										:source-type="form.sourceType" :query-sort="form.querySort" :source-label="sourceDisplayLabel" :reset-revision="draftRevision"
 										@update:search="selectedItemSearch = $event" @update:sort-type="changeSelectedItemSort"
 										@update:sort-direction="changeSelectedItemSortDirection"
 										@reorder-items="reorderSelectedItems" @move-item="moveSelectedItem"
@@ -1313,7 +1324,7 @@ watch(() => [form.type, form.sourceType], () => {
 					</div></ResourceUsage>
 				</div>
 				<ResourceEditorActionBar
-					v-if="!initialLoading" :pending="!editingId || isDirty"
+					v-if="editorReady" :pending="!editingId || isDirty"
 					:draft-warning="aiDraftWarning" :draft-restored="aiDraft.recovered.value" :save-label="editingId ? 'Save' : 'Add'"
 					resource-type="Program"
 					:validation-message="subtitlesInvalid ? 'Complete the specific subtitle rules before saving.' : !metadataValid ? 'Correct the metadata keys before saving.' : ''"

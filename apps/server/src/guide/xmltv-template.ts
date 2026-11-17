@@ -46,6 +46,26 @@ export function xmltvTimestamp(value: string, timeZone: string): string {
 	return `${dateTime} ${offset}`;
 }
 
+/** Bound the demand for timestamp memoization in a single guide presentation. */
+const GUIDE_TIMESTAMP_CACHE_LIMIT = 4_096;
+
+/** Reuse formatted boundaries across neighboring listings in a single timezone and response. */
+export function guideTimestampFormatter(timeZone: string): (instant: string) => string {
+	const formatted = new Map<string, string>();
+	return instant => {
+		const cached = formatted.get(instant);
+		if (cached !== undefined) {
+			return cached;
+		}
+		if (formatted.size === GUIDE_TIMESTAMP_CACHE_LIMIT) {
+			formatted.delete(formatted.keys().next().value!);
+		}
+		const value = xmltvTimestamp(instant, timeZone);
+		formatted.set(instant, value);
+		return value;
+	};
+}
+
 /** Replace characters outside XML 1.0 text and escape markup in interpolated values. */
 export function escapeXmlText(value: unknown): string {
 	return String(value ?? '')
@@ -389,12 +409,12 @@ export function programmeContext(input: {
 		truncated: boolean;
 	};
 	block: { title: string; description: string; artwork_url?: string | null } | null;
-}): Record<string, unknown> {
+}, formatTime = (instant: string): string => xmltvTimestamp(instant, input.timeZone)): Record<string, unknown> {
 	return {
 		kind: input.kind,
 		title: input.title,
-		start: xmltvTimestamp(input.start, input.timeZone),
-		stop: xmltvTimestamp(input.finish, input.timeZone),
+		start: formatTime(input.start),
+		stop: formatTime(input.finish),
 		start_iso: input.start,
 		stop_iso: input.finish,
 		channel: input.channel,

@@ -81,6 +81,7 @@ test.beforeEach(async ({ page }) => {
 			})), pagination: { page: currentPage, totalPages: Math.max(1, Math.ceil(ids.length / pageSize)) },
 		} });
 	});
+	await page.route('**/api/v1/programs', route => route.fulfill({ json: [saved ?? program] }));
 	await page.route('**/api/v1/scheduling/overview', route => route.fulfill({ json: {
 		programs: [saved ?? program], templates: [], channelSchedules: [], programStatuses: [],
 	} }));

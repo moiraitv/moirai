@@ -22,6 +22,7 @@ test('profiles large scheduling catalogs and program editor navigation', async (
 		boundaries: [{ id: libraryId, leftSlotId: libraryId, rightSlotId: libraryId, targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard' }],
 		createdAt: program.createdAt, updatedAt: program.updatedAt,
 	}));
+	await page.route('**/api/v1/programs', route => route.fulfill({ json: programs }));
 	await page.route('**/api/v1/scheduling/overview', route => route.fulfill({ json: { programs, templates, programStatuses: [], channelSchedules: [] } }));
 	const errors: string[] = [];
 	page.on('pageerror', error => errors.push(error.message));

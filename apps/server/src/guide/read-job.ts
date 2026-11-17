@@ -17,6 +17,7 @@ export interface GuideReadRequest {
 	startDate: string;
 	days: number;
 	guideDays?: number;
+	snapshot?: true;
 }
 
 /** Complete response bytes and metadata, with bounded template warnings for the main logger. */
@@ -26,6 +27,7 @@ export interface GuideReadResult {
 	startDate?: string;
 	generatedAt?: string;
 	warnings?: Array<{ message: string; extra?: Record<string, unknown> }>;
+	snapshotKey?: string;
 }
 
 /** Read authoritative timelines, present them, and serialize without exposing catalog objects. */

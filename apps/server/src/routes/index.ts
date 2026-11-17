@@ -18,6 +18,7 @@ import type { ChannelLogoStore } from '../artwork/channel-logo-store.js';
 import type { AppConfig } from '../config.js';
 import type { AiSettingsService } from '../ai/settings.js';
 import type { EpgService } from '../guide/epg.js';
+import type { FirstDayGuideSnapshot } from '../guide/first-day-snapshot.js';
 import type { HealthService } from '../operations/health-service.js';
 import type { LiveEventHub } from '../operations/live-events.js';
 import type { LogService } from '../operations/log-service.js';
@@ -59,6 +60,7 @@ export interface HttpRouteDependencies {
 	guideArtwork: GuideArtworkStore;
 	fallbackFillers: FallbackFillerStore;
 	epg: EpgService;
+	firstDayGuide: FirstDayGuideSnapshot;
 	timelineMaterializer: TimelineMaterializer;
 	schedulingWorkers: SchedulingWorkerPool;
 	requestEmbeddingWork?: (includeMedia?: boolean, concepts?: string[]) => EmbeddingWakeStatus | void;

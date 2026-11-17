@@ -25,6 +25,7 @@ import {
 	channelScheduleSchema,
 	programItemAdditionConfirmationErrorSchema,
 	scheduleTemplateSchema,
+	schedulingOverviewQuerySchema,
 	schedulingOverviewSchema,
 	programItemAdditionResultSchema,
 	schedulingProgramSchema,
@@ -339,11 +340,16 @@ export function registerSchedulingRoutes(
 			operationId: 'getSchedulingOverview',
 			tags: ['Scheduling'],
 			summary: 'Read scheduling configuration and health',
+			querystring: schedulingOverviewQuerySchema,
 			response: { 200: responseContent('Scheduling overview', 'application/json', schedulingOverviewSchema) },
-			errors: [500, 503],
+			errors: [400, 500, 503],
 		}),
 	}, async (request, reply) => {
-		const result = await schedulingWorkers.read({ kind: 'overview' }, workerRequestSignal(reply));
+		const query = schedulingOverviewQuerySchema.parse(request.query);
+		const result = await schedulingWorkers.read({
+			kind: 'overview',
+			...(query.includeProgramStatuses === 'false' ? { includeProgramStatuses: false as const } : {}),
+		}, workerRequestSignal(reply));
 		return sendWorkerJson(reply, result.body);
 	});
 

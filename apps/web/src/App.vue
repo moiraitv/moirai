@@ -99,9 +99,9 @@ function closeDrawer(): void {
 
 /** Load authenticated shell data only after an administrator session exists. */
 function loadAdministrativeState(): void {
-	void libraryStore.load();
+	void (libraryStore.loaded ? libraryStore.load() : libraryStore.ensureLoaded());
 	void channelsStore.loadChannels().catch(() => undefined);
-	void channelsStore.loadCapabilities().catch(() => undefined);
+	void channelsStore.loadCapabilities(true).catch(() => undefined);
 	void loadPlaybackState();
 }
 

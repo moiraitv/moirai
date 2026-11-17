@@ -27,6 +27,7 @@ import {
 	channelContext,
 	compileGuideTemplate,
 	flattenLiquidPreviewValues,
+	guideTimestampFormatter,
 	minifyXmltv,
 	renderChannelFragment,
 	xmlProgrammeText,
@@ -131,9 +132,10 @@ async function renderChannelListings(
 	mediaById: Map<string, SchedulingCatalog['media'][number]>,
 	renderOptions: { fallback: boolean; warn?: GuideTemplateWarn },
 	programMetadata?: ReadonlyMap<string, ProgramMetadata>,
+	formatTime?: (instant: string) => string,
 ): Promise<ChannelListing[]> {
 	const id = effectiveTvgId(channel);
-	const channelGuide = new Map(guide.channels.map((entry) => [entry.channelId, entry])).get(channel.id);
+	const channelGuide = guide.channels.find(entry => entry.channelId === channel.id);
 	const configuredSegments = channelGuide?.preview.segments;
 	const segments = configuredSegments?.length
 		? [...configuredSegments]
@@ -145,7 +147,7 @@ async function renderChannelListings(
 	for (const entry of channelGuide?.entries ?? segments.filter(segment => !segment.airing || segment.id === segment.airing.primarySegmentId).map(itemGuideEntry)) {
 		const segment = entry.segmentId ? byId.get(entry.segmentId) : undefined;
 		const media = segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
-		const rendered = await renderGuideListing(entry, segment, media, catalog, contextChannel, guide.timeZone, publicUrl, compiled, renderOptions, programMetadata);
+		const rendered = await renderGuideListing(entry, segment, media, catalog, contextChannel, guide.timeZone, publicUrl, compiled, renderOptions, programMetadata, formatTime);
 		if (rendered) {
 			listings.push({ entry, ...rendered });
 		}
@@ -248,8 +250,7 @@ function listingArtwork(media?: SchedulableMedia): {
 }
 
 /** Copy XMLTV title and description onto a guide listing without mutating the source entry. */
-function presentedEntry(entry: GuideEntry, xml: string, media?: SchedulableMedia): GuideEntry {
-	const { title, subtitle, description } = xmlProgrammeText(xml);
+function presentedEntry(entry: GuideEntry, { title, subtitle, description }: ReturnType<typeof xmlProgrammeText>, media?: SchedulableMedia): GuideEntry {
 	return {
 		...entry,
 		title: title || entry.title,
@@ -273,6 +274,7 @@ export async function presentGuideListings(
 	const compiledBySources = new Map<string, CompiledGuideTemplate>();
 	const mediaById = new Map(catalog.media.map((media) => [media.id, media]));
 	const channelsById = new Map(channels.map((channel) => [channel.id, channel]));
+	const formatTime = guideTimestampFormatter(guide.timeZone);
 	const fallback = options.fallback ?? false;
 	const renderOptions = options.warn ? { fallback, warn: options.warn } : { fallback };
 	const presented = await Promise.all(guide.channels.map(async (channelGuide) => {
@@ -294,11 +296,13 @@ export async function presentGuideListings(
 			mediaById,
 			renderOptions,
 			options.programMetadata,
+			formatTime,
 		);
-		const byEntryId = new Map(listings.map((listing) => [listing.entry.id, listing]));
+		const labels = listings.map(({ entry, xml }) => ({ entry, text: xmlProgrammeText(xml) }));
+		const byEntryId = new Map(labels.map(({ entry, text }) => [entry.id, text]));
 		const bySegmentId = new Map(
-			listings.flatMap((listing) => listing.entry.segmentId
-				? [[listing.entry.segmentId, listing] as const]
+			labels.flatMap(({ entry, text }) => entry.segmentId
+				? [[entry.segmentId, text] as const]
 				: []),
 		);
 		const mediaForSegment = (segment: TimelineSegment | undefined): SchedulableMedia | undefined => (
@@ -308,7 +312,7 @@ export async function presentGuideListings(
 		const entries = channelGuide.entries?.map((entry) => {
 			const listing = byEntryId.get(entry.id);
 			const segment = entry.segmentId ? segmentById.get(entry.segmentId) : undefined;
-			return listing ? presentedEntry(entry, listing.xml, mediaForSegment(segment)) : entry;
+			return listing ? presentedEntry(entry, listing, mediaForSegment(segment)) : entry;
 		});
 		return {
 			...channelGuide,
@@ -322,7 +326,7 @@ export async function presentGuideListings(
 					}
 
 					const media = mediaForSegment(segment);
-					const { title, subtitle } = xmlProgrammeText(listing.xml);
+					const { title, subtitle } = listing;
 					return {
 						...segment,
 						title: title || segment.title,
@@ -369,7 +373,7 @@ export async function previewGuideListings(
 		const segment = entry.segmentId ? segmentsById.get(entry.segmentId) : undefined;
 		const media = segment?.mediaItemId ? mediaById.get(segment.mediaItemId) : undefined;
 		const previewEntry = {
-			...presentedEntry(entry, xml, media),
+			...presentedEntry(entry, xmlProgrammeText(xml), media),
 			segmentId: entry.segmentId && /^[0-9a-f-]{36}$/iu.test(entry.segmentId) ? entry.segmentId : null,
 		};
 		listingValues[previewEntry.id] = flattenLiquidPreviewValues(context);

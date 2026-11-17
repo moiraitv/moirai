@@ -10,6 +10,6 @@ export function workerRequestSignal(reply: FastifyReply): AbortSignal {
 }
 
 /** Send JSON already validated and serialized by a trusted worker without repeating that work. */
-export function sendWorkerJson(reply: FastifyReply, body: string): FastifyReply {
-	return reply.type('application/json; charset=utf-8').send(Buffer.from(body));
+export function sendWorkerJson(reply: FastifyReply, body: string | Buffer): FastifyReply {
+	return reply.type('application/json; charset=utf-8').send(typeof body === 'string' ? Buffer.from(body) : body);
 }

@@ -11,6 +11,7 @@ import {
 } from '@moirai/shared/api-contracts';
 import type { AppConfig } from '../config.js';
 import { DuplicateTvgIdError, type EpgService } from '../guide/epg.js';
+import type { FirstDayGuideSnapshot } from '../guide/first-day-snapshot.js';
 import type { Repository } from '../repository/index.js';
 import {
 	CommittedGuideRangeError,
@@ -44,6 +45,7 @@ interface GuideRouteDependencies {
 	config: AppConfig;
 	repository: Repository;
 	epg: EpgService;
+	firstDayGuide: FirstDayGuideSnapshot;
 	timelineMaterializer: TimelineMaterializer;
 	schedulingWorkers: SchedulingWorkerPool;
 }
@@ -51,10 +53,11 @@ interface GuideRouteDependencies {
 /** Register committed guide, materialization, and XMLTV endpoints. */
 export function registerGuideRoutes(
 	app: FastifyInstance,
-	{ config, repository, epg, timelineMaterializer, schedulingWorkers, playback }: GuideRouteDependencies,
+	{ config, repository, epg, firstDayGuide, timelineMaterializer, schedulingWorkers, playback }: GuideRouteDependencies,
 ): void {
 	// Batch guide data for the SPA timeline views.
 	app.get('/api/v1/schedule-guide', {
+		compress: { encodings: ['gzip'], zlibOptions: { level: 1 } },
 		schema: apiOperation({
 			operationId: 'getScheduleGuide',
 			tags: ['Guide'],
@@ -66,13 +69,17 @@ export function registerGuideRoutes(
 	}, async (request, reply) => {
 		const query = guideRangeQuerySchema.parse(request.query);
 		const startDate = query.startDate ?? Temporal.Now.plainDateISO(config.timeZone).toString();
+		const signal = workerRequestSignal(reply);
 		try {
-			const result = await readCommittedGuideAfterMaterializing(
-				() => schedulingWorkers.read({ kind: 'guide', timeZone: config.timeZone,
-					publicUrl: config.publicUrl, startDate, guideDays: config.guideDays, days: query.days ?? config.guideDays }, workerRequestSignal(reply)),
+			const body = await readCommittedGuideAfterMaterializing(
+				() => firstDayGuide.read(
+					{ kind: 'guide', timeZone: config.timeZone, publicUrl: config.publicUrl,
+						startDate, guideDays: config.guideDays, days: query.days ?? config.guideDays },
+					input => schedulingWorkers.read(input, signal),
+				),
 				() => timelineMaterializer.runNow(),
 			);
-			return sendWorkerJson(reply, result.body);
+			return sendWorkerJson(reply, body);
 		}
 		catch (error) {
 			if (

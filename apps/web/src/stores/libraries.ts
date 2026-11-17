@@ -12,9 +12,25 @@ export const useLibrariesStore = defineStore('libraries', () => {
 	const error = ref('');
 	let loadSequence = 0;
 	let refreshTimer: number | undefined;
+	let pendingLoad: Promise<void> | undefined;
+	let finishLoad: (() => void) | undefined;
 
-	/** Load libraries while ignoring responses superseded by a newer request. */
-	async function load(): Promise<void> {
+	/** Reuse a library bootstrap already started by the application shell. */
+	function ensureLoaded(): Promise<void> {
+		return loaded.value ? Promise.resolve() : pendingLoad ?? load();
+	}
+
+	/** Start a fresh read and let all callers await the latest authoritative response. */
+	function load(): Promise<void> {
+		const completion = pendingLoad ??= new Promise<void>(resolve => {
+			finishLoad = resolve;
+		});
+		void performLoad();
+		return completion;
+	}
+
+	/** Replace the library collection only after the latest request succeeds. */
+	async function performLoad(): Promise<void> {
 		const sequence = ++loadSequence;
 		if (!loaded.value) {
 			loading.value = true;
@@ -38,7 +54,11 @@ export const useLibrariesStore = defineStore('libraries', () => {
 		}
 		finally {
 			if (sequence === loadSequence) {
+				const finish = finishLoad;
+				pendingLoad = undefined;
+				finishLoad = undefined;
 				loading.value = false;
+				finish?.();
 			}
 		}
 	}
@@ -62,5 +82,5 @@ export const useLibrariesStore = defineStore('libraries', () => {
 		refreshTimer = window.setTimeout(() => void load(), 100);
 	}
 
-	return { libraries, loading, loaded, error, load, scheduleRefresh, applyScanEvent };
+	return { libraries, loading, loaded, error, load, ensureLoaded, scheduleRefresh, applyScanEvent };
 });

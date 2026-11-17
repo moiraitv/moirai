@@ -1654,6 +1654,18 @@ serialized there before HTTP delivery. Authentication and input validation remai
 committed coverage still requests authoritative materialization before retrying the read. Draft
 semantic preparation is queued by the owning service, never by a read-only worker. Paginated catalog
 browsing, genre facets, and source searches use the same read workers and existing bounded queries.
+The Channels view requests authored scheduling configuration with
+`includeProgramStatuses=false` and starts the guide when runtime capabilities are available. The
+Program editor initializes from saved Program definitions, then loads source choices and selected
+media in their sections. Quick Setup initializes from libraries, channels, and runtime capabilities.
+The browser renders the first committed guide day before the rest of the window. Guide and Channels
+share a private snapshot of today's browser response, capped at 32 MiB. Startup verifies it against
+durable timeline and presentation inputs. Timeline, template, channel, program metadata, and catalog
+updates invalidate it, and a batched background rebuild runs when the scheduling pool can spare a
+worker. While the rebuild runs, the scheduler keeps the last free worker available for live tunes.
+The local calendar boundary expires the prior day. A miss uses the ordinary committed guide
+read, which can also populate the snapshot when only one worker is configured. The guide JSON
+endpoint negotiates level-1 gzip, and presentation reuses formatted timestamps and parsed labels.
 
 Background materialization prepares catalogs, fingerprints, selection state, and commit payloads in a
 worker. Bulk checkpoints skip future application boundaries before catalog and occupancy work unless

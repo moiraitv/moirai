@@ -70,16 +70,17 @@ export function useProgramDraft<T extends { metadataRows: unknown[] }>(
 	/** Load the authoritative baseline before applying current or legacy recovery fields. */
 	async function open(version: string, reset: () => void, restore = true): Promise<void> {
 		retained.pause();
+		const key = legacyKey();
 		generation.value = null;
 		reset();
 		baselineFields = JSON.stringify(form);
 		baselineProgramming = programmingSnapshot();
 		await retained.open(version, restore);
-		if (!restore) {
+		if (!restore || legacyKey() !== key) {
 			return;
 		}
 		try {
-			const raw = localStorage.getItem(legacyKey());
+			const raw = localStorage.getItem(key);
 			if (raw) {
 				const legacy = legacyAiProgramDraftSchema.parse(JSON.parse(raw));
 				// A newer general draft takes precedence over an older AI-only draft.
@@ -93,7 +94,7 @@ export function useProgramDraft<T extends { metadataRows: unknown[] }>(
 					}
 				}
 				if (await retained.flush()) {
-					localStorage.removeItem(legacyKey());
+					localStorage.removeItem(key);
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { EmbeddingService } from './semantic/service.js';
 import { DatabaseWriter, writerRepository } from './repository/writer.js';
 import { existsSync } from 'node:fs';
+import compress from '@fastify/compress';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
 import multipart from '@fastify/multipart';
@@ -27,6 +28,7 @@ import { ChannelLogoStore } from './artwork/channel-logo-store.js';
 import type { AppConfig } from './config.js';
 import type { MoiraiDatabase } from './db/index.js';
 import { EpgService } from './guide/epg.js';
+import { FirstDayGuideSnapshot } from './guide/first-day-snapshot.js';
 import { invalidateCommittedGuideCache } from './guide/schedule-guide.js';
 import { HealthService } from './operations/health-service.js';
 import { LiveEventHub } from './operations/live-events.js';
@@ -268,6 +270,11 @@ export async function buildApp(
 		schedulingWorkers,
 		config.guideDays,
 	);
+	const firstDayGuide = new FirstDayGuideSnapshot(config, db, {
+		canWarmGuide: schedulingWorkers.canWarmGuide,
+		warmGuide: request => resourcePressure.health().status === 'ready'
+			? schedulingWorkers.warmGuide(request) : Promise.resolve(undefined),
+	}, (error) => logs.logger.warn({ err: error }, 'First-day guide snapshot unavailable'));
 	const unsubscribeMaterializer = events.subscribe((event) => {
 		if (event.type === 'embeddings.changed') {
 			repository.invalidateSchedulingCatalog();
@@ -284,6 +291,7 @@ export async function buildApp(
 			epg.invalidate();
 			invalidateCommittedGuideCache();
 		}
+		firstDayGuide.handleEvent(event);
 	});
 	const unsubscribePlayout = events.subscribe((event) => playout.handleEvent(event));
 	const unsubscribePlayback = events.subscribe((event) => {
@@ -325,6 +333,7 @@ export async function buildApp(
 
 	await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
 	await app.register(sensible);
+	await app.register(compress, { globalCompression: false, globalDecompression: false });
 	await app.register(cookie);
 	await app.register(formbody);
 	await app.register(multipart, {
@@ -355,10 +364,12 @@ export async function buildApp(
 		});
 		playout.start();
 		await playback.start();
+		await firstDayGuide.start();
 		maintenance.start();
 		await backups.start();
 	});
 	app.addHook('onClose', async () => {
+		await firstDayGuide.close();
 		await backups.close();
 		responsiveness.close();
 		authentication.close();
@@ -413,6 +424,7 @@ export async function buildApp(
 		guideArtwork,
 		fallbackFillers,
 		epg,
+		firstDayGuide,
 		timelineMaterializer,
 		schedulingWorkers,
 		logs,

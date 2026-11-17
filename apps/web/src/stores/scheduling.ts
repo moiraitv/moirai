@@ -11,6 +11,9 @@ export const useSchedulingStore = defineStore('scheduling', () => {
 	const loaded = ref(false);
 	const error = ref('');
 	let loadSequence = 0;
+	const configuration = ref<SchedulingOverview | null>(null);
+	const configurationError = ref('');
+	let configurationSequence = 0;
 
 	/** Load the scheduling overview while ignoring superseded responses. */
 	async function load(): Promise<void> {
@@ -42,5 +45,22 @@ export const useSchedulingStore = defineStore('scheduling', () => {
 		}
 	}
 
-	return { overview, loading, loaded, error, load };
+	/** Read authored scheduling data for views that need assignments and names only. */
+	async function loadConfiguration(): Promise<void> {
+		const sequence = ++configurationSequence;
+		configurationError.value = '';
+		try {
+			const result = await api.schedulingConfiguration();
+			if (sequence === configurationSequence) {
+				configuration.value = result;
+			}
+		}
+		catch (cause) {
+			if (sequence === configurationSequence) {
+				configurationError.value = errorMessage(cause);
+			}
+		}
+	}
+
+	return { overview, loading, loaded, error, load, configuration, configurationError, loadConfiguration };
 });

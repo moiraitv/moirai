@@ -30,7 +30,7 @@ import { publicSchedulingProgram } from './ai-cursor.js';
 
 /** Read jobs keep catalog data on their executing thread and return only public results. */
 export type SchedulingReadRequest
-	= | { kind: 'overview' }
+	= | { kind: 'overview'; includeProgramStatuses?: false }
 		| { kind: 'semantic-matches'; input: SemanticMatchesRequest }
 		| { kind: 'query'; input: QuickChannelQueryPreviewRequest }
 		| { kind: 'program-content'; input: ProgramContentBrowseRequest }
@@ -60,7 +60,7 @@ export async function schedulingRead(repository: Repository, request: Scheduling
 		readComplete();
 	};
 	if (request.kind === 'overview') {
-		const value = await overview(repository, completeRead);
+		const value = await overview(repository, completeRead, request.includeProgramStatuses !== false);
 
 		return { body: serialize(value, schedulingOverviewSchema) };
 	}
@@ -119,21 +119,21 @@ function serialize(value: unknown, schema: { parse: (value: unknown) => unknown 
 	});
 }
 
-/** Load the scheduling dashboard and bounded program samples together. */
-async function overview(repository: Repository, readComplete: () => void) {
+/** Load saved scheduling configuration and evaluate program health only on request. */
+async function overview(repository: Repository, readComplete: () => void, includeProgramStatuses: boolean) {
 	const programsPromise = repository.listPrograms();
 	const [programs, templates, channelSchedules, catalog] = await Promise.all([
 		programsPromise,
 		repository.listScheduleTemplates(),
 		repository.listChannelSchedules(),
-		programsPromise.then((programs) => repository.getSchedulingCatalog(programs)),
+		includeProgramStatuses ? programsPromise.then(programs => repository.getSchedulingCatalog(programs)) : null,
 	]);
 	readComplete();
 	return {
 		programs: programs.map(publicSchedulingProgram),
 		templates,
 		channelSchedules,
-		programStatuses: timePhase('compute', () => schedulingProgramStatuses(programs, catalog)),
+		programStatuses: catalog ? timePhase('compute', () => schedulingProgramStatuses(programs, catalog)) : [],
 	};
 }
 

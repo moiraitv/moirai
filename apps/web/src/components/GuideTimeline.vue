@@ -500,12 +500,12 @@ function centerCurrentTime(): void {
 defineExpose({ centerCurrentTime });
 
 watch(
-	() => [props.startDate, props.guide, hourWidth.value] as const,
-	async ([startDate, , width], previous) => {
-		if (previous && previous[1] !== props.guide) {
+	() => [props.startDate, props.timeZone, hourWidth.value, props.guide] as const,
+	async ([startDate, timeZone, width, guide], previous) => {
+		if (previous && previous[3] !== guide) {
 			pinnedProgramme.value = null;
 		}
-		const startChanged = !previous || previous[0] !== startDate;
+		const startChanged = !previous || previous[0] !== startDate || previous[1] !== timeZone;
 		const zoomChanged = Boolean(previous) && previous[2] !== width;
 		if (startChanged) {
 			centerNow.value = false;

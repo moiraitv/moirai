@@ -849,6 +849,12 @@ export const quickChannelSetupPreviewResultSchema = z.object({
 /** Shared response for the enriched Quick Setup review. */
 export type QuickChannelSetupPreviewResult = z.infer<typeof quickChannelSetupPreviewResultSchema>;
 
+/** Select whether the overview should evaluate program health and samples. */
+export const schedulingOverviewQuerySchema = z.object({
+	includeProgramStatuses: z.enum(['true', 'false']).optional()
+		.describe('Set to false to return scheduling configuration with an empty programStatuses array.'),
+});
+
 /** Scheduling editor overview assembled from authored configuration and catalog health. */
 export const schedulingOverviewSchema = z.object({
 	programs: z.array(schedulingProgramSchema),

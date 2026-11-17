@@ -6,6 +6,8 @@ import type { MoiraiDatabase } from '../db/index.js';
 import { Repository } from '../repository/index.js';
 import { invalidateCommittedGuideCache } from '../guide/schedule-guide.js';
 import { guideRead, type GuideReadRequest, type GuideReadResult } from '../guide/read-job.js';
+import { firstDayGuideKey } from '../guide/snapshot-key.js';
+import { timePhase } from './job-timing.js';
 import { schedulingRead, type SchedulingReadRequest, type SchedulingReadResult } from './read-jobs.js';
 
 /** The editable and rendered previews share the same committed timeline lookup. */
@@ -94,6 +96,10 @@ export class DatabaseJobReader {
 			}
 			if (request.kind === 'catalog') {
 				return await catalogRead(this.repository, request);
+			}
+			if (request.kind === 'guide' && request.snapshot) {
+				const snapshotKey = timePhase('read', () => firstDayGuideKey(this.db, request));
+				return { ...await guideRead(this.repository, request, release), snapshotKey };
 			}
 			return request.kind === 'guide' || request.kind === 'xmltv' || request.kind === 'guide-template' || request.kind === 'channel-guide'
 				? await guideRead(this.repository, request, release)
