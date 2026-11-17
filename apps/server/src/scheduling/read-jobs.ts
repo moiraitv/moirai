@@ -1,5 +1,8 @@
 import { semanticMatchesRequestSchema, semanticMatchesResponseSchema, type SemanticMatchesRequest } from '@moirai/shared';
 import { semanticMatches } from '../semantic/matches.js';
+import { browseProgramContent } from './program-content.js';
+import type { ProgramContentBrowseRequest } from '@moirai/shared';
+import { mediaSourcePickerResultSchema } from '@moirai/shared/api-contracts';
 import { referencedMidRollPresetIds } from './mid-roll-presets.js';
 import { timePhase, recordJobPhase } from './job-timing.js';
 import { Temporal } from '@js-temporal/polyfill';
@@ -30,6 +33,7 @@ export type SchedulingReadRequest
 	= | { kind: 'overview' }
 		| { kind: 'semantic-matches'; input: SemanticMatchesRequest }
 		| { kind: 'query'; input: QuickChannelQueryPreviewRequest }
+		| { kind: 'program-content'; input: ProgramContentBrowseRequest }
 		| { kind: 'persisted'; id: string; input: { startDate?: string | undefined; days: number }; timeZone: string }
 		| { kind: 'template'; input: TimelineDraftPreview; timeZone: string }
 		| { kind: 'similarity'; config: Extract<ProgramConfig, { type: 'similarity' | 'theme' }>; retry?: boolean };
@@ -64,6 +68,12 @@ export async function schedulingRead(repository: Repository, request: Scheduling
 		const value = await queryPreview(repository, request.input, completeRead);
 
 		return { body: serialize(value, quickChannelQueryPreviewResultSchema) };
+	}
+	if (request.kind === 'program-content') {
+		const value = await browseProgramContent(repository, request.input);
+		completeRead();
+
+		return { body: serialize(value, mediaSourcePickerResultSchema) };
 	}
 	if (request.kind === 'semantic-matches') {
 		const input = semanticMatchesRequestSchema.parse(request.input);

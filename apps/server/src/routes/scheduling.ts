@@ -3,6 +3,7 @@ import type { GuideArtworkStore } from '../artwork/guide-artwork-store.js';
 import { sendWorkerJson, workerRequestSignal } from './worker-response.js';
 import { registerSemanticProgramRoutes } from './semantic-programs.js';
 import { registerProgramGroupRoutes } from './program-groups.js';
+import { registerProgramContentRoutes } from './program-content.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
@@ -68,6 +69,7 @@ export function registerSchedulingRoutes(
 	{ config, repository, events, schedulingWorkers, requestEmbeddingWork, guideArtwork }: SchedulingRouteDependencies,
 ): void {
 	registerProgramGroupRoutes(app, repository, events);
+	registerProgramContentRoutes(app, schedulingWorkers);
 	registerSemanticProgramRoutes(app, repository, requestEmbeddingWork, schedulingWorkers);
 	app.post('/api/v1/programs/sequence-preview', {
 		schema: apiOperation({ operationId: 'previewSequenceProgram', tags: ['Schedule previews'],

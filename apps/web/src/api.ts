@@ -47,6 +47,7 @@ import type {
 	MediaSort,
 	MediaSourcePickerResult,
 	ProgramCreate,
+	ProgramContentBrowseRequest,
 	QuickChannelQueryPreviewRequest,
 	QuickChannelSetupCreate,
 	ProgramItemAddition,
@@ -448,6 +449,10 @@ export const api = {
 		request<MediaSelectionItem[]>(`/api/v1/libraries/${id}/media-selection`, {
 			method: 'POST',
 			body: JSON.stringify({ itemIds, exclusions }),
+		}),
+	programContentOptions: (body: ProgramContentBrowseRequest) =>
+		request<MediaSourcePickerResult>('/api/v1/programs/content-options', {
+			method: 'POST', body: JSON.stringify(body),
 		}),
 	mediaSelectionAliases: (id: string, itemIds: string[]) =>
 		request<Record<string, string>>(`/api/v1/libraries/${id}/media-selection/aliases`, {

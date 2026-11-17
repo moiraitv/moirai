@@ -73,11 +73,15 @@ Moirai applies your exclusions before the item limit. For example, if a query is
 
 ### Exclude specific media
 
-Choose **Manage exclusions** to browse or search the Program’s library. Choose **Browse** next to a show or artist to find its seasons or albums. Choose **Exclude** and confirm for any item or group you want to skip. A group exclusion covers all its media, including media indexed later.
+Choose **Manage exclusions** to open **Current**, which shows the content included by your current selections, filters, limit, and exclusions, including unsaved changes. Choose **Browse** next to a show or artist to find its included seasons, albums, and items. Excluded content disappears from Current immediately; a limited query can fill its place with the next match. Open **Browse Library** to browse or search the whole library. Choose **Exclude** and confirm for any item or group you want to skip. A group exclusion covers all its media, including media indexed later.
+
+![Current tab showing included movies and Exclude controls](/screenshots/program-exclusions-current.png)
 
 Hover over an indexed media item to preview its details, or tap its preview button on a touch screen. For lists with multiple pages, use **Previous** and **Next** in the bottom bar.
 
-Open **Excluded** to review your entries. Choose **Restore** and confirm to remove an entry from the exclusion list. An excluded parent group still covers its items and subgroups after you restore an individual entry.
+Open **Exclusions** to review your entries. Choose **Restore** and confirm to remove an entry from the exclusion list. An excluded parent group still covers its items and subgroups after you restore an individual entry.
+
+![Exclusions tab showing an excluded movie and its Restore control](/screenshots/program-exclusions-list.png)
 
 Choose **Done** to return to the editor. **Matching now** shows the remaining matches for a library query. Your original item or group selections and manual order stay editable. **Add** or **Save** applies the exclusions to your Program.
 
@@ -89,7 +93,7 @@ Moirai combines local title, genre, and plot matching with model knowledge and o
 
 Each generation will cost API quota, including work performed before a failure or cancellation. While generating, the activity appears above the estimated percentage and elapsed time. The percentage follows preparation, review batches, and final refinement rather than elapsed time. After finishing, the selected count appears beside Generate with coverage such as **36 selected · 1,000 of 3,000 reviewed**. Warnings can identify any failures or limitations.
 
-Choose **Review results** to browse or search the eligible results, including those from a saved AI Program. Choose **Exclude** and confirm to hide an item from **Results** while keeping it in the frozen selection. Future generations skip excluded items and items in excluded groups. To undo an exclusion, open **Excluded**, choose **Restore**, and confirm. If the item is still in the frozen selection and no other exclusion covers it, it returns to **Results** immediately. An item skipped during generation or removed from an older AI selection becomes eligible for a future generation.
+Choose **Review results** to open **AI Results** and browse or search the eligible results, including those from a saved AI Program. Choose **Exclude** and confirm to hide an item from **AI Results** while keeping it in the frozen selection. Future generations skip excluded items and items in excluded groups. To undo an exclusion, open **Exclusions**, choose **Restore**, and confirm. If the item is still in the frozen selection and no other exclusion covers it, it returns to **AI Results** immediately. An item skipped during generation or removed from an older AI selection becomes eligible for a future generation.
 
 AI drafts, including the name, prompt, requested result count, selection, exclusions, and playback preferences, are saved automatically in your current browser. Close the editor or reload the page, then reopen the same Program (or New Program) to continue. Generation keeps running while the page is closed; reopening reconnects without starting another paid request. Save is unavailable until generation finishes. Browser drafts do not sync between devices. If browser storage is unavailable, keep the page open and use Save.
 

@@ -26,6 +26,7 @@ import {
 	type MediaItem,
 	type MediaSourcePickerEntry,
 	type ProgramCreate,
+	type ProgramContentSource,
 	type SchedulingProgram,
 	type SelectedMediaSort,
 } from '@moirai/shared';
@@ -264,6 +265,19 @@ const form = reactive({
 	entries: [] as SequenceDraftEntry[],
 });
 const supportsContentExclusions = computed(() => form.sourceType !== 'item' && form.sourceType !== 'group');
+const currentContentSource = computed<ProgramContentSource | null>(() => {
+	if (form.sourceType === 'group-collection') {
+		return form.selectedGroupIds.length ? { type: 'group-collection', libraryId: form.libraryId, groupIds: form.selectedGroupIds } : null;
+	}
+	if (!form.selectedItemIds.length) {
+		return null;
+	}
+	if (form.sourceType === 'ai') {
+		// Preserve AI date-indexed ordering without requiring or transmitting a valid draft prompt.
+		return { type: 'ai', libraryId: form.libraryId, itemIds: form.selectedItemIds, sort: selectedItemSort.value, prompt: 'Current content' };
+	}
+	return { type: 'collection', libraryId: form.libraryId, sort: selectedItemSort.value, ...selectedItemOrdering.additionOrder.value };
+});
 const draftIdentity = computed(() => editingId.value ?? 'new');
 const metadata = computed(() => Object.fromEntries(form.metadataRows.map(({ key, value }) => [key, value])));
 const originalMetadata = ref(JSON.stringify(metadata.value));
@@ -1220,7 +1234,7 @@ watch(() => [form.type, form.sourceType], () => {
 												v-model:sort-direction="form.selectedItemSortDirection" :exclusions="form.contentExclusions"
 												:library-id="form.libraryId" :library-type="selectedLibraryType" :draft-revision="draftRevision" :sequential="form.strategy === 'sequential'"
 											/>
-											<ProgramExclusions v-model="form.contentExclusions" :result-ids="form.selectedItemIds" :library-id="form.libraryId" :library-type="selectedLibraryType" :library-name="sourceLibraryLabel" :disabled="Boolean(aiGeneration)" @remove-missing="removeSelectedItem" />
+											<ProgramExclusions v-model="form.contentExclusions" :current-source="currentContentSource" :result-ids="form.selectedItemIds" :library-id="form.libraryId" :library-type="selectedLibraryType" :library-name="sourceLibraryLabel" :disabled="Boolean(aiGeneration)" @remove-missing="removeSelectedItem" />
 										</template>
 										<template v-else-if="form.sourceType === 'library-query'">
 											<ProgramLibraryQuery
@@ -1228,6 +1242,7 @@ watch(() => [form.type, form.sourceType], () => {
 												v-model:sort="form.querySort"
 												v-model:item-limit="form.queryItemLimit"
 												v-model:exclusions="form.contentExclusions"
+												:kinds="form.kinds"
 												:library-id="form.libraryId"
 												:library-type="selectedLibraryType"
 												:library-name="sourceLibraryLabel"
@@ -1261,7 +1276,7 @@ watch(() => [form.type, form.sourceType], () => {
 												@toggle-item="toggleSelectedItem" @toggle-group="toggleSelectedGroup" @page="changeSourcePage"
 												@root="sourceParentId = undefined; sourcePage = 1; loadSourceOptions();"
 											/>
-											<ProgramExclusions v-if="supportsContentExclusions" v-model="form.contentExclusions" :library-id="form.libraryId" :library-type="selectedLibraryType" :library-name="sourceLibraryLabel" />
+											<ProgramExclusions v-if="supportsContentExclusions" v-model="form.contentExclusions" :current-source="currentContentSource" :library-id="form.libraryId" :library-type="selectedLibraryType" :library-name="sourceLibraryLabel" />
 										</template>
 									</div>
 								</section>

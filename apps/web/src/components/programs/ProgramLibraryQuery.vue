@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import type {
 	CatalogProgramItemFilter,
 	ContentExclusions,
 	LibraryQuerySort,
 	MediaGenreFacet,
+	ProgramContentSource,
 } from '@moirai/shared';
 import type { QuickChannelQueryPreviewResult } from '@moirai/shared/api-contracts';
 import { api } from '../../api';
@@ -17,6 +18,7 @@ const props = defineProps<{
 	libraryId: string;
 	libraryType: string;
 	libraryName: string;
+	kinds: string[];
 	genres: MediaGenreFacet[];
 	loading: boolean;
 	loaded: boolean;
@@ -26,6 +28,8 @@ const filter = defineModel<CatalogProgramItemFilter>({ required: true });
 const sort = defineModel<LibraryQuerySort>('sort', { required: true });
 const itemLimit = defineModel<number | null>('itemLimit', { required: true });
 const exclusions = defineModel<ContentExclusions>('exclusions', { required: true });
+const currentSource = computed<ProgramContentSource>(() => ({ type: 'library-query', libraryId: props.libraryId,
+	kinds: props.kinds, ...filter.value, sort: sort.value, itemLimit: itemLimit.value }));
 const items = ref<QuickChannelQueryPreviewResult['items']>([]);
 const indexedItemCount = ref(0);
 const previewLoading = ref(false);
@@ -162,7 +166,7 @@ onMounted(() => void loadPreview());
 			:loading="props.loading"
 			:loaded="props.loaded"
 		/>
-		<ProgramExclusions v-model="exclusions" :library-id="libraryId" :library-type="libraryType" :library-name="libraryName" />
+		<ProgramExclusions v-model="exclusions" :current-source="currentSource" :library-id="libraryId" :library-type="libraryType" :library-name="libraryName" />
 		<QuickQueryPreview
 			:items="items"
 			:indexed-item-count="indexedItemCount"

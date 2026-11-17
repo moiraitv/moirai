@@ -40,6 +40,7 @@ const EXPECTED_HTTP_OPERATIONS = [
 	'addLibraryItemsToProgram',
 	'applyChannelMaterialization',
 	'browseLibraryMedia',
+	'browseProgramContent',
 	'cancelLibraryScan',
 	'clearViewingPreferences',
 	'completeLogtoAuthentication',

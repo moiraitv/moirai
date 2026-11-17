@@ -811,6 +811,7 @@
 		}
 
 		.program-matches-tabs {
+			flex-shrink: 1;
 			flex-wrap: wrap;
 			gap: 10px;
 		}

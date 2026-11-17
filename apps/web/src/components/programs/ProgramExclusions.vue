@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
-import type { ContentExclusions } from '@moirai/shared';
+import type { ContentExclusions, ProgramContentSource } from '@moirai/shared';
 import ProgramExclusionsDrawer from './ProgramExclusionsDrawer.vue';
 
-defineProps<{ libraryId: string; libraryType: string; libraryName: string; resultIds?: string[] | undefined; disabled?: boolean }>();
+defineProps<{ libraryId: string; libraryType: string; libraryName: string; currentSource: ProgramContentSource | null; resultIds?: string[] | undefined; disabled?: boolean }>();
 const exclusions = defineModel<ContentExclusions>({ required: true });
 const emit = defineEmits<{ removeMissing: [id: string] }>();
-const initialTab = ref<'browse' | 'results' | null>(null);
+const initialTab = ref<'current' | 'results' | null>(null);
 const count = computed(() => exclusions.value.itemIds.length + exclusions.value.groupIds.length);
 let trigger: HTMLButtonElement | undefined;
 
-/** Open the same drawer for library exclusions or for the AI Program's frozen results. */
-function open(tab: 'browse' | 'results', event: MouseEvent): void {
+/** Open current draft membership or the AI Program's frozen results in the shared drawer. */
+function open(tab: 'current' | 'results', event: MouseEvent): void {
 	trigger = event.currentTarget as HTMLButtonElement;
 	initialTab.value = tab;
 }
@@ -32,8 +32,8 @@ async function close(): Promise<void> {
 		</div>
 		<div class="program-exclusions-actions">
 			<button v-if="resultIds" type="button" class="toolbar-button" :disabled="!libraryId || disabled" @click="open('results', $event)">Review results</button>
-			<button type="button" class="toolbar-button" :disabled="!libraryId || disabled" @click="open('browse', $event)">Manage exclusions</button>
+			<button type="button" class="toolbar-button" :disabled="!libraryId || disabled" @click="open('current', $event)">Manage exclusions</button>
 		</div>
 	</div>
-	<ProgramExclusionsDrawer v-if="initialTab" :key="libraryId" v-model="exclusions" :result-ids="resultIds" :library-id="libraryId" :library-type="libraryType" :library-name="libraryName" :initial-tab="initialTab" @close="close" @remove-missing="emit('removeMissing', $event)" />
+	<ProgramExclusionsDrawer v-if="initialTab" :key="libraryId" v-model="exclusions" :current-source="currentSource" :result-ids="resultIds" :library-id="libraryId" :library-type="libraryType" :library-name="libraryName" :initial-tab="initialTab" @close="close" @remove-missing="emit('removeMissing', $event)" />
 </template>

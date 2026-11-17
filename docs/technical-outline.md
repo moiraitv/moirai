@@ -870,7 +870,14 @@ the normal schedule regeneration boundary and reconcile candidate membership aga
 Schedule generation and previews resolve missing sequential cursor IDs through the alias index at
 the selected playback boundary, using only targets already in the cached catalog. Status and query
 previews only resolve authored IDs.
-The editor shares one library browser and exclusion review across the four sources. The drawer keeps
+The editor shares one library browser and exclusion review across the four sources. Manage exclusions
+opens Current, followed by AI Results when applicable, Browse Library, and Exclusions. Current
+resolves unsaved membership through a read-only scheduling-worker operation, applying canonical
+identity, exclusions, source ordering, and query limits before projecting and paging the hierarchy.
+Only groups with included descendants appear, and browsing never expands beyond current membership.
+Page metadata is read in batches; unavailable indexed media remain visible and missing references
+are omitted. Empty selections need no membership request. Exclusion edits and catalog refreshes reload Current
+without changing persistent playback state. The drawer keeps
 pagination in its footer and uses shared catalog previews for indexed items. It
 resolves saved item aliases when opening the exclusions drawer, groups equivalent item references
 for review, and restores all references to the same indexed item together. Legacy AI cursor

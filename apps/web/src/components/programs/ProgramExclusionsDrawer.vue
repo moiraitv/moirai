@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import { Asterisk, Ban, Check, Layers3, X } from '@lucide/vue';
-import { MAX_EXCLUDED_MEDIA_ITEMS, MAX_EXPLICIT_MEDIA_GROUPS, type ContentExclusions, type MediaGroup, type MediaSelectionItem, type MediaSourcePickerTarget } from '@moirai/shared';
+import { MAX_EXCLUDED_MEDIA_ITEMS, MAX_EXPLICIT_MEDIA_GROUPS, type ContentExclusions, type MediaGroup, type MediaSelectionItem, type MediaSourcePickerTarget, type ProgramContentSource } from '@moirai/shared';
 import { api } from '../../api';
 import { artworkVariantUrl } from '../../artwork-url';
 import { errorMessage } from '../../error-message';
@@ -23,9 +23,9 @@ interface ExclusionRow {
 
 /** Bound metadata reads and the number of displayed controls on each tab. */
 const PAGE_SIZE = 20;
-/** Views shared by every source, with frozen results available for AI. */
-type ExclusionTab = 'browse' | 'excluded' | 'results';
-const props = defineProps<{ libraryId: string; libraryType: string; libraryName: string; resultIds?: string[] | undefined; initialTab: ExclusionTab }>();
+/** Current membership and library exclusions, with frozen results available for AI. */
+type ExclusionTab = 'current' | 'browse' | 'excluded' | 'results';
+const props = defineProps<{ libraryId: string; libraryType: string; libraryName: string; currentSource: ProgramContentSource | null; resultIds?: string[] | undefined; initialTab: ExclusionTab }>();
 const exclusions = defineModel<ContentExclusions>({ required: true });
 const emit = defineEmits<{ close: []; removeMissing: [id: string] }>();
 const id = useId();
@@ -34,6 +34,9 @@ const panel = ref<HTMLElement>();
 const visible = ref(true);
 const tab = ref<ExclusionTab>(props.initialTab);
 const hierarchy = ref<MediaGroup[]>([]);
+const currentHierarchy = ref<MediaGroup[]>([]);
+const currentPage = ref(1);
+const currentPages = ref(1);
 const searchInput = ref('');
 const search = ref('');
 const target = ref<MediaSourcePickerTarget>(props.libraryType === 'shows' ? 'all' : 'items');
@@ -52,7 +55,8 @@ const aliases = ref<Record<string, string>>({});
 let aliasRequest: Promise<Record<string, string>> | undefined;
 let revision = 0;
 
-const parent = computed(() => hierarchy.value.at(-1));
+const activeHierarchy = computed(() => tab.value === 'current' ? currentHierarchy.value : hierarchy.value);
+const parent = computed(() => activeHierarchy.value.at(-1));
 const itemReferencesByIdentity = computed(() => new Map(exclusions.value.itemIds.map(id => [canonicalItemId(id), id])));
 const groupIds = computed(() => new Set(exclusions.value.groupIds));
 const count = computed(() => itemReferencesByIdentity.value.size + groupIds.value.size);
@@ -65,16 +69,17 @@ const filteredResults = computed(() => {
 	return query ? remainingResults.value.filter(row => [title(row), row.item?.showSortTitle, row.item?.year].join(' ').toLocaleLowerCase().includes(query))
 		: remainingResults.value;
 });
-const page = computed(() => tab.value === 'browse' ? browsePage.value : tab.value === 'excluded' ? excludedPage.value : resultsPage.value);
-const totalPages = computed(() => tab.value === 'browse' ? browsePages.value
+const page = computed(() => tab.value === 'current' ? currentPage.value : tab.value === 'browse' ? browsePage.value : tab.value === 'excluded' ? excludedPage.value : resultsPage.value);
+const totalPages = computed(() => tab.value === 'current' ? currentPages.value : tab.value === 'browse' ? browsePages.value
 	: Math.max(1, Math.ceil((tab.value === 'excluded' ? count.value : filteredResults.value.length) / PAGE_SIZE)));
 const displayedRows = computed(() => tab.value === 'results'
 	? filteredResults.value.slice((resultsPage.value - 1) * PAGE_SIZE, resultsPage.value * PAGE_SIZE)
 	: rows.value);
 const tabs = computed<{ id: ExclusionTab; label: string }[]>(() => [
-	...(props.resultIds ? [{ id: 'results' as const, label: 'Results' }] : []),
-	{ id: 'browse', label: 'Browse library' },
-	{ id: 'excluded', label: 'Excluded (' + count.value.toLocaleString() + ')' },
+	{ id: 'current', label: 'Current' },
+	...(props.resultIds ? [{ id: 'results' as const, label: 'AI Results' }] : []),
+	{ id: 'browse', label: 'Browse Library' },
+	{ id: 'excluded', label: 'Exclusions (' + count.value.toLocaleString() + ')' },
 ]);
 const canSearchGroups = computed(() => props.libraryType === 'shows' || props.libraryType === 'music-videos');
 
@@ -162,6 +167,20 @@ async function load(): Promise<void> {
 			return;
 		}
 		aliases.value = resolved;
+		if (tab.value === 'current') {
+			const result = props.currentSource ? await api.programContentOptions({
+				source: { ...props.currentSource, exclusions: exclusions.value }, parentId: parent.value?.id,
+				page: currentPage.value, pageSize: PAGE_SIZE,
+			}) : { entries: [], pagination: { page: 1, totalPages: 1 } };
+			if (current === revision) {
+				currentPage.value = result.pagination.page;
+				currentPages.value = result.pagination.totalPages;
+				rows.value = result.entries.map(entry => ({ id: entry.key, kind: entry.kind,
+					...(entry.group ? { group: entry.group } : {}), ...(entry.item ? { item: entry.item } : {}), parentTitle: entry.parentTitle }));
+				loadedTabs.value.add('current');
+			}
+			return;
+		}
 		if (tab.value === 'results') {
 			const ids = props.resultIds ?? [];
 			const items = ids.length ? await api.mediaSelection(props.libraryId, ids, exclusions.value) : [];
@@ -216,6 +235,13 @@ async function load(): Promise<void> {
 
 /** Navigate into a group or back to an earlier level, starting with unfiltered rows. */
 function browse(path: MediaGroup[]): void {
+	if (tab.value === 'current') {
+		currentHierarchy.value = path;
+		currentPage.value = 1;
+		panel.value?.focus({ preventScroll: true });
+		return;
+	}
+
 	hierarchy.value = path;
 	searchInput.value = '';
 	search.value = '';
@@ -235,7 +261,10 @@ function movePage(offset: number): void {
 		return;
 	}
 
-	if (tab.value === 'browse') {
+	if (tab.value === 'current') {
+		currentPage.value += offset;
+	}
+	else if (tab.value === 'browse') {
 		browsePage.value += offset;
 	}
 	else if (tab.value === 'excluded') {
@@ -322,10 +351,17 @@ function close(): void {
 	visible.value = false;
 }
 
-watch([() => parent.value?.id, search, () => search.value ? target.value : null], () => {
+watch([() => hierarchy.value.at(-1)?.id, search, () => search.value ? target.value : null], () => {
 	browsePages.value = 1;
 });
+watch(() => props.currentSource, () => {
+	currentHierarchy.value = [];
+	currentPage.value = 1;
+}, { deep: true });
 watch(() => {
+	if (tab.value === 'current') {
+		return [tab.value, parent.value?.id, currentPage.value, props.currentSource, exclusions.value];
+	}
 	if (tab.value === 'browse') {
 		return [tab.value, parent.value?.id, browsePage.value, search.value, search.value ? target.value : null];
 	}
@@ -333,7 +369,7 @@ watch(() => {
 		return [tab.value, excludedPage.value, exclusions.value];
 	}
 	return tab.value;
-}, () => void load(), { immediate: true });
+}, () => void load(), { immediate: true, deep: true });
 watch([tab, totalPages], ([currentTab, pages]) => {
 	if (currentTab === 'results' && resultsPage.value > pages) {
 		resultsPage.value = pages;
@@ -378,23 +414,23 @@ onBeforeUnmount(() => {
 								</select>
 								<button type="submit" class="toolbar-button">Search</button>
 							</form>
-							<nav v-if="parent" class="program-exclusions-path" aria-label="Library location">
-								<button type="button" class="text-button" @click="browse([])">{{ libraryName }}</button>
-								<template v-for="(group, index) in hierarchy" :key="group.id">
-									<span aria-hidden="true">›</span>
-									<span v-if="group.id === parent.id" aria-current="location">{{ group.title }}</span>
-									<button v-else type="button" class="text-button" @click="browse(hierarchy.slice(0, index + 1))">{{ group.title }}</button>
-								</template>
-							</nav>
 						</template>
 						<template v-else-if="tab === 'results'">
 							<input v-model="resultSearch" type="search" aria-label="Search AI results" placeholder="Search results…" @input="resultsPage = 1" />
 							<small v-if="!loading && !failure" role="status">{{ filteredResults.length.toLocaleString() }} {{ filteredResults.length === 1 ? 'matching result' : 'matching results' }}</small>
 						</template>
-						<p v-else class="muted">Group exclusions cover all descendants. Restoring an entry still leaves it excluded if an ancestor is excluded.</p>
+						<p v-else-if="tab === 'excluded'" class="muted">Group exclusions cover all descendants. Restoring an entry still leaves it excluded if an ancestor is excluded.</p>
+						<nav v-if="(tab === 'current' || tab === 'browse') && parent" class="program-exclusions-path" aria-label="Library location">
+							<button type="button" class="text-button" @click="browse([])">{{ libraryName }}</button>
+							<template v-for="(group, index) in activeHierarchy" :key="group.id">
+								<span aria-hidden="true">›</span>
+								<span v-if="group.id === parent.id" aria-current="location">{{ group.title }}</span>
+								<button v-else type="button" class="text-button" @click="browse(activeHierarchy.slice(0, index + 1))">{{ group.title }}</button>
+							</template>
+						</nav>
 						<p v-if="actionError" class="notice warning" role="alert">{{ actionError }}</p>
 						<div :aria-busy="loading">
-							<LoadingState v-if="loading" :label="tab === 'browse' ? 'Loading library media…' : 'Loading exclusions…'" />
+							<LoadingState v-if="loading" :label="tab === 'current' ? 'Loading current content…' : tab === 'browse' ? 'Loading library media…' : tab === 'results' ? 'Loading AI results…' : 'Loading exclusions…'" />
 							<p v-else-if="failure" class="notice warning" role="alert">{{ failure }} <button type="button" class="text-button" @click="load">Try again</button></p>
 							<div v-else-if="displayedRows.length" class="source-picker-list program-exclusions-list">
 								<component
@@ -411,7 +447,7 @@ onBeforeUnmount(() => {
 										</span>
 										<span class="source-picker-copy"><strong>{{ title(row) }}</strong><small :id="`${id}-${row.kind}-${row.id}`">{{ subtitle(row) }}</small></span>
 										<div class="source-picker-actions">
-											<button v-if="tab === 'browse' && row.group && row.group.childCount > 0" type="button" class="button secondary contextual" :aria-label="`Browse ${title(row)}`" :aria-describedby="`${id}-${row.kind}-${row.id}`" @click="browse([...hierarchy, row.group])">Browse</button>
+											<button v-if="(tab === 'browse' || tab === 'current') && row.group && row.group.childCount > 0" type="button" class="button secondary contextual" :aria-label="`Browse ${title(row)}`" :aria-describedby="`${id}-${row.kind}-${row.id}`" @click="browse([...activeHierarchy, row.group])">Browse</button>
 											<TwoStepActionButton v-if="tab === 'results' && !row.item" class="toolbar-button" :label="`Remove ${title(row)}`" :confirm-label="`Confirm remove ${title(row)}`" :aria-describedby="`${id}-${row.kind}-${row.id}`" tone="caution" @confirm="removeMissingResult(row.id)">Remove</TwoStepActionButton>
 											<TwoStepActionButton
 												v-else-if="tab !== 'excluded'" class="toolbar-button" :class="{ 'exclusion-selected': isExcluded(row) }"
@@ -423,7 +459,7 @@ onBeforeUnmount(() => {
 									</article>
 								</component>
 							</div>
-							<p v-else class="empty-state compact">{{ tab === 'browse' ? 'No matching library media.' : tab === 'results' ? 'No matching AI results.' : 'No exclusions added.' }}</p>
+							<p v-else class="empty-state compact">{{ tab === 'current' ? 'No current content at this location.' : tab === 'browse' ? 'No matching library media.' : tab === 'results' ? 'No matching AI results.' : 'No exclusions added.' }}</p>
 						</div>
 					</div>
 					<footer class="selection-drawer-footer program-exclusions-footer">

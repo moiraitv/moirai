@@ -82,11 +82,30 @@ test('excludes a show, season and episode, backfills a limited query, and retain
 		await opener.click();
 		const drawer = page.getByRole('dialog', { name: 'Manage exclusions' });
 		await expect(drawer).toBeFocused();
+		await expect(drawer.getByRole('tab')).toHaveText(['Current', 'Browse Library', 'Exclusions (0)']);
+		await expect(drawer.getByRole('tab', { name: 'Current', exact: true })).toHaveAttribute('aria-selected', 'true');
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText(['Aster', 'Birch']);
+		await drawer.getByRole('button', { name: 'Browse Birch', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Browse Season 1', exact: true }).click();
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText(['Birch Pilot']);
+		await drawer.getByRole('button', { name: 'Exclude Birch Pilot', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Confirm exclude Birch Pilot', exact: true }).click();
+		await expect(drawer.locator('.empty-state')).toBeVisible();
+		await drawer.getByRole('button', { name: 'Exclusion library', exact: true }).click();
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText(['Aster', 'Cedar']);
+		await drawer.getByRole('tab', { name: 'Exclusions (1)', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Restore Birch Pilot', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Confirm restore Birch Pilot', exact: true }).click();
+		await drawer.getByRole('tab', { name: 'Current', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Browse Birch', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Browse Season 1', exact: true }).click();
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText(['Birch Pilot']);
+		await drawer.getByRole('tab', { name: 'Browse Library', exact: true }).click();
 		const excludeShow = drawer.getByRole('button', { name: 'Exclude Aster', exact: true });
 		const confirmShow = drawer.getByRole('button', { name: 'Confirm exclude Aster', exact: true });
 		await excludeShow.click();
 		await expect(confirmShow).toBeFocused();
-		await expect(drawer.getByRole('tab', { name: 'Excluded (0)' })).toBeVisible();
+		await expect(drawer.getByRole('tab', { name: 'Exclusions (0)' })).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(excludeShow).toBeFocused();
 		await excludeShow.click();
@@ -112,7 +131,14 @@ test('excludes a show, season and episode, backfills a limited query, and retain
 		await drawer.getByRole('button', { name: 'Confirm exclude Season 1', exact: true }).click();
 		await drawer.getByRole('button', { name: 'Browse Birch', exact: true }).click();
 		await expect(drawer.getByRole('button', { name: 'Excluded Season 1', exact: true })).toBeDisabled();
-		await expect(drawer.getByRole('tab', { name: 'Excluded (3)' })).toBeVisible();
+		await expect(drawer.getByRole('tab', { name: 'Exclusions (3)' })).toBeVisible();
+		await drawer.getByRole('tab', { name: 'Current', exact: true }).click();
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText([]);
+		await drawer.getByRole('button', { name: 'Exclusion library', exact: true }).click();
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText(['Cedar', 'Birch']);
+		await drawer.getByRole('button', { name: 'Browse Birch', exact: true }).click();
+		await drawer.getByRole('button', { name: 'Browse Season 2', exact: true }).click();
+		await expect(drawer.locator('.source-picker-list article strong')).toHaveText(['Birch Finale']);
 		await page.screenshot({ path: testInfo.outputPath('exclusions-desktop.png'), animations: 'disabled' });
 		await drawer.getByRole('button', { name: 'Done', exact: true }).click();
 		await expect(opener).toBeFocused();
@@ -133,9 +159,9 @@ test('excludes a show, season and episode, backfills a limited query, and retain
 			await page.setViewportSize({ width, height: 844 });
 			await opener.click();
 			await expect(drawer).toBeFocused();
-			await drawer.getByRole('tab', { name: 'Browse library' }).focus();
+			await drawer.getByRole('tab', { name: 'Browse Library' }).click();
 			await page.keyboard.press('ArrowRight');
-			await expect(drawer.getByRole('tab', { name: 'Excluded (3)' })).toBeFocused();
+			await expect(drawer.getByRole('tab', { name: 'Exclusions (3)' })).toBeFocused();
 			await expect(drawer.getByRole('button', { name: 'Restore Birch Return' })).toBeVisible();
 			expect(await drawer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 			await page.screenshot({ path: testInfo.outputPath(`exclusions-${width}.png`), animations: 'disabled' });
@@ -157,12 +183,16 @@ test('excludes a show, season and episode, backfills a limited query, and retain
 		await expect(page.locator('.program-exclusions-summary')).toContainText('3 entries');
 	}
 	finally {
-		if (programId) {
-			await page.request.delete(`/api/v1/programs/${programId}`, { headers });
+		try {
+			if (programId) {
+				await page.request.delete(`/api/v1/programs/${programId}`, { headers });
+			}
+			if (libraryId) {
+				await page.request.delete(`/api/v1/libraries/${libraryId}`, { headers });
+			}
 		}
-		if (libraryId) {
-			await page.request.delete(`/api/v1/libraries/${libraryId}`, { headers });
+		finally {
+			await rm(root, { recursive: true, force: true });
 		}
-		await rm(root, { recursive: true, force: true });
 	}
 });

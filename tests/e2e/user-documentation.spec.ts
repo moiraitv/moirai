@@ -12,6 +12,7 @@ import './documentation/duration-filters';
 import './documentation/actor-filters';
 import './documentation/sequence-ordering';
 import './documentation/example-schedules';
+import './documentation/program-exclusions';
 import './documentation/weekend-schedule';
 import { randomUUID } from 'node:crypto';
 import { rename, mkdir, writeFile, copyFile, readFile } from 'node:fs/promises';

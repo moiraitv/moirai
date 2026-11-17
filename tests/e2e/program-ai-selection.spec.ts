@@ -72,6 +72,15 @@ test.beforeEach(async ({ page }) => {
 	await page.route('**/api/v1/libraries/*/media-source-options*', route => route.fulfill({ json: {
 		entries: [], pagination: { page: 1, totalPages: 1, total: 0, pageSize: 20 },
 	} }));
+	await page.route('**/api/v1/programs/content-options', route => {
+		const { source, page: currentPage, pageSize } = route.request().postDataJSON();
+		const ids = source.itemIds.filter((id: string) => !source.exclusions.itemIds.includes(id));
+		return route.fulfill({ json: {
+			entries: ids.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((id: string) => ({
+				key: id, kind: 'item', matches: [], item: { id, libraryId: source.libraryId, title: `Result ${itemIds.indexOf(id) + 1}`, kind: 'movie' },
+			})), pagination: { page: currentPage, totalPages: Math.max(1, Math.ceil(ids.length / pageSize)) },
+		} });
+	});
 	await page.route('**/api/v1/scheduling/overview', route => route.fulfill({ json: {
 		programs: [saved ?? program], templates: [], channelSchedules: [], programStatuses: [],
 	} }));
@@ -221,6 +230,107 @@ test('reviews the full selection, retries loading, and saves exclusions', async 
 	});
 });
 
+test('opens Current for the live AI draft and restores excluded content across all tab widths', async ({ page }, testInfo) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto(`/schedules/programs/${programId}`);
+	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+	const current = drawer.getByRole('tab', { name: 'Current', exact: true });
+	await expect(drawer.getByRole('tab')).toHaveText(['Current', 'AI Results', 'Browse Library', 'Exclusions (0)']);
+	await expect(current).toHaveAttribute('aria-selected', 'true');
+	await expect(drawer.locator('article strong')).toHaveText(['Result 1']);
+	await drawer.getByRole('button', { name: 'Exclude Result 1', exact: true }).click();
+	await drawer.getByRole('button', { name: 'Confirm exclude Result 1', exact: true }).click();
+	await expect(drawer.locator('.empty-state')).toBeVisible();
+	await drawer.getByRole('tab', { name: 'Exclusions (1)' }).click();
+	await drawer.getByRole('button', { name: 'Restore Result 1', exact: true }).click();
+	await drawer.getByRole('button', { name: 'Confirm restore Result 1', exact: true }).click();
+	await current.click();
+	await expect(drawer.locator('article strong')).toHaveText(['Result 1']);
+	for (const width of [1440, 390, 320]) {
+		await page.setViewportSize({ width, height: 844 });
+		await expect.poll(() => drawer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+		await current.focus();
+		await page.keyboard.press('ArrowRight');
+		await expect(drawer.getByRole('tab', { name: 'AI Results' })).toBeFocused();
+		await page.keyboard.press('Home');
+		await expect(current).toBeFocused();
+		await expect(drawer.locator('article strong')).toHaveText(['Result 1']);
+		await page.screenshot({ path: testInfo.outputPath(`current-${width}.png`), animations: 'disabled' });
+	}
+	await drawer.getByRole('button', { name: 'Done', exact: true }).click();
+	await page.getByRole('button', { name: 'Review results', exact: true }).click();
+	await expect(drawer.getByRole('tab', { name: 'AI Results' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('distinguishes Current loading and failure, retries, and ignores a response after changing tabs', async ({ page }) => {
+	let release: () => void = () => {};
+	let read = 0;
+	let finishRead: () => void = () => {};
+	const completed = new Promise<void>(resolve => {
+		finishRead = resolve;
+	});
+	await page.route('**/api/v1/programs/content-options', async route => {
+		read += 1;
+		const request = read;
+		if (request === 1 || request === 3) {
+			await new Promise<void>(resolve => {
+				release = resolve;
+			});
+		}
+		if (request === 1) {
+			await route.fulfill({ status: 503, json: { message: 'Current temporarily unavailable' } });
+		}
+		else {
+			await route.fulfill({ json: { entries: [{ key: itemIds[0], kind: 'item',
+				item: { id: itemIds[0], title: 'Current item', libraryId: libraryIds[0], kind: 'movie' } }], pagination: { page: 1, totalPages: 1 } } });
+		}
+		if (request === 3) {
+			finishRead();
+		}
+	});
+	try {
+		await page.goto(`/schedules/programs/${programId}`);
+		await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+		const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+		await expect(drawer.getByText('Loading current content…')).toBeVisible();
+		await expect(drawer.locator('.empty-state')).toHaveCount(0);
+		await expect.poll(() => read).toBe(1);
+		release();
+		await expect(drawer.getByRole('alert')).toContainText('Current temporarily unavailable');
+		await expect(drawer.locator('.empty-state')).toHaveCount(0);
+		await drawer.getByRole('button', { name: 'Try again' }).click();
+		await expect(drawer.locator('article strong')).toHaveText(['Current item']);
+		await drawer.getByRole('tab', { name: 'Browse Library' }).click();
+		await drawer.getByRole('tab', { name: 'Current', exact: true }).click();
+		await expect.poll(() => read).toBe(3);
+		await drawer.getByRole('tab', { name: 'Browse Library' }).click();
+		await expect(drawer.locator('.empty-state')).toBeVisible();
+		release();
+		await completed;
+		await expect(drawer.locator('article')).toHaveCount(0);
+		await expect(drawer.getByRole('tab', { name: 'Browse Library' })).toHaveAttribute('aria-selected', 'true');
+	}
+	finally {
+		release();
+	}
+});
+
+test('shows an empty Current selection without requesting content metadata', async ({ page }) => {
+	saved = { ...program, config: { ...program.config, source: { ...program.config.source, itemIds: [] } } };
+	let reads = 0;
+	page.on('request', request => {
+		if (request.url().endsWith('/programs/content-options')) {
+			reads += 1;
+		}
+	});
+	await page.goto(`/schedules/programs/${programId}`);
+	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+	await expect(drawer.locator('.empty-state')).toBeVisible();
+	expect(reads).toBe(0);
+});
+
 test('can save a restored legacy AI item that returns in a generation and is excluded again', async ({ page }) => {
 	saved = { ...program, config: { ...program.config,
 		source: { ...program.config.source, itemIds: itemIds.slice(1), excludedItemIds: [itemIds[0]!] } } };
@@ -228,7 +338,7 @@ test('can save a restored legacy AI item that returns in a generation and is exc
 	await page.goto(`/schedules/programs/${programId}`);
 	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
 	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
-	await drawer.getByRole('tab', { name: 'Excluded (1)', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Exclusions (1)', exact: true }).click();
 	await drawer.getByRole('button', { name: 'Restore Result 1', exact: true }).click();
 	await drawer.getByRole('button', { name: 'Confirm restore Result 1', exact: true }).click();
 	await drawer.getByRole('button', { name: 'Done', exact: true }).click();
@@ -307,6 +417,7 @@ test('returns to a populated browse page when a live scan removes the last page'
 	await page.goto(`/schedules/programs/${programId}`);
 	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
 	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+	await drawer.getByRole('tab', { name: 'Browse Library', exact: true }).click();
 	const pagination = drawer.getByRole('navigation', { name: 'Exclusions pagination' });
 	const previous = pagination.getByRole('button', { name: 'Previous', exact: true });
 	const next = pagination.getByRole('button', { name: 'Next', exact: true });
@@ -340,7 +451,7 @@ test('returns to a populated browse page when a live scan removes the last page'
 	await expect(drawer.getByRole('button', { name: 'Previous', exact: true })).toHaveCount(0);
 });
 
-test('keeps Results and Excluded pagination in the drawer footer at desktop and phone widths', async ({ page }) => {
+test('keeps AI Results and Exclusions pagination in the drawer footer at desktop and phone widths', async ({ page }) => {
 	const ids = Array.from({ length: 21 }, () => randomUUID());
 	const excluded = Array.from({ length: 21 }, () => randomUUID());
 	saved = { ...program, config: { ...program.config, source: { ...program.config.source, itemIds: ids, excludedItemIds: excluded } } };
@@ -351,12 +462,16 @@ test('keeps Results and Excluded pagination in the drawer footer at desktop and 
 	const footer = drawer.locator('footer');
 	const panel = drawer.getByRole('tabpanel');
 	const pagination = footer.getByRole('navigation', { name: 'Exclusions pagination' });
-	for (const name of ['Results', 'Excluded (21)']) {
+	for (const name of ['AI Results', 'Exclusions (21)']) {
 		await drawer.getByRole('tab', { name, exact: true }).click();
 		await expect(pagination).toContainText('Page 1 of 2');
 		await expect(pagination.getByRole('button', { name: 'Next' })).toBeEnabled();
 		for (const width of [1440, 390, 320]) {
 			await page.setViewportSize({ width, height: 844 });
+			await page.evaluate(async () => {
+				await document.fonts.ready;
+				await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			});
 			await panel.evaluate(node => {
 				node.scrollTop = 0;
 			});
@@ -370,7 +485,7 @@ test('keeps Results and Excluded pagination in the drawer footer at desktop and 
 			expect(await footer.boundingBox()).toEqual(position);
 			expect(await footer.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 			await expect(footer.getByRole('button', { name: 'Done' })).toBeInViewport();
-			if (name === 'Results') {
+			if (name === 'AI Results') {
 				await expect(footer.getByRole('button', { name: 'Exclude all results' })).toBeInViewport();
 			}
 		}
@@ -408,6 +523,7 @@ test('previews indexed exclusions by canonical ID on hover and keyboard focus', 
 	await page.goto(`/schedules/programs/${programId}`);
 	await page.getByRole('button', { name: 'Manage exclusions' }).click();
 	const drawer = page.getByRole('dialog', { name: 'Manage exclusions' });
+	await drawer.getByRole('tab', { name: 'Browse Library', exact: true }).click();
 	const tooltip = page.locator('.media-card-preview-tooltip');
 	const groupRow = drawer.locator('article').filter({ hasText: group.title });
 	await expect(groupRow.locator('..')).not.toHaveClass(/media-card-preview-trigger/);
@@ -420,11 +536,11 @@ test('previews indexed exclusions by canonical ID on hover and keyboard focus', 
 	await groupRow.getByRole('button', { name: `Exclude ${group.title}` }).press('Tab');
 	await expect(browseRow).toBeFocused();
 	await expect(tooltip.filter({ hasText: `Indexed preview details for ${browse.id}.` })).toBeVisible();
-	await drawer.getByRole('tab', { name: 'Results' }).click();
+	await drawer.getByRole('tab', { name: 'AI Results' }).click();
 	await expect(drawer.locator('article').filter({ hasText: missing }).locator('..')).not.toHaveClass(/media-card-preview-trigger/);
 	await drawer.getByRole('button', { name: 'Exclude Frozen multipart item' }).focus();
 	await expect(tooltip.filter({ hasText: `Indexed preview details for ${canonical}.` })).toBeVisible();
-	await drawer.getByRole('tab', { name: 'Excluded (2)' }).click();
+	await drawer.getByRole('tab', { name: 'Exclusions (2)' }).click();
 	await drawer.getByRole('button', { name: 'Restore Excluded multipart item' }).focus();
 	await expect(tooltip.filter({ hasText: `Indexed preview details for ${excludedCanonical}.` })).toBeVisible();
 	await expect.poll(() => previewIds).toEqual([browse.id, canonical, excludedCanonical]);
@@ -442,7 +558,7 @@ test.describe('touch media previews', () => {
 		const drawer = page.getByRole('dialog', { name: 'Manage exclusions' });
 		await drawer.getByRole('button', { name: 'Preview Result 1' }).tap();
 		await expect(page.locator('.media-card-preview-tooltip')).toContainText('Touch preview details.');
-		await expect(drawer.getByRole('tab', { name: 'Excluded (0)' })).toBeVisible();
+		await expect(drawer.getByRole('tab', { name: 'Exclusions (0)' })).toBeVisible();
 	});
 });
 
@@ -461,12 +577,13 @@ test('shows one exclusion for an indexed item and its saved multipart alias', as
 	await page.goto(`/schedules/programs/${programId}`);
 	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
 	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+	await drawer.getByRole('tab', { name: 'Browse Library', exact: true }).click();
 	await expect(drawer.getByRole('button', { name: 'Excluded Multipart film' })).toBeDisabled();
-	await drawer.getByRole('tab', { name: 'Excluded (1)', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Exclusions (1)', exact: true }).click();
 	await expect(drawer.locator('.program-exclusions-list article')).toHaveCount(1);
 	await drawer.getByRole('button', { name: 'Restore Multipart film', exact: true }).click();
 	await drawer.getByRole('button', { name: 'Confirm restore Multipart film', exact: true }).click();
-	await drawer.getByRole('tab', { name: 'Browse library' }).click();
+	await drawer.getByRole('tab', { name: 'Browse Library' }).click();
 	await expect(drawer.getByRole('button', { name: 'Exclude Multipart film', exact: true })).toBeEnabled();
 	await drawer.getByRole('button', { name: 'Done', exact: true }).click();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -538,12 +655,12 @@ test('restores an excluded frozen result and sends the remaining exclusions to g
 	await expect(drawer.locator('.program-exclusions-list article')).toHaveCount(itemIds.length);
 	await drawer.getByRole('button', { name: 'Exclude all results', exact: true }).click();
 	await drawer.getByRole('button', { name: 'Confirm exclude all results', exact: true }).click();
-	await drawer.getByRole('tab', { name: 'Excluded (6)', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Exclusions (6)', exact: true }).click();
 	await expect(drawer.locator('.program-exclusions-list article')).toHaveCount(6);
 	await drawer.getByRole('button', { name: 'Restore Result 1', exact: true }).click();
 	await drawer.getByRole('button', { name: 'Confirm restore Result 1', exact: true }).click();
-	await expect(drawer.getByRole('tab', { name: 'Excluded (5)', exact: true })).toBeVisible();
-	await drawer.getByRole('tab', { name: 'Results', exact: true }).click();
+	await expect(drawer.getByRole('tab', { name: 'Exclusions (5)', exact: true })).toBeVisible();
+	await drawer.getByRole('tab', { name: 'AI Results', exact: true }).click();
 	await expect(drawer.getByText('1 matching result', { exact: true })).toBeVisible();
 	await expect(drawer.locator('.program-exclusions-list article')).toContainText('Result 1');
 	await drawer.getByRole('button', { name: 'Done', exact: true }).click();
@@ -553,7 +670,7 @@ test('restores an excluded frozen result and sends the remaining exclusions to g
 	});
 	await page.reload();
 	await page.getByRole('button', { name: 'Review results', exact: true }).click();
-	await drawer.getByRole('tab', { name: 'Excluded (5)', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Exclusions (5)', exact: true }).click();
 	await expect(drawer.locator('.program-exclusions-list article')).toHaveCount(5);
 	await drawer.press('Escape');
 	await expect(drawer).toBeHidden();

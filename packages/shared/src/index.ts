@@ -22,6 +22,7 @@ import type {
 
 export * from './scheduling.js';
 export * from './program-metadata.js';
+export * from './program-content.js';
 export * from './template-defaults.js';
 export * from './guide.js';
 export * from './normalization.js';
