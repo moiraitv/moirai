@@ -1,0 +1,7 @@
+{
+  "GHSA-fc5q-39xc-vjpf": {
+    "active": true,
+    "notes": "Temporarily accepted for 14 days because picomatch has no patched release: all published versions through 4.0.7 are affected. The server-only production audit is clean; the full workspace finding comes through frontend and development tooling. Recheck upstream and remove this exception when a compatible fix is available.",
+    "expiry": "2026-12-01T17:52:21.000Z"
+  }
+}

@@ -2119,8 +2119,12 @@ build enforces the production guide review gate. Full application verification a
 refresh remain required release preparation steps documented in `CONTRIBUTING.md`.
 
 Production builds run `security:audit` before documentation approval checks and compilation.
-The npm audit covers runtime, development, and optional dependencies and fails on any reported
-vulnerability, including low severity, or an unsuccessful audit request. Docker uses this same gate;
+The audit uses better-npm-audit over npm's runtime, development, and optional dependency report.
+Every finding at low severity or above blocks the build unless its advisory has an active,
+unexpired exception in `.nsprc`; explanatory notes and expiry dates are required. The picomatch
+advisory `GHSA-fc5q-39xc-vjpf` is temporarily excepted for 14 days, ending December 1, 2026 at
+17:52:21 UTC, because no patched release is available. All other findings and unsuccessful audit
+requests remain blocking. Expired exceptions stop suppressing findings. Docker uses this same gate;
 production builds require access to the npm advisory service.
 The local `build:docker` script defaults to these gates and a `moirai:local` image for `linux/amd64`.
 It streams Docker output and highlights explicit disk-space errors after a failed build.
