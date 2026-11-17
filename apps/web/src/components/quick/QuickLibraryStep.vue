@@ -13,7 +13,7 @@ const props = defineProps<{
 }>();
 const mode = defineModel<'existing' | 'new'>('mode', { required: true });
 const libraryId = defineModel<string>('libraryId', { required: true });
-const newLibrary = defineModel<LibraryCreate>('newLibrary', { required: true });
+const newLibrary = defineModel<Extract<LibraryCreate, { sourceType: 'on-disk' }>>('newLibrary', { required: true });
 const emit = defineEmits<{ back: []; next: []; create: [] }>();
 const newLibraryValid = computed(() => libraryCreateSchema.safeParse(newLibrary.value).success);
 const canContinue = computed(() => mode.value === 'existing'

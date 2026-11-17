@@ -4,12 +4,13 @@ import type { Repository } from './index.js';
 export type WriteDomains = {
 	root: Repository;
 	preferences: Repository['semantic']['preferences'];
-} & Pick<Repository, 'authentication' | 'encodingProfiles' | 'creditTemplates' | 'guideTemplates' | 'fillerPresets' | 'midRollPresets' | 'graphics' | 'semantic'>;
+} & Pick<Repository, 'authentication' | 'encodingProfiles' | 'creditTemplates' | 'guideTemplates' | 'fillerPresets' | 'midRollPresets' | 'graphics' | 'mediaServers' | 'semantic'>;
 
 /** Runtime mutations accepted by the single writer; reads remain on separate connections. */
 export const WRITE_METHODS = {
 	root: ['setMediaIssueIgnored', 'setSilentEndingAcceptance', 'createLibrary', 'updateLibrary', 'stageLibrarySourceChange', 'deleteLibrary', 'setWatcherStatus', 'markChangeDetected', 'recoverInterruptedScans', 'beginScan', 'reconcileScan', 'applyMissingItemPresence', 'confirmLibraryRemovals', 'authorizeSourceAcceptance', 'cancelSourceChange', 'failScan', 'cancelScan', 'pruneScanHistory', 'createChannel', 'updateChannel', 'updateChannelLogo', 'deleteChannel', 'createQuickChannelSetup', 'createProgram', 'updateProgram', 'appendProgramItems', 'appendProgramGroups', 'deleteProgram', 'createScheduleTemplate', 'updateScheduleTemplate', 'deleteScheduleTemplate', 'setChannelSchedule', 'resetChannelScheduleState', 'deleteChannelSchedule', 'setTemplateAssignments', 'markTimelinePending', 'markTimelineFailed', 'commitMaterializedTimeline', 'setPlaybackSettings', 'setBackupSettings', 'recordViewingPreference', 'clearViewingPreferences', 'pruneViewingPreferences'],
 	authentication: ['claimInitialLocalIdentity', 'replaceLocalIdentityAndSession', 'createLogtoSessionIfLogoutGenerationCurrent', 'createSessionIfLocalPasswordCurrent', 'touchSession', 'deleteSession', 'revokeLogtoSessionsForConfiguration', 'applyLogtoLogout', 'createOidcTransaction', 'consumeOidcTransaction', 'createRecoveryToken', 'consumeRecoveryToken', 'prune'],
+	mediaServers: ['createMediaServer', 'updateMediaServer', 'deleteMediaServer'],
 	encodingProfiles: ['save', 'setDefault', 'delete'],
 	creditTemplates: ['save', 'delete'],
 	guideTemplates: ['save', 'setDefault', 'delete'],

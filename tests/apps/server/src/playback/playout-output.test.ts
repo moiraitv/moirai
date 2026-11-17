@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { channelCreateSchema, FALLBACK_FILLER_MIN_DURATION_MILLISECONDS, type Channel, type ScheduleGuide } from '@moirai/shared';
+import { channelCreateSchema, FALLBACK_FILLER_MIN_DURATION_MILLISECONDS, remotePlaybackReference, type Channel, type ScheduleGuide } from '@moirai/shared';
 import { buildEtvPlayoutFiles } from '@server/playback/playout-output.js';
 
 /** Build a channel with validated normalization defaults. */
@@ -636,5 +636,66 @@ describe('ErsatzTV playout output', () => {
 			['2026-08-23T12:00:00Z', '2026-08-23T12:00:50Z'],
 			['2026-08-23T12:00:50Z', '2026-08-23T12:02:00Z'],
 		]);
+	});
+
+	it('publishes remote media as a signed loopback URL without a provider token', () => {
+		const configured = channel();
+		const serverId = randomUUID();
+		const playbackPath = remotePlaybackReference(serverId, 'part:7');
+		const guide: ScheduleGuide = {
+			timeZone: 'UTC',
+			startDate: '2026-08-23',
+			requestedDays: 1,
+			days: 1,
+			segmentLimitApplied: false,
+			channels: [{
+				channelId: configured.id,
+				preview: {
+					channelId: configured.id,
+					timeZone: 'UTC',
+					startDate: '2026-08-23',
+					days: 1,
+					segments: [{
+						id: 'remote',
+						role: 'primary',
+						channelId: configured.id,
+						scheduleLayerId: null,
+						templateId: randomUUID(),
+						slotId: randomUUID(),
+						programId: randomUUID(),
+						mediaItemId: randomUUID(),
+						title: 'Remote Film',
+						playbackPath,
+						start: '2026-08-23T12:00:00Z',
+						finish: '2026-08-23T12:30:00Z',
+						sourceStartSeconds: 0,
+						sourceFinishSeconds: 1_800,
+						truncated: false,
+					}],
+					issues: [],
+					proposedState: [],
+				},
+			}],
+		};
+		const remoteMedia = { origin: 'http://127.0.0.1:3000', secret: 'stream-secret' };
+		const document = JSON.parse([...buildEtvPlayoutFiles(
+			[configured],
+			guide,
+			new Map(),
+			undefined,
+			undefined,
+			undefined,
+			remoteMedia,
+		).values()][0]!);
+		const source = document.items[0].source;
+
+		expect(source.source_type).toBe('http');
+		expect(source.uri).toContain('http://127.0.0.1:3000/api/v1/internal/media');
+		expect(source.uri).toContain(`server=${serverId}`);
+		expect(source.uri).not.toContain('stream-secret');
+		expect(source.uri).not.toContain('secret-token');
+		expect(() => buildEtvPlayoutFiles([configured], guide)).toThrow(
+			'Remote media needs a signed playback address',
+		);
 	});
 });

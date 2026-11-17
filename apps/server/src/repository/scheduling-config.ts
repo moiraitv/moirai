@@ -741,8 +741,10 @@ export class SchedulingConfigurationRepository {
 		}
 
 		const updatedAt = currentTimestamp();
-		const guideOnly = stableJsonFingerprint(templatePlaybackInput(currentInput))
-			=== stableJsonFingerprint(templatePlaybackInput(updated));
+		// Compare persisted JSON settings so omitted optional fields do not imply playback changes.
+		const priorPlaybackInput = JSON.parse(JSON.stringify(templatePlaybackInput(currentInput)));
+		const nextPlaybackInput = JSON.parse(JSON.stringify(templatePlaybackInput(updated)));
+		const guideOnly = stableJsonFingerprint(priorPlaybackInput) === stableJsonFingerprint(nextPlaybackInput);
 		this.db.transaction((tx) => {
 			new GraphicsRepository(tx).validateAssignments([updated.graphicsAssignment, ...updated.slots.map(slot => slot.graphicsAssignment)]);
 			tx.update(scheduleTemplates)

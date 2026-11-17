@@ -173,7 +173,7 @@ export function writerRepository(repository: Repository, writer: DatabaseWriter)
 								&& ['recoverInterruptedScans', 'beginScan', 'reconcileScan', 'applyMissingItemPresence', 'failScan', 'cancelScan', 'pruneScanHistory', 'markTimelinePending', 'markTimelineFailed', 'commitMaterializedTimeline', 'recordViewingPreference', 'pruneViewingPreferences', 'setWatcherStatus', 'markChangeDetected'].includes(property)),
 						);
 						if (domain === 'semantic' || domain === 'preferences' || domain === 'fillerPresets'
-							|| domain === 'midRollPresets' || (domain === 'root'
+							|| domain === 'midRollPresets' || domain === 'mediaServers' || (domain === 'root'
 								&& !['recordViewingPreference', 'clearViewingPreferences', 'pruneViewingPreferences', 'pruneScanHistory', 'markTimelinePending', 'markTimelineFailed', 'beginScan', 'cancelScan', 'failScan', 'setWatcherStatus'].includes(property))) {
 							repository.invalidateSchedulingCatalog();
 						}

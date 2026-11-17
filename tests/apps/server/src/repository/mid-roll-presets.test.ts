@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
-import { BUILTIN_MID_ROLL_PRESETS, SECONDS_PER_SCHEDULING_DAY, channelCreateSchema,
+import { BUILTIN_MID_ROLL_PRESETS, defaultFillerAssignment, SECONDS_PER_SCHEDULING_DAY, channelCreateSchema,
 	midRollPresetCreateSchema, scheduleTemplateCreateSchema } from '@moirai/shared';
 import { createDatabase } from '@server/db/index.js';
 import { Repository } from '@server/repository/index.js';
@@ -101,7 +101,7 @@ it('rejects wrong-kind assignments and protects pre/post references in usage and
 	await expect(repo.fillerPresets.delete(preset.id)).rejects.toThrow('in use');
 });
 
-it('rejects Sequence sources in every filler assignment while retaining primary Sequence support', async () => {
+it('persists Sequence sources in every filler assignment and as primary Programs', async () => {
 	const repo = repository();
 	const leaf = await repo.createProgram({ name: 'Leaf', config: { type: 'content', source: { type: 'item', itemId: randomUUID() }, strategy: { type: 'sequential' } } });
 	const sequence = await repo.createProgram({ name: 'Sequence', config: { type: 'sequence', repeat: true, entries: [{ id: randomUUID(), programId: leaf.id, count: 1 }] } });
@@ -110,18 +110,29 @@ it('rejects Sequence sources in every filler assignment while retaining primary 
 		boundaries: [{ id: randomUUID(), leftSlotId: slotId, rightSlotId: slotId, targetSeconds: SECONDS_PER_SCHEDULING_DAY, policy: 'hard' }] });
 	const template = await repo.createScheduleTemplate(input);
 	const channel = await repo.createChannel(channelCreateSchema.parse({ name: 'Sequence primary', number: '99' }));
-	const assignment = { programId: sequence.id, presetId: BUILTIN_MID_ROLL_PRESETS[0]!.id, policy: 'next-fit-only' as const };
+	const assignmentFor = (field: string) => field.toLowerCase().includes('midroll')
+		? { programId: sequence.id, presetId: BUILTIN_MID_ROLL_PRESETS[0]!.id, policy: 'next-fit-only' as const }
+		: defaultFillerAssignment(field.toLowerCase().includes('preroll') ? 'pre-roll' : field.toLowerCase().includes('postroll') ? 'post-roll' : 'tail', sequence.id);
 	for (const field of ['defaultPreRoll', 'defaultMidRoll', 'defaultPostRoll', 'defaultFiller'] as const) {
-		await expect(repo.createScheduleTemplate({ ...input, [field]: assignment })).rejects.toThrow('Sequence Programs');
-		await expect(repo.updateScheduleTemplate(template.id, { [field]: assignment })).rejects.toThrow('Sequence Programs');
+		const assignment = assignmentFor(field);
+		const freshSlotId = randomUUID();
+		const created = await repo.createScheduleTemplate({ ...input, name: `Sequence ${field}`, [field]: assignment,
+			slots: [{ ...input.slots[0]!, id: freshSlotId }],
+			boundaries: [{ ...input.boundaries[0]!, id: randomUUID(), leftSlotId: freshSlotId, rightSlotId: freshSlotId }] });
+		expect(created[field]).toMatchObject({ programId: sequence.id, presetId: assignment.presetId });
+		expect((await repo.updateScheduleTemplate(template.id, { [field]: assignment }))?.[field]).toMatchObject({ programId: sequence.id, presetId: assignment.presetId });
 	}
 	for (const field of ['preRoll', 'midRoll', 'postRoll', 'filler'] as const) {
-		await expect(repo.updateScheduleTemplate(template.id, { slots: [{ ...input.slots[0]!, [field]: { mode: 'configured', config: assignment } }] })).rejects.toThrow('Sequence Programs');
+		const assignment = assignmentFor(field);
+		const updated = await repo.updateScheduleTemplate(template.id, { slots: [{ ...input.slots[0]!, [field]: { mode: 'configured', config: assignment } }] });
+		expect(updated?.slots[0]?.[field]).toMatchObject({ mode: 'configured', config: { programId: sequence.id, presetId: assignment.presetId } });
 	}
 	for (const field of ['defaultPreRoll', 'defaultMidRoll', 'defaultPostRoll', 'defaultTailFiller', 'defaultFiller'] as const) {
-		await expect(repo.setChannelSchedule(channel.id, { defaultTemplateId: template.id, defaultProgramId: null, layers: [], defaultFiller: null,
-			[field]: assignment })).rejects.toThrow('Sequence Programs');
+		const assignment = assignmentFor(field);
+		const saved = await repo.setChannelSchedule(channel.id, { defaultTemplateId: template.id, defaultProgramId: null, layers: [], defaultFiller: null,
+			[field]: assignment });
+		expect(saved?.[field]).toMatchObject({ programId: sequence.id, presetId: assignment.presetId });
 	}
 	await expect(repo.setChannelSchedule(channel.id, { defaultTemplateId: null, defaultProgramId: sequence.id, layers: [], defaultFiller: null })).resolves.toMatchObject({ defaultProgramId: sequence.id });
-	expect((await repo.getScheduleTemplate(template.id))?.defaultMidRoll).toBeNull();
+	expect((await repo.getScheduleTemplate(template.id))?.defaultMidRoll?.programId).toBe(sequence.id);
 });

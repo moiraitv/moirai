@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import Fastify from 'fastify';
 import { LogService } from '@server/operations/log-service.js';
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -43,6 +44,28 @@ describe('on-disk logs', () => {
 			requestId: 'req-1',
 			context: { token: '[Redacted]', category: 'scanner' },
 		});
+	});
+
+	it('keeps signed URLs and credential fields out of persisted access records', async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'moirai-private-logs-'));
+		const logs = new LogService(root, 'info', 1_048_576, 1, 1_048_576);
+		const app = Fastify({ loggerInstance: logs.logger });
+		app.get('/api/v1/internal/media', async () => ({ ok: true }));
+		try {
+			await app.inject({ method: 'GET', url: '/api/v1/internal/media?sig=synthetic-secret-signature' });
+			logs.logger.info({ accessToken: 'synthetic-secret-token', connection: { accessToken: 'synthetic-nested-token' } }, 'Audit');
+			await app.close();
+			await logs.close();
+			const entries = await logs.page({ limit: 20 });
+			const stored = JSON.stringify(entries);
+			expect(stored).toContain('/api/v1/internal/media');
+			expect(stored).not.toContain('synthetic-secret-signature');
+			expect(stored).not.toContain('synthetic-secret-token');
+			expect(stored).not.toContain('synthetic-nested-token');
+		}
+		finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	it('keeps entry IDs stable when new lines are appended', async () => {

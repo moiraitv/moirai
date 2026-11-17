@@ -5,13 +5,12 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "declaration": false,
-    "baseUrl": "..",
     "paths": {
-      "@server/*": ["apps/server/src/*"],
-      "@web/*": ["apps/web/src/*"],
-      "@shared-source/*": ["packages/shared/src/*"],
-      "@ersatztv-source/*": ["packages/ersatztv-contract/src/*"],
-      "@scripts/*": ["scripts/*"]
+      "@server/*": ["../apps/server/src/*"],
+      "@web/*": ["../apps/web/src/*"],
+      "@shared-source/*": ["../packages/shared/src/*"],
+      "@ersatztv-source/*": ["../packages/ersatztv-contract/src/*"],
+      "@scripts/*": ["../scripts/*"]
     },
     "types": ["node", "vite/client"]
   },

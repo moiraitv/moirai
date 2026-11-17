@@ -105,6 +105,32 @@ async function upgradeFrom(
 	}
 }
 
+/** Build recovery state with current APIs, then persist only columns present in the old schema. */
+async function seedLegacyRecovery(
+	legacy: SqliteDatabase,
+	seed: (database: ReturnType<typeof createDatabase>) => Promise<void>,
+): Promise<void> {
+	const fixture = createDatabase(':memory:', migrationsDir);
+	try {
+		await seed(fixture);
+
+		// Keep historical schema and migration markers intact, copying dependencies before consumers.
+		for (const table of ['libraries', 'media_items', 'scheduling_programs', 'channels',
+			'channel_schedules', 'selection_states', 'timeline_materializations', 'materialized_timeline_segments']) {
+			const columns = (legacy.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>)
+				.map(column => `"${column.name}"`);
+			const rows = fixture.sqlite.prepare(`SELECT ${columns.join(',')} FROM "${table}"`).all() as Array<Record<string, unknown>>;
+			const insert = legacy.prepare(`INSERT INTO "${table}" (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`);
+			for (const row of rows) {
+				insert.run(...Object.values(row));
+			}
+		}
+	}
+	finally {
+		fixture.close();
+	}
+}
+
 function insertLibrary(sqlite: SqliteDatabase, id = 'library', name = 'Library'): void {
 	sqlite.prepare(
 		`INSERT INTO libraries (id, name, type_key, source_type, source_config)
@@ -977,7 +1003,7 @@ it.each([false, true])('repairs only elapsed subsecond prefixes without changing
 		{ id: 'future', start: '2099-08-23T00:00:00Z', first: '2099-08-23T00:00:00.71Z', repair: false },
 		{ id: 'empty', start, first: null, repair: false },
 	];
-	let originalSegments: unknown[];
+	let originalSegments: Array<Record<string, unknown>>;
 	let originalStates: unknown[];
 	let originalSchedules: unknown[];
 	let originalStatuses: Array<Record<string, unknown>>;
@@ -1025,7 +1051,7 @@ it.each([false, true])('repairs only elapsed subsecond prefixes without changing
 					);
 			}
 		}
-		originalSegments = sqlite.prepare('SELECT * FROM materialized_timeline_segments ORDER BY id').all();
+		originalSegments = sqlite.prepare('SELECT * FROM materialized_timeline_segments ORDER BY id').all() as Array<Record<string, unknown>>;
 		originalStates = sqlite.prepare('SELECT * FROM selection_states ORDER BY consumer_key').all();
 		originalSchedules = sqlite.prepare('SELECT * FROM channel_schedules ORDER BY channel_id').all();
 		originalStatuses = sqlite.prepare('SELECT * FROM timeline_materializations ORDER BY channel_id').all() as Array<Record<string, unknown>>;
@@ -1038,7 +1064,8 @@ it.each([false, true])('repairs only elapsed subsecond prefixes without changing
 				playback_path: null, media_snapshot: null, airing: null, continuation: null, state_delta: '[]' });
 			expect(repair.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 		}
-		expect(sqlite.prepare("SELECT * FROM materialized_timeline_segments WHERE role = 'primary' ORDER BY id").all()).toEqual(originalSegments);
+		expect(sqlite.prepare("SELECT * FROM materialized_timeline_segments WHERE role = 'primary' ORDER BY id").all())
+			.toEqual(originalSegments.map(segment => ({ ...segment, filler_preset_id: null })));
 		expect(sqlite.prepare('SELECT * FROM selection_states ORDER BY consumer_key').all()).toEqual(originalStates);
 		expect(sqlite.prepare('SELECT * FROM channel_schedules ORDER BY channel_id').all()).toEqual(originalSchedules);
 		for (const original of originalStatuses) {
@@ -1089,45 +1116,47 @@ it.each([
 	let channelId: string;
 	let checkpoint: NonNullable<Awaited<ReturnType<Repository['getTimelineMaterialization']>>>;
 	try {
-		await upgradeFrom('0041_filler_compatibility_and_guide_indexes', async (sqlite, database) => {
-			const repository = new Repository(database.db);
-			const library = await repository.createLibrary({
-				name: 'Unmeasured library', typeKey: 'movies', sourceType: 'on-disk',
-				sourceConfig: { scanRoot: '/migration-fixture', playbackRoot: null }, scanIntervalMinutes: 15,
-				watcherEnabled: false, enabled: true,
-			});
-			insertMediaItem(sqlite, 'unmeasured', library.id);
-			const program = await repository.createProgram({
-				name: 'Unmeasured films', config: {
-					type: 'content', source: { type: 'library-query', libraryId: library.id, kinds: ['movie'], genres: [] },
-					strategy: { type: 'sequential' },
-				},
-			});
-			const channel = await repository.createChannel(channelCreateSchema.parse({ number: '1', name: 'Recovery' }));
-			channelId = channel.id;
-			await repository.setChannelSchedule(channelId, { defaultTemplateId: null, defaultProgramId: program.id, layers: [], defaultFiller: null });
-			await new TimelineMaterializer(repository, { publish() {} }, 'UTC', undefined, undefined, 1).runNow();
-			const original = (await repository.getTimelineMaterialization(channelId))!;
-			expect(original.health).toBe('ready');
-			expect(original.issues.some(issue => issue.code === 'media-duration-missing')).toBe(true);
-
-			// Reproduce the retained prefix damage before the older process stopped.
-			sqlite.prepare('UPDATE materialized_timeline_segments SET starts_at = ? WHERE channel_id = ? AND starts_at = ?')
-				.run('2020-08-23T00:00:00.71Z', channelId, original.windowStart);
-			vi.setSystemTime(new Date('2020-08-23T12:30:00Z'));
-			if (health === 'failed') {
-				repository.markTimelineFailed(channelId, 'Interrupted generation', new Date().toISOString());
-			}
-			else {
-				if (program.config.type !== 'content') {
-					throw new Error('Expected a content program fixture');
-				}
-				await repository.updateProgram(program.id, { config: { ...program.config, strategy: { type: 'shuffle', seed: 'pending-edit' } } });
+		await upgradeFrom('0041_filler_compatibility_and_guide_indexes', async sqlite => {
+			await seedLegacyRecovery(sqlite, async database => {
+				const repository = new Repository(database.db);
+				const library = await repository.createLibrary({
+					name: 'Unmeasured library', typeKey: 'movies', sourceType: 'on-disk',
+					sourceConfig: { scanRoot: '/migration-fixture', playbackRoot: null }, scanIntervalMinutes: 15,
+					watcherEnabled: false, enabled: true,
+				});
+				insertMediaItem(database.sqlite, 'unmeasured', library.id);
+				const program = await repository.createProgram({
+					name: 'Unmeasured films', config: {
+						type: 'content', source: { type: 'library-query', libraryId: library.id, kinds: ['movie'], genres: [] },
+						strategy: { type: 'sequential' },
+					},
+				});
+				const channel = await repository.createChannel(channelCreateSchema.parse({ number: '1', name: 'Recovery' }));
+				channelId = channel.id;
+				await repository.setChannelSchedule(channelId, { defaultTemplateId: null, defaultProgramId: program.id, layers: [], defaultFiller: null });
 				await new TimelineMaterializer(repository, { publish() {} }, 'UTC', undefined, undefined, 1).runNow();
-			}
-			checkpoint = (await repository.getTimelineMaterialization(channelId))!;
-			expect(checkpoint.health).toBe(health);
-			vi.setSystemTime(new Date('2020-08-23T13:00:00Z'));
+				const original = (await repository.getTimelineMaterialization(channelId))!;
+				expect(original.health).toBe('ready');
+				expect(original.issues.some(issue => issue.code === 'media-duration-missing')).toBe(true);
+
+				// Reproduce the retained prefix damage before the older process stopped.
+				database.sqlite.prepare('UPDATE materialized_timeline_segments SET starts_at = ? WHERE channel_id = ? AND starts_at = ?')
+					.run('2020-08-23T00:00:00.71Z', channelId, original.windowStart);
+				vi.setSystemTime(new Date('2020-08-23T12:30:00Z'));
+				if (health === 'failed') {
+					repository.markTimelineFailed(channelId, 'Interrupted generation', new Date().toISOString());
+				}
+				else {
+					if (program.config.type !== 'content') {
+						throw new Error('Expected a content program fixture');
+					}
+					await repository.updateProgram(program.id, { config: { ...program.config, strategy: { type: 'shuffle', seed: 'pending-edit' } } });
+					await new TimelineMaterializer(repository, { publish() {} }, 'UTC', undefined, undefined, 1).runNow();
+				}
+				checkpoint = (await repository.getTimelineMaterialization(channelId))!;
+				expect(checkpoint.health).toBe(health);
+				vi.setSystemTime(new Date('2020-08-23T13:00:00Z'));
+			});
 		}, async (_sqlite, database) => {
 			const repository = new Repository(database.db);
 			const migrated = (await repository.getTimelineMaterialization(channelId))!;
@@ -1150,4 +1179,26 @@ it.each([
 	finally {
 		vi.useRealTimers();
 	}
+});
+
+it('adds disabled Jellyfin reporting while preserving saved connections from the prior schema', async () => {
+	await upgradeFrom('0045_media_servers', sqlite => {
+		sqlite.prepare(`INSERT INTO media_servers (
+			id, provider, name, name_key, base_url, server_key, server_name, client_identifier,
+			access_token, allow_insecure_tls, path_replacements
+		) VALUES (?, 'jellyfin', 'Home', 'home', 'https://jellyfin.example', 'server', 'Jellyfin',
+			'moirai-device', 'synthetic-upgrade-token', 1, ?)`)
+			.run('server-id', JSON.stringify([{ remotePrefix: '/remote', localPrefix: '/local' }]));
+	}, async (sqlite, database) => {
+		const row = sqlite.prepare('SELECT * FROM media_servers WHERE id = ?').get('server-id') as Record<string, unknown>;
+		expect(row).toMatchObject({
+			provider: 'jellyfin', name: 'Home', base_url: 'https://jellyfin.example',
+			client_identifier: 'moirai-device', access_token: 'synthetic-upgrade-token',
+			allow_insecure_tls: 1, playback_reporting_enabled: 0,
+		});
+		expect(JSON.parse(String(row.path_replacements))).toEqual([{ remotePrefix: '/remote', localPrefix: '/local' }]);
+		const repository = new Repository(database.db);
+		expect((await repository.mediaServers.getMediaServer('server-id'))!.playbackReportingEnabled).toBe(false);
+		expect(await repository.mediaServers.playbackReportingConnections()).toEqual([]);
+	}, true);
 });

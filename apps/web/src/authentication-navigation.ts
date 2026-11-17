@@ -2,6 +2,7 @@
 export interface AuthenticationNavigationTarget {
 	fullPath: string;
 	meta: {
+		[key: string]: unknown;
 		publicAuthentication?: unknown;
 		allowAuthenticated?: unknown;
 	};

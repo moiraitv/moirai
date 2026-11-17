@@ -1,6 +1,6 @@
 import { prepareUpgradeBackup, recordStartedVersion } from './backup/upgrade.js';
 import { resumeRestore } from './backup/restore.js';
-import { mkdir } from 'node:fs/promises';
+import { ensurePrivateDirectory, preparePrivateDatabase } from './operations/private-storage.js';
 import type { Server } from 'node:http';
 import Database from 'better-sqlite3';
 import { buildApp } from './app.js';
@@ -20,6 +20,7 @@ import { listenWithAddressRetry } from './listen.js';
 
 /** Peek journal progress without holding the database open. */
 function peekMigrationProgress(databasePath: string, migrationsDir: string): MigrationProgress {
+	preparePrivateDatabase(databasePath);
 	const sqlite = new Database(databasePath);
 	try {
 		return migrationProgressFromSqlite(sqlite, migrationsDir);
@@ -91,7 +92,7 @@ if (developmentWatch) {
 		process.once('disconnect', forceExit);
 	}
 }
-await mkdir(config.dataDir, { recursive: true });
+ensurePrivateDirectory(config.dataDir);
 try {
 	await resumeRestore(config);
 }

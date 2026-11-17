@@ -40,7 +40,12 @@ import { FallbackFillerStore } from './playback/fallback-filler-store.js';
 import { Repository } from './repository/index.js';
 import { ResourcePressureCoordinator } from './operations/resource-pressure.js';
 import { ScannerManager } from './scanner/manager.js';
+import { loadMediaStreamSecret } from './media-servers/secret.js';
+import { MediaStreamServer } from './media-servers/stream-server.js';
+import { ProviderArtworkDownloads } from './media-servers/artwork-downloads.js';
+import { ensurePrivateDirectory } from './operations/private-storage.js';
 import { OnDiskSourceAdapter } from './scanner/on-disk-adapter.js';
+import { MediaServerSourceAdapter } from './scanner/media-server-adapter.js';
 import { LibrarySourceRegistry } from './scanner/source-registry.js';
 import { SchedulingWorkerPool } from './scheduling/worker-pool.js';
 import { TimelineMaterializer } from './scheduling/timeline-materializer.js';
@@ -78,6 +83,7 @@ export async function buildApp(
 	db: MoiraiDatabase,
 	restartAfterRestore?: () => Promise<void>,
 ): Promise<{ app: FastifyInstance; services: AppServices }> {
+	ensurePrivateDirectory(config.dataDir);
 	const aiSettings = new AiSettingsService(config.dataDir);
 	await aiSettings.load();
 	// Establish logging and the HTTP shell before constructing dependent services.
@@ -148,8 +154,15 @@ export async function buildApp(
 		logs.logger as FastifyBaseLogger,
 	);
 	await fallbackFillers.start((await repository.listChannels()).map((channel) => channel.id));
+	const mediaStreamSecret = await loadMediaStreamSecret(config.dataDir);
+	const mediaStreams = new MediaStreamServer(repository, mediaStreamSecret);
+	const remoteMedia = { origin: '', secret: mediaStreamSecret };
+	const providerArtworkDownloads = new ProviderArtworkDownloads(config.artworkTransformConcurrency);
 	const librarySources = new LibrarySourceRegistry([
 		new OnDiskSourceAdapter(mediaProbe),
+		new MediaServerSourceAdapter('plex', repository.mediaServers, mediaProbe),
+		new MediaServerSourceAdapter('jellyfin', repository.mediaServers, mediaProbe),
+		new MediaServerSourceAdapter('emby', repository.mediaServers, mediaProbe),
 	]);
 
 	const scanner = new ScannerManager(
@@ -193,6 +206,7 @@ export async function buildApp(
 		graphicsFolder(config.dataDir),
 		config.ffprobePath,
 		config.publicUrl,
+		remoteMedia,
 	);
 	const hardwareAcceleration = new HardwareAccelerationResolver(
 		logs.logger as FastifyBaseLogger,
@@ -322,6 +336,7 @@ export async function buildApp(
 
 	// Start and stop background services with the HTTP application lifecycle.
 	app.addHook('onReady', async () => {
+		remoteMedia.origin = await mediaStreams.start();
 		await authentication.start();
 		if (!(await repository.authentication.initialized())) {
 			logs.logger.warn(
@@ -357,6 +372,7 @@ export async function buildApp(
 		await playback.close();
 		await playout.close();
 		await playout.graphicsClock?.close();
+		await mediaStreams.close();
 		await timelineMaterializer.close();
 		await schedulingWorkers.close();
 		await maintenance.close();
@@ -401,6 +417,7 @@ export async function buildApp(
 		schedulingWorkers,
 		logs,
 		health,
+		providerArtworkDownloads,
 	});
 
 	// Serve the built SPA last so it cannot shadow API routes.

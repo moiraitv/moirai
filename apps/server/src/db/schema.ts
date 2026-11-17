@@ -13,6 +13,8 @@ import type {
 	FillerConfig,
 	Library,
 	LibraryCreate,
+	MediaServerPathReplacement,
+	MediaServerProvider,
 	MediaItem,
 	PlaybackSettings,
 	ProgramConfig,
@@ -92,6 +94,35 @@ export const libraries = sqliteTable('libraries', {
 	warningCount: integer('warning_count').notNull().default(0),
 	...timestamps,
 }, (table) => [uniqueIndex('libraries_name_key_unique').on(table.nameKey)]);
+
+/**
+ * Schema for `mediaServers`.
+ *
+ * Stores a Plex, Jellyfin, or Emby connection shared by one or more libraries. The access token
+ * stays in this table and is never selected for API responses.
+ */
+export const mediaServers = sqliteTable('media_servers', {
+	id: text('id').primaryKey(),
+	provider: text('provider').$type<MediaServerProvider>().notNull(),
+	name: text('name').notNull(),
+	nameKey: text('name_key').notNull(),
+	baseUrl: text('base_url').notNull(),
+	serverKey: text('server_key').notNull(),
+	serverName: text('server_name').notNull(),
+	clientIdentifier: text('client_identifier').notNull(),
+	accessToken: text('access_token').notNull(),
+	allowInsecureTls: integer('allow_insecure_tls', { mode: 'boolean' }).notNull().default(false),
+	playbackReportingEnabled: integer('playback_reporting_enabled', { mode: 'boolean' }).notNull().default(false),
+	pathReplacements: text('path_replacements', { mode: 'json' })
+		.$type<MediaServerPathReplacement[]>()
+		.notNull()
+		.default([]),
+	...timestamps,
+}, (table) => [
+	uniqueIndex('media_servers_name_key_unique').on(table.nameKey),
+	uniqueIndex('media_servers_provider_server_key_unique').on(table.provider, table.serverKey),
+	check('media_servers_provider_check', sql`${table.provider} IN ('plex', 'jellyfin', 'emby')`),
+]);
 
 /**
  * Schema for `mediaGroups`.

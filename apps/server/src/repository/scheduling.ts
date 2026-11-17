@@ -817,8 +817,12 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 			}));
 	}
 
-	/** Read current programming in one query, filling artist credits absent from older snapshots. */
-	async listCurrentPlaybackSegments(at: string): Promise<MaterializedSegmentRecord[]> {
+	/** Read current programming in one optionally channel-scoped query, filling legacy artist credits. */
+	async listCurrentPlaybackSegments(at: string, channelIds?: string[]): Promise<MaterializedSegmentRecord[]> {
+		if (channelIds?.length === 0) {
+			return [];
+		}
+
 		const rows = await this.db
 			.select({ segment: materializedTimelineSegments, artists: mediaItems.artists })
 			.from(materializedTimelineSegments)
@@ -827,6 +831,7 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 				eq(mediaItems.kind, 'music-video'),
 			))
 			.where(and(
+				channelIds ? inArray(materializedTimelineSegments.channelId, channelIds) : undefined,
 				lte(instantMilliseconds(materializedTimelineSegments.startsAt), Date.parse(at)),
 				gt(instantMilliseconds(materializedTimelineSegments.finishesAt), Date.parse(at)),
 			));

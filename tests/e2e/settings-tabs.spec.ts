@@ -5,6 +5,7 @@ test('retains independent settings drafts across keyboard tab switches and prote
 	await authenticateAdministrator(page);
 	await page.goto('/settings');
 	const playback = page.getByRole('tab', { name: /^Playback/ });
+	const mediaServers = page.getByRole('tab', { name: /^Media Servers/ });
 	const ai = page.getByRole('tab', { name: /^AI/ });
 	const backups = page.getByRole('tab', { name: /^Backups/ });
 	const capacity = page.getByRole('spinbutton', { name: /^Maximum active channel sessions/ });
@@ -12,6 +13,9 @@ test('retains independent settings drafts across keyboard tab switches and prote
 	await capacity.fill(saved === '6' ? '7' : '6');
 	await expect(playback).toHaveAccessibleName(/Unsaved changes/);
 	await playback.focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(mediaServers).toBeFocused();
+	await expect(mediaServers).toHaveAttribute('aria-selected', 'true');
 	await page.keyboard.press('ArrowRight');
 	await expect(ai).toBeFocused();
 	await expect(ai).toHaveAttribute('aria-selected', 'true');
@@ -145,7 +149,10 @@ test('keeps the automatic backup switch independent while one disclosure reveals
 
 test('links Settings tabs and preserves drafts through tab history navigation', async ({ page }) => {
 	await authenticateAdministrator(page);
-	await page.goto('/settings?tab=ai&example=kept#details');
+	await page.goto('/settings?tab=media-servers&example=kept#details');
+	await expect(page).toHaveURL(/\/settings\/media-servers\?example=kept#details$/);
+	await expect(page.getByRole('tab', { name: /^Media Servers/ })).toHaveAttribute('aria-selected', 'true');
+	await page.getByRole('tab', { name: /^AI/ }).click();
 	await expect(page).toHaveURL(/\/settings\/ai\?example=kept#details$/);
 	await expect(page.getByRole('tab', { name: /^AI/ })).toHaveAttribute('aria-selected', 'true');
 	await page.getByRole('tab', { name: /^Backups/ }).click();
@@ -173,7 +180,7 @@ test('links Settings tabs and preserves drafts through tab history navigation', 
 
 test('opens Settings section permalinks and supports native new-tab links', async ({ page, context }) => {
 	await authenticateAdministrator(page);
-	for (const [section, label] of [['playback', 'Playback'], ['ai', 'AI'], ['backups', 'Backups']]) {
+	for (const [section, label] of [['playback', 'Playback'], ['media-servers', 'Media Servers'], ['ai', 'AI'], ['backups', 'Backups']]) {
 		await page.goto(`/settings/${section}`);
 		const tab = page.getByRole('tab', { name: new RegExp(`^${label}`) });
 		await expect(tab).toHaveAttribute('aria-selected', 'true');

@@ -1,7 +1,6 @@
 import { registerCastFunctions } from './cast-functions.js';
 import { registerPrimaryGenreMigration } from './primary-genre-migration.js';
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
+import { preparePrivateDatabase } from '../operations/private-storage.js';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
@@ -18,9 +17,7 @@ export type MoiraiDatabase = ReturnType<typeof createDatabase>['db'];
 
 /** Open and configure the single-process SQLite database. */
 export function createDatabase(databasePath: string, migrationsDir: string) {
-	if (databasePath !== ':memory:') {
-		mkdirSync(path.dirname(databasePath), { recursive: true });
-	}
+	preparePrivateDatabase(databasePath);
 
 	const sqlite = new Database(databasePath);
 	sqlite.function('moirai_music_fold', { deterministic: true }, value =>

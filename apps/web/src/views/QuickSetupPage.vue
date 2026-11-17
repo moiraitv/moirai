@@ -66,7 +66,7 @@ const logo = ref<PreparedChannelLogo | null>(null);
 const logoError = ref('');
 const result = ref<QuickChannelSetupResult | null>(null);
 const scanRevision = ref(0);
-let newLibrary = reactive<LibraryCreate>({
+let newLibrary = reactive<Extract<LibraryCreate, { sourceType: 'on-disk' }>>({
 	name: '',
 	typeKey: 'movies',
 	sourceType: 'on-disk',

@@ -1,11 +1,12 @@
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
+import { validateLibrarySources } from './validate-library-sources.js';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { scheduleTemplates, scheduleSlots, scheduleBoundaries } from '../db/schema.js';
 import {
 	channelCreateSchema, programConfigSchema, programMetadataSchema, encodingProfileCreateSchema, channelScheduleConfigSchema,
 	fillerPresetCreateSchema, midRollPresetCreateSchema, guideTemplateSourcesSchema,
-	onDiskSourceConfigSchema, sourceIdentitySchema, scheduleTemplateCreateSchema,
+	sourceIdentitySchema, scheduleTemplateCreateSchema,
 } from '@moirai/shared';
 
 /** Validate configuration payloads after historical migrations have supplied current defaults. */
@@ -16,13 +17,13 @@ export function validateConfigurationRecords(sqlite: Database.Database): void {
 		['encoding_profiles', 'config', encodingProfileCreateSchema],
 		['channel_schedules', 'config', channelScheduleConfigSchema],
 		['guide_templates', 'sources', guideTemplateSourcesSchema],
-		['libraries', 'source_config', onDiskSourceConfigSchema],
 	];
 	for (const [table, column, schema] of configurations) {
 		for (const row of sqlite.prepare(`SELECT "${column}" AS value FROM "${table}"`).iterate() as Iterable<{ value: string }>) {
 			schema.parse(JSON.parse(row.value));
 		}
 	}
+	validateLibrarySources(sqlite);
 	validateScheduleTemplates(sqlite);
 	for (const row of sqlite.prepare('SELECT kind,config FROM filler_presets').iterate() as Iterable<{ kind: string; config: string }>) {
 		(row.kind === 'mid-roll' ? midRollPresetCreateSchema : fillerPresetCreateSchema).parse(JSON.parse(row.config));

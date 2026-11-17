@@ -63,3 +63,19 @@ it('keeps save/discard protection when retaining work fails', async () => {
 	expect(clear).toHaveBeenCalledOnce();
 	expect(dismiss).toHaveBeenCalledOnce();
 });
+
+
+it.each([true, false])('dismisses an unretained draft after Save only when the save succeeds: %s', async succeeds => {
+	let dirty = true;
+	const dismiss = vi.fn();
+	const save = vi.fn(async () => {
+		dirty = !succeeds;
+	});
+	const closing = closeUnsavedEditor({
+		dirty, isDirty: () => dirty, key: 'remote-source', message: 'Save before closing?', save, discard: dismiss,
+	});
+	settleConfirmation('confirm');
+	await closing;
+	expect(save).toHaveBeenCalledOnce();
+	expect(dismiss).toHaveBeenCalledTimes(succeeds ? 1 : 0);
+});

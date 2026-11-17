@@ -404,7 +404,18 @@ export class MediaProbe {
 						throw new MediaProbeError('cancelled', 'Media probe was cancelled');
 					}
 					const retry = args.map(arg => arg.replace(':chapter=start_time,end_time:chapter_tags=title', ''));
-					output = await this.run(retry, signal, source.handle.fd);
+					// Child reads share the descriptor offset; reopen and revalidate before retrying.
+					const retrySource = await openSourceFile(scanRoot, file);
+					try {
+						if (retrySource.stat.dev !== source.stat.dev || retrySource.stat.ino !== source.stat.ino
+							|| retrySource.stat.size !== source.stat.size || retrySource.stat.mtimeMs !== source.stat.mtimeMs) {
+							throw new MediaProbeError('probe-failed', 'Media file changed between probe attempts');
+						}
+						output = await this.run(retry, signal, retrySource.handle.fd);
+					}
+					finally {
+						await retrySource.handle.close();
+					}
 					omittedChapters = true;
 				}
 				const result = parseMediaProbeOutput(output, source.stat.size);

@@ -28,6 +28,9 @@ it('enriches legacy music snapshots while preserving captured credits and time b
 			sourceStartSeconds: 0, sourceFinishSeconds: 3600, truncated: false, mediaSnapshot: snapshot, stateDelta: [],
 		});
 		expect((await repository.listCurrentPlaybackSegments(start))[0]?.mediaSnapshot?.artists).toEqual(['Catalog artist']);
+		expect((await repository.listCurrentPlaybackSegments(start, [channel.id])).map(record => record.segment.id)).toEqual([segmentId]);
+		expect(await repository.listCurrentPlaybackSegments(start, [])).toEqual([]);
+		expect(await repository.listCurrentPlaybackSegments(start, ['other-channel'])).toEqual([]);
 		expect(await repository.listCurrentPlaybackSegments(finish)).toEqual([]);
 		expect(await repository.listCurrentPlaybackSegments('2026-09-14T00:59:59.999Z')).toEqual([]);
 		await database.db.update(materializedTimelineSegments).set({ mediaSnapshot: { ...snapshot, artists: ['Captured artist'] } }).where(eq(materializedTimelineSegments.id, segmentId));

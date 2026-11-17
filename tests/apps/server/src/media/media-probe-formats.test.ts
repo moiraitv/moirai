@@ -96,6 +96,18 @@ describe('real media probing', () => {
 		await expect(probe.probe(root, file)).rejects.toMatchObject({ code: 'missing-duration' });
 	});
 
+	it('reopens the validated file when oversized chapter metadata needs a bounded retry', async () => {
+		const input = encode('chapter-input.mkv', ['-c:v', 'libx264', '-c:a', 'aac']);
+		const metadata = path.join(root, 'large-chapter.txt');
+		await writeFile(metadata, `;FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1000\ntitle=${'x'.repeat(300_000)}\n`);
+		const file = path.join(root, 'large-chapter.mkv');
+		execFileSync(ffmpeg, ['-v', 'error', '-i', input, '-f', 'ffmetadata', '-i', metadata,
+			'-map', '0', '-map_chapters', '1', '-c', 'copy', file]);
+		const result = await probe.probe(root, file);
+		expect(result.durationMilliseconds).toBeGreaterThanOrEqual(2_000);
+		expect(result).toMatchObject({ chapterLimitExceeded: true, chapters: [] });
+	});
+
 	it('keeps the output limit when requesting all stream tags', async () => {
 		const input = encode('small.mkv', ['-c:v', 'libx264', '-c:a', 'aac']);
 		const metadata = path.join(root, 'large-metadata.txt');

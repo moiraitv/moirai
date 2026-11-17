@@ -14,6 +14,7 @@ import {
 	countLabel,
 	isRemovalScanIssue,
 	scanIssueRequiresAttention,
+	isOnDiskSourceConfig,
 	REMOVAL_CONFIRMATION_INTERVAL_MINUTES,
 	REMOVAL_CONFIRMATION_OBSERVATIONS,
 } from '@moirai/shared';
@@ -50,6 +51,26 @@ import { preserveGroupIdentities } from './scan-identities.js';
 
 /** Keep variable-size scan inserts below SQLite statement parameter limits. */
 const SCAN_INSERT_BATCH_SIZE = 500;
+
+/** Identity used only when an on-disk caller omits the adapter's observed identity. */
+function onDiskFallbackIdentity(libraryState: {
+	sourceType: string;
+	sourceConfig: Library['sourceConfig'];
+}): SourceIdentity {
+	if (!isOnDiskSourceConfig(libraryState.sourceConfig)) {
+		throw new Error('Remote scans must supply a source identity');
+	}
+
+	return {
+		sourceType: libraryState.sourceType,
+		sourceKey: libraryState.sourceConfig.scanRoot,
+		details: {
+			canonicalRoot: libraryState.sourceConfig.scanRoot,
+			device: 'repository-call',
+			inode: 'repository-call',
+		},
+	};
+}
 
 /** Store the current indexed-item total on the library row. */
 function persistLibraryItemCount(
@@ -151,15 +172,7 @@ export abstract class ScanRepository {
 			throw new Error('Library not found');
 		}
 
-		const observedSourceIdentity: SourceIdentity = sourceIdentity ?? {
-			sourceType: libraryState.sourceType,
-			sourceKey: libraryState.sourceConfig.scanRoot,
-			details: {
-				canonicalRoot: libraryState.sourceConfig.scanRoot,
-				device: 'repository-call',
-				inode: 'repository-call',
-			},
-		};
+		const observedSourceIdentity: SourceIdentity = sourceIdentity ?? onDiskFallbackIdentity(libraryState);
 		const [existing, existingGroups] = await Promise.all([this.db
 			.select({
 				id: mediaItems.id,

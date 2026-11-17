@@ -17,7 +17,7 @@ const prefix = useId();
 
 /** Activate an immediately available panel and retain keyboard focus on its tab. */
 function navigate(event: KeyboardEvent, index: number): void {
-	let next = index;
+	let next: number;
 	if (event.key === ' ') {
 		next = index;
 	}

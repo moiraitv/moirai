@@ -9,6 +9,17 @@ import {
 } from '@server/api-documentation.js';
 
 const EXPECTED_HTTP_OPERATIONS = [
+	'listMediaServers',
+	'createMediaServer',
+	'updateMediaServer',
+	'deleteMediaServer',
+	'listMediaServerLibraries',
+	'probeMediaServer',
+	'probeSavedMediaServer',
+	'createPlexPin',
+	'pollPlexPin',
+	'signInMediaServer',
+	'resolveMediaSelectionAliases',
 	'getResourceUsage',
 	'createGraphicsPreset',
 	'updateGraphicsPreset',

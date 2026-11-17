@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import LibraryCreateModal from '../components/library/LibraryCreateModal.vue';
-import { useLibraryEditorRoute } from '../composables/useLibraryEditorRoute';
-import { onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { ChevronRight, FileText, Film, FolderOpen, Music2, Plus, RefreshCw, TvMinimal, Unplug } from '@lucide/vue';
 import {
 	type Library,
 	type LibraryContentPreview,
+	type MediaServer,
 } from '@moirai/shared';
 import { api } from '../api';
 import { artworkSrcset, artworkVariantUrl } from '../artwork-url';
@@ -19,13 +18,15 @@ import MediaCardPreview from '../components/MediaCardPreview.vue';
 import PageHeader from '../components/PageHeader.vue';
 import ResourceEmptyState from '../components/ResourceEmptyState.vue';
 import StatusPill from '../components/StatusPill.vue';
-import { isLibraryScanning as isScanning, isLibrarySourceUnavailable, libraryStatusValue } from '../library-health';
+import { isLibraryScanning as isScanning, isLibrarySourceUnavailable, librarySourceLabel, libraryStatusValue } from '../library-health';
 import { useLibrariesStore } from '../stores/libraries';
 
 const librariesStore = useLibrariesStore();
 const { libraries, loading, loaded, error: loadError } = storeToRefs(librariesStore);
 const router = useRouter();
-const { open: showForm, editor: creator, close: closeCreator } = useLibraryEditorRoute('create');
+const route = useRoute();
+const showForm = computed(() => route.path === '/libraries/new');
+const mediaServers = ref<MediaServer[]>([]);
 const contentPreviews = ref(new Map<string, LibraryContentPreview>());
 const previewsLoading = ref(true);
 const previewsLoaded = ref(false);
@@ -93,12 +94,6 @@ function schedulePreviewRefresh(): void {
 	window.clearTimeout(previewRefreshTimer);
 	previewRefreshTimer = window.setTimeout(() => void loadContentPreviews(), 100);
 }
-/** Continue in the created Library’s settings editor and refresh the catalog. */
-async function created(library: Library): Promise<void> {
-	await router.replace(`/libraries/${library.id}/settings`);
-	await librariesStore.load();
-	await loadContentPreviews();
-}
 const unsubscribe = liveEvents.subscribe((event) => {
 	if (
 		event.type === 'system.ready'
@@ -106,11 +101,23 @@ const unsubscribe = liveEvents.subscribe((event) => {
 		|| (event.type === 'scan.changed' && event.data.status !== 'running')
 	) {
 		schedulePreviewRefresh();
+		void loadMediaServers();
 	}
 });
+/** Load server names used to label remote libraries. */
+async function loadMediaServers(): Promise<void> {
+	try {
+		mediaServers.value = await api.mediaServers();
+	}
+	catch {
+		mediaServers.value = [];
+	}
+}
+
 onMounted(() => {
 	void librariesStore.load();
 	void loadContentPreviews();
+	void loadMediaServers();
 });
 onUnmounted(() => {
 	window.clearTimeout(previewRefreshTimer);
@@ -128,7 +135,6 @@ onUnmounted(() => {
 			Add Library
 		</button></PageHeader
 		>
-		<LibraryCreateModal v-if="showForm" ref="creator" @close="closeCreator" @saved="created" />
 		<p v-if="loadError" class="notice error">
 			{{ loadError }}
 			<button class="button ghost" @click="librariesStore.load">Retry</button>
@@ -167,9 +173,9 @@ onUnmounted(() => {
 							v-if="isLibrarySourceUnavailable(library) && !isScanning(library)"
 							class="library-source-warning"
 						>
-							<Unplug :size="15" />Source path unavailable; disk may be offline
+							<Unplug :size="15" />{{ library.sourceType === 'on-disk' ? 'Source path unavailable; disk may be offline' : 'Media server unavailable' }}
 						</p>
-						<small>{{ library.sourceConfig.scanRoot }}</small>
+						<small>{{ librarySourceLabel(library, mediaServers) }}</small>
 					</div>
 				</RouterLink>
 				<div class="library-content-carousel" :aria-label="`${library.name} recently added media`">
@@ -199,7 +205,7 @@ onUnmounted(() => {
 		<ResourceEmptyState
 			v-else-if="loaded && !showForm"
 			title="Build your first library"
-			description="Choose a folder with media and Kodi-compatible NFO sidecars."
+			description="Choose a folder with media and NFO metadata files, or choose a Plex/Jellyfin/Emby library."
 		>
 			<template #icon><FolderOpen :size="37" /></template>
 			<button class="button" type="button" @click="router.push('/libraries/new')">

@@ -1,4 +1,5 @@
 import { ZodError, type core } from 'zod';
+import { MediaServerPersistenceError } from './media-servers.js';
 import { CreditTemplateError } from './credit-templates.js';
 import { EncodingProfileError } from './encoding-profiles.js';
 import { FillerPresetError } from './filler-presets.js';
@@ -25,6 +26,7 @@ export function writeError(payload: WriteError): Error {
 		return new ZodError(payload.issues ?? []);
 	}
 	const prototypes: Record<string, object> = {
+		MediaServerPersistenceError: MediaServerPersistenceError.prototype,
 		CreditTemplateError: CreditTemplateError.prototype,
 		EncodingProfileError: EncodingProfileError.prototype,
 		FillerPresetError: FillerPresetError.prototype,

@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { opendir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
+	isOnDiskSourceConfig,
 	MEDIA_EXTENSIONS,
 	type Library,
 	type MediaExternalId,
@@ -302,6 +303,10 @@ async function sourceStat(
 
 /** Replace the local scan root with the path visible to the playback container. */
 function playbackPath(library: Library, relativePath: string): string {
+	if (!isOnDiskSourceConfig(library.sourceConfig)) {
+		throw new Error('On-disk playback received a remote library');
+	}
+
 	const root = library.sourceConfig.playbackRoot ?? library.sourceConfig.scanRoot;
 	return path.posix.join(root.split(path.sep).join('/'), relativePath);
 }
@@ -314,6 +319,10 @@ export async function discoverOnDisk(
 	// Resolve and walk the source root before beginning per-file metadata work.
 	const issues: ScanIssue[] = [];
 	const signal = options.signal;
+	if (!isOnDiskSourceConfig(library.sourceConfig)) {
+		throw new Error('On-disk discovery received a remote library');
+	}
+
 	const sourceIdentity = await identifyOnDiskSource(library.sourceConfig.scanRoot, signal);
 	const scanRoot = sourceIdentity.details.canonicalRoot!;
 	const walked = await walk(scanRoot, issues, signal, options.openDirectory);

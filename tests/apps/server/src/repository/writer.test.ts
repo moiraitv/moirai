@@ -5,6 +5,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
 import { Repository } from '@server/repository/index.js';
 import { DatabaseWriter, DATABASE_WRITE_QUEUE_LIMIT, DatabaseWriteQueueFullError, writerRepository } from '@server/repository/writer.js';
+import { MediaServerPersistenceError } from '@server/repository/media-servers.js';
 import { ResourceIdentityConflictError } from '@server/repository/resource-identity.js';
 import { channelCreateSchema, catalogProgramItemQuerySchema, quickChannelSetupCreateSchema, libraryCreateSchema } from '@moirai/shared';
 import { discoverOnDisk } from '@server/scanner/on-disk.js';
@@ -127,4 +128,21 @@ it('rejects stale timeline commands and preserves the acknowledged authoritative
 	await repository.commitMaterializedTimeline(commit);
 	await expect(repository.commitMaterializedTimeline({ ...commit, inputFingerprint: 'stale' })).rejects.toBeInstanceOf(StaleSemanticDecisionError);
 	expect(await repository.getTimelineMaterialization(channel.id)).toMatchObject({ inputFingerprint: 'first', revision: 1 });
+});
+
+
+it('persists media-server credential changes through the writer with a read-only production facade', async () => {
+	const { database, repository } = await fixture();
+	const inspection = { serverKey: 'writer-audit', serverName: 'Audit', libraries: [] };
+	const server = await repository.mediaServers.createMediaServer({ provider: 'plex', name: 'Audit', baseUrl: 'https://audit.test', accessToken: 'synthetic-original-token', allowInsecureTls: false, playbackReportingEnabled: false, pathReplacements: [] }, inspection);
+	expect(() => database.sqlite.prepare("UPDATE media_servers SET name='unsafe'").run()).toThrow(/readonly/iu);
+	expect((await repository.mediaServers.getMediaServerConnection(server.id))?.accessToken).toBe('synthetic-original-token');
+	const updated = await repository.mediaServers.updateMediaServer(server.id, { accessToken: 'synthetic-replacement-token' }, inspection);
+	expect(updated?.server).not.toHaveProperty('accessToken');
+	const library = await repository.createLibrary(libraryCreateSchema.parse({ name: 'Remote', typeKey: 'movies', sourceType: 'plex', sourceConfig: { mediaServerId: server.id, remoteLibraryId: '1', remoteLibraryName: 'Movies' } }));
+	await expect(repository.mediaServers.deleteMediaServer(server.id)).rejects.toBeInstanceOf(MediaServerPersistenceError);
+	await repository.deleteLibrary(library.id);
+	expect((await repository.mediaServers.getMediaServerConnection(server.id))?.accessToken).toBe('synthetic-replacement-token');
+	expect(await repository.mediaServers.deleteMediaServer(server.id)).toBe(true);
+	expect(await repository.mediaServers.getMediaServer(server.id)).toBeNull();
 });

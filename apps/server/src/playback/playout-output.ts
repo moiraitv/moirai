@@ -7,13 +7,25 @@ import {
 } from '@moirai/ersatztv-contract';
 import {
 	FALLBACK_FILLER_MIN_DURATION_MILLISECONDS,
+	parseRemotePlaybackReference,
 	type Channel,
 	type ScheduleGuide,
 	type TimelineSegment,
 } from '@moirai/shared';
+import {
+	MEDIA_STREAM_GRACE_MILLISECONDS,
+	mediaStreamUrl,
+	signMediaStream,
+} from '../media-servers/stream-url.js';
 
 /** Maximum source span exposed through one fallback playout item. */
 export const FALLBACK_ITEM_MAX_MILLISECONDS = 5 * 60 * 1_000;
+
+/** Loopback publisher used when a segment has no local file. */
+export interface RemoteMediaPublishOptions {
+	origin: string;
+	secret: string;
+}
 
 /** Effective fallback selected for one channel. */
 export interface PlayoutFallback {
@@ -54,6 +66,7 @@ export function playoutItems(
 	subtitles?: PreparedSubtitles,
 	audio?: PreparedAudio,
 	video?: PreparedAudio,
+	remoteMedia?: RemoteMediaPublishOptions,
 ): EtvPlayoutItem[] {
 	const segmentStart = Temporal.Instant.from(segment.start);
 	const segmentFinish = Temporal.Instant.from(segment.finish);
@@ -99,18 +112,44 @@ export function playoutItems(
 				|| (parts.length === 1 && segment.sourceFinishSeconds !== null)
 				? overlapFinishMs - partStartMs
 				: null;
-			output.push({
-				type: 'local',
+			const remote = parseRemotePlaybackReference(part.playbackPath);
+			const shared = {
 				id: `${segment.id}:${date}${parts.length > 1 ? `:${index}` : ''}`,
 				start: itemStart.toString(),
 				finish: itemFinish.toString(),
-				path: part.playbackPath,
 				subtitle: subtitles?.get(segment.id)?.[index] ?? null,
 				audioStreamIndex: audio?.get(segment.id)?.[index] ?? null,
 				videoStreamIndex: video?.get(segment.id)?.[index] ?? null,
 				inPointMs: inPointMs === 0 ? null : inPointMs,
 				outPointMs,
-			});
+			};
+			if (remote) {
+				if (!remoteMedia) {
+					throw new Error('Remote media needs a signed playback address');
+				}
+
+				const expiresAt = itemFinish.epochMilliseconds + MEDIA_STREAM_GRACE_MILLISECONDS;
+				const signature = signMediaStream(
+					remoteMedia.secret,
+					expiresAt,
+					remote.mediaServerId,
+					remote.partId,
+				);
+				output.push({
+					type: 'http',
+					uri: mediaStreamUrl(
+						remoteMedia.origin,
+						remote.mediaServerId,
+						remote.partId,
+						expiresAt,
+						signature,
+					),
+					...shared,
+				});
+			}
+			else {
+				output.push({ type: 'local', path: part.playbackPath, ...shared });
+			}
 		}
 		partStartMs = partFinishMs;
 		if (partStartMs >= virtualFinishMs) {
@@ -126,9 +165,10 @@ function coveredIntervals(
 	windowStart: Temporal.Instant,
 	windowEnd: Temporal.Instant,
 	date: string,
+	remoteMedia?: RemoteMediaPublishOptions,
 ): CoveredInterval[] {
 	const intervals = segments
-		.flatMap((segment) => playoutItems(segment, windowStart, windowEnd, date))
+		.flatMap((segment) => playoutItems(segment, windowStart, windowEnd, date, undefined, undefined, undefined, remoteMedia))
 		.map<CoveredInterval>((item) => ({
 			start: Temporal.Instant.from(item.start),
 			finish: Temporal.Instant.from(item.finish),
@@ -305,6 +345,7 @@ export function buildEtvPlayoutFiles(
 	subtitles?: PreparedSubtitles,
 	audio?: PreparedAudio,
 	video?: PreparedAudio,
+	remoteMedia?: RemoteMediaPublishOptions,
 ): Map<string, string> {
 	const files = new Map<string, string>();
 	const segmentsByChannel = new Map(
@@ -321,7 +362,7 @@ export function buildEtvPlayoutFiles(
 		const fallback = fallbacks.get(channel.id);
 		const generatedFallback = fallback
 			? uncoveredIntervals(
-				coveredIntervals(segments, rangeStart, rangeFinish, guide.startDate),
+				coveredIntervals(segments, rangeStart, rangeFinish, guide.startDate, remoteMedia),
 				rangeStart,
 				rangeFinish,
 			).flatMap((gap) => fallbackItems(
@@ -343,7 +384,7 @@ export function buildEtvPlayoutFiles(
 			const finish = zonedFinish.toInstant();
 			const items = [
 				...segments.flatMap((segment) => {
-					return playoutItems(segment, start, finish, date.toString(), subtitles, audio, video);
+					return playoutItems(segment, start, finish, date.toString(), subtitles, audio, video, remoteMedia);
 				}),
 				...generatedFallback.flatMap((item) => {
 					return clipFallbackItem(item, start, finish);

@@ -1,4 +1,4 @@
-import Token from 'markdown-it/lib/token.mjs';
+import MarkdownIt, { type Token } from 'markdown-it';
 
 /** Shared core-hook contract used by standalone MarkdownIt and VitePress's bundled renderer. */
 interface BadgeMarkdown {
@@ -21,7 +21,7 @@ const terms = new Map([
 
 /** Make plain text without interpreting the label as authored HTML. */
 function textToken(content: string): Token {
-	const token = new Token('text', '', 0);
+	const token = new MarkdownIt.Token('text', '', 0);
 	token.content = content;
 	return token;
 }
@@ -39,7 +39,7 @@ export function userDocsTermBadges(markdown: BadgeMarkdown): void {
 			for (let index = 0; index < children.length; index += 1) {
 				const icon = children[index]!;
 				const name = icon.type === 'image'
-					? icon.attrGet('src')?.match(/^\/(?:help\/)?icons\/([^/]+)\.svg$/)?.[1]
+					? String(icon.attrGet('src') ?? '').match(/^\/(?:help\/)?icons\/([^/]+)\.svg$/)?.[1]
 					: undefined;
 				const pattern = name ? terms.get(name) : undefined;
 				if (!pattern) {
@@ -62,10 +62,10 @@ export function userDocsTermBadges(markdown: BadgeMarkdown): void {
 					continue;
 				}
 
-				const open = new Token('span_open', 'span', 1);
+				const open = new MarkdownIt.Token('span_open', 'span', 1);
 				open.attrSet('class', 'docs-term-badge');
 				open.attrSet('data-tone', name!.startsWith('tv-') ? 'blue' : 'green');
-				const replacement = [open, icon, textToken(match[1]!), new Token('span_close', 'span', -1)];
+				const replacement = [open, icon, textToken(match[1]!), new MarkdownIt.Token('span_close', 'span', -1)];
 				if (linked) {
 					replacement.unshift(children[index + 2]!);
 				}

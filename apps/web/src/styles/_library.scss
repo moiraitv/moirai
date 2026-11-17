@@ -1089,8 +1089,23 @@ a.media-card {
 	width: min(760px, 100%);
 }
 
-.library-settings-fields {
-	margin-top: 22px;
+.library-server-signin,
+.library-path-replacements {
+	display: grid;
+	gap: 10px;
+}
+
+.library-path-replacement {
+	display: grid;
+	grid-template-columns: 1fr 1fr auto;
+	gap: 8px;
+	align-items: center;
+}
+
+@media (max-width: 640px) {
+	.library-path-replacement {
+		grid-template-columns: 1fr;
+	}
 }
 
 .library-settings-checks {

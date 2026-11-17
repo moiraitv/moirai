@@ -15,7 +15,10 @@ import {
 	idSchema,
 	isoDateSchema,
 	libraryCreateSchema,
+	mediaServerPathReplacementSchema,
+	mediaServerProviderSchema,
 	onDiskSourceConfigSchema,
+	remoteLibrarySourceConfigSchema,
 	playbackSettingsSchema,
 	scanRunSchema,
 	sourceCandidateSummarySchema,
@@ -44,8 +47,8 @@ export const acceptedStatusSchema = z.object({
 	status: z.enum(['accepted', 'cancelling']),
 });
 
-/** Current configuration and indexing state of one media library. */
-export const librarySchema = libraryCreateSchema.extend({
+/** Indexing and availability state attached to every library response. */
+const libraryStateSchema = {
 	id: idSchema,
 	watcherStatus: watcherStatusSchema,
 	sourceAvailability: sourceAvailabilitySchema,
@@ -60,7 +63,60 @@ export const librarySchema = libraryCreateSchema.extend({
 	warningCount: z.number().int().nonnegative(),
 	createdAt: isoDateSchema,
 	updatedAt: isoDateSchema,
+};
+
+/** Saved media server without its access token. */
+export const mediaServerSchema = z.object({
+	id: idSchema,
+	provider: mediaServerProviderSchema,
+	name: z.string(),
+	baseUrl: z.string(),
+	serverKey: z.string(),
+	serverName: z.string(),
+	clientIdentifier: z.string(),
+	allowInsecureTls: z.boolean(),
+	playbackReportingEnabled: z.boolean(),
+	pathReplacements: z.array(mediaServerPathReplacementSchema),
+	hasCredential: z.boolean(),
+	credentialPlaceholder: z.string().nullable(),
+	createdAt: isoDateSchema,
+	updatedAt: isoDateSchema,
 });
+
+/** Remote library offered while adding a Moirai library. */
+export const remoteLibraryChoiceSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	typeKey: z.enum(['movies', 'shows', 'music-videos', 'other']),
+});
+
+/** Connection probe result. The submitted token is not echoed. */
+export const mediaServerProbeResultSchema = z.object({
+	serverKey: z.string(),
+	serverName: z.string(),
+	libraries: z.array(remoteLibraryChoiceSchema),
+});
+
+/** Server credential returned by destination-bound Plex linking or Jellyfin/Emby sign-in. */
+export const mediaServerCredentialResultSchema = z.object({
+	accessToken: z.string().nullable(),
+	clientIdentifier: z.string(),
+});
+
+/** Plex link code the operator enters at plex.tv/link. */
+export const plexPinSchema = z.object({
+	pinId: z.number().int(),
+	code: z.string(),
+	clientIdentifier: z.string(),
+});
+
+/** Current configuration and indexing state of one media library. */
+export const librarySchema = z.discriminatedUnion('sourceType', [
+	libraryCreateSchema.options[0].extend(libraryStateSchema),
+	libraryCreateSchema.options[1].extend(libraryStateSchema),
+	libraryCreateSchema.options[2].extend(libraryStateSchema),
+	libraryCreateSchema.options[3].extend(libraryStateSchema),
+]);
 
 /** Missing-media and source-change state awaiting observation or operator action. */
 export const libraryReconciliationSchema = z.object({
@@ -70,7 +126,7 @@ export const libraryReconciliationSchema = z.object({
 	requiredObservations: z.number().int().positive(),
 	observationIntervalMinutes: z.number().int().nonnegative(),
 	revision: z.string().nullable(),
-	candidateSourceConfig: onDiskSourceConfigSchema.nullable(),
+	candidateSourceConfig: z.union([onDiskSourceConfigSchema, remoteLibrarySourceConfigSchema]).nullable(),
 	sourceChangeCanBeCancelled: z.boolean(),
 	candidateSummary: sourceCandidateSummarySchema.nullable(),
 	missingItems: z.array(z.object({

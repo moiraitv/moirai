@@ -3,17 +3,18 @@ import { GraphicsSnapshots, type GraphicsSnapshotRetries } from '../graphics/sna
 import { graphicsPreparationBudget, preparePlayoutGraphicsLabels } from '../graphics/segments.js';
 import { graphicsFolder } from '../graphics/assets.js';
 import { decorateGraphics } from '../graphics/playout.js';
+import { ensurePrivateDirectory, protectPrivateFile } from '../operations/private-storage.js';
 import type { PlayoutPreparation } from './playout-preparation.js';
 import type { SchedulingWorkerPool } from '../scheduling/worker-pool.js';
 import { prepareMediaStreams, type PreparedMediaStreams } from './audio-selection.js';
 import { SubtitleAssets, type PreparedSubtitles } from './subtitle-assets.js';
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Temporal } from '@js-temporal/polyfill';
 import type { FastifyBaseLogger } from 'fastify';
 import { XMLTV_EPG_DAYS, type Channel, type LiveEvent } from '@moirai/shared';
-import { buildEtvPlayoutFiles } from './playout-output.js';
+import { buildEtvPlayoutFiles, type RemoteMediaPublishOptions } from './playout-output.js';
 import type { FallbackFillerStore } from './fallback-filler-store.js';
 import type { LiveEventPublisher } from '../operations/live-events.js';
 import type { Repository } from '../repository/index.js';
@@ -84,8 +85,9 @@ export class PlayoutSynchronizer {
 		private readonly graphicsRoot = graphicsFolder(root),
 		private readonly graphicsFfprobe = 'ffprobe',
 		private readonly publicUrl = 'http://localhost',
+		private readonly remoteMedia?: RemoteMediaPublishOptions,
 	) {
-		this.subtitles = new SubtitleAssets(root, repository);
+		this.subtitles = new SubtitleAssets(root, repository, remoteMedia);
 	}
 
 	/** Serialize worker configuration delivery with playout publication for the same channel. */
@@ -121,6 +123,7 @@ export class PlayoutSynchronizer {
 	/** Stop future passes and wait for active channel writes. */
 	async close(): Promise<void> {
 		this.running = false;
+		this.subtitles.close();
 		if (this.timer) {
 			clearTimeout(this.timer);
 			this.timer = null;
@@ -212,6 +215,7 @@ export class PlayoutSynchronizer {
 	syncChannel(channelId: string, live = false): Promise<string> {
 		if (live) {
 			this.liveChannels.add(channelId);
+			this.subtitles.promote(channelId);
 			this.workers?.promotePlayout(channelId);
 		}
 		const existing = this.active.get(channelId);
@@ -252,7 +256,7 @@ export class PlayoutSynchronizer {
 	/** Repeat one channel pass when an invalidation arrives during its active write. */
 	private async performQueuedChannelSync(channelId: string): Promise<string> {
 		let folder: string | null = null;
-		let failed = false;
+		let failed: boolean;
 		let failure: unknown;
 		try {
 			do {
@@ -342,17 +346,17 @@ export class PlayoutSynchronizer {
 			this.ensureMaterialized,
 		);
 		const fallback = await this.fallbackFillers.resolve(channel.id);
-		await mkdir(this.root, { recursive: true });
+		ensurePrivateDirectory(this.root);
 		const resolvedRoot = await realpath(this.root);
 		const folder = this.channelFolder(channel.id);
-		await mkdir(folder, { recursive: true });
+		ensurePrivateDirectory(folder);
 		const resolvedFolder = await realpath(folder);
 		if (!resolvedFolder.startsWith(`${resolvedRoot}${path.sep}`)) {
 			throw new Error('Playback output directory is outside its configured root');
 		}
 		const sourcePrograms = preparation ? null : this.repository.listPrograms();
 		const programs = preparation ? Promise.resolve(preparation.programs) : sourcePrograms!;
-		const selections = await this.subtitles.prepare(channel, guide, programs);
+		const selections = await this.subtitles.prepare(channel, guide, programs, () => this.liveChannels.has(channelId));
 		const streams = preparation ? undefined : await Promise.all([sourcePrograms!, this.repository.getPlaybackSettings()])
 			.then(([items, settings]) => prepareMediaStreams(this.repository, channel, guide, items, settings.audioPreferences)).catch(() => ({ audio: new Map(), video: new Map() }));
 		const graphics = preparation ? preparation.graphics : await this.localGraphics(channel, guide);
@@ -363,7 +367,8 @@ export class PlayoutSynchronizer {
 		return this.withChannelConfiguration(channelId, async () => {
 			const files = preparation
 				? await this.workers!.playoutRead({ kind: 'playout-documents', channelId,
-					timeZone: this.timeZone, startDate, days: playoutDays, fallback, subtitles: selections }, this.liveChannels.has(channelId)) as Map<string, string>
+					timeZone: this.timeZone, startDate, days: playoutDays, fallback, subtitles: selections,
+					...(this.remoteMedia ? { remoteMedia: this.remoteMedia } : {}) }, this.liveChannels.has(channelId)) as Map<string, string>
 				: null;
 			if (inputsChanged()) {
 				this.pending.add(channelId);
@@ -397,6 +402,9 @@ export class PlayoutSynchronizer {
 				const destination = path.join(resolvedFolder, filename);
 				try {
 					const existing = await lstat(destination);
+					if (existing.isFile() && !existing.isSymbolicLink()) {
+						protectPrivateFile(destination);
+					}
 					const unchanged
 						= existing.isFile()
 							&& !existing.isSymbolicLink()
@@ -410,7 +418,7 @@ export class PlayoutSynchronizer {
 				}
 				const temporary = `${destination}.tmp-${randomUUID()}`;
 				try {
-					await writeFile(temporary, content, { mode: 0o644 });
+					await writeFile(temporary, content, { mode: 0o600 });
 					if (inputsChanged()) {
 						await unlink(temporary);
 						this.pending.add(channelId);
@@ -520,7 +528,7 @@ export class PlayoutSynchronizer {
 		let usedGraphics = new Map<string, number>();
 		const files = new Map<string, string>();
 		const input: Parameters<typeof buildEtvPlayoutFiles> = [[channel], guide,
-			new Map([[channel.id, fallback]]), subtitles, streams?.audio, streams?.video];
+			new Map([[channel.id, fallback]]), subtitles, streams?.audio, streams?.video, this.remoteMedia];
 		let generated = preparedFiles ?? (this.workers ? await this.workers.playout(input, this.liveChannels.has(channel.id)) : buildEtvPlayoutFiles(...input));
 		if (graphics) {
 			try {

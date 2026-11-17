@@ -262,10 +262,20 @@ export class LogService {
 						'*.password',
 						'*.token',
 						'*.secret',
+						'accessToken',
+						'*.accessToken',
+						'req.headers.x-plex-token',
+						'req.headers.x-emby-token',
+						'headers.x-plex-token',
+						'headers.x-emby-token',
 					],
 					censor: '[Redacted]',
 				},
 				serializers: {
+					/** Log route context without temporary stream or authentication bearers. */
+					req(request: { method?: string; url?: string; headers?: { host?: string }; ip?: string }) {
+						return { method: request.method, url: request.url?.split(/[?#]/, 1)[0], host: request.headers?.host, remoteAddress: request.ip };
+					},
 					/** Normalize an attached error before writing structured context. */
 					err(error: Error) {
 						return {

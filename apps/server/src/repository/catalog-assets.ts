@@ -13,7 +13,7 @@ import type {
 	MediaItemDetail,
 	MediaSelectionItem,
 } from '@moirai/shared';
-import { MAX_LIBRARY_CONTENT_PREVIEW_ITEMS } from '@moirai/shared';
+import { isOnDiskSourceConfig, MAX_LIBRARY_CONTENT_PREVIEW_ITEMS } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import {
 	libraries,
@@ -400,7 +400,7 @@ export class CatalogAssetsRepository {
 				libraryId: row.libraryId,
 				relativePath: row.relativePath,
 				sourceType: row.sourceType,
-				scanRoot: row.sourceConfig.scanRoot,
+				scanRoot: isOnDiskSourceConfig(row.sourceConfig) ? row.sourceConfig.scanRoot : '',
 			}
 			: null;
 	}

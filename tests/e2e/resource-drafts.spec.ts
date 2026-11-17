@@ -1,5 +1,7 @@
 import { expect, type Locator } from '@playwright/test';
 import sharp from 'sharp';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import { test } from './documentation/fixture';
 import { authenticateAdministrator } from './authentication';
 import { seedSchedule } from './documentation/seed';
@@ -198,9 +200,15 @@ test('creates a Library and keeps its settings editor open after subsequent save
 	await page.reload();
 	await expect(name).toHaveValue('New retained library');
 	await expect(editor.getByRole('status').filter({ hasText: 'Previous draft restored' })).toBeVisible();
+	const dialogNode = await editor.elementHandle();
+	const nameNode = await name.elementHandle();
 	await editor.getByRole('button', { name: 'Add and Scan', exact: true }).click();
 	await expect(page).toHaveURL(/\/libraries\/[^/]+\/settings$/);
+	expect(await dialogNode!.evaluate(node => node.isConnected)).toBe(true);
+	expect(await nameNode!.evaluate(node => node.isConnected)).toBe(true);
+	await expect(editor.getByRole('button', { name: 'Delete Library', exact: true })).toBeEnabled();
 	await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+	await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(':library:')))).toEqual([]);
 	await name.fill('Updated retained library');
 	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
@@ -210,7 +218,61 @@ test('creates a Library and keeps its settings editor open after subsequent save
 	await name.fill('Pending reset');
 	await reset(editor);
 	await expect(name).toHaveValue('Updated retained library');
+	expect(await dialogNode!.evaluate(node => node.isConnected)).toBe(true);
+	await editor.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(page).toHaveURL(/\/libraries\/[^/]+$/);
+	await page.goBack();
+	await expect(editor).toBeVisible();
+	await expect(name).toHaveValue('Updated retained library');
+	await expect(editor.getByRole('status').filter({ hasText: 'Previous draft restored' })).toHaveCount(0);
+	await page.reload();
+	await editor.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(page).toHaveURL(/\/libraries\/[^/]+$/);
+	await page.getByRole('link', { name: 'Libraries', exact: true }).click();
+	await page.getByRole('button', { name: 'Add Library', exact: true }).first().click();
+	await expect(name).toHaveValue('');
+	await expect(editor.getByRole('status').filter({ hasText: 'Previous draft restored' })).toHaveCount(0);
 });
+
+for (const outcome of ['committed', 'failed', 'changed'] as const) {
+	test(`clears only recovered library drafts that match saved data (${outcome})`, async ({ page, documentationServer }) => {
+		await authenticateAdministrator(page);
+		const mediaRoot = path.join(documentationServer.directory, 'media');
+		await mkdir(mediaRoot);
+		await page.goto('/libraries/new');
+		const editor = page.getByRole('dialog', { name: 'Add Library', exact: true });
+		await editor.getByLabel('Name', { exact: true }).fill('Interrupted library creation');
+		await editor.getByLabel('Path Moirai scans', { exact: true }).fill(mediaRoot);
+		await page.route('**/api/v1/libraries', async route => {
+			if (route.request().method() !== 'POST') {
+				await route.continue();
+				return;
+			}
+			if (outcome !== 'failed') {
+				const response = await route.fetch();
+				expect(response.status()).toBe(201);
+			}
+			await route.abort('failed');
+		});
+		await editor.getByRole('button', { name: 'Add and Scan', exact: true }).click();
+		await expect(editor.getByRole('alert')).toBeVisible();
+		if (outcome === 'changed') {
+			await editor.getByRole('button', { name: 'Advanced', exact: true }).click();
+			const interval = editor.getByLabel('Fallback scan, minutes', { exact: true });
+			await interval.fill(String(Number(await interval.inputValue()) + 1));
+		}
+		await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.endsWith(':library:new')).length)).toBe(1);
+		await page.reload();
+		await expect(editor.getByLabel('Name', { exact: true })).toHaveValue(outcome === 'committed' ? '' : 'Interrupted library creation');
+		if (outcome === 'committed') {
+			await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.endsWith(':library:new')))).toEqual([]);
+			await expect(editor.getByRole('status').filter({ hasText: 'Previous draft restored' })).toHaveCount(0);
+		}
+		else {
+			await expect(editor.getByRole('status').filter({ hasText: 'Previous draft restored' })).toBeVisible();
+		}
+	});
+}
 
 test('keeps embedded Program and Template editors open after saving', async ({ page, documentationServer }) => {
 	const { channel } = await seedSchedule(page, documentationServer.directory);

@@ -251,7 +251,7 @@ function movePage(offset: number): void {
 /** Apply the shared tab navigation keys to the adjacent browse and review controls. */
 async function navigateTabs(event: KeyboardEvent): Promise<void> {
 	const index = tabs.value.findIndex(entry => entry.id === tab.value);
-	let next = index;
+	let next: number;
 	if (event.key === 'Home') {
 		next = 0;
 	}

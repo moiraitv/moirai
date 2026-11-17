@@ -64,8 +64,6 @@ import LibraryScanWarnings from '../components/library/LibraryScanWarnings.vue';
 import LibraryScanHistoryModal from '../components/library/LibraryScanHistoryModal.vue';
 import TransientToast from '../components/TransientToast.vue';
 import LibraryFilterModal from '../components/library/LibraryFilterModal.vue';
-import LibrarySettingsModal from '../components/library/LibrarySettingsModal.vue';
-import { useLibraryEditorRoute } from '../composables/useLibraryEditorRoute';
 import VirtualLibraryCatalog from '../components/library/VirtualLibraryCatalog.vue';
 import {
 	catalogProgramQuery,
@@ -80,12 +78,12 @@ import { liveEvents } from '../live-events';
 import { isLibrarySourceUnavailable } from '../library-health';
 import { shiftCalendarMonths } from '../date-key';
 import { useSelectionToolbarTransition } from '../selection-toolbar-transition';
-import { useLibrariesStore } from '../stores/libraries';
 
 const route = useRoute();
 const router = useRouter();
-const librariesStore = useLibrariesStore();
+const emit = defineEmits<{ loaded: [library: Library] }>();
 const id = computed(() => String(route.params.id));
+const showSettings = computed(() => route.path.endsWith('/settings'));
 const library = ref<Library>();
 const scans = ref<ScanRun[]>([]);
 const scanHistoryOpen = ref(false);
@@ -142,7 +140,6 @@ const initialLoading = ref(true);
 const mediaLoading = ref(false);
 const scanRequestPending = ref(false);
 const loadError = ref('');
-const { open: showSettings, editor: settingsEditor, close: closeSettings } = useLibraryEditorRoute('settings');
 const showFilter = ref(false);
 const showReconciliation = ref(false);
 const {
@@ -751,6 +748,7 @@ async function loadLibrary(): Promise<void> {
 		api.mediaGenres(id.value),
 		api.libraryReconciliation(id.value),
 	]);
+	emit('loaded', library.value!);
 	const runningScan = scans.value.find((entry) => entry.status === 'running');
 	if (!runningScan) {
 		activeScanId.value = undefined;
@@ -1020,18 +1018,12 @@ function handleKeydown(event: KeyboardEvent): void {
 	}
 }
 
-/** Apply an updated library returned by the settings workflow. */
-async function finishSettings(updated: Library): Promise<void> {
+/** Apply the shared editor's saved settings to the currently displayed catalog. */
+function applySettings(updated: Library): void {
 	library.value = updated;
 	actionError.value = '';
-	await librariesStore.load();
 }
-
-/** Refresh shared state and leave the deleted library route. */
-async function finishDeletion(): Promise<void> {
-	await librariesStore.load();
-	await router.push('/libraries');
-}
+defineExpose({ applySettings });
 
 /** Refresh width-dependent pagination and sticky catalog measurements. */
 function handleResize(): void {
@@ -1222,13 +1214,15 @@ onUnmounted(() => {
 				<div>
 					<strong>{{ isScanRunning() ? 'Checking media source' : 'Media source may be offline' }}</strong>
 					<p v-if="isScanRunning()">
-						Moirai is checking <code>{{ library.sourceConfig.scanRoot }}</code> after the source
-						was unavailable. Indexed media remains retained while the scan runs.
+						Moirai is checking this library after the source was unavailable. Indexed media remains retained while the scan runs.
 					</p>
-					<p v-else>
+					<p v-else-if="library.sourceType === 'on-disk' && 'scanRoot' in library.sourceConfig">
 						Moirai cannot currently access <code>{{ library.sourceConfig.scanRoot }}</code>. The
 						disk may be disconnected or unmounted, or the network location may be offline.
 						Indexed media is being retained until the source returns and a healthy scan completes.
+					</p>
+					<p v-else>
+						Moirai cannot currently reach the media server. Indexed media is being retained until the server returns and a healthy scan completes.
 					</p>
 				</div>
 				<button v-if="!isScanRunning()" class="button secondary" @click="scan">Scan Again</button>
@@ -1238,14 +1232,14 @@ onUnmounted(() => {
 			<section class="library-status-panel" aria-label="Library status">
 				<div class="status-stat status-watcher">
 					<span class="status-icon"><Unplug v-if="sourceUnavailable" :size="24" /><CircleCheck v-else :size="24" /></span>
-					<div><span>Watcher</span><strong>{{ sourceUnavailable ? 'Source offline' : library.watcherStatus === 'fallback' ? 'Periodic scans' : library.watcherStatus }}</strong><small>{{ sourceUnavailable ? 'Waiting for the configured path' : library.watcherStatus === 'fallback' ? 'Live watching paused; scheduled scans remain active' : library.watcherEnabled ? 'Monitoring library' : 'Disabled' }}</small></div>
+					<div><span>Watcher</span><strong>{{ sourceUnavailable ? 'Source offline' : library.sourceType !== 'on-disk' ? 'Scheduled' : library.watcherStatus === 'fallback' ? 'Periodic scans' : library.watcherStatus }}</strong><small>{{ sourceUnavailable ? (library.sourceType === 'on-disk' ? 'Waiting for the configured path' : 'Waiting for the media server') : library.sourceType !== 'on-disk' ? `Scans every ${library.scanIntervalMinutes} minutes` : library.watcherStatus === 'fallback' ? 'Live watching paused; scheduled scans remain active' : library.watcherEnabled ? 'Monitoring library' : 'Disabled' }}</small></div>
 				</div>
 				<div class="status-stat status-scan">
 					<span class="status-icon" :class="{ spinning: isScanRunning() }"><RefreshCw :size="24" /></span>
 					<div>
 						<span>Scan status</span>
 						<strong>{{ isScanRunning() ? 'Running' : sourceUnavailable ? 'Source unavailable' : latestScan?.status ?? 'Ready' }}</strong>
-						<small>{{ isScanRunning() ? scanProgressDescription : sourceUnavailable ? 'Disk path cannot be accessed' : 'No scan in progress' }}</small>
+						<small>{{ isScanRunning() ? scanProgressDescription : sourceUnavailable ? (library.sourceType === 'on-disk' ? 'Disk path cannot be accessed' : 'Media server cannot be reached') : 'No scan in progress' }}</small>
 						<div
 							v-if="isScanRunning() && scanProgressPercent !== null"
 							class="scan-progress-track"
@@ -1407,7 +1401,6 @@ onUnmounted(() => {
 		<LibraryScanHistoryModal v-if="scanHistoryOpen" :library-id="id" :scans="scans" @close="scanHistoryOpen = false" @refresh="loadLibrary" />
 
 		<LibraryReconciliationModal v-if="showReconciliation && reconciliation" :reconciliation="reconciliation" :busy="reconciliationBusy" @close="showReconciliation = false" @scan="scan" @reconcile="reconcile" />
-		<LibrarySettingsModal v-if="showSettings" ref="settingsEditor" :key="library.id" :library="library" @close="closeSettings" @saved="finishSettings" @deleted="finishDeletion" />
 		<LibraryFilterModal v-if="showFilter" :key="filterModalInstance" :library-id="id" :library-type="library.typeKey" :draft="filterDraft" :genres="genres" @apply="applyFilters" @close="showFilter = false" />
 		<AddItemsToProgramModal v-if="programSelection" :library-id="library.id" :library-name="library.name" :selection="programSelection" @added="finishProgramAddition" @close="programSelection = null" />
 		<ProgramAdditionToast v-if="programAdditionResult" :result="programAdditionResult" @close="programAdditionResult = null" />

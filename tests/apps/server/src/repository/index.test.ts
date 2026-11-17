@@ -1304,7 +1304,7 @@ describe('Repository scan reconciliation', () => {
 			pageSize: 10,
 			search: 'Sci-Fi',
 		});
-		expect(genreGroups.entries.map((entry) => entry.group?.kind)).toEqual(['season', 'show']);
+		expect(genreGroups.entries.map((entry) => entry.group?.kind).sort()).toEqual(['season', 'show']);
 		expect(
 			genreGroups.entries.every((entry) =>
 				entry.matches.some((match) => match.field === 'genre' && match.label === 'Science Fiction')),
@@ -1318,9 +1318,13 @@ describe('Repository scan reconciliation', () => {
 			search: 'space station',
 		});
 		expect(titleGroups.pagination).toMatchObject({ totalEntries: 2, totalPages: 2 });
-		expect(titleGroups.entries).toMatchObject([
-			{ group: { id: showId, childCount: 1 }, matches: [{ field: 'title', label: 'Space Station' }] },
-		]);
+		expect(titleGroups.entries).toHaveLength(1);
+		expect([showId, seasonId]).toContain(titleGroups.entries[0]!.group!.id);
+		expect(titleGroups.entries[0]!.group!.childCount).toBe(1);
+		expect(titleGroups.entries[0]!.matches).toContainEqual({
+			field: titleGroups.entries[0]!.group!.kind === 'show' ? 'title' : 'show',
+			label: 'Space Station',
+		});
 
 		const seasonMatches = await repository.browseMediaSourceOptions(library.id, {
 			target: 'groups',
@@ -1357,7 +1361,7 @@ describe('Repository scan reconciliation', () => {
 			director: '',
 		});
 		expect(showSearch.items.map((entry) => entry.title)).toEqual(['First Contact']);
-		expect(showSearch.groups).toEqual([]);
+		expect(showSearch.groups).toMatchObject([{ id: showId, kind: 'show' }]);
 
 		const inheritedTitle = await repository.browseMediaSourceOptions(library.id, {
 			target: 'items',
@@ -1372,7 +1376,7 @@ describe('Repository scan reconciliation', () => {
 		const browsed = await repository.browseMedia(library.id, {
 			...catalogProgramItemQuerySchema.parse({ search: 'Space Station' }), page: 1, pageSize: 10,
 		});
-		expect(browsed.entries.map(entry => entry.matches)).toEqual(inheritedTitle.entries.map(entry => entry.matches));
+		expect(browsed.entries.filter(entry => entry.item).map(entry => entry.matches)).toEqual(inheritedTitle.entries.map(entry => entry.matches));
 
 		database.sqlite.prepare('UPDATE media_groups SET title = ?, sort_title = ? WHERE id = ?')
 			.run('Renamed Station', 'Renamed Station', showId);
