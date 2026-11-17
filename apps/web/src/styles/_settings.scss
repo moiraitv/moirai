@@ -543,3 +543,43 @@
 		opacity: 0.55;
 	}
 }
+
+.media-servers-settings-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 16px;
+}
+
+.media-servers-settings-panel .settings-card-heading {
+	flex: 1 1 260px;
+}
+
+.media-server-list {
+	display: grid;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.media-server-list li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--line);
+}
+
+.media-server-list li > div {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.media-server-list small {
+	display: block;
+	margin-top: 4px;
+	color: var(--muted);
+}

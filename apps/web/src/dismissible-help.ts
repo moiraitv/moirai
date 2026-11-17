@@ -32,7 +32,7 @@ export function useDismissibleHelp(
 	storageKey: string,
 	storage: HelpPreferenceStorage | undefined = browserStorage(),
 ): DismissibleHelpState {
-	let dismissed = false;
+	let dismissed: boolean;
 	try {
 		dismissed = storage?.getItem(storageKey) === 'dismissed';
 	}

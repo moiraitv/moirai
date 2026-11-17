@@ -35,6 +35,8 @@ import { registerChannelRoutes } from './channels.js';
 import { registerGuideRoutes } from './guide.js';
 import { registerFallbackFillerRoutes } from './fallback-fillers.js';
 import { registerLibraryRoutes } from './libraries.js';
+import { registerMediaServerRoutes } from './media-servers.js';
+import type { ProviderArtworkDownloads } from '../media-servers/artwork-downloads.js';
 import { registerPlaybackRoutes } from './playback.js';
 import { registerQuickChannelSetupRoutes } from './quick-channel-setups.js';
 import { registerSchedulingRoutes } from './scheduling.js';
@@ -62,6 +64,7 @@ export interface HttpRouteDependencies {
 	requestEmbeddingWork?: (includeMedia?: boolean, concepts?: string[]) => EmbeddingWakeStatus | void;
 	logs: LogService;
 	health: HealthService;
+	providerArtworkDownloads?: ProviderArtworkDownloads;
 }
 
 /** Register the complete documented HTTP and WebSocket route surface. */
@@ -82,6 +85,8 @@ export function registerHttpRoutes(
 	registerGraphicsRoutes(app, dependencies);
 	registerMidRollPresetRoutes(app, dependencies);
 	registerLibraryRoutes(app, dependencies);
+	registerMediaServerRoutes(app, dependencies);
+
 	registerCatalogRoutes(app, dependencies);
 	registerAiRoutes(app, dependencies);
 	registerChannelRoutes(app, dependencies);

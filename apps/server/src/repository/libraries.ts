@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type {
 	Library,
 	LibraryCreate,
 	LibraryUpdate,
 } from '@moirai/shared';
-import { canonicalIdentityKey } from '@moirai/shared';
+import { canonicalIdentityKey, isOnDiskSourceConfig } from '@moirai/shared';
 import type { MoiraiDatabase } from '../db/index.js';
 import { ScanRepository } from './scans.js';
 import {
 	libraries,
+	mediaServers,
 	mediaItems,
 } from '../db/schema.js';
 import { ResourceIdentityConflictError } from './resource-identity.js';
@@ -39,7 +40,26 @@ export abstract class LibraryRepository extends ScanRepository {
 			const rows = await this.db.select({ id: libraries.id, config: libraries.sourceConfig })
 				.from(libraries).where(inArray(libraries.id, unique.slice(offset, offset + 500)));
 			for (const row of rows) {
-				roots.set(row.id, row.config.playbackRoot ?? row.config.scanRoot);
+				if (isOnDiskSourceConfig(row.config)) {
+					roots.set(row.id, row.config.playbackRoot ?? row.config.scanRoot);
+				}
+			}
+		}
+		return roots;
+	}
+
+	/** Read trusted sidecar roots in bounded batches, including every saved local mapping. */
+	async getLibrarySubtitleRoots(ids: string[]): Promise<Map<string, string[]>> {
+		const unique = [...new Set(ids)];
+		const roots = new Map<string, string[]>();
+		for (let offset = 0; offset < unique.length; offset += 500) {
+			const rows = await this.db.select({ id: libraries.id, config: libraries.sourceConfig, mappings: mediaServers.pathReplacements })
+				.from(libraries).leftJoin(mediaServers, sql`json_extract(${libraries.sourceConfig}, '$.mediaServerId') = ${mediaServers.id}`)
+				.where(inArray(libraries.id, unique.slice(offset, offset + 500)));
+			for (const row of rows) {
+				roots.set(row.id, isOnDiskSourceConfig(row.config)
+					? [row.config.playbackRoot ?? row.config.scanRoot]
+					: [...new Set((row.mappings ?? []).map((mapping) => mapping.localPrefix))]);
 			}
 		}
 		return roots;
@@ -79,7 +99,7 @@ export abstract class LibraryRepository extends ScanRepository {
 			.select({ pending: libraries.pendingSourceDefinition })
 			.from(libraries)
 			.where(eq(libraries.id, id));
-		return state?.pending ? { ...library, ...state.pending } : library;
+		return state?.pending ? { ...library, ...state.pending } as Library : library;
 	}
 
 	/** Persist a new media library configuration. */

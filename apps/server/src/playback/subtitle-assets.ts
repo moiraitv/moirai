@@ -1,7 +1,10 @@
+import path from 'node:path';
+import { isPathWithinRoot } from '../media/path-boundary.js';
+import type { RemoteMediaPublishOptions } from './playout-output.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { stat, writeFile } from 'node:fs/promises';
-import type { Channel, MediaSubtitleTrack, ScheduleGuide, SubtitlePreferences, TimelineSegment } from '@moirai/shared';
+import { parseRemotePlaybackReference, type Channel, type MediaSubtitleTrack, type ScheduleGuide, type SubtitlePreferences, type TimelineSegment } from '@moirai/shared';
 import type { EtvSubtitleSelection } from '@moirai/ersatztv-contract';
 import type { Repository } from '../repository/index.js';
 import { probeSidecarStreams } from './sidecar-streams.js';
@@ -9,6 +12,7 @@ import { creditContext } from './credit-context.js';
 import { renderCreditTemplate } from './credit-renderer.js';
 import { isImageSubtitle, resolveSubtitlePreferences, subtitleCandidates, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from './subtitle-selection.js';
 
+import { RemoteSubtitleAssets, RemoteSubtitleDeferredError, REMOTE_SUBTITLE_EXTRACTION_TIMEOUT_MS } from './remote-subtitles.js';
 import { SubtitleSnapshotStore } from './subtitle-snapshots.js';
 
 /** Only inherited subtitle fields are needed for main-thread asset preparation. */
@@ -19,6 +23,19 @@ export interface SubtitleProgram {
 
 /** Invoke FFmpeg without a shell and with bounded execution/output. */
 const execute = promisify(execFile);
+/** Bound local embedded subtitle extraction. */
+const SUBTITLE_EXTRACTION_TIMEOUT_MS = 120_000;
+
+/** Choose the most specific configured root containing this sidecar; opening validates real paths. */
+function subtitleRoot(file: string, roots: string[] | undefined): string | undefined {
+	return roots?.map((root) => path.resolve(root))
+		.filter((root) => isPathWithinRoot(root, path.resolve(file)))
+		.sort((left, right) => right.length - left.length)[0];
+}
+/** Prefer the current airing, then upcoming items, while retaining cached historical selections. */
+function subtitlePreparationRank(segment: TimelineSegment, now: number): number {
+	return Date.parse(segment.finish) <= now ? 2 : Date.parse(segment.start) <= now ? 0 : 1;
+}
 /** Concrete selections indexed by segment and physical part. */
 export type PreparedSubtitles = Map<string, Array<EtvSubtitleSelection | null>> & { subtitleMode?: Channel['subtitleMode'] };
 
@@ -29,8 +46,20 @@ export type PreparedSubtitles = Map<string, Array<EtvSubtitleSelection | null>> 
 export class SubtitleAssets {
 	readonly issues = new Map<string, string[]>();
 	private readonly snapshots: SubtitleSnapshotStore;
-	constructor(root: string, private readonly repository: Repository) {
+	private readonly remoteSubtitles: RemoteSubtitleAssets;
+	constructor(root: string, private readonly repository: Repository, remoteMedia?: RemoteMediaPublishOptions) {
 		this.snapshots = new SubtitleSnapshotStore(root);
+		this.remoteSubtitles = new RemoteSubtitleAssets(this.snapshots, remoteMedia);
+	}
+
+	/** Interrupt optional remote work when a viewer promotes an existing background pass. */
+	promote(channelId: string): void {
+		this.remoteSubtitles.promote(channelId);
+	}
+
+	/** Stop remote extraction before the synchronizer waits for active preparation to finish. */
+	close(): void {
+		this.remoteSubtitles.close();
 	}
 
 	/** Resolve inherited preferences against the program path captured by materialization. */
@@ -39,10 +68,10 @@ export class SubtitleAssets {
 		return resolveSubtitlePreferences(channel.subtitlePreferences, ancestry.map(id => programs.get(id)));
 	}
 
-	/** Prepare all referenced selections in bounded metadata batches, isolating per-item failures. */
-	async prepare(channel: Channel, guide: ScheduleGuide, programs?: Promise<SubtitleProgram[]>): Promise<PreparedSubtitles> {
+	/** Resolve selections while limiting uncached remote work to one background file per pass. */
+	async prepare(channel: Channel, guide: ScheduleGuide, programs?: Promise<SubtitleProgram[]>, isLive: () => boolean = () => false): Promise<PreparedSubtitles> {
 		try {
-			return await this.prepareSelections(channel, guide, programs);
+			return await this.prepareSelections(channel, guide, programs, isLive);
 		}
 		catch {
 			this.issues.set(channel.id, ['Unable to prepare optional subtitles; playback will continue without them']);
@@ -51,7 +80,7 @@ export class SubtitleAssets {
 	}
 
 	/** Resolve metadata and prepare selections, omitting individual failed subtitles. */
-	private async prepareSelections(channel: Channel, guide: ScheduleGuide, suppliedPrograms?: Promise<SubtitleProgram[]>): Promise<PreparedSubtitles> {
+	private async prepareSelections(channel: Channel, guide: ScheduleGuide, suppliedPrograms: Promise<SubtitleProgram[]> | undefined, isLive: () => boolean): Promise<PreparedSubtitles> {
 		const result: PreparedSubtitles = new Map();
 		const programs = new Map((await (suppliedPrograms ?? this.repository.listPrograms())).map((program) => [program.id, program.config.subtitlePreferences ?? {}]));
 		const segments = guide.channels.flatMap((entry) => entry.preview.segments)
@@ -82,9 +111,13 @@ export class SubtitleAssets {
 			return [...item.subtitleTracks, ...item.parts.flatMap((part) => part.subtitleTracks)]
 				.some((track) => track.sourceType === 'sidecar') ? [item.libraryId] : [];
 		});
-		const roots = sidecarLibraries.length ? await this.repository.getLibraryPlaybackRoots(sidecarLibraries) : new Map<string, string>();
+		const roots = sidecarLibraries.length ? await this.repository.getLibrarySubtitleRoots(sidecarLibraries) : new Map<string, string[]>();
 
 		const templates = new Map((await this.repository.creditTemplates.list()).map((template) => [template.id, template]));
+		const now = Date.now();
+		selected.sort((left, right) => subtitlePreparationRank(left, now) - subtitlePreparationRank(right, now)
+			|| Date.parse(left.start) - Date.parse(right.start));
+		let remoteExtraction: { path: string; deadline: number } | undefined;
 		for (const segment of selected) {
 			const item = media.get(segment.mediaItemId!);
 			if (!item) {
@@ -123,7 +156,7 @@ export class SubtitleAssets {
 								}
 								let streams = sidecarStreams.get(candidate.id);
 								if (!streams) {
-									streams = this.snapshots.sidecar(channel.id, candidate, file, roots.get(item.libraryId), channel.ffprobePath ?? 'ffprobe').then((snapshot) => probeSidecarStreams(snapshot, { ...candidate, playbackPaths: [snapshot] }, channel.ffprobePath ?? 'ffprobe')).catch(() => {
+									streams = this.snapshots.sidecar(channel.id, candidate, file, subtitleRoot(file, roots.get(item.libraryId)), channel.ffprobePath ?? 'ffprobe').then((snapshot) => probeSidecarStreams(snapshot, { ...candidate, playbackPaths: [snapshot] }, channel.ffprobePath ?? 'ffprobe')).catch(() => {
 										issues.add(`${item.title}: unable to read a VobSub sidecar; other subtitle tracks remain available`);
 										return [];
 									});
@@ -141,12 +174,21 @@ export class SubtitleAssets {
 						}
 
 						let choice: EtvSubtitleSelection | null = null;
+						let deferred = false;
 						for (const track of candidates.slice(0, MAX_SUBTITLE_PREPARATION_ATTEMPTS)) {
 							const key = JSON.stringify([track.sourceType, track.streamIndex, track.playbackPaths, part.playbackPath, channel.subtitleMode, roots.get(item.libraryId)]);
 							try {
 								let preparation = prepared.get(key);
 								if (!preparation) {
-									preparation = this.prepareTrack(channel, track, part.playbackPath, roots.get(item.libraryId));
+									preparation = this.prepareTrack(channel, track, part.playbackPath, subtitleRoot(track.playbackPaths[0] ?? '', roots.get(item.libraryId)), item.fileModifiedAt ?? item.updatedAt, () => {
+										const partFinish = Date.parse(segment.start) + partStartMs + part.durationSeconds * 1_000 - segment.sourceStartSeconds * 1_000;
+										const now = Date.now();
+										if (isLive() || partFinish <= now || (remoteExtraction && remoteExtraction.path !== part.playbackPath)) {
+											return 0;
+										}
+										remoteExtraction ??= { path: part.playbackPath, deadline: now + REMOTE_SUBTITLE_EXTRACTION_TIMEOUT_MS };
+										return Math.max(0, remoteExtraction.deadline - now);
+									});
 									prepared.set(key, preparation);
 								}
 								choice = await preparation;
@@ -158,9 +200,16 @@ export class SubtitleAssets {
 								}
 							}
 							catch (cause) {
+								if (cause instanceof RemoteSubtitleDeferredError) {
+									deferred = true;
+									continue;
+								}
 								const message = cause instanceof Error && !('cmd' in cause) ? cause.message : 'Unable to prepare the selected subtitle';
 								issues.add(`${item.title}: ${message}`);
 							}
+						}
+						if (!choice && deferred) {
+							issues.add(new RemoteSubtitleDeferredError().message);
 						}
 						choices.push(choice);
 					}
@@ -178,8 +227,21 @@ export class SubtitleAssets {
 		return result;
 	}
 
-	/** Prepare one candidate without timing offsets so repeated segments reuse successes and failures. */
-	private async prepareTrack(channel: Channel, track: MediaSubtitleTrack, playbackPath: string, root: string | undefined): Promise<EtvSubtitleSelection | null> {
+	/** Prepare one candidate without timing offsets; part modification versions invalidate remote assets. */
+	private async prepareTrack(channel: Channel, track: MediaSubtitleTrack, playbackPath: string, root: string | undefined, sourceVersion = '', remoteTimeBudget: () => number = () => 0): Promise<EtvSubtitleSelection | null> {
+		const remote = parseRemotePlaybackReference(playbackPath);
+		if (remote) {
+			if (track.sourceType === 'sidecar') {
+				throw new Error('Selected subtitle requires a local file');
+			}
+
+			if (channel.subtitleMode === 'burn' && !isImageSubtitle(track) && track.streamIndex !== null) {
+				return this.remoteSubtitles.prepare(channel, track, remote, playbackPath, sourceVersion, remoteTimeBudget);
+			}
+
+			return track.streamIndex === null ? null : { streamIndex: track.streamIndex };
+		}
+
 		if (track.sourceType === 'sidecar') {
 			let file = track.format === 'vobsub' ? track.playbackPaths.find(file => file.toLowerCase().endsWith('.idx')) : track.playbackPaths[0];
 			if (!file) {
@@ -199,7 +261,7 @@ export class SubtitleAssets {
 			const source = await stat(playbackPath);
 			const key = JSON.stringify({ path: playbackPath, size: source.size, modified: source.mtimeMs, stream: track.streamIndex });
 			const file = await this.snapshots.asset(channel.id, key, '.ass', async destination => {
-				await execute(channel.ffmpegPath ?? 'ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', playbackPath, '-map', `0:${track.streamIndex}`, '-c:s', 'ass', '-f', 'ass', destination], { timeout: 120_000, maxBuffer: 1_048_576 });
+				await execute(channel.ffmpegPath ?? 'ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', playbackPath, '-map', `0:${track.streamIndex}`, '-c:s', 'ass', '-f', 'ass', destination], { timeout: SUBTITLE_EXTRACTION_TIMEOUT_MS, maxBuffer: 1_048_576 });
 			});
 			return { path: file };
 		}

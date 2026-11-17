@@ -475,8 +475,13 @@ describe('channel graphics', () => {
 			const document = shapedFixture;
 			const snapshots = await GraphicsSnapshots.open(path.join(state.root, 'snapshots'));
 			const layer = await prepareGraphicsLayer(
-				state.root, document.layers[0]!, state.repository.graphics.validateAssets(document),
-				sampleGraphicsContext, 5000, snapshots, { width: 1920, height: 1080 },
+				state.root,
+				document.layers[0]!,
+				state.repository.graphics.validateAssets(document),
+				sampleGraphicsContext,
+				5000,
+				snapshots,
+				{ width: 1920, height: 1080 },
 			);
 			expect(layer).toMatchObject({ kind: 'media', location: 'bottom_left', width_percent: 34 });
 			const { data, info } = await sharp(layer!.source.path).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -902,7 +907,9 @@ it('rejects new snapshots at capacity and reuses a published one', async () => {
 		await Promise.all(names.map(name => writeFile(path.join(folder, name), 'cached')));
 		const snapshots = await GraphicsSnapshots.open(folder);
 		await expect(snapshots.use('f'.repeat(64) + '.png', async () => {})).rejects.toThrow(/capacity/);
-		expect(await snapshots.use(names[0]!, async () => { throw new Error('already cached'); })).toBe(path.join(folder, names[0]!));
+		expect(await snapshots.use(names[0]!, async () => {
+			throw new Error('already cached');
+		})).toBe(path.join(folder, names[0]!));
 	}
 	finally {
 		await state.close();
@@ -1003,8 +1010,15 @@ it('rejects oversized generated text before it occupies a snapshot slot', async 
 		}
 		const directory = path.join(state.root, 'snapshots');
 		const snapshots = await GraphicsSnapshots.open(directory);
-		await expect(prepareGraphicsLayer(state.root, { ...layer, text: 'I', width: 100 },
-			new Map(), sampleGraphicsContext, 5000, snapshots, { width: 1920, height: 1080 })).rejects.toThrow(/dimensions/);
+		await expect(prepareGraphicsLayer(
+			state.root,
+			{ ...layer, text: 'I', width: 100 },
+			new Map(),
+			sampleGraphicsContext,
+			5000,
+			snapshots,
+			{ width: 1920, height: 1080 },
+		)).rejects.toThrow(/dimensions/);
 		expect(existsSync(directory)).toBe(false);
 	}
 	finally {
@@ -1124,7 +1138,9 @@ it('shares an in-progress snapshot between preparation passes and exposes its co
 		const first = await GraphicsSnapshots.open(directory, retries);
 		const name = 'a'.repeat(64) + '.png';
 		let finish!: () => void;
-		const gate = new Promise<void>(resolve => { finish = resolve; });
+		const gate = new Promise<void>(resolve => {
+			finish = resolve;
+		});
 		const render = first.use(name, async destination => {
 			await gate;
 			await publishGraphicsFile(destination, Buffer.from('completed'));
@@ -1134,7 +1150,9 @@ it('shares an in-progress snapshot between preparation passes and exposes its co
 			const duplicate = vi.fn(async () => {});
 			const reuse = next.use(name, duplicate);
 			const independent = await GraphicsSnapshots.open(path.join(state.root, 'independent'));
-			const second = independent.use('b'.repeat(64) + '.png', async () => { await gate; });
+			const second = independent.use('b'.repeat(64) + '.png', async () => {
+				await gate;
+			});
 			try {
 				const cachedDir = path.join(state.root, 'cached');
 				const cachedName = 'c'.repeat(64) + '.png';

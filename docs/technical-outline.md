@@ -99,9 +99,10 @@ root.
 The server registers library source adapters behind one scanner contract. Each adapter owns source
 configuration validation, identity, normalized discovery, optional targeted presence checks, and an
 optional live change watcher. The scanner manager owns provider-independent scheduling,
-cancellation, progress, retry, reconciliation, and source-health publication. Only the on-disk
-adapter is registered today; filesystem traversal, technical probing, path-only presence checks, and
-watcher creation remain contained within that adapter.
+cancellation, progress, retry, reconciliation, and source-health publication. Registered adapters
+are `on-disk`, `plex`, `jellyfin`, and `emby`. Filesystem traversal, technical probing, path-only
+presence checks, and watcher creation remain inside the on-disk adapter. The media-server adapters
+do not watch the remote server; they scan on the library interval.
 
 Source identities use a provider type and stable provider-defined key, with diagnostics stored
 separately. For on-disk sources, the canonical root is the stable key while device and inode remain
@@ -116,8 +117,114 @@ For example, a host can scan `/Volumes/Media/Movies` while a containerized playb
 the same files under `/media/movies`. Relative paths must agree beneath both roots.
 
 Source media is managed outside Moirai. Moirai indexes files but does not add or delete them.
-Preview, artwork, and playout resource resolution are still filesystem-backed. Supporting a remote
-adapter will require a separate resource-access boundary in addition to implementing its scanner.
+On-disk preview, artwork, and playout stay filesystem-backed. A Plex, Jellyfin, or Emby library
+stores only the saved server id and remote library id. Library PATCH requests may omit either
+source field; the route validates the merged source against the saved library before persistence.
+Settings lists saved media servers in a dedicated tab after Playback and provides create, edit, and
+delete controls with protected drafts, write-only credentials, shared folder mappings, and explicit deletion
+confirmation. Its list distinguishes initial loading, empty results, and failed loads.
+Plex and Jellyfin connections can opt into per-channel playback start, progress, and stop reports.
+Migration 0046 defaults existing connections to disabled; adding Plex support requires no further
+schema change and leaves saved preferences intact. Separate stable channel device identities share
+one session across downstream viewers; wall-clock source positions and broadcast boundaries exclude
+FFmpeg read-ahead and HTTP reconnects. Only ready workers with recent viewers and server-streamed
+parts report; local folder mappings remain unreported. A shared background observer batches settings
+and current segments outside HLS requests. Plex rating keys and full item durations are resolved in
+one additional background query, scoped to active Plex items, without changing stored part references
+or querying per channel. Plex receives item-relative positions and retains its session across file
+boundaries; Jellyfin receives file-relative positions. The heartbeat target is 15 seconds, shortened
+to 10 seconds while Plex items are active; the observer wakes sooner at broadcast boundaries. Reports
+stop on inactivity, disablement, worker exit, or shutdown. Requests have a three-second deadline; errors log
+fixed text without provider exceptions and never gate playback. Plex tokens stay in headers and
+channel names use sanitized UTF-8 header bytes. Reports advertise no remote-control capabilities and
+can affect the authenticated user's watch history, counts, and resume state; the editor recommends a
+dedicated Moirai account. Upstream Direct Play describes the server's original file, independent of
+Moirai's output transcoding; Plex may also display file transfers as download activity.
+Library creation, library editing, and server settings share a Server card containing connection and
+authentication controls, with source-specific options under Advanced. Wide layouts pair the server
+address with its certificate switch and the half-width authentication selector with Plex sign-in or
+manual token entry. The Plex link code and Copy button share a column beside the linking instructions;
+Test connection follows the credential controls. These rows stack on narrow screens. Server and library
+editors keep save and connection errors below their fixed header, outside the scrolling form content.
+These sections use the shared form disclosure
+with a stateful caret, keyboard controls, focus restoration, and reduced-motion support.
+New Plex connections default to the Sign in with Plex authentication choice; Plex token is a separate
+manual-entry choice, and saved connections default to retaining their credential. Switching methods
+clears draft credentials and invalidates pending sign-in responses. Link-code sign-in requests a short
+four-character PIN for `plex.tv/link` and polls for a server credential using the same client
+identifier and the selected `baseUrl`. The PIN account token stays server-side and is sent only to
+Plex resource discovery. The selected address must match exactly one advertised server connection,
+including its scheme, port, and base path; only that resource credential reaches the editor and PMS.
+Unadvertised reverse proxies require manual server-token entry. The PIN polling API requires
+`baseUrl`; unbound legacy requests fail validation instead of exposing an account credential.
+The editor presents the PIN in a read-only field with a Copy action that stays available while polling, shared transient success feedback, and persistent
+clipboard failure feedback with manual selection available.
+Password sign-in and library discovery run
+through one non-persisting connection test; generation guards ignore responses after input changes,
+Reset, or disposal. Saved-connection probes accept draft fields at
+`POST /api/v1/media-servers/:id/probe`, apply the same retained-credential destination and TLS
+restrictions as updates, and return provider identity and matching libraries without writing settings.
+Unchanged attached libraries remain editable while the provider is offline.
+Saved credentials stay on the media-server row and are not returned to the browser, written into
+playout, or passed to FFmpeg. Fresh sign-in credentials stay only in the active editor draft until
+saving; browser recovery storage excludes them. Deleting a saved
+server is refused while a library's accepted source or a pending source change still references
+it. Optional path
+mappings play a local file when it exists. Otherwise playout uses a signed URL aimed at a dedicated listener bound only to
+`127.0.0.1` on an OS-assigned port. The private listener starts before playout preparation and
+closes after playback workers stop. It is absent from the main HTTP listener, including when
+that listener receives loopback reverse-proxy traffic. Startup republishes worker URLs for the
+current private port. The server proxies requests with the stored credential, forwards Range,
+and serves media as non-executable bytes. Signatures expire six hours after their scheduled
+item finishes; signed URLs are excluded from access logs.
+
+Saved destinations cannot change, or certificate verification be weakened, using a retained
+credential: the operator must explicitly supply a token before any connection test. The serialized
+writer rechecks these boundaries against the current row after the upstream probe, using its existing
+read. Conflicting saves return HTTP 409 without moving the newer credential or weakening its TLS
+policy. Explicit credentials persist with the transport policy used by their probe. Provider changes
+are rejected before contacting upstream. Tokens and client identifiers are validated
+before header encoding, including provider-issued tokens. Transport failures are replaced with
+credential-safe errors without retaining original exception messages, stacks, or causes.
+Server addresses reject userinfo, query strings, and fragments; reverse-proxy base paths remain
+supported. Public projections strip credentials from legacy URLs, while private requests reject
+those addresses until corrected. HTTP and certificate exceptions remain supported, with
+persistent warnings beside the library editor's connection and sign-in controls.
+
+Application-owned data and playout directories are restricted to `0700`; database, WAL, SHM,
+stream-signing secret, and playout files are restricted to `0600`. Database protection runs
+before the first SQLite open in startup, migration, and recovery paths. Existing data and
+custom parent-directory permissions are preserved. Credentials remain plaintext in the private
+database; backups require the same access protection.
+
+Provider metadata, sign-in, and artwork requests have a 30-second deadline covering queued
+artwork admission and response consumption. Long-running media streams use worker cancellation
+instead. Worker stdout and stderr are assembled into bounded lines and signed playback
+capabilities are redacted before diagnostics are logged, including signatures split across process chunks.
+Jellyfin discovers root library folders through the account-scoped Items endpoint, supporting ordinary
+user tokens and server API keys without requiring elevated library administration. Emby retains its
+media-folder discovery endpoint. Jellyfin and Emby select the first advertised media version instead of
+concatenating alternatives.
+Their artwork references retain provider image tags so a rescan invalidates cached item and show
+images when those tags change. Remote imports retain actors, roles, billing order, directors, ratings,
+exact release dates, sort titles,
+and available original titles, certifications, writers, studios, countries, and tags in the shared
+catalog metadata. Plex editions populate the existing edition field; audience rating falls back to
+the general Plex rating, and personal ratings are retained only when provided on the 0–10 scale.
+Metadata labels and credits use existing catalog bounds and normalization. Jellyfin/Emby item-level
+paths and streams fill missing media-source values. Remote fingerprints include the final normalized
+item, so metadata, duration, subtitle, artwork, and hierarchy changes refresh the catalog even when
+the provider modification timestamp stays unchanged. The metadata version refreshes older imports
+on the next scan without changing item identities or saved Program definitions.
+A listing that stops reporting a previously declared total fails without committing partial results.
+JSON is limited to 8 MiB per response; a library listing is limited to 100,000 items,
+1,000 pages, and 128 MiB of decoded metadata. Nonfinite or changing totals and duplicate item
+identifiers fail the scan without confirming removals. Artwork downloads enforce the configured
+source-byte limit while streaming to private temporary files, keep active work within the
+artwork concurrency setting, and admit at most 32 waiting downloads. Cancellation and failure
+remove partial files and release admission; saturated admission returns 503. Provider artwork
+is downloaded with the credential when the cache misses. A connection failure marks the library
+unavailable and keeps the previous index.
 
 The libraries overview presents each configured source as a full-width row with a carousel of the 12
 most recently indexed items. One bounded query ranks preview items within every library, including
@@ -191,10 +298,22 @@ forced, hearing-impaired, and commentary dispositions. Sidecar `.srt`, `.ass`, `
 `.sub`/`.idx`, and `.sup` files are associated with either the logical item or a specific physical
 part. Channel defaults and nested program overrides select one track using equivalent language
 codes and Off, Forced, Prefer default, or Any policies. Selected embedded text is extracted to an
-immutable sidecar for Burn; Convert passes the embedded stream index to the worker for WebVTT.
+immutable sidecar for Burn, using the signed loopback stream for remote files; Convert passes
+the embedded stream index to the worker for WebVTT.
 VobSub sidecars are probed once per track during preparation so language and disposition selection
 passes a concrete stream index to the worker. Failed VobSub probes exclude only that sidecar,
 leaving other subtitle candidates available. Image subtitles remain burned. Logical and part-scoped sidecar offsets follow multipart clipping.
+Mapped media-server sidecar identities include their server, item, and part, so repeated subtitle
+filenames in different folders cannot share playback probe state. Mapped sidecars use the most
+specific saved local-folder root; canonical containment
+and descriptor validation remain mandatory. Root lookup batches only libraries with selected
+sidecars and reads all mappings in the existing query budget. Remote extraction caches assets by
+part, modification version, and stream. Live tunes use cached remote assets without starting a
+remote read. Each background pass attempts one uncached file, prioritizing the current airing over
+future and expired spans, sharing a 120-second hard ceiling across fallback tracks in that file.
+Promoting a shared pass for a live tune kills its optional extraction and defers further reads; shutdown stops children before asset cleanup.
+Deferred text subtitles remain visible as a preparation issue without blocking video and audio.
+Failures never log signed URLs.
 Text sidecar snapshots normalize to UTF-8 without changing source files, timing, or styling. Unicode
 markers precede strict UTF-8 and the same conservative legacy detection used for undeclared NFOs.
 Text input is limited to 16 MiB; uncertainty and invalid encodings omit only the selected subtitle
@@ -248,7 +367,12 @@ resource-editor footers retain accessible action names and reset confirmation wi
 Core resource editors retain incomplete form drafts synchronously in account/resource-scoped browser
 storage, with duplication-source identities kept separate. Programs, schedule templates, channels,
 channel schedules, filler presets, encoding profiles, credit/guide templates, and library creation
-and settings share recovery and Save/Close behavior, including embedded editors. Selected artwork,
+and settings share recovery and Save/Close behavior, including embedded editors. Library creation and
+settings use one persistent editor: creation adopts the saved settings permalink, captured baseline,
+and recovery identity without remounting its dialog; subsequent saves update the same resource.
+Recovered creation drafts are cleared when their normalized saveable fields exactly match a library
+in the already-loaded collection, covering lost creation responses without another request. Different
+or incomplete drafts remain recoverable. Selected artwork,
 logo sources/crops, and fallback videos retain their files in IndexedDB through `idb`; file writes
 occur only when selections change and complete before in-app dismissal. Browser quotas can prevent
 retention, particularly for large videos. Failed retention keeps persistent warnings and existing
@@ -387,7 +511,11 @@ Media issue and tail-assessment fingerprints use size and modification time with
 library/path scope, independently of the technical probe-cache version. The fixed identity-format
 marker preserves existing decisions across probe upgrades without a database migration. Visual
 results are reused only with a reusable technical probe; refreshing probe measurements also
-refreshes visual inspection so an assessment cannot describe an outdated interval or stream;
+refreshes visual inspection so an assessment cannot describe an outdated interval or stream. Mapped
+remote scans reassess duration health even when technical probes are cached, preserving unresolved
+findings and applicable prior tail decisions. Their mapped-file stats also supply the shared physical
+issue identity, so reconciliation retains ignores for unchanged files and expires only changed inputs,
+independently of provider etags and technical probe-cache refreshes;
 metadata uses relevant media/NFO inputs and sidecar absence;
 Multipart decisions include ordered member identities; show conflicts include participating metadata.
 Unavailable inputs include observable identity and stable availability state rather than error messages.
@@ -1310,6 +1438,7 @@ embedded chapters, offset across multipart files, with a timed fallback only whe
 chapter points are absent. A probe-version bump refreshes chapters during ordinary rescans.
 If chapter output exceeds the 256 KiB ffprobe cap, one retry omits chapters while preserving playback
 facts and flags the chapter limit. Both attempts retain the output cap, process timeout, and cancellation;
+The retry opens a fresh validated descriptor and requires the same file identity and facts;
 metadata that still exceeds the cap fails rather than retrying again.
 
 Per-break count budgets consume full Program items; duration budgets reuse tail filler policies.
@@ -1534,7 +1663,7 @@ the queue limit and shutdown lifecycle, with priority over other queued work.
 After startup migrations, one dedicated worker owns runtime mutations for file-backed databases.
 The main SQLite connection rejects writes with `query_only`, and computational workers open read-only
 connections. Typed, allowlisted commands retain complete scan, timeline, resource, authentication,
-and semantic transactions. The FIFO admits one active command and at most 32 waiting commands;
+saved media-server credential changes, and semantic transactions. The FIFO admits one active command and at most 32 waiting commands;
 background producers wait for capacity and excess interactive mutations return `503` with
 `Retry-After`. Callers await commits before events or read-cache invalidation. Shutdown drains accepted
 commands; unexpected worker failure rejects pending work without replaying uncertain commits and
@@ -1765,7 +1894,7 @@ The adapter produces validated, non-overlapping playout documents for each local
 
 - respects DST-shortened and DST-lengthened days;
 - splits media crossing midnight while preserving source offsets;
-- maps primary and filler content to playback-visible local paths;
+- maps primary and filler content to a local file when one is visible, and otherwise to a signed loopback HTTP source that does not carry the media-server credential;
 - expands multipart logical items into sequential physical playout entries;
 - expresses truncation and resumed fragments with millisecond offsets;
 - replaces every remaining uncovered interval with channel, global, or bundled fallback video.
@@ -1982,15 +2111,22 @@ An explicit `--skip-build-checks` sets the build-stage-only `MOIRAI_SKIP_BUILD_C
 running the ordinary build without audit or approval checks. Dependency installation and compilation
 remain required; approval records and dependencies are unchanged. Release workflows retain the gated
 default.
-The documentation build uses markdown-it 14.3.3 or newer in its 14.x line and a scoped Vite 7.3.7
+The documentation build uses markdown-it 14.3.3 or newer in its 14.x line and a scoped Vite 7.3.8
 override for VitePress 1.6.4 to address parser and development-server security advisories.
 The Transformers.js 3.8.1 dependency uses a scoped Sharp 0.35.5 override to remove vulnerable
 image libraries while retaining ONNX runtime support for Intel macOS development.
+Transformers.js 4.3.2 requires ONNX Runtime 1.30.0, whose published Node package omits Darwin x64
+binaries despite the upstream platform table. Keep the 3.8.1 / 1.21.0 inference stack until a
+compatible published runtime restores this target. TypeScript stays on the 6.0 line because
+typescript-eslint and Vue checking require the JavaScript compiler API absent from TypeScript 7.
+The direct Undici dependency starts at 8.12.4, including the provider-response process-crash fix.
+The web application uses Vite 8 with explicit Chrome/Edge 107, Firefox 104, and Safari 16 build
+targets to retain the previous browser compatibility floor.
 ONNX Runtime 1.21.0 uses global-agent 4.1.3 for its installer, and js-yaml 3.15.2 uses
 argparse 2.0.1, whose legacy API supports the YAML CLI. These scoped overrides remove the
 unpatched sprintf-js dependency without changing the model runtime or gray-matter's YAML API.
 The server uses Fastify Static 10.1.10 or newer in its 10.x line to resolve a patched glob release.
-TypeScript ESLint's parser uses a scoped minimatch 11.0.4 override for the glob-pattern denial of
+TypeScript ESLint's parser uses a scoped minimatch 11.0.8 override for the glob-pattern denial of
 service fix. Remove this override when TypeScript ESLint depends on a patched minimatch range.
 
 ## API and web application
@@ -2073,10 +2209,10 @@ ordinary links with current-page semantics and horizontal overflow on narrow scr
 collection and resource editor URLs, contextual help, draft retention, and navigation guards remain
 owned by their original views; switching collections does not mount inactive editors.
 
-Settings separates Playback, AI, and Backups with accessible in-place tabs. Hidden panels remain
-mounted to retain drafts and existing resource polling. Settings sections use `/settings/playback`,
-`/settings/ai`, and `/settings/backups`; `/settings` and older `tab` query links redirect while preserving
-unrelated query values and fragments. Guide Template editor tabs retain their validated `tab` query
+Settings separates Playback, Media Servers, AI, and Backups with accessible in-place tabs. Hidden panels
+remain mounted to retain drafts and existing resource polling. Settings sections use `/settings/playback`,
+`/settings/media-servers`, `/settings/ai`, and `/settings/backups`; `/settings` and older `tab` query links
+redirect while preserving unrelated query values and fragments. Guide Template editor tabs retain their validated `tab` query
 parameter. Section changes and browser history preserve mounted drafts; tab indicators expose pending
 changes and failures. Playback readiness is a compact strip. Saved-value disclosures hide secondary filler
 and backup details; Engine details opens a dismissible floating popup without expanding the status
@@ -2330,9 +2466,12 @@ reconstruction, configuration and relationships, and managed assets.
 
 The backup domain exports durable catalog identities, configuration, viewing/selection state, and
 managed channel, guide, and fallback uploads. It excludes authentication, AI credentials, source
-media, generated images/search/embeddings/timelines/playout, logs, and scan history. Logical records
-prevent deleted secrets from leaking through raw SQLite pages. Workers perform export, ZIP work,
-validation, and historical-schema reconstruction using trusted bundled migrations and bound values.
+media, generated images/search/embeddings/timelines/playout, logs, and scan history. Shared media-server
+definitions and accepted/pending library references round-trip with access tokens blanked; restored
+connections require sign-in again. Restore validates source variants and server/provider references
+without network requests, including pre-reporting schema upgrades. Logical records prevent deleted
+secrets from leaking through raw SQLite pages. Workers perform export, ZIP work, validation, and
+historical-schema reconstruction using trusted bundled migrations and bound values.
 Archive SQL is never executed. Limits are 64 GiB compressed, 128 GiB expanded, and 100,000 entries;
 paths, duplicate members, links, encryption, checksums, and managed asset limits are validated.
 Authored template, slot, and boundary payloads are checked against shared scheduling contracts.

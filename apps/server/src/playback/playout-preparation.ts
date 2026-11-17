@@ -5,7 +5,7 @@ import type { Repository } from '../repository/index.js';
 import { readCommittedChannelScheduleGuide } from '../guide/schedule-guide.js';
 import { resolveSubtitlePreferences } from './subtitle-selection.js';
 import { prepareMediaStreams } from './audio-selection.js';
-import { buildEtvPlayoutFiles, type PlayoutFallback } from './playout-output.js';
+import { buildEtvPlayoutFiles, type PlayoutFallback, type RemoteMediaPublishOptions } from './playout-output.js';
 import type { PreparedSubtitles, SubtitleProgram } from './subtitle-assets.js';
 
 /** Read-only worker requests retain full committed guides and transfer only optional asset work. */
@@ -20,6 +20,7 @@ export type PlayoutReadRequest = {
 	priority?: Int32Array<SharedArrayBuffer>;
 	fallback?: PlayoutFallback;
 	subtitles?: PreparedSubtitles;
+	remoteMedia?: RemoteMediaPublishOptions;
 };
 
 /** Compact main-thread work for optional subtitle assets; no primary guide transfer is required. */
@@ -73,6 +74,7 @@ export class PlayoutPreparationReader {
 				request.subtitles, 
 				streams.audio, 
 				streams.video,
+				request.remoteMedia,
 			));
 		}
 

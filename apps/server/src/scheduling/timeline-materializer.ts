@@ -572,7 +572,7 @@ export class TimelineMaterializer {
 
 		// Choose the replacement boundary and reconstruct selection state at that instant.
 		let replaceFrom = desiredStart;
-		let initialState: SelectionStateRecord[] = [];
+		let initialState: SelectionStateRecord[];
 		let baseState: SelectionStateRecord[] = [];
 		if (current) {
 			baseState = windowBaseState(stateAfter(current.baseState, existing, desiredStart), today.toString());

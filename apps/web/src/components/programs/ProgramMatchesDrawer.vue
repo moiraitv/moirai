@@ -46,7 +46,7 @@ function close(): void {
 
 /** Activate review tabs with the same arrow, Home, and End navigation as settings tabs. */
 function navigateTabs(event: KeyboardEvent): void {
-	let next = tab.value;
+	let next: typeof tab.value;
 	if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
 		next = tab.value === 'matches' ? 'removed' : 'matches';
 	}

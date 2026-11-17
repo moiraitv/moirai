@@ -1,5 +1,6 @@
 import { GraphicsRepository } from './graphics.js';
 import { FillerPresetRepository } from './filler-presets.js';
+import { MediaServerRepository } from './media-servers.js';
 import { MidRollPresetRepository } from './mid-roll-presets.js';
 import { readAiCatalog } from './ai-catalog.js';
 import { setMediaIssueIgnored } from './ignored-media-issues.js';
@@ -135,6 +136,8 @@ export class Repository extends LibraryRepository {
 		return audioMetadata(this.database, ids);
 	}
 
+	/** Plex, Jellyfin, and Emby connections shared by remote libraries. */
+	readonly mediaServers: MediaServerRepository;
 	/** Reusable guided break behavior for channel, template, and slot assignments. */
 	readonly graphics: GraphicsRepository;
 	readonly fillerPresets: FillerPresetRepository;
@@ -158,6 +161,7 @@ export class Repository extends LibraryRepository {
 
 	constructor(private readonly database: MoiraiDatabase, readOnlyPreferences = false) {
 		super(database);
+		this.mediaServers = new MediaServerRepository(database);
 		this.semantic = new SemanticRepository(database);
 		this.authentication = new AuthenticationRepository(database);
 		this.graphics = new GraphicsRepository(database);
@@ -540,9 +544,9 @@ export class Repository extends LibraryRepository {
 		return result;
 	}
 
-	/** Read current playback metadata, including catalog artist credits for legacy snapshots. */
-	async listCurrentPlaybackSegments(at: string): Promise<MaterializedSegmentRecord[]> {
-		return this.scheduling.listCurrentPlaybackSegments(at);
+	/** Read current playback metadata, optionally scoped to active channels, with legacy artist credits. */
+	async listCurrentPlaybackSegments(at: string, channelIds?: string[]): Promise<MaterializedSegmentRecord[]> {
+		return this.scheduling.listCurrentPlaybackSegments(at, channelIds);
 	}
 
 	/** Read exact-media occupancy without loading snapshot or cursor JSON. */

@@ -28,5 +28,6 @@ const usageSlotId = useId();
 				<X :size="21" aria-hidden="true" />
 			</button>
 		</div>
+		<slot name="notice" />
 	</header>
 </template>

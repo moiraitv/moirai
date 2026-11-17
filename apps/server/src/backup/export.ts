@@ -34,6 +34,9 @@ async function exportTables(config: BackupPaths, staging: string): Promise<Pick<
 					if (table === 'media_removal_tombstones' && 'last_scan_id' in row) {
 						row.last_scan_id = null;
 					}
+					if (table === 'media_servers') {
+						row.access_token = '';
+					}
 					const record = `${JSON.stringify(row)}\n`;
 					if (Buffer.byteLength(record) > 64 * 1024 ** 2) {
 						throw new Error('Backup record exceeds 64 MiB');

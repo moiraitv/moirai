@@ -1492,3 +1492,39 @@
 		min-height: var(--target-touch);
 	}
 }
+
+@media (max-width: 680px) {
+	.source-editor-modal .resource-editor-header {
+		padding: 20px 18px 14px;
+	}
+
+	.source-editor-modal .resource-editor-scroll {
+		padding: 8px 12px 18px;
+	}
+
+	.source-editor-sources {
+		grid-auto-flow: row;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.source-editor-sources button {
+		gap: 9px;
+		padding: 10px 6px;
+	}
+
+	.source-editor-card {
+		padding: 16px;
+	}
+
+	.source-editor-card-heading {
+		gap: 12px;
+	}
+
+	.source-editor-address-row,
+	.source-editor-auth-row,
+	.source-editor-link-row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+	}
+
+}

@@ -106,6 +106,10 @@ Similar Items Programs use `BAAI/bge-small-en-v1.5` locally on the CPU. Every se
 
 One background worker prepares the library, releases the model after a minute without work, and suspends under system resource pressure. English descriptions give the best results with this model. If the bundle is incomplete, Similar Items may show an error while the rest of Moirai remains available; rebuild or reinstall may be needed to fix it.
 
+## Media library servers
+
+In **Settings**, use **Media Servers** to add or edit shared Plex, Jellyfin, and Emby connections. Use the **Server** and **Authentication** cards to enter its address and sign in with username/password (Jellyfin or Emby), a Plex link code, or a direct token/API key. **Test connection** checks edited values without saving them. Editing lets you rename it, replace its credential, or change local folder mappings for all libraries using it. Deleting a server is available only when no accepted or pending library source uses it. See [Libraries and scanning](/libraries/managing-libraries) for connection and credential details.
+
 ## AI content selection
 
 AI content selection is provided as a means of initially generating content lists using just a general idea rather than making explicit choices. It's disabled by default because it needs a configured AI provider, API key, and established budget to use.

@@ -5,10 +5,12 @@ import { AuthenticationService } from './auth/service.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/index.js';
 import { Repository } from './repository/index.js';
+import { ensurePrivateDirectory } from './operations/private-storage.js';
 
 /** Issue one short-lived recovery URL without accepting a plaintext password from the shell. */
 async function main(): Promise<void> {
 	const config = loadConfig();
+	ensurePrivateDirectory(config.dataDir);
 	const database = createDatabase(config.databasePath, config.migrationsDir);
 	const shell = Fastify({ logger: false });
 	try {

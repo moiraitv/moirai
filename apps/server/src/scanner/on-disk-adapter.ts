@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import {
+	isOnDiskSourceConfig,
 	onDiskSourceConfigSchema,
 	type Library,
 } from '@moirai/shared';
@@ -78,6 +79,10 @@ export class OnDiskSourceAdapter implements LibrarySourceAdapter {
 		targets: MissingItemPresenceTarget[],
 		context: PresenceCheckContext,
 	) {
+		if (!isOnDiskSourceConfig(library.sourceConfig)) {
+			throw new Error('On-disk presence check received a remote library');
+		}
+
 		return checkOnDiskPresence(library.sourceConfig.scanRoot, targets, context.signal);
 	}
 
@@ -86,6 +91,10 @@ export class OnDiskSourceAdapter implements LibrarySourceAdapter {
 		library: Library,
 		callbacks: SourceWatcherCallbacks,
 	): Promise<SourceWatcher> {
+		if (!isOnDiskSourceConfig(library.sourceConfig)) {
+			throw new Error('On-disk watcher received a remote library');
+		}
+
 		await this.validateConfig(library.sourceConfig);
 		return createSourceWatcher(library.sourceConfig.scanRoot, callbacks);
 	}

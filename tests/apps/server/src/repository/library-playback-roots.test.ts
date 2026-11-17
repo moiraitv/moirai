@@ -24,6 +24,11 @@ it('batches distinct requested library roots and falls back to scan roots withou
 		const roots = await repo.getLibraryPlaybackRoots([...requested.map((row) => row.id), requested[0]!.id, randomUUID()]);
 		expect(select).toHaveBeenCalledTimes(2);
 		expect(roots).toEqual(new Map(requested.map((row) => [row.id, row.sourceConfig.playbackRoot ?? row.sourceConfig.scanRoot])));
+		select.mockClear();
+		expect(await repo.getLibrarySubtitleRoots([])).toEqual(new Map());
+		expect(select).not.toHaveBeenCalled();
+		expect(await repo.getLibrarySubtitleRoots(requested.map((row) => row.id))).toEqual(new Map(requested.map((row) => [row.id, [row.sourceConfig.playbackRoot ?? row.sourceConfig.scanRoot]])));
+		expect(select).toHaveBeenCalledTimes(2);
 	}
 	finally {
 		database.close();

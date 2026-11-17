@@ -5,8 +5,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import CreditTemplatesPage from './views/CreditTemplatesPage.vue';
 import GuideTemplatesPage from './views/GuideTemplatesPage.vue';
 import DashboardPage from './views/DashboardPage.vue';
-import LibrariesPage from './views/LibrariesPage.vue';
-import LibraryPage from './views/LibraryPage.vue';
+import LibraryRoutePage from './views/LibraryRoutePage.vue';
 import ChannelsPage from './views/ChannelsPage.vue';
 import SettingsPage from './views/SettingsPage.vue';
 import MediaItemPage from './views/MediaItemPage.vue';
@@ -33,10 +32,10 @@ export const router = createRouter({
 		},
 		{ path: '/', component: DashboardPage },
 		{ path: '/guide', component: GuidePage },
-		{ path: '/libraries', component: LibrariesPage },
-		{ path: '/libraries/new', component: LibrariesPage },
-		{ path: '/libraries/:id', component: LibraryPage },
-		{ path: '/libraries/:id/settings', component: LibraryPage },
+		{ path: '/libraries', component: LibraryRoutePage },
+		{ path: '/libraries/new', component: LibraryRoutePage },
+		{ path: '/libraries/:id', component: LibraryRoutePage },
+		{ path: '/libraries/:id/settings', component: LibraryRoutePage },
 		{ path: '/libraries/:libraryId/items/:id', component: MediaItemPage },
 		{ path: '/channels', component: ChannelsPage },
 		{ path: '/channels/:id', component: ChannelsPage },
@@ -64,12 +63,12 @@ export const router = createRouter({
 			path: '/settings',
 			redirect: to => {
 				const query = { ...to.query };
-				const section = typeof query.tab === 'string' && ['playback', 'ai', 'backups'].includes(query.tab) ? query.tab : 'playback';
+				const section = typeof query.tab === 'string' && ['playback', 'media-servers', 'ai', 'backups'].includes(query.tab) ? query.tab : 'playback';
 				delete query.tab;
 				return { path: `/settings/${section}`, query, hash: to.hash };
 			},
 		},
-		{ path: '/settings/:section(playback|ai|backups)', component: SettingsPage },
+		{ path: '/settings/:section(playback|media-servers|ai|backups)', component: SettingsPage },
 		{ path: '/account', component: AccountPage },
 		{ path: '/logs', component: LogsPage },
 		{ path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundPage },

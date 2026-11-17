@@ -275,7 +275,7 @@ function contextualHtml(body: string): string {
 	markdown.use(userDocsTermBadges).use(userDocsIntroductions);
 	markdown.renderer.rules.image = (tokens, index, options, _env, renderer) => {
 		const token = tokens[index]!;
-		const source = token.attrGet('src');
+		const source = String(token.attrGet('src') ?? '');
 		if (source?.startsWith('/screenshots/') || source?.startsWith('/icons/')) {
 			token.attrSet('src', `/help${source}`);
 		}
@@ -284,7 +284,7 @@ function contextualHtml(body: string): string {
 	};
 	markdown.renderer.rules.link_open = (tokens, index, options, _env, renderer) => {
 		const token = tokens[index]!;
-		const href = token.attrGet('href');
+		const href = String(token.attrGet('href') ?? '');
 		if (href?.startsWith('/') && !href.startsWith('//') && !href.startsWith('/help/')) {
 			const [pathname, anchor] = href.split('#');
 			const fullPath = pathname === '/' ? '/help/' : `/help${pathname}.html`;

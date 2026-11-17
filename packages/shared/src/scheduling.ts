@@ -159,7 +159,7 @@ export function orderSelectedMedia<T extends SelectedMediaSortable>(
 
 	const additionOrder = new Map(items.map((item, index) => [item.id, index]));
 	return [...items].sort((left, right) => {
-		let compared = 0;
+		let compared: number;
 		let missing = false;
 		if (sort.type === 'episode') {
 			return compareEpisodeOrder(left, right, sort.direction)

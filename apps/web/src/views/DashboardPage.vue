@@ -18,6 +18,7 @@ import { liveEvents } from '../live-events';
 import { errorMessage } from '../error-message';
 import { hideBrokenImage } from '../image-error';
 import { countLabel } from '../count-label';
+import { libraryStatusValue } from '../library-health';
 import {
 	playbackAccelerationLabel,
 	playbackClientDurationLabel,
@@ -314,13 +315,13 @@ onUnmounted(() => {
 					><strong>{{ library.name }}</strong
 					><small>{{ library.typeKey }} · {{ countLabel(library.itemCount, 'item') }}</small></span
 					>
-					<StatusPill :value="isScanning(library) ? 'running' : library.watcherStatus" />
+					<StatusPill :value="libraryStatusValue(library, isScanning(library))" />
 				</RouterLink>
 			</div>
 			<div v-else class="empty-state">
 				<Library :size="48" />
 				<h3>No libraries yet</h3>
-				<p>Add a media folder to begin building the index.</p>
+				<p>Add a media folder or media server library (Plex/Jellyfin/Emby).</p>
 				<div class="form-actions">
 					<RouterLink class="button" to="/quick">Quick Setup</RouterLink>
 					<RouterLink class="button secondary" to="/libraries">Manage Libraries</RouterLink>

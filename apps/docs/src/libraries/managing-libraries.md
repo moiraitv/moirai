@@ -7,7 +7,7 @@ contextual: true
 
 # ![](/icons/library.svg) Libraries and scanning
 
-Choose **Add Library** to open the library editor. Enter the source details, then choose **Add and Scan** to create the Library, queue its initial scan, and continue in its settings editor.
+Choose **Add Library** to open the library editor. Use the source selector to choose Folder, Jellyfin, Plex, or Emby, then fill in **Library Details** and the source cards. Choose **Add and Scan** when the library is ready. After creation, Moirai queues the initial scan; continue making changes with **Save**, or choose **Close** to view the library.
 
 ![Add Library editor](/screenshots/library-create.png)
 
@@ -19,7 +19,47 @@ Use the path as Moirai sees it. In Docker this is normally a mounted path such a
 
 See [Media file naming](/libraries/media-file-naming) for recommended movie and show layouts, episode numbering, editions, multi-part videos, artwork, NFO files, and subtitle names.
 
-Direct streaming from media center software such as Jellyfin, Plex, Emby, and similar services is not currently supported. Make the underlying media files available to Moirai through a filesystem path instead, such as a folder mounted into its Docker container.
+## Plex, Jellyfin, and Emby libraries
+
+### Manage shared connections
+
+Manage shared connections in **Settings → Media Servers**. Choose **Add Media Server**, select Plex, Jellyfin, or Emby, and enter its name and address. Jellyfin and Emby offer username/password sign-in or direct API-key entry. A Jellyfin account needs access to the libraries you want to use; administrator permission is not required.
+
+For a new Plex connection, **Authentication method** defaults to **Sign in with Plex**. Choose **Plex token** instead to paste an existing token manually. With **Sign in with Plex**, choose **Copy** beside the **Plex link code** field and enter the four-character code at **plex.tv/link**, following the instructions shown. Keep the editor open until sign-in finishes, then choose **Test connection**. If the code expires, choose **Sign in with Plex** again for a new code.
+
+**Test connection**, below the authentication controls, verifies the new media server connection without saving it; **Save** finalizes the connection after validating it. Use **Edit** to change a connection, replace its credential, or adjust folder mappings. Choose **Keep saved credential** to keep the saved sign-in; changing the address or accepting an untrusted certificate requires entering a credential again. A server used by an accepted or pending library source cannot be deleted.
+
+### Report channel playback
+
+For Plex or Jellyfin, enable **Report channel playback to Plex** or **Report channel playback to Jellyfin** in the server editor to show each watched channel in that server’s dashboard. Reporting is off by default. Moirai reports the current movie or episode and its live position about every 10 seconds for Plex or 15 seconds for Jellyfin, changes items at broadcast boundaries, and stops reporting when the channel stops or its viewers become inactive.
+
+Playback reports can update the connected account’s watch history, play counts, and resume positions, so use a dedicated Moirai account if you want to keep personal viewing history separate. Plex may also show the upstream file transfer as a media download in its activity menu.
+
+### Add a remote library
+
+In addition to local files, libraries can read from Plex, Jellyfin, or Emby. In **Add Library**, choose the source and select a saved server or **New server**. Enter the address and authentication details in the **Server** card, then choose **Test connection**. For Jellyfin and Emby, this exchanges a username and password for an API key when needed, then discovers libraries. Passwords are used once and discarded after successful sign-in. Choose a matching library in **Remote Library**.
+
+For Jellyfin and Emby items with multiple versions, Moirai uses the first version offered by the server. Plex does not provide music-video libraries. Moirai stores the server sign-in separately from the library and does not show the token again.
+
+### Folder mappings and subtitles
+
+When the media files are visible on this computer, open **Advanced** and add a folder mapping so playback reads them directly. Otherwise Moirai streams each file from the media server while a channel is playing. Folder mappings also allow Moirai to use local subtitle files beside the video. Folder names on Unix servers are case-sensitive; Windows drive and network-share prefixes ignore case. For remote embedded text subtitles, Burn mode uses a local subtitle file prepared in the background. Tuning starts immediately with any cached subtitles; if they are not ready, playback starts without them and the playback status explains that preparation is pending. Background sync prepares one uncached file at a time, starting with the current item. Convert mode uses the embedded stream.
+
+### Remote scans and metadata
+
+Remote libraries scan on a schedule instead of watching a folder. **Advanced** contains the scan interval, folder watching, optional playback path, and folder mappings that apply to the selected source. Scans refresh genres, cast, directors, ratings, release dates, and other available descriptive details when they change on the server. After an importer update, synchronize the library to refresh older catalog entries. Personal ratings are available only when the server returns them for the saved connection.
+
+![Remote library connection cards](/screenshots/remote-library-create.png)
+
+### Remote request limits
+
+Moirai limits remote requests to 30 seconds, including artwork download waits. A metadata response can contain up to 8 MiB. One remote library scan can read up to 100,000 items, 1,000 pages, and 128 MiB of metadata. Artwork uses the configured source-image size limit, and excess download requests ask you to retry. If a server exceeds a limit or returns an incomplete listing, Moirai keeps the previous index instead of removing items.
+
+### Private playback files
+
+Remote playback uses a separate connection available only on this computer. Keep Moirai's data folder, playback files, and database backups private: the database contains the server sign-in needed for playback. Moirai restricts its private files when it starts, including older database and playback files.
+
+## Library scanning
 
 Each library in the main navigation has a scan-status indicator on its right. Hover over it to read its status label.
 
@@ -47,7 +87,7 @@ Library settings can change the display name or source path. A path change is st
 
 When a library scan finds issues, it will display a small alert at the top of the page. Open **Review Issues** on a library to see findings from that scan. **Last scan** opens the history of earlier results. Each finding includes a code and, when applicable, the affected path.
 
-Note that a warning does not necessarily mean the media cannot play. Choose **Ignore issue** to hide it from attention counts until its relevant files change. Ignoring does not repair media, make it playable, resolve catalog conflicts, or approve source changes or removals. Folder/source availability, scan-wide failures, and reconciliation decisions cannot be ignored.
+Note that a warning does not necessarily mean the media cannot play. Choose **Ignore issue** to hide it from attention counts until its relevant files change. This also applies to local files mapped from Plex, Jellyfin, or Emby: rescanning an unchanged file keeps the choice, while changing the affected file makes its warning visible again. Ignoring does not repair media, make it playable, resolve catalog conflicts, or approve source changes or removals. Folder/source availability, scan-wide failures, and reconciliation decisions cannot be ignored.
 
 Open **Show all issues → Suppressed issues** to review automatically suppressed and manually ignored findings. You can also reach **Suppressed issues** from **Last scan**. Choose **Restore issue** on a manually ignored finding to return it to attention counts; a later scan may still suppress a duration finding automatically.
 

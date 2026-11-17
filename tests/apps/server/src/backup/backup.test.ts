@@ -134,7 +134,7 @@ it('rejects a graphics backup with a custom asset using a bundled asset ID', asy
 it('distinguishes unavailable validation storage from a missing archived graphics file', async () => {
 	const value = await fixture();
 	try {
-		const { config, database, image, repository, root } = value;
+		const { config, image, repository, root } = value;
 		const asset = await storeGraphicsAsset(graphicsFolder(config.dataDir), 'logo.png', image, config.ffprobePath);
 		repository.graphics.addAsset(asset);
 		const archive = await exportFixture(value);

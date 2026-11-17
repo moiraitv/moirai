@@ -15,6 +15,8 @@ Open **Settings → Backups** to manage automatic backup policy and saved archiv
 
 Backups preserve configuration, the library index and IDs, channel icons, custom guide artwork, and custom fallback videos. They exclude library media files, generated thumbnails and other caches, logs, passwords, sessions, and API keys. 
 
+Backups keep shared Plex, Jellyfin, and Emby server definitions, folder mappings, and library connections, but leave out their sign-in tokens. After restoring, open **Settings → Media library servers**, edit each server, and sign in again or enter its token or API key. Save the connection, then synchronize its libraries.
+
 For simple restoration, reep media mounted at the same paths when moving to another installation. You can adjust library paths and re-scan to adapt to a new mount point without losing any configuration, though.
 
 Backup filenames are dated to include their creation time in UTC (`Z`) and a unique ID (e.g., `moirai-2026-10-17T21-15-30.123Z-<id>.zip`).

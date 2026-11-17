@@ -51,7 +51,7 @@ function contentStatus(
 
 	const source = program.config.source;
 	const indexed = indexedContentMatches(source, catalog);
-	let missing = false;
+	let missing: boolean;
 	if (source.type === 'item') {
 		missing = indexed.length === 0;
 	}

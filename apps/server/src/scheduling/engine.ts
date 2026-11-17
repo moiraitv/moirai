@@ -179,7 +179,6 @@ export function generateTimelineDetailed(input: GenerateTimelineInput): Timeline
 				continue;
 			}
 			let cursor: Temporal.Instant = carriedStart ?? nominalStart;
-			carriedStart = null;
 			if (Temporal.Instant.compare(cursor, windowEnd) >= 0
 				&& (!carriedBoundary || Temporal.Instant.compare(cursor, nominalEnd) < 0)) {
 				carriedStart = cursor;

@@ -4,13 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Library } from '@moirai/shared';
+
+type OnDiskLibrary = Extract<Library, { sourceType: 'on-disk' }>;
 import { MAX_MEDIA_DURATION_MILLISECONDS, MAX_MID_ROLL_POINTS, MAX_NFO_BYTES, MEDIA_EXTENSIONS } from '@moirai/shared';
 import { MEDIA_PROBE_VERSION, MediaProbeError, mediaProbeFingerprint, parseMediaProbeOutput } from '@server/media/media-probe.js';
 import { checkOnDiskPresence, discoverOnDisk } from '@server/scanner/on-disk.js';
 import { MAX_MEDIA_SCAN_ATTEMPTS } from '@server/scanner/scan-queue.js';
 
 const roots: string[] = [];
-async function library(typeKey = 'movies'): Promise<Library> {
+async function library(typeKey = 'movies'): Promise<OnDiskLibrary> {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-scan-'));
 	roots.push(root);
 	return {

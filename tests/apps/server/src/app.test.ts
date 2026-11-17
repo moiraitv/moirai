@@ -210,6 +210,12 @@ afterEach(async () => {
 });
 
 describe('API', () => {
+	it('does not expose the private media stream route on the main listener', async () => {
+		const { app } = await fixture();
+		const response = await app.inject({ method: 'GET', url: '/api/v1/internal/media?sig=synthetic-bearer', remoteAddress: '127.0.0.1' });
+		expect(response.statusCode).toBe(404);
+	});
+
 	it('protects management data while leaving health and IPTV delivery public', async () => {
 		const { app } = await fixture({ authenticated: false });
 		expect([200, 503]).toContain(
@@ -1241,7 +1247,7 @@ describe('API', () => {
 		expect(unavailable.statusCode).toBe(503);
 	});
 
-	it('validates merged library updates and immediately reconciles index-affecting changes', async () => {
+	it('accepts partial source updates, validates merged libraries, and reconciles index changes', async () => {
 		const { app, services, root } = await fixture();
 		const firstRoot = path.join(root, 'first-media');
 		const secondRoot = path.join(root, 'second-media');
@@ -1261,6 +1267,13 @@ describe('API', () => {
 		);
 		await services.scanner.scan(library.id, 'initial');
 
+		const mismatched = await app.inject({
+			method: 'PATCH',
+			url: `/api/v1/libraries/${library.id}`,
+			payload: { sourceType: 'plex' },
+		});
+		expect(mismatched.statusCode).toBe(400);
+
 		const unsupported = await app.inject({
 			method: 'PATCH',
 			url: `/api/v1/libraries/${library.id}`,
@@ -1275,7 +1288,8 @@ describe('API', () => {
 			},
 		});
 		expect(missing.statusCode).toBe(400);
-		expect((await services.repository.getLibrary(library.id))?.sourceConfig.scanRoot).toBe(
+		const unchanged = await services.repository.getLibrary(library.id);
+		expect(unchanged && 'scanRoot' in unchanged.sourceConfig ? unchanged.sourceConfig.scanRoot : null).toBe(
 			firstRoot,
 		);
 
@@ -1610,6 +1624,8 @@ describe('API', () => {
 				libraryId,
 				kinds: ['movie'],
 				genres: [],
+				primaryGenres: [],
+				excludedGenres: [],
 			},
 			strategy: { type: 'sequential' as const },
 		};
@@ -2137,6 +2153,7 @@ describe('API', () => {
 			maxActiveSessions: 6,
 			viewingPreferencesEnabled: true,
 			fillerShortfallWarningThresholdPercent: 80,
+			audioPreferences: {},
 		});
 		const status = await app.inject({ url: '/api/v1/playback/status' });
 		expect(status.headers['cache-control']).toBe('private, no-store');

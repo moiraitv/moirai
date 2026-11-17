@@ -1,3 +1,4 @@
+import { PLAYBACK_LOG_LINE_LIMIT } from '@server/playback/worker-log-lines.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -41,6 +42,7 @@ it('redacts signed clock URLs split across worker writes', () => {
 	expect(info.mock.calls.map(call => call[1])).toEqual([
 		'ffmpeg http://127.0.0.1:5000/clock/[redacted]',
 		'worker ready',
+		`${'x'.repeat(PLAYBACK_LOG_LINE_LIMIT)} [truncated]`,
 	]);
 });
 

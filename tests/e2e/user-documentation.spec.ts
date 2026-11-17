@@ -2154,3 +2154,32 @@ test('captures on-screen graphics assignments', { tag: '@docs-screenshot' }, asy
 	await preset.selectOption({ label: 'Animated Corner Bug' });
 	await captureSection(page, editor.locator('.graphics-assignment'), 'filler-graphics-assignment.png');
 });
+
+test('captures media library server settings', { tag: '@docs-screenshot' }, async ({ page }) => {
+	await authenticateAdministrator(page);
+	await page.route('**/api/v1/media-servers', (route) => route.fulfill({ json: [{
+		id: '11111111-1111-4111-8111-111111111111', provider: 'jellyfin', name: 'Living room',
+		baseUrl: 'https://media.example', serverKey: 'jellyfin', serverName: 'Jellyfin',
+		clientIdentifier: 'moirai-docs', hasCredential: true, credentialPlaceholder: 'Saved API key',
+		createdAt: '2026-01-15T00:00:00.000Z', updatedAt: '2026-01-15T00:00:00.000Z',
+		allowInsecureTls: false, playbackReportingEnabled: false, pathReplacements: [],
+	}] }));
+	await page.goto('/settings/media-servers');
+	const panel = page.getByRole('region', { name: 'Media library servers', exact: true });
+	await expect(panel.getByText('Living room', { exact: true })).toBeVisible();
+	await captureSection(page, page.locator('.settings-page'), 'media-library-servers.png');
+	await page.setViewportSize({ width: 1440, height: 1250 });
+	await panel.getByRole('button', { name: 'Edit media server Living room', exact: true }).click();
+	const serverEditor = page.getByRole('dialog', { name: 'Edit Media Server', exact: true });
+	await captureSection(page, serverEditor, 'media-server-editor.png');
+	await serverEditor.getByRole('button', { name: 'Close media server editor', exact: true }).click();
+	await expect(serverEditor).toBeHidden();
+	await page.unroute('**/api/v1/media-servers');
+	await page.route('**/api/v1/media-servers', (route) => route.fulfill({ json: [] }));
+	await page.goto('/libraries/new');
+	const libraryEditor = page.getByRole('dialog', { name: 'Add Library', exact: true });
+	await libraryEditor.getByRole('radio', { name: 'Jellyfin', exact: true }).click();
+	await libraryEditor.getByLabel('Server name', { exact: true }).fill('Home Jellyfin');
+	await libraryEditor.getByLabel('Server address', { exact: true }).fill('https://media.example:8096');
+	await captureSection(page, libraryEditor, 'remote-library-create.png');
+});

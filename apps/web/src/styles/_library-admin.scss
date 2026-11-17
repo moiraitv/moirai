@@ -178,6 +178,7 @@
 	letter-spacing: 0.08em;
 }
 
+.status-pill[data-status='scheduled'],
 .status-pill[data-status='ready'],
 .status-pill[data-status='playing'],
 .status-pill[data-status='complete'],

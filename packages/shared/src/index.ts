@@ -8,6 +8,7 @@ export * from './audio.js';
 import { audioPreferencesSchema } from './audio.js';
 import { audioNormalizationSchema, videoNormalizationSchema, type ConcreteHardwareAcceleration } from './encoding.js';
 export * from './encoding.js';
+import { remoteLibrarySourceConfigSchema } from './media-servers.js';
 import { z } from 'zod';
 import { subtitlePreferencesSchema } from './subtitles.js';
 export * from './subtitles.js';
@@ -29,6 +30,7 @@ export * from './catalog.js';
 export * from './catalog-sort.js';
 export * from './availability.js';
 export * from './scan-issues.js';
+export * from './media-servers.js';
 
 /** Format a numeric count with the matching singular or plural noun. */
 export function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -38,7 +40,7 @@ export function countLabel(count: number, singular: string, plural = `${singular
 /** Built-in library categories advertised by the server. */
 export const LIBRARY_TYPE_KEYS = ['movies', 'shows', 'music-videos', 'other'] as const;
 /** Built-in media provider identifiers advertised by the server. */
-export const SOURCE_TYPE_KEYS = ['on-disk'] as const;
+export const SOURCE_TYPE_KEYS = ['on-disk', 'plex', 'jellyfin', 'emby'] as const;
 /** Video suffixes treated as playable media by the on-disk provider. */
 export const MEDIA_EXTENSIONS = [
 	'.avi',
@@ -122,20 +124,47 @@ export const onDiskSourceConfigSchema = z.object({
 	playbackRoot: z.string().trim().min(1).nullable().default(null),
 });
 
-/** Validate the library create contract at runtime. */
-export const libraryCreateSchema = z.object({
+/** Fields shared by every library source variant. */
+const libraryFields = {
 	name: z.string().trim().min(1).max(120),
 	typeKey: libraryTypeSchema,
-	sourceType: sourceTypeSchema,
-	sourceConfig: onDiskSourceConfigSchema,
 	scanIntervalMinutes: z.number().int().min(1).max(10_080)
 		.default(DEFAULT_FALLBACK_SCAN_INTERVAL_MINUTES),
 	watcherEnabled: z.boolean().default(true),
 	enabled: z.boolean().default(true),
-});
+};
 
-/** Validate the library update contract at runtime. */
-export const libraryUpdateSchema = libraryCreateSchema.partial();
+/** Validate the library create contract at runtime. */
+export const libraryCreateSchema = z.discriminatedUnion('sourceType', [
+	z.object({ ...libraryFields, sourceType: z.literal('on-disk'), sourceConfig: onDiskSourceConfigSchema }),
+	z.object({ ...libraryFields, sourceType: z.literal('plex'), sourceConfig: remoteLibrarySourceConfigSchema }),
+	z.object({ ...libraryFields, sourceType: z.literal('jellyfin'), sourceConfig: remoteLibrarySourceConfigSchema }),
+	z.object({ ...libraryFields, sourceType: z.literal('emby'), sourceConfig: remoteLibrarySourceConfigSchema }),
+]);
+
+/** Validate partial library edits; the route validates omitted source fields against saved values. */
+export const libraryUpdateSchema = z.object({
+	name: z.string().trim().min(1).max(120).optional(),
+	typeKey: libraryTypeSchema.optional(),
+	sourceType: z.enum(SOURCE_TYPE_KEYS).optional(),
+	sourceConfig: z.union([onDiskSourceConfigSchema, remoteLibrarySourceConfigSchema]).optional(),
+	scanIntervalMinutes: z.number().int().min(1).max(10_080).optional(),
+	watcherEnabled: z.boolean().optional(),
+	enabled: z.boolean().optional(),
+}).superRefine((value, context) => {
+	if (!value.sourceType || !value.sourceConfig) {
+		return;
+	}
+
+	const remote = value.sourceType !== 'on-disk';
+	if (remote !== ('mediaServerId' in value.sourceConfig)) {
+		context.addIssue({
+			code: 'custom',
+			path: ['sourceConfig'],
+			message: 'Source configuration does not match the source type',
+		});
+	}
+});
 
 /** Shared wire contract for library create. */
 export type LibraryCreate = z.infer<typeof libraryCreateSchema>;
@@ -163,8 +192,8 @@ export const sourceCandidateSummarySchema = z.object({
 /** Shared wire contract for source candidate summary. */
 export type SourceCandidateSummary = z.infer<typeof sourceCandidateSummarySchema>;
 
-/** Shared wire contract for library. */
-export interface Library extends LibraryCreate {
+/** Runtime state joined to one authored library definition. */
+interface LibraryState {
 	id: string;
 	watcherStatus: z.infer<typeof watcherStatusSchema>;
 	sourceAvailability: SourceAvailability;
@@ -179,6 +208,16 @@ export interface Library extends LibraryCreate {
 	warningCount: number;
 	createdAt: string;
 	updatedAt: string;
+}
+
+/** Shared wire contract for library. */
+export type Library = LibraryCreate & LibraryState;
+
+/** Return whether a library source reads a local folder. */
+export function isOnDiskSourceConfig(
+	config: LibraryCreate['sourceConfig'],
+): config is z.infer<typeof onDiskSourceConfigSchema> {
+	return 'scanRoot' in config;
 }
 
 /** Shared wire contract for library reconciliation item. */

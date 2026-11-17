@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import Database from 'better-sqlite3';
+import { preparePrivateDatabase } from '../operations/private-storage.js';
 import { applyPendingMigrations } from './migrations.js';
 
 const { databasePath, migrationsDir } = workerData as {
@@ -7,6 +8,7 @@ const { databasePath, migrationsDir } = workerData as {
 	migrationsDir: string;
 };
 
+preparePrivateDatabase(databasePath);
 const sqlite = new Database(databasePath);
 try {
 	sqlite.pragma('foreign_keys = ON');

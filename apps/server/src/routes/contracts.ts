@@ -5,7 +5,7 @@ import { $ZodType, safeParse } from 'zod/v4/core';
 import { apiErrorBodySchema } from '@moirai/shared/api-contracts';
 
 /** HTTP status codes represented by the stable JSON error envelope. */
-export type DocumentedErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 416 | 422 | 429 | 500 | 503;
+export type DocumentedErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 416 | 422 | 429 | 500 | 502 | 503;
 
 /** Descriptive fields and contracts used by one generated API operation. */
 interface ApiOperationContract {

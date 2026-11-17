@@ -13,7 +13,7 @@ export interface EtvSubtitleSelection {
 }
 
 /** Serialize subtitle source offsets independently of the physical video part. */
-function subtitleTrack(item: EtvLocalPlayoutItem): Record<string, unknown> {
+function subtitleTrack(item: EtvTimedMediaItem): Record<string, unknown> {
 	const selection = item.subtitle!;
 	return {
 		...(selection.streamIndex === undefined ? {} : { stream_index: selection.streamIndex }),
@@ -67,13 +67,11 @@ export interface EtvCanvasGraphicsLayer {
 /** Ordered graphics composited by the pinned engine. */
 export type EtvGraphicsLayer = EtvMediaGraphicsLayer | EtvCanvasGraphicsLayer;
 
-/** A concrete local media item in a generated ErsatzTV playout window. */
-export interface EtvLocalPlayoutItem {
-	type: 'local';
+/** Fields shared by a file and an HTTP media item. */
+interface EtvTimedMediaItem {
 	id: string;
 	start: string;
 	finish: string;
-	path: string;
 	inPointMs: number | null;
 	outPointMs: number | null;
 	silentAudio?: boolean;
@@ -81,6 +79,18 @@ export interface EtvLocalPlayoutItem {
 	videoStreamIndex?: number | null;
 	subtitle?: EtvSubtitleSelection | null;
 	graphics?: EtvGraphicsLayer[];
+}
+
+/** A concrete local media item in a generated ErsatzTV playout window. */
+export interface EtvLocalPlayoutItem extends EtvTimedMediaItem {
+	type: 'local';
+	path: string;
+}
+
+/** A remote file fetched by the channel worker from a loopback URL that carries no credential. */
+export interface EtvHttpPlayoutItem extends EtvTimedMediaItem {
+	type: 'http';
+	uri: string;
 }
 
 /** A bounded black-and-silent item used for intentional dead air. */
@@ -94,22 +104,29 @@ export interface EtvDeadAirPlayoutItem {
 }
 
 /** Concrete item accepted by the ErsatzTV playout adapter. */
-export type EtvPlayoutItem = EtvLocalPlayoutItem | EtvDeadAirPlayoutItem;
+export type EtvPlayoutItem = EtvLocalPlayoutItem | EtvHttpPlayoutItem | EtvDeadAirPlayoutItem;
 
-/** Represent local media offsets or bounded dead air in the pinned ErsatzTV playout format. */
+/** Represent local media, a signed HTTP source, or bounded dead air in the pinned playout format. */
 function toEtvPlayoutItem(item: EtvPlayoutItem): Record<string, unknown> {
-	if (item.type === 'local') {
+	if (item.type === 'local' || item.type === 'http') {
 		return {
 			id: item.id,
 			start: item.start,
 			finish: item.finish,
 			...(item.graphics?.length ? { graphics: item.graphics } : {}),
-			source: {
-				source_type: 'local',
-				path: item.path,
-				...(item.inPointMs === null ? {} : { in_point_ms: item.inPointMs }),
-				...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs }),
-			},
+			source: item.type === 'http'
+				? {
+					source_type: 'http',
+					uri: item.uri,
+					...(item.inPointMs === null ? {} : { in_point_ms: item.inPointMs }),
+					...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs }),
+				}
+				: {
+					source_type: 'local',
+					path: item.path,
+					...(item.inPointMs === null ? {} : { in_point_ms: item.inPointMs }),
+					...(item.outPointMs === null ? {} : { out_point_ms: item.outPointMs }),
+				},
 			...(item.silentAudio || item.subtitle || item.audioStreamIndex != null || item.videoStreamIndex != null
 				? {
 					tracks: {

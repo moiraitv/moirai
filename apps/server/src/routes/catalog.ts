@@ -7,6 +7,7 @@ import { z } from 'zod';
 import {
 	canonicalGenreKey,
 	contentExclusionsSchema,
+	isOnDiskSourceConfig,
 	genreMatchSchema,
 	MAX_EXPLICIT_MEDIA_GROUPS,
 	MAX_EXPLICIT_MEDIA_ITEMS,
@@ -34,7 +35,9 @@ import {
 } from '../artwork/artwork-cache.js';
 import { MediaPreviewError, mediaMimeType, parseMediaRange, resolveMediaFile } from '../media/media-preview.js';
 import type { Repository } from '../repository/index.js';
-import { openSourceFile, SourceFileError } from '../media/source-file.js';
+import { openSourceFile, SourceFileError, type OpenedSourceFile } from '../media/source-file.js';
+import { PROVIDER_IMAGE_PREFIX } from '../media-servers/catalog.js';
+import { ProviderArtworkDownloads, ProviderArtworkCapacityError } from '../media-servers/artwork-downloads.js';
 import { parseId } from './params.js';
 import { MEDIA_SELECTION_BODY_LIMIT } from './media-request-limits.js';
 import {
@@ -146,12 +149,13 @@ interface CatalogRouteDependencies {
 	repository: Repository;
 	artworkCache: ArtworkCache;
 	schedulingWorkers?: SchedulingWorkerPool;
+	providerArtworkDownloads?: ProviderArtworkDownloads;
 }
 
 /** Register catalog browsing, media preview, and proxied artwork endpoints. */
 export function registerCatalogRoutes(
 	app: FastifyInstance,
-	{ repository, artworkCache, schedulingWorkers }: CatalogRouteDependencies,
+	{ repository, artworkCache, schedulingWorkers, providerArtworkDownloads = new ProviderArtworkDownloads() }: CatalogRouteDependencies,
 ): void {
 	/** Preserve local route fixtures while production reads return worker-validated bytes. */
 	const readCatalog = async (request: CatalogReadRequest, reply: import('fastify').FastifyReply): Promise<unknown> => {
@@ -477,15 +481,43 @@ export function registerCatalogRoutes(
 		}
 
 		// Open the source through the library boundary or fall back to a stale variant.
-		let artworkSource: Awaited<ReturnType<typeof openSourceFile>>;
+		let artworkSource: OpenedSourceFile | undefined;
+		const abort = new AbortController();
+		request.raw.once('aborted', () => abort.abort());
+		reply.raw.once('close', () => abort.abort());
+		let cleanupProviderArtwork: (() => Promise<void>) | null = null;
 		try {
-			artworkSource = await openSourceFile(
-				library.sourceConfig.scanRoot,
-				relativePath,
-				artworkCache.maximumSourceBytes,
-			);
+			if (relativePath.startsWith(PROVIDER_IMAGE_PREFIX)) {
+				if (isOnDiskSourceConfig(library.sourceConfig)) {
+					throw new SourceFileError('missing', 'Artwork was not found');
+				}
+
+				const providerArtwork = await providerArtworkDownloads.open(
+					repository.mediaServers,
+					library.sourceConfig.mediaServerId,
+					relativePath,
+					artworkCache.maximumSourceBytes,
+					abort.signal,
+				);
+				artworkSource = providerArtwork.file;
+				cleanupProviderArtwork = providerArtwork.cleanup;
+			}
+			else if (!isOnDiskSourceConfig(library.sourceConfig)) {
+				throw new SourceFileError('unavailable', 'Artwork source is temporarily unavailable');
+			}
+			else {
+				artworkSource = await openSourceFile(
+					library.sourceConfig.scanRoot,
+					relativePath,
+					artworkCache.maximumSourceBytes,
+				);
+			}
 		}
 		catch (error) {
+			if (error instanceof ProviderArtworkCapacityError) {
+				throw error;
+			}
+
 			const stale = await artworkCache.getStale(cacheOwner, artworkQuery.variant, artworkQuery.dpr);
 			if (!stale) {
 				if (error instanceof SourceFileError) {
@@ -521,11 +553,11 @@ export function registerCatalogRoutes(
 		}
 
 		// Transform and cache the requested variant while guaranteeing descriptor cleanup.
-		let servedArtwork: string | null = null;
+		let servedArtwork: string | null;
 		try {
 			servedArtwork = await artworkCache.store(
 				cacheOwner,
-				artworkSource,
+				artworkSource!,
 				artworkQuery.variant,
 				artworkQuery.dpr,
 			);
@@ -545,7 +577,12 @@ export function registerCatalogRoutes(
 			throw error;
 		}
 		finally {
-			await artworkSource.handle.close().catch(() => undefined);
+			if (cleanupProviderArtwork) {
+				await cleanupProviderArtwork();
+			}
+			else {
+				await artworkSource?.handle.close().catch(() => undefined);
+			}
 		}
 		if (!servedArtwork) {
 			throw app.httpErrors.unprocessableEntity('Artwork exceeds configured rendering limits');

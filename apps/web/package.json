@@ -10,23 +10,23 @@
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",
-    "@lucide/vue": "^1.33.0",
+    "@lucide/vue": "^1.72.0",
     "@moirai/shared": "*",
-    "@tanstack/vue-virtual": "^3.13.36",
-    "focus-trap": "7.8.0",
+    "@tanstack/vue-virtual": "^3.13.52",
+    "focus-trap": "8.2.4",
     "idb": "^8.0.4",
     "iso-639-3": "^3.0.1",
-    "liquidjs": "^10.29.0",
-    "pinia": "^3.0.0",
-    "vue": "^3.5.0",
+    "liquidjs": "^10.30.1",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.45",
     "vue-draggable-plus": "^0.6.1",
-    "vue-router": "^4.5.0",
+    "vue-router": "^5.5.1",
     "yaml": "^2.8.3"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.0",
-    "sass": "^1.92.0",
-    "vite": "^7.3.7",
-    "vue-tsc": "^3.0.0"
+    "@vitejs/plugin-vue": "^6.0.11",
+    "sass": "^1.108.2",
+    "vite": "^8.3.8",
+    "vue-tsc": "^3.3.14"
   }
 }

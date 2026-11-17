@@ -282,17 +282,16 @@ export class MediaCatalogRepository {
 
 		// Build a parameterized flattened scope and its requested filters.
 		let forceLike = false;
-		let scopeCte = '';
-		let where = '';
-		let allParams: Array<string | number> = [];
-		let navigation: MediaBrowseResult['navigation'] = [];
-		let totalEntries = 0;
+		let scopeCte: string;
+		let where: string;
+		let allParams: Array<string | number>;
+		let navigation: MediaBrowseResult['navigation'];
+		let totalEntries: number;
 		for (;;) {
 			const scope = this.filteredItemScope(libraryId, query, forceLike, libraryType === 'music-videos');
 			({ scopeCte, where } = scope);
 			allParams = [...scope.scopeParams, ...scope.filterParams];
 			navigation = [];
-			totalEntries = 0;
 
 			// Derive section navigation and total entries from the active sort mode.
 			if (query.sort === 'title' && !query.search) {

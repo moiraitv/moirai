@@ -1,6 +1,5 @@
 import matter from 'gray-matter';
-import type MarkdownIt from 'markdown-it';
-import type Token from 'markdown-it/lib/token.mjs';
+import type { MarkdownIt, Token } from 'markdown-it';
 import type { ReviewChange } from './user-docs-review.js';
 
 /** Current Markdown locations that differ from a verified approval. */
@@ -14,10 +13,10 @@ export interface ReviewHighlights {
 interface HighlightMarkdown {
 	core: {
 		ruler: {
-			after: (after: string, name: string, rule: (state: { tokens: Token[]; env: { frontmatter?: { id?: string } } }) => void) => void;
+			after: (after: string, name: string, rule: (state: { tokens: Token[]; env: { [key: string]: unknown; frontmatter?: { id?: string } } }) => void) => void;
 		};
 	};
-	renderer: MarkdownIt['renderer'];
+	renderer: { rules: Record<string, unknown> };
 }
 
 /** Translate unified diff positions into zero-based Markdown body lines. */
@@ -68,16 +67,18 @@ export function userDocsHighlights(markdown: HighlightMarkdown, pages: Array<{ i
 			mark(line);
 		}
 		for (const token of state.tokens) {
-			if (token.map && (changes.all || token.children?.some((child) => child.type === 'image' && changes.images.includes(child.attrGet('src') ?? '')))) {
+			if (token.map && (changes.all || token.children?.some((child) => child.type === 'image' && changes.images.includes(String(child.attrGet('src') ?? ''))))) {
 				mark(token.map[0]);
 			}
 		}
 	});
+	// VitePress and MarkdownIt 15 differ in attribute types; each hook forwards its own tokens.
+	const rules = markdown.renderer.rules as Partial<MarkdownIt['renderer']['rules']>;
 	for (const type of ['fence', 'code_block']) {
-		const render = markdown.renderer.rules[type]!;
-		markdown.renderer.rules[type] = (tokens, index, options, env, renderer) => {
+		const render = rules[type]!;
+		rules[type] = (tokens, index, options, env, renderer) => {
 			const html = render(tokens, index, options, env, renderer);
-			return tokens[index]!.attrGet('class')?.includes('docs-review-changed') ? `<div class="docs-review-changed">${html}</div>` : html;
+			return String(tokens[index]!.attrGet('class') ?? '').includes('docs-review-changed') ? `<div class="docs-review-changed">${html}</div>` : html;
 		};
 	}
 }

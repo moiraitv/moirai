@@ -1,3 +1,8 @@
+import { createServer } from 'node:http';
+import { createReadStream } from 'node:fs';
+import { createDatabase } from '@server/db/index.js';
+import { Repository as ConcreteRepository } from '@server/repository/index.js';
+import { MediaStreamServer } from '@server/media-servers/stream-server.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
@@ -5,7 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { channelCreateSchema, subtitlePreferencesSchema, MUSIC_VIDEO_CREDIT_TEMPLATE, type Channel, type MediaItem, type MediaSubtitleTrack, type ScheduleGuide, type TimelineSegment } from '@moirai/shared';
+import { channelCreateSchema, subtitlePreferencesSchema, libraryCreateSchema, mediaServerCreateSchema, remotePlaybackReference, MUSIC_VIDEO_CREDIT_TEMPLATE, type Channel, type MediaItem, type MediaSubtitleTrack, type ScheduleGuide, type TimelineSegment } from '@moirai/shared';
 import { selectSubtitle, subtitleLanguageKey, MAX_SUBTITLE_PREPARATION_ATTEMPTS } from '@server/playback/subtitle-selection.js';
 import { assTimestamp, escapeAssText, renderCredits } from '@server/playback/credit-render.js';
 import { renderCreditTemplate } from '@server/playback/credit-renderer.js';
@@ -281,7 +286,7 @@ it.each(['burn', 'convert'] as const)('omits malformed sidecars in %s mode and a
 	const media = item();
 	media.subtitleTracks = [track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file] })];
 	const entry = segment(configured, media);
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const prepared = await assets.prepare(configured, guide(configured, entry));
 	expect(prepared.get(entry.id)).toEqual([null]);
@@ -315,7 +320,7 @@ process.stdout.write(JSON.stringify({streams:[{index:0,tags:{language:'fra'}},{i
 	const media = item();
 	media.subtitleTracks = [track({ sourceType: 'sidecar', format: 'vobsub', codec: 'dvd_subtitle', streamIndex: null, language: null, playbackPaths: [file, path.join(root, 'video.sub')] })];
 	const entry = segment(configured, media);
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const selected = await assets.prepare(configured, guide(configured, entry));
 	const snapshot = selected.get(entry.id)![0]!.path!;
@@ -364,7 +369,7 @@ it.each(['embedded', 'sidecar'] as const)('keeps a valid %s subtitle when a VobS
 		track({ sourceType: 'sidecar', format: 'vobsub', streamIndex: null, playbackPaths: [path.join(root, 'video.idx')] }),
 		track({ sourceType, streamIndex: sourceType === 'embedded' ? 2 : null, format: sourceType === 'sidecar' ? 'srt' : null, playbackPaths: sourceType === 'sidecar' ? [file] : [] }),
 	];
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const entry = segment(configured, media);
 	const prepared = await assets.prepare(configured, guide(configured, entry));
@@ -415,7 +420,7 @@ it.each(['symlink', 'parent', 'traversal', 'missing', 'directory', 'idx', 'sub']
 	const configured = channel();
 	configured.subtitlePreferences = { policy: 'any' };
 	const entry = segment(configured, media);
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, library]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [library]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const output = path.join(root, 'assets');
 	const assets = new SubtitleAssets(output, repository);
 	const prepared = await assets.prepare(configured, guide(configured, entry));
@@ -468,8 +473,8 @@ it.each([false, true])('copies validated descriptors under a mapped root (symlin
 		await symlink(outside, file);
 		return opened;
 	});
-	const lookup = vi.fn(async () => new Map([[media.libraryId, trustedRoot]]));
-	const repository = { getLibraryPlaybackRoots: lookup, listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const lookup = vi.fn(async () => new Map([[media.libraryId, [trustedRoot]]]));
+	const repository = { getLibrarySubtitleRoots: lookup, listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(output, repository);
 	const entry = segment(configured, media);
 	const prepared = await assets.prepare(configured, guide(configured, entry));
@@ -499,7 +504,7 @@ it('reuses sidecar snapshots across filesystem identity changes and refreshes ch
 	configured.subtitlePreferences = { policy: 'any' };
 	const media = item();
 	media.subtitleTracks = [track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file] })];
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(path.join(root, 'assets'), repository);
 	const entry = segment(configured, media);
 	const first = (await assets.prepare(configured, guide(configured, entry))).get(entry.id)![0]!.path!;
@@ -540,7 +545,7 @@ it('closes the source and removes temporary output when streaming fails', async 
 	const configured = channel();
 	configured.subtitlePreferences = { policy: 'any' };
 	const entry = segment(configured, media);
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
 	expect(opened!.handle.fd).toBe(-1);
@@ -571,7 +576,7 @@ it.each(['western', 'japanese', 'gb18030', 'big5', 'unicode-ass', 'unicode-sub-l
 	await mkdir(directory, { recursive: true });
 	const oldSnapshot = path.join(directory, createHash('sha256').update(oldKey).digest('hex') + `.${extension}`);
 	await writeFile(oldSnapshot, raw);
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const entry = segment(configured, media);
 	const prepared = await assets.prepare(configured, guide(configured, entry));
@@ -597,7 +602,7 @@ it.each(['uncertain', 'oversized'])('omits %s subtitle text with an actionable i
 	const file = path.join(root, 'video.srt');
 	await writeFile(file, kind === 'uncertain' ? Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nCaf\xe9\n', 'latin1') : Buffer.alloc(MAX_SUBTITLE_TEXT_BYTES + 1, 65));
 	media.subtitleTracks = [track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [file] })];
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const entry = segment(configured, media);
 	expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
@@ -618,7 +623,7 @@ it.each(['sup', 'sub'])('preserves binary %s snapshots instead of trying to deco
 	await writeFile(file, bytes);
 	const media = item();
 	media.subtitleTracks = [track({ sourceType: 'sidecar', format: extension, codec: null, streamIndex: null, playbackPaths: [file] })];
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const entry = segment(configured, media);
 	const prepared = await assets.prepare(configured, guide(configured, entry));
@@ -679,7 +684,7 @@ it.each(['recover', 'forced', 'language', 'part', 'limit', 'title'])('keeps subt
 		sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [valid], relativePaths: ['valid.srt'],
 		language: scenario === 'language' ? 'fra' : 'eng', partNumber: scenario === 'part' ? 2 : 1,
 	})];
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const entry = segment(configured, media);
 	const repeated = { ...entry, id: randomUUID() };
@@ -714,7 +719,7 @@ it('falls back within forced multipart candidates while preserving whole-file of
 	const sidecar = (file: string, partNumber: number | null) => track({ sourceType: 'sidecar', streamIndex: null, format: 'srt', playbackPaths: [file], partNumber, isForced: true });
 	media.subtitleTracks = [sidecar(whole, null)];
 	media.parts = [first, broken].map((file, index) => ({ number: index + 1, kind: 'part', relativePath: `part${index + 1}.mkv`, playbackPath: `/part${index + 1}.mkv`, durationSeconds: 90, subtitleTracks: [sidecar(file, index + 1)] }));
-	const repository = { getLibraryPlaybackRoots: async () => new Map([[media.libraryId, root]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+	const repository = { getLibrarySubtitleRoots: async () => new Map([[media.libraryId, [root]]]), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
 	const assets = new SubtitleAssets(root, repository);
 	const entry = { ...segment(configured, media), playbackParts: media.parts.map(part => ({ playbackPath: part.playbackPath, durationSeconds: 90 })) };
 	const prepared = await assets.prepare(configured, guide(configured, entry));
@@ -724,3 +729,102 @@ it('falls back within forced multipart candidates while preserving whole-file of
 	expect(await readFile(choices[1]!.path!, 'utf8')).toContain('Whole file');
 	expect(assets.issues.get(configured.id)?.[0]).toContain('encoding');
 });
+
+
+it.each(['burn', 'convert'] as const)('prepares mapped remote-library sidecars in %s mode and rejects files outside the mappings', async (mode) => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-remote-sidecars-'));
+	roots.push(root);
+	const mapped = path.join(root, 'mapped');
+	await mkdir(mapped);
+	const sidecar = path.join(mapped, 'movie.srt');
+	const outside = path.join(root, 'outside.srt');
+	await writeFile(sidecar, '1\n00:00:01,000 --> 00:00:02,000\nMapped caption\n');
+	await writeFile(outside, '1\n00:00:01,000 --> 00:00:02,000\nOutside caption\n');
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	try {
+		const repo = new ConcreteRepository(database.db);
+		const server = await repo.mediaServers.createMediaServer(mediaServerCreateSchema.parse({
+			provider: 'plex', name: 'Mapped server', baseUrl: 'https://synthetic.invalid', accessToken: 'synthetic-token',
+			pathReplacements: [{ remotePrefix: '/unused', localPrefix: path.join(root, 'unused') }, { remotePrefix: '/media', localPrefix: mapped }],
+		}), { serverKey: 'synthetic', serverName: 'Synthetic', libraries: [] });
+		const library = await repo.createLibrary(libraryCreateSchema.parse({ name: 'Mapped movies', typeKey: 'movies', sourceType: 'plex', sourceConfig: { mediaServerId: server.id, remoteLibraryId: '1', remoteLibraryName: 'Movies' } }));
+		const configured = channel();
+		configured.subtitleMode = mode;
+		configured.subtitlePreferences = { policy: 'any' };
+		const media = { ...item(), libraryId: library.id, playbackPath: path.join(mapped, 'movie.mkv'), subtitleTracks: [track({ sourceType: 'sidecar', format: 'srt', streamIndex: null, playbackPaths: [sidecar] })] };
+		const repository = { getLibrarySubtitleRoots: repo.getLibrarySubtitleRoots.bind(repo), listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] } } as unknown as Repository;
+		const assets = new SubtitleAssets(path.join(root, 'assets'), repository);
+		const entry = segment(configured, media);
+		const prepared = await assets.prepare(configured, guide(configured, entry));
+		expect(await readFile(prepared.get(entry.id)![0]!.path!, 'utf8')).toContain('Mapped caption');
+		expect(assets.issues.get(configured.id)).toEqual([]);
+		media.subtitleTracks[0]!.playbackPaths = [outside];
+		expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
+		media.subtitleTracks[0]!.playbackPaths = [sidecar];
+		await rm(sidecar);
+		await symlink(outside, sidecar);
+		expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
+	}
+	finally {
+		database.close();
+	}
+});
+
+it('extracts remote text for Burn through the signed listener, reuses snapshots, and preserves Convert', async () => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-09-02T00:00:00Z'));
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-remote-burn-'));
+	roots.push(root);
+	const video = path.join(root, 'video.mkv');
+	const srt = path.join(root, 'subtitle.srt');
+	await writeFile(srt, '1\n00:00:01,000 --> 00:00:02,000\nRemote caption\n');
+	execFileSync(testFfmpeg, ['-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x180:r=10:d=3', '-i', srt, '-map', '0:v', '-map', '1:s', '-c:v', 'mpeg4', '-c:s', 'srt', video]);
+	const credentials: Array<string | undefined> = [];
+	const upstream = createServer((request, response) => {
+		credentials.push(request.headers['x-plex-token'] as string | undefined);
+		response.setHeader('Content-Type', 'video/x-matroska');
+		createReadStream(video).pipe(response);
+	});
+	await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+	const address = upstream.address() as { port: number };
+	const serverId = randomUUID();
+	const configured = channel();
+	configured.subtitleMode = 'burn';
+	configured.subtitlePreferences = { policy: 'any' };
+	const media = { ...item(), playbackPath: remotePlaybackReference(serverId, '7'), fileModifiedAt: '2026-10-06T00:00:00Z', subtitleTracks: [track({ streamIndex: 1 })] };
+	const repository = { listPrograms: async () => [], creditTemplates: { media: async () => new Map([[media.id, media]]), list: async () => [] }, mediaServers: { getMediaServerConnection: async () => ({ provider: 'plex', baseUrl: `http://127.0.0.1:${address.port}`, accessToken: 'synthetic-provider-token', clientIdentifier: 'synthetic-client', allowInsecureTls: false }) } } as unknown as Repository;
+	const secret = 'synthetic-signing-secret';
+	const listener = new MediaStreamServer(repository, secret);
+	try {
+		const remoteMedia = { origin: await listener.start(), secret };
+		const assets = new SubtitleAssets(path.join(root, 'assets'), repository, remoteMedia);
+		const entry = segment(configured, media);
+		const prepared = await assets.prepare(configured, guide(configured, entry));
+		const snapshot = prepared.get(entry.id)![0]!.path!;
+		expect(await readFile(snapshot, 'utf8')).toContain('Remote caption');
+		expect(assets.issues.get(configured.id)).toEqual([]);
+		expect(credentials.length).toBeGreaterThan(0);
+		expect(credentials.every((credential) => credential === 'synthetic-provider-token')).toBe(true);
+		const requests = credentials.length;
+		expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)![0]!.path).toBe(snapshot);
+		expect(credentials).toHaveLength(requests);
+		const documents = [...buildEtvPlayoutFiles([configured], guide(configured, entry), new Map(), prepared, undefined, undefined, remoteMedia).values()].map((value) => JSON.parse(value));
+		expect(documents[0].items[0].tracks.subtitle.source).toMatchObject({ source_type: 'local', path: snapshot });
+		configured.subtitleMode = 'convert';
+		expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([{ streamIndex: 1 }]);
+		expect(credentials).toHaveLength(requests);
+		configured.subtitleMode = 'burn';
+		media.fileModifiedAt = '2026-10-06T01:00:00Z';
+		const refreshed = await assets.prepare(configured, guide(configured, entry));
+		expect(refreshed.get(entry.id)![0]!.path).not.toBe(snapshot);
+		expect(credentials.length).toBeGreaterThan(requests);
+		await listener.close();
+		media.fileModifiedAt = '2026-10-06T02:00:00Z';
+		expect((await assets.prepare(configured, guide(configured, entry))).get(entry.id)).toEqual([null]);
+		expect(assets.issues.get(configured.id)).toEqual([`${media.title}: Unable to extract the selected remote subtitle`]);
+	}
+	finally {
+		await listener.close();
+		await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
+	}
+}, 30_000);

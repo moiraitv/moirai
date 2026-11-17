@@ -1,12 +1,8 @@
-import type { Library } from '@moirai/shared';
+import type { Library, MediaServer } from '@moirai/shared';
 
-/** Identify an enabled on-disk library whose configured source cannot be reached. */
+/** Identify an enabled library whose configured source cannot be reached. */
 export function isLibrarySourceUnavailable(library: Library): boolean {
-	return (
-		library.enabled
-		&& library.sourceType === 'on-disk'
-		&& library.sourceAvailability === 'unavailable'
-	);
+	return library.enabled && library.sourceAvailability === 'unavailable';
 }
 
 /** Choose the concise library-list status without hiding an active scan. */
@@ -15,7 +11,23 @@ export function libraryStatusValue(library: Library, scanning: boolean): string 
 		return 'running';
 	}
 
-	return isLibrarySourceUnavailable(library) ? 'offline' : library.watcherStatus;
+	if (isLibrarySourceUnavailable(library)) {
+		return 'offline';
+	}
+
+	return library.sourceType === 'on-disk' ? library.watcherStatus : 'scheduled';
+}
+
+/** Describe where a library reads media, without showing a folder for a remote server. */
+export function librarySourceLabel(library: Library, servers: MediaServer[] = []): string {
+	const config = library.sourceConfig;
+	if ('scanRoot' in config) {
+		return config.scanRoot;
+	}
+
+	const server = servers.find((entry) => entry.id === config.mediaServerId);
+	const serverName = server?.name ?? 'Media server';
+	return `${serverName} · ${config.remoteLibraryName}`;
 }
 
 /** Identify a scan that started after the library's most recent completion. */

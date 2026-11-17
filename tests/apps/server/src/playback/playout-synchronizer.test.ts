@@ -4,7 +4,7 @@ import * as graphicsPlayout from '@server/graphics/playout.js';
 import * as scheduleGuide from '@server/guide/schedule-guide.js';
 import * as mediaStreams from '@server/playback/audio-selection.js';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile, readdir } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile, readdir, stat, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -527,9 +527,16 @@ it('reclaims completed graphics during playback while retaining a replaced item 
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-graphics-lease-'));
 	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Graphics' }), id: randomUUID(), createdAt: '', updatedAt: '' };
 	const repository = { graphics: { assignments: () => new Map(), preparePresets: () => new Map() }, getChannel: async () => channel, listPrograms: async () => [], getPlaybackSettings: async () => playbackSettingsSchema.parse({}) } as unknown as Repository;
-	const synchronizer = new PlayoutSynchronizer(repository, root, 'UTC', 60, async () => {},
+	const synchronizer = new PlayoutSynchronizer(
+		repository,
+		root,
+		'UTC',
+		60,
+		async () => {},
 		{ resolve: async () => null } as unknown as FallbackFillerStore,
-		{ publish: vi.fn() } as LiveEventPublisher, loggerFixture());
+		{ publish: vi.fn() } as LiveEventPublisher,
+		loggerFixture(),
+	);
 	const guide = vi.spyOn(scheduleGuide, 'readCommittedChannelScheduleGuide').mockResolvedValue({ channels: [{ preview: { segments: [{ id: randomUUID(), role: 'primary' }] } }] } as ScheduleGuide);
 	const streams = vi.spyOn(mediaStreams, 'prepareMediaStreams').mockResolvedValue({ audio: new Map(), video: new Map() });
 	vi.spyOn(synchronizer.subtitles, 'prepare').mockResolvedValue(new Map());
@@ -577,6 +584,55 @@ it('reclaims completed graphics during playback while retaining a replaced item 
 	finally {
 		guide.mockRestore();
 		streams.mockRestore();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+it('republishes playout for a changed private origin and protects unchanged existing documents', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'moirai-private-playout-'));
+	const channel = { ...channelCreateSchema.parse({ number: '1', name: 'Private' }), id: randomUUID(), createdAt: '', updatedAt: '' };
+	const repository = { getChannel: async () => channel } as unknown as Repository;
+	const guide = { channels: [], timeZone: 'UTC', startDate: '2026-10-02', days: 3 } as unknown as ScheduleGuide;
+	const filename = '20261002T000000.000000000+0000_20261003T000000.000000000+0000.json';
+	const workers = {
+		databaseBacked: true, playoutRevision: () => 'stable',
+		playoutRead: async (request: { kind: string; remoteMedia?: { origin: string } }) => request.kind === 'playout-preparation'
+			? { channel, guide, programs: [] }
+			: new Map([[filename, JSON.stringify({ origin: request.remoteMedia?.origin })]]),
+	} as unknown as SchedulingWorkerPool;
+	let synchronizer: PlayoutSynchronizer | undefined;
+	try {
+		for (const origin of ['http://127.0.0.1:31001', 'http://127.0.0.1:31002']) {
+			synchronizer = new PlayoutSynchronizer(
+				repository,
+				root,
+				'UTC',
+				60,
+				async () => {},
+				{ resolve: async () => ({}) } as unknown as FallbackFillerStore,
+				{ publish: vi.fn() },
+				loggerFixture(),
+				workers,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				{ origin, secret: 'synthetic-private-secret' },
+			);
+			await synchronizer.syncChannel(channel.id);
+			const document = path.join(root, channel.id, filename);
+			expect(JSON.parse(await readFile(document, 'utf8'))).toEqual({ origin });
+			expect((await stat(root)).mode & 0o777).toBe(0o700);
+			expect((await stat(path.dirname(document))).mode & 0o777).toBe(0o700);
+			expect((await stat(document)).mode & 0o777).toBe(0o600);
+			await chmod(document, 0o644);
+			await synchronizer.syncChannel(channel.id);
+			expect((await stat(document)).mode & 0o777).toBe(0o600);
+			await synchronizer.close();
+		}
+	}
+	finally {
+		await synchronizer?.close();
 		await rm(root, { recursive: true, force: true });
 	}
 });

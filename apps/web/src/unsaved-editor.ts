@@ -31,7 +31,7 @@ export async function closeUnsavedEditor(options: UnsavedEditorCloseOptions): Pr
 	});
 	if (resolution === 'save') {
 		await options.save();
-		if (options.retainedDraft && options.isDirty && !options.isDirty()) {
+		if (options.isDirty && !options.isDirty()) {
 			await options.discard();
 		}
 	}

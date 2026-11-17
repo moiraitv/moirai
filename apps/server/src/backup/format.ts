@@ -5,7 +5,7 @@ import type { AppConfig } from '../config.js';
 
 /** Explicit durable table ownership; caches and all authentication tables are excluded. */
 export const BACKUP_TABLES = [
-	'libraries', 'media_groups', 'catalog_conflicts', 'media_items', 'media_item_aliases',
+	'media_servers', 'libraries', 'media_groups', 'catalog_conflicts', 'media_items', 'media_item_aliases',
 	'media_item_genres', 'media_item_people', 'viewing_preference_events', 'media_removal_tombstones',
 	'channels', 'scheduling_programs', 'schedule_templates', 'schedule_slots', 'schedule_boundaries',
 	'channel_schedules', 'channel_schedule_layers', 'selection_states', 'settings', 'credit_templates',
