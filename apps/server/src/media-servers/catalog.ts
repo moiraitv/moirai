@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { MediaPart, MediaServerPathReplacement, MediaSubtitleTrack } from '@moirai/shared';
-import { catalogSortTitle, remotePlaybackReference } from '@moirai/shared';
+import { catalogSortTitle, MAX_MEDIA_DURATION_MILLISECONDS, remotePlaybackReference } from '@moirai/shared';
 import { chapterInputExceedsLimit, normalizeMediaChapters } from '../media/chapters.js';
 import { mediaProbeFingerprint, type MediaProbe, type MediaProbeResult } from '../media/media-probe.js';
 import { mediaFileFingerprint } from '../media/file-fingerprint.js';
@@ -140,7 +140,7 @@ async function buildItem(
 	const parts: MediaPart[] = [];
 	const technicalParts: Array<Record<string, unknown>> = [];
 	let durationMilliseconds = 0;
-	let sawDuration = false;
+	let allPartsMeasured = true;
 	let probeFailed = false;
 	const subtitleTracks: MediaSubtitleTrack[] = [];
 	const located = [];
@@ -176,14 +176,28 @@ async function buildItem(
 		technicalParts.push(resolved.technical);
 		subtitleTracks.push(...resolved.subtitles);
 		probeFailed = probeFailed || resolved.probeFailed;
-		if (resolved.part.durationSeconds !== null) {
-			durationMilliseconds += Math.round(resolved.part.durationSeconds * 1_000);
-			sawDuration = true;
+		const measured = Math.round((resolved.part.durationSeconds ?? 0) * 1_000);
+		if (Number.isSafeInteger(measured) && measured > 0) {
+			durationMilliseconds += measured;
+		}
+		else {
+			allPartsMeasured = false;
 		}
 	}
 
 	if (parts.length === 0) {
 		return null;
+	}
+
+	const multipart = parts.length > 1;
+	const durationValid = allPartsMeasured && (!multipart || durationMilliseconds <= MAX_MEDIA_DURATION_MILLISECONDS);
+	if (multipart && !durationValid) {
+		issues.push({
+			path: remote.id,
+			code: 'multipart_duration_invalid',
+			message: 'Multipart duration is missing or exceeds the scheduling limit.',
+			severity: 'warning',
+		});
 	}
 
 	const relativePath = remote.id;
@@ -222,7 +236,7 @@ async function buildItem(
 		nfoRelativePath: null,
 		plot: remote.plot,
 		year: remote.year,
-		durationMilliseconds: sawDuration ? durationMilliseconds : null,
+		durationMilliseconds: durationValid ? durationMilliseconds : null,
 		probeFingerprint: localProbeKey ?? remote.etag,
 		probeStatus: probeFailed ? 'failed' : 'complete',
 		probeUpdatedAt: remote.modifiedAt,
@@ -239,7 +253,7 @@ async function buildItem(
 		trackNumber: remote.trackNumber,
 		discNumber: null,
 		artists: metadata.artists,
-		multipartStatus: parts.length < 2 ? 'none' : parts.every((part) => part.durationSeconds !== null) ? 'complete' : 'incomplete',
+		multipartStatus: !multipart ? 'none' : allPartsMeasured ? 'complete' : 'incomplete',
 		parts,
 		subtitleTracks,
 		metadataStatus: remote.plot || remote.year || genres.length ? 'complete' : 'incomplete',

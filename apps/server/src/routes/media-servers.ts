@@ -95,7 +95,6 @@ export function registerMediaServerRoutes(
 			baseUrl: connection.baseUrl,
 			allowInsecureTls: connection.allowInsecureTls,
 			accessToken: input.accessToken,
-			pathReplacements: connection.pathReplacements,
 		}, inspection));
 		if (!updated) {
 			throw app.httpErrors.notFound('Media server not found');

@@ -213,48 +213,64 @@ test('Plex link-code tokens can be tested without saving a connection', async ({
 	await expect(editor.getByRole('combobox', { name: 'Remote library', exact: true })).toHaveValue('films');
 });
 
-test('keeps an existing remote library editable while its server is offline', async ({ page }) => {
-	await authenticateAdministrator(page);
-	const id = '22222222-2222-4222-8222-222222222222';
-	let library = {
-		id, name: 'Offline films', typeKey: 'movies', sourceType: 'jellyfin',
-		sourceConfig: { mediaServerId: savedServer.id, remoteLibraryId: 'films', remoteLibraryName: 'Films' },
-		scanIntervalMinutes: 15, watcherEnabled: false, enabled: true, watcherStatus: 'stopped',
-		sourceAvailability: 'unavailable', sourceAvailabilityUpdatedAt: null, reconciliationStatus: 'idle',
-		pendingRemovalCount: 0, itemCount: 0, warningCount: 0,
-		lastScanStartedAt: null, lastScanCompletedAt: null, lastChangeDetectedAt: null, lastIndexedChangeAt: null,
-		createdAt: savedServer.createdAt, updatedAt: savedServer.updatedAt,
-	};
-	let patches = 0;
-	await page.route('**/api/v1/media-servers', (route) => route.fulfill({ json: [savedServer] }));
-	await page.route(`**/api/v1/media-servers/${savedServer.id}/probe`, (route) => route.fulfill({ status: 400, json: { message: 'Synthetic offline server', code: 'request_failed', requestId: 'test' } }));
-	await page.route(`**/api/v1/libraries/${id}`, async (route) => {
-		if (route.request().method() === 'PATCH') {
-			patches += 1;
-			library = { ...library, ...route.request().postDataJSON() };
+for (const discovery of ['offline', 'missing the attached library'] as const) {
+	test(`preserves the attached remote library when discovery is ${discovery}`, async ({ page }) => {
+		await authenticateAdministrator(page);
+		const id = '22222222-2222-4222-8222-222222222222';
+		let library = {
+			id, name: 'Offline films', typeKey: 'movies', sourceType: 'jellyfin',
+			sourceConfig: { mediaServerId: savedServer.id, remoteLibraryId: 'films', remoteLibraryName: 'Films' },
+			scanIntervalMinutes: 15, watcherEnabled: false, enabled: true, watcherStatus: 'stopped',
+			sourceAvailability: 'unavailable', sourceAvailabilityUpdatedAt: null, reconciliationStatus: 'idle',
+			pendingRemovalCount: 0, itemCount: 0, warningCount: 0,
+			lastScanStartedAt: null, lastScanCompletedAt: null, lastChangeDetectedAt: null, lastIndexedChangeAt: null,
+			createdAt: savedServer.createdAt, updatedAt: savedServer.updatedAt,
+		};
+		let patches = 0;
+		await page.route('**/api/v1/media-servers', (route) => route.fulfill({ json: [savedServer] }));
+		await page.route(`**/api/v1/media-servers/${savedServer.id}/probe`, (route) => route.fulfill(discovery === 'offline'
+			? { status: 400, json: { message: 'Synthetic offline server', code: 'request_failed', requestId: 'test' } }
+			: { json: { serverKey: savedServer.serverKey, serverName: savedServer.serverName, libraries: [{ id: 'alternative', name: 'Alternative', typeKey: 'movies' }] } }));
+		await page.route(`**/api/v1/libraries/${id}`, async (route) => {
+			if (route.request().method() === 'PATCH') {
+				patches += 1;
+				library = { ...library, ...route.request().postDataJSON() };
+			}
+			await route.fulfill({ json: library });
+		});
+		await page.route(`**/api/v1/libraries/${id}/**`, async (route) => {
+			const pathname = new URL(route.request().url()).pathname;
+			await route.fulfill({ json: pathname.endsWith('/reconciliation')
+				? { libraryId: id, status: 'idle', pendingRemovalCount: 0, missingItems: [], sourceChangeCanBeCancelled: false }
+				: pathname.endsWith('/media') ? { entries: [], groups: [], items: [], navigation: [], pagination: { page: 1, pageSize: 100, totalEntries: 0, totalPages: 0 } } : [] });
+		});
+		await page.goto(`/libraries/${id}/settings`);
+		const editor = page.getByRole('dialog', { name: /^Library settings for/ });
+		if (discovery === 'offline') {
+			await expect(editor.getByRole('alert').filter({ hasText: 'Synthetic offline server' })).toBeVisible();
 		}
-		await route.fulfill({ json: library });
+		else {
+			const remote = editor.getByRole('combobox', { name: 'Remote library', exact: true });
+			await expect(remote).toHaveValue('films');
+			await expect(remote.getByRole('option', { name: 'Alternative', exact: true })).toHaveCount(1);
+			await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+			await expect(editor.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+		}
+
+		await editor.getByLabel('Name', { exact: true }).fill('Renamed library');
+		if (discovery === 'offline') {
+			await editor.getByRole('button', { name: 'Advanced', exact: true }).click();
+			await editor.getByRole('button', { name: 'Add folder mapping', exact: true }).click();
+			await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+			await editor.getByRole('button', { name: 'Remove mapping', exact: true }).click();
+			await editor.getByRole('button', { name: 'Remove this mapping', exact: true }).click();
+		}
+		await editor.getByRole('button', { name: 'Save', exact: true }).click();
+		await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+		expect(patches).toBe(1);
+		expect(library.sourceConfig.remoteLibraryId).toBe('films');
 	});
-	await page.route(`**/api/v1/libraries/${id}/**`, async (route) => {
-		const pathname = new URL(route.request().url()).pathname;
-		await route.fulfill({ json: pathname.endsWith('/reconciliation')
-			? { libraryId: id, status: 'idle', pendingRemovalCount: 0, missingItems: [], sourceChangeCanBeCancelled: false }
-			: pathname.endsWith('/media') ? { entries: [], groups: [], items: [], navigation: [], pagination: { page: 1, pageSize: 100, totalEntries: 0, totalPages: 0 } } : [] });
-	});
-	await page.goto(`/libraries/${id}/settings`);
-	const editor = page.getByRole('dialog', { name: /^Library settings for/ });
-	await expect(editor.getByRole('alert').filter({ hasText: 'Synthetic offline server' })).toBeVisible();
-	await editor.getByLabel('Name', { exact: true }).fill('Renamed offline library');
-	await editor.getByRole('button', { name: 'Advanced', exact: true }).click();
-	await editor.getByRole('button', { name: 'Add folder mapping', exact: true }).click();
-	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-	await editor.getByRole('button', { name: 'Remove mapping', exact: true }).click();
-	await editor.getByRole('button', { name: 'Remove this mapping', exact: true }).click();
-	await editor.getByRole('button', { name: 'Save', exact: true }).click();
-	await expect(editor.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
-	expect(patches).toBe(1);
-	expect(library.sourceConfig.remoteLibraryId).toBe('films');
-});
+}
 
 test('matches the revised library layout at desktop and phone sizes', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 1350 });

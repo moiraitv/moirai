@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type {
 	Library,
 	LibraryCreate,
@@ -14,6 +14,7 @@ import {
 	mediaItems,
 } from '../db/schema.js';
 import { ResourceIdentityConflictError } from './resource-identity.js';
+import { MediaServerPersistenceError } from './media-servers.js';
 import { currentTimestamp } from '../time.js';
 
 /**
@@ -116,14 +117,17 @@ export abstract class LibraryRepository extends ScanRepository {
 			throw new ResourceIdentityConflictError('library');
 		}
 
-		await this.db.insert(libraries).values({
-			id,
-			...input,
-			nameKey,
-			sourceAvailability: 'unknown',
-			sourceAvailabilityUpdatedAt: null,
-			createdAt: timestamp,
-			updatedAt: timestamp,
+		this.db.transaction(tx => {
+			this.assertMediaServerSource(tx, input.sourceType, input.sourceConfig);
+			tx.insert(libraries).values({
+				id,
+				...input,
+				nameKey,
+				sourceAvailability: 'unknown',
+				sourceAvailabilityUpdatedAt: null,
+				createdAt: timestamp,
+				updatedAt: timestamp,
+			}).run();
 		});
 		this.catalogChanged();
 		return (await this.getLibrary(id))!;
@@ -160,7 +164,10 @@ export abstract class LibraryRepository extends ScanRepository {
 			throw new ResourceIdentityConflictError('library');
 		}
 
-		await this.db.update(libraries).set(merged).where(eq(libraries.id, id));
+		this.db.transaction(tx => {
+			this.assertMediaServerSource(tx, merged.sourceType, merged.sourceConfig);
+			tx.update(libraries).set(merged).where(eq(libraries.id, id)).run();
+		});
 		this.catalogChanged();
 		return this.getLibrary(id);
 	}
@@ -183,19 +190,20 @@ export abstract class LibraryRepository extends ScanRepository {
 			throw new ResourceIdentityConflictError('library');
 		}
 
-		await this.db
-			.update(libraries)
-			.set({
+		const pendingSourceDefinition = {
+			typeKey: input.typeKey ?? existing.typeKey,
+			sourceType: input.sourceType ?? existing.sourceType,
+			sourceConfig: input.sourceConfig ?? existing.sourceConfig,
+		};
+		this.db.transaction(tx => {
+			this.assertMediaServerSource(tx, pendingSourceDefinition.sourceType, pendingSourceDefinition.sourceConfig);
+			tx.update(libraries).set({
 				name,
 				nameKey,
 				scanIntervalMinutes: input.scanIntervalMinutes ?? existing.scanIntervalMinutes,
 				watcherEnabled: input.watcherEnabled ?? existing.watcherEnabled,
 				enabled: input.enabled ?? existing.enabled,
-				pendingSourceDefinition: {
-					typeKey: input.typeKey ?? existing.typeKey,
-					sourceType: input.sourceType ?? existing.sourceType,
-					sourceConfig: input.sourceConfig ?? existing.sourceConfig,
-				},
+				pendingSourceDefinition,
 				candidateSourceIdentity: null,
 				candidateManifest: null,
 				candidateSummary: null,
@@ -204,14 +212,23 @@ export abstract class LibraryRepository extends ScanRepository {
 				sourceAvailability: 'unknown',
 				sourceAvailabilityUpdatedAt: timestamp,
 				updatedAt: timestamp,
-			})
-			.where(eq(libraries.id, id));
-		await this.db
-			.update(mediaItems)
-			.set({ availability: 'unconfirmed' })
-			.where(eq(mediaItems.libraryId, id));
+			}).where(eq(libraries.id, id)).run();
+			tx.update(mediaItems).set({ availability: 'unconfirmed' }).where(eq(mediaItems.libraryId, id)).run();
+		});
 		this.catalogChanged();
 		return this.getLibrary(id);
+	}
+
+	/** Validate an accepted or pending reference in the same transaction that persists it. */
+	private assertMediaServerSource(tx: Pick<MoiraiDatabase, 'select'>, sourceType: Library['sourceType'], sourceConfig: Library['sourceConfig']): void {
+		if (sourceType === 'on-disk') {
+			return;
+		}
+
+		if (isOnDiskSourceConfig(sourceConfig) || !tx.select({ id: mediaServers.id }).from(mediaServers)
+			.where(and(eq(mediaServers.id, sourceConfig.mediaServerId), eq(mediaServers.provider, sourceType))).get()) {
+			throw new MediaServerPersistenceError('Choose a saved media server for this library', 400);
+		}
 	}
 
 	/** Delete a library and invalidate cached catalog scopes when it existed. */

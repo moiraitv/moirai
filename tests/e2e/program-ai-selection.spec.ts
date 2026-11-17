@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test, type WebSocketRoute } from '@playwright/test';
+import { expect, test, type Route, type WebSocketRoute } from '@playwright/test';
 import { AI_GENERATION_TARGET_MS, type AiGeneration, type AiContentSelectionResponse, type ContentExclusions, type SelectedMediaSort } from '@moirai/shared';
 import { authenticateAdministrator } from './authentication';
 
@@ -314,6 +314,173 @@ test('distinguishes Current loading and failure, retries, and ignores a response
 	finally {
 		release();
 	}
+});
+
+for (const width of [1440, 390, 320]) {
+	test(`keeps Current rows and artwork mounted during rapid exclusions at ${width}px`, async ({ page }) => {
+		const ids = Array.from({ length: 24 }, (_, index) => itemIds[index] ?? randomUUID());
+		saved = { ...program, config: { ...program.config, source: { ...program.config.source, itemIds: ids } } };
+		const pending: Route[] = [];
+		const respond = (route: Route) => {
+			const { source, page: requestedPage, pageSize } = route.request().postDataJSON();
+			const remaining = ids.filter(id => !source.exclusions.itemIds.includes(id));
+			const totalPages = Math.max(1, Math.ceil(remaining.length / pageSize));
+			const currentPage = Math.min(requestedPage, totalPages);
+			return route.fulfill({ json: {
+				entries: remaining.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(id => ({
+					key: id, kind: 'item', item: { id, libraryId: libraryIds[0], title: `Result ${ids.indexOf(id) + 1}`, kind: 'movie', artworkUrl: '/fixture-artwork.svg' },
+				})), pagination: { page: currentPage, totalPages },
+			} });
+		};
+		await page.route('**/fixture-artwork.svg*', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="30"><rect width="20" height="30" fill="teal"/></svg>' }));
+		await page.route('**/api/v1/programs/content-options', route => {
+			if (route.request().postDataJSON().source.exclusions.itemIds.length) {
+				pending.push(route);
+				return;
+			}
+			return respond(route);
+		});
+		await page.setViewportSize({ width, height: 844 });
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.goto(`/schedules/programs/${programId}`);
+		await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+		const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+		const rows = drawer.locator('.program-exclusions-row');
+		await expect(rows).toHaveCount(20);
+		const retained = rows.filter({ has: page.getByText('Result 10', { exact: true }) });
+		const row = await retained.elementHandle();
+		const artwork = await retained.locator('img').elementHandle();
+		const panel = drawer.getByRole('tabpanel');
+		await drawer.getByRole('button', { name: 'Exclude Result 8', exact: true }).click();
+		const scrollTop = await panel.evaluate(node => node.scrollTop);
+		expect(scrollTop).toBeGreaterThan(0);
+		await page.keyboard.press('Enter');
+		await expect(drawer.getByRole('button', { name: 'Exclude Result 9', exact: true })).toBeFocused();
+		await expect(rows).toHaveCount(19);
+		await expect.poll(() => pending.length).toBe(1);
+		await expect(drawer.getByText('Loading current content…')).toHaveCount(0);
+		expect(await panel.evaluate(node => node.scrollTop)).toBe(scrollTop);
+
+		// Confirm another exclusion before the first membership request has returned.
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('Enter');
+		await expect(drawer.getByRole('button', { name: 'Exclude Result 10', exact: true })).toBeFocused();
+		await expect(rows).toHaveCount(18);
+		await expect.poll(() => pending.length).toBe(2);
+		expect(await retained.evaluate((node, original) => node === original, row)).toBe(true);
+		expect(await artwork!.evaluate(node => node.isConnected)).toBe(true);
+		expect(await panel.evaluate(node => node.scrollTop)).toBe(scrollTop);
+
+		// Backfill from the newest draft, then deliver the superseded response last.
+		await respond(pending[1]!);
+		await expect(rows).toHaveCount(20);
+		await respond(pending[0]!);
+		await expect(drawer.getByRole('button', { name: 'Exclude Result 9', exact: true })).toHaveCount(0);
+		await expect(drawer.getByRole('button', { name: 'Exclude Result 22', exact: true })).toBeAttached();
+		expect(await retained.evaluate((node, original) => node === original, row)).toBe(true);
+		expect(await artwork!.evaluate(node => node.isConnected)).toBe(true);
+		await expect.poll(() => drawer.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+	});
+}
+
+test('retains Current during a failed background refresh and retry', async ({ page }) => {
+	saved = { ...program, config: { ...program.config, source: { ...program.config.source, itemIds } } };
+	const pending: Route[] = [];
+	await page.route('**/api/v1/programs/content-options', route => {
+		if (route.request().postDataJSON().source.exclusions.itemIds.length) {
+			pending.push(route);
+			return;
+		}
+		return route.fallback();
+	});
+	await page.goto(`/schedules/programs/${programId}`);
+	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+	const retained = drawer.getByRole('button', { name: 'Exclude Result 2', exact: true });
+	const button = await retained.elementHandle();
+	await drawer.getByRole('button', { name: 'Exclude Result 1', exact: true }).click();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => pending.length).toBe(1);
+	await pending[0]!.fulfill({ status: 503, json: { message: 'Refresh temporarily unavailable' } });
+	await expect(drawer.getByRole('alert')).toContainText('Refresh temporarily unavailable');
+	await expect(drawer.locator('article')).toHaveCount(5);
+	await expect(retained).toBeEnabled();
+	await drawer.getByRole('button', { name: 'Try again', exact: true }).click();
+	await expect.poll(() => pending.length).toBe(2);
+	expect(await retained.evaluate((node, original) => node === original, button)).toBe(true);
+	await expect(drawer.getByText('Loading current content…')).toHaveCount(0);
+	await pending[1]!.fallback();
+	await expect(drawer.locator('[aria-busy="true"]')).toHaveCount(0);
+	await expect(drawer.getByRole('alert')).toHaveCount(0);
+	await expect(drawer.locator('article')).toHaveCount(5);
+	expect(await retained.evaluate((node, original) => node === original, button)).toBe(true);
+});
+
+test('keeps Exclusions usable during restores and clamps an emptied last page', async ({ page }) => {
+	const ids: string[] = Array.from({ length: 22 }, () => randomUUID()).sort();
+	saved = { ...program, config: { ...program.config, source: { ...program.config.source, exclusions: { itemIds: ids, groupIds: [] } } } };
+	const pending: Route[] = [];
+	let delay = false;
+	const respond = (route: Route) => route.fulfill({ json: route.request().postDataJSON().itemIds.map((id: string) => ({
+		id, libraryId: libraryIds[0], title: `Excluded ${ids.indexOf(id) + 1}`, kind: 'movie',
+	})) });
+	await page.route('**/api/v1/libraries/*/media-selection/aliases', route => route.fulfill({ json: {} }));
+	await page.route('**/api/v1/libraries/*/media-selection', route => {
+		if (delay) {
+			pending.push(route);
+			return;
+		}
+		return respond(route);
+	});
+	await page.goto(`/schedules/programs/${programId}`);
+	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+	const drawer = page.getByRole('dialog', { name: 'Manage exclusions', exact: true });
+	await drawer.getByRole('tab', { name: 'Exclusions (22)', exact: true }).click();
+	await expect(drawer.locator('article')).toHaveCount(20);
+	const retained = drawer.getByRole('button', { name: 'Restore Excluded 3', exact: true });
+	const button = await retained.elementHandle();
+	delay = true;
+	await drawer.getByRole('button', { name: 'Restore Excluded 1', exact: true }).click();
+	await page.keyboard.press('Enter');
+	await expect(drawer.getByRole('button', { name: 'Restore Excluded 2', exact: true })).toBeFocused();
+	await expect(drawer.locator('article')).toHaveCount(19);
+	await page.keyboard.press('Enter');
+	await page.keyboard.press('Enter');
+	await expect(retained).toBeFocused();
+	await expect(drawer.locator('article')).toHaveCount(18);
+	await expect.poll(() => pending.length).toBe(2);
+	expect(await retained.evaluate((node, original) => node === original, button)).toBe(true);
+	await expect(drawer.getByText('Loading exclusions…')).toHaveCount(0);
+	delay = false;
+	await respond(pending[1]!);
+	await expect(drawer.locator('article')).toHaveCount(20);
+	await respond(pending[0]!);
+	await expect(drawer.getByRole('button', { name: 'Restore Excluded 2', exact: true })).toHaveCount(0);
+
+	// Reopen with a single remaining entry on the last page, then restore it.
+	await drawer.getByRole('button', { name: 'Done', exact: true }).click();
+	await page.getByRole('button', { name: 'Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm Reset', exact: true }).click();
+	await page.getByRole('button', { name: 'Manage exclusions', exact: true }).click();
+	await drawer.getByRole('tab', { name: 'Exclusions (22)', exact: true }).click();
+	await drawer.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect(drawer.locator('article')).toHaveCount(2);
+	await drawer.getByRole('button', { name: 'Restore Excluded 21', exact: true }).click();
+	await page.keyboard.press('Enter');
+	await expect(drawer.locator('article')).toHaveCount(1);
+	delay = true;
+	await drawer.getByRole('button', { name: 'Restore Excluded 22', exact: true }).click();
+	await page.keyboard.press('Enter');
+	await expect(drawer.getByRole('status')).toHaveText('Updating list…');
+	await expect(drawer.locator('.empty-state')).toHaveCount(0);
+	await expect(drawer.getByText('Loading exclusions…')).toHaveCount(0);
+	await expect.poll(() => pending.length).toBeGreaterThan(2);
+	delay = false;
+	for (const route of pending.slice(2)) {
+		await respond(route);
+	}
+	await expect(drawer.locator('article')).toHaveCount(20);
+	await expect(drawer.getByRole('button', { name: 'Next', exact: true })).toHaveCount(0);
 });
 
 test('shows an empty Current selection without requesting content metadata', async ({ page }) => {

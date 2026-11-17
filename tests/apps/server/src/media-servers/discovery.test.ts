@@ -564,6 +564,8 @@ describe('media server discovery', () => {
 			allowInsecureTls: false,
 		});
 		expect(await empty.listItems('1', 'movies')).toEqual([]);
+		const emptyWithoutMetadata = new PlexClient(async () => jsonResponse(200, { MediaContainer: { size: 0 } }), connection());
+		expect(await emptyWithoutMetadata.listItems('1', 'movies')).toEqual([]);
 
 		const jellyfin = new JellyfinClient(async () => jsonResponse(200, {
 			Items: [],
@@ -630,6 +632,25 @@ describe('media server discovery', () => {
 		expect(item?.parts[0]?.streams).toEqual([
 			expect.objectContaining({ index: 0, type: 'video' }),
 			expect.objectContaining({ index: 2, type: 'subtitle', isDefault: true }),
+		]);
+	});
+
+	it('chooses a complete Plex version when higher-quality versions have invalid part IDs', async () => {
+		const plex = new PlexClient(async () => jsonResponse(200, {
+			MediaContainer: {
+				totalSize: 1,
+				Metadata: [{ ratingKey: '9', title: 'Film', Media: [
+					{ width: 3840, height: 2160, Part: [{ id: 11 }, { file: '/unnamed-part.mkv' }] },
+					{ width: 2560, height: 1440, Part: [{ id: 12 }, { id: '012' }] },
+					{ width: 1920, height: 1080, Part: [{ id: 13 }, { id: null }] },
+					{ width: 1280, height: 720, Part: [{ id: 14, duration: 40_000 }, { id: '15', duration: 50_000 }] },
+				] }],
+			},
+		}), connection());
+		const [item] = await plex.listItems('1', 'movies');
+		expect(item?.parts).toEqual([
+			expect.objectContaining({ id: '14', durationMilliseconds: 40_000 }),
+			expect.objectContaining({ id: '15', durationMilliseconds: 50_000 }),
 		]);
 	});
 
@@ -765,14 +786,20 @@ describe('media server discovery', () => {
 	});
 });
 
-it.each(['invalid total', 'missing later total'])('preserves the persisted catalog after a provider listing with %s', async (failure) => {
+it.each([
+	['invalid total', /invalid library total/],
+	['missing later total', /stopped reporting its library total/],
+	['missing envelope', /library listing/],
+	['unconfirmed empty page', /library listing/],
+	['unidentified file', /identify every file/],
+] as const)('preserves the persisted catalog after a provider listing with %s', async (failure, problem) => {
 	const database = createDatabase(':memory:', path.resolve('drizzle'));
 	const repository = new Repository(database.db);
 	let invalid = false;
 	let invalidRequests = 0;
 	const adapter = new MediaServerSourceAdapter(
 		'plex',
-		{ getMediaServerConnection: async () => connection() },
+		repository.mediaServers,
 		undefined,
 		() => async () => {
 			if (!invalid) {
@@ -780,6 +807,18 @@ it.each(['invalid total', 'missing later total'])('preserves the persisted catal
 			}
 			if (failure === 'invalid total') {
 				return { ...jsonResponse(200, {}), text: async () => '{"MediaContainer":{"totalSize":1e400,"Metadata":[]}}' };
+			}
+			if (failure === 'missing envelope') {
+				return jsonResponse(200, {});
+			}
+			if (failure === 'unconfirmed empty page') {
+				return jsonResponse(200, { MediaContainer: {} });
+			}
+			if (failure === 'unidentified file') {
+				return jsonResponse(200, {
+					MediaContainer: { totalSize: 1, Metadata: [{ ratingKey: '42', title: 'Arrival',
+						Media: [{ Part: [{ id: 7, duration: 120_000 }, { duration: 90_000 }] }] }] },
+				});
 			}
 
 			invalidRequests += 1;
@@ -790,7 +829,11 @@ it.each(['invalid total', 'missing later total'])('preserves the persisted catal
 	);
 	const manager = new ScannerManager(repository, { publish: () => undefined }, new LibrarySourceRegistry([adapter]));
 	try {
-		const saved = await repository.createLibrary(libraryCreateSchema.parse({ ...library(), id: undefined }));
+		const provider = connection();
+		const server = await repository.mediaServers.createMediaServer(provider, { ...provider, libraries: [] });
+		const definition = libraryCreateSchema.parse(library());
+		const saved = await repository.createLibrary(libraryCreateSchema.parse({ ...definition,
+			sourceConfig: { ...definition.sourceConfig, mediaServerId: server.id } }));
 		expect((await manager.scan(saved.id, 'initial')).status).toBe('complete');
 		const previous = database.sqlite.prepare('SELECT * FROM media_items').all();
 		expect(previous).toHaveLength(1);
@@ -798,7 +841,7 @@ it.each(['invalid total', 'missing later total'])('preserves the persisted catal
 		const failed = await manager.scan(saved.id, 'manual');
 		expect(failed.status).toBe('failed');
 		expect(database.sqlite.prepare('SELECT * FROM media_items').all()).toEqual(previous.map((item) => ({ ...(item as Record<string, unknown>), availability: 'unconfirmed' })));
-		expect(failed.issues.some((issue) => issue.message.includes(failure === 'invalid total' ? 'invalid library total' : 'stopped reporting its library total'))).toBe(true);
+		expect(failed.issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringMatching(problem) })]));
 		expect(failed.removedCount).toBe(0);
 	}
 	finally {
@@ -806,6 +849,25 @@ it.each(['invalid total', 'missing later total'])('preserves the persisted catal
 		database.close();
 	}
 
+});
+
+it.each(['jellyfin', 'emby'] as const)('requires a conclusive %s item response before counting absence', async (provider) => {
+	let upstream = jsonResponse(200, {});
+	const client = new JellyfinClient(async () => upstream, { ...connection(), provider });
+	await expect(client.listItems('movies', 'movies')).rejects.toThrow(/item list/);
+	await expect(client.itemExists('item')).rejects.toThrow(/item list/);
+
+	upstream = jsonResponse(404, {});
+	await expect(client.itemExists('item')).rejects.toMatchObject({ status: 404 });
+	upstream = jsonResponse(200, { Items: [{ Id: 'another-item' }] });
+	await expect(client.itemExists('item')).rejects.toThrow(/conclusive/);
+	upstream = jsonResponse(200, { Items: [], TotalRecordCount: 1 });
+	await expect(client.itemExists('item')).rejects.toThrow(/conclusive/);
+	upstream = jsonResponse(200, { Items: [{ Id: 'item' }] });
+	await expect(client.itemExists('item')).resolves.toBe(true);
+	upstream = jsonResponse(200, { Items: [], TotalRecordCount: 0 });
+	await expect(client.itemExists('item')).resolves.toBe(false);
+	await expect(client.listItems('movies', 'movies')).resolves.toEqual([]);
 });
 
 it.each(['jellyfin', 'emby'] as const)('uses one preferred %s version instead of concatenating alternate versions', async (provider) => {

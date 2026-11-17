@@ -96,15 +96,15 @@ export class JellyfinClient {
 		const budget = new MediaListingBudget();
 		for (;;) {
 			budget.nextPage();
-			const body = await this.getJson<{ Items?: JellyfinItem[]; TotalRecordCount?: number }>(
+			const body = await this.getItemPage(
 				`/Items?ParentId=${encodeURIComponent(remoteLibraryId)}&Recursive=true&IncludeItemTypes=${itemType}&Fields=${encodeURIComponent(fields)}&StartIndex=${start}&Limit=${PAGE_SIZE}`,
 				signal,
 				(bytes) => budget.consumeBytes(bytes),
 			);
-			const page = body.Items ?? [];
+			const page = body.Items;
 
 			const total = body.TotalRecordCount;
-			budget.acceptPage(page.map((row) => row.Id), total);
+			budget.acceptPage(page.map((row) => row?.Id), total);
 			const label = serverLabel(this.connection.provider);
 			if (page.length === 0) {
 				if (total === undefined || total === items.length) {
@@ -136,19 +136,20 @@ export class JellyfinClient {
 		return items.flatMap((item) => projectItem(item, typeKey));
 	}
 
-	/** Report whether an item id still exists. */
+	/** Report absence only when the item query explicitly returns an empty result. */
 	async itemExists(itemId: string, signal?: AbortSignal): Promise<boolean> {
-		const response = await this.fetch(this.url(`/Items?Ids=${encodeURIComponent(itemId)}&Limit=1`), {
-			headers: jellyfinAuthHeaders(this.connection, this.connection.accessToken),
+		const { Items: items, TotalRecordCount: total } = await this.getItemPage(
+			`/Items?Ids=${encodeURIComponent(itemId)}&Limit=1`,
 			signal,
-		});
-		if (response.status === 404) {
-			await response.body?.cancel();
+		);
+		if (items.length === 0 && (total === undefined || total === 0)) {
 			return false;
 		}
+		if (items.some(item => item?.Id === itemId)) {
+			return true;
+		}
 
-		const body = await readJson<{ Items?: unknown[] }>(response, serverLabel(this.connection.provider));
-		return (body.Items ?? []).length > 0;
+		throw new MediaServerRequestError(`${serverLabel(this.connection.provider)} did not return a conclusive item lookup`);
 	}
 
 	/** Direct static stream for one item and media source. */
@@ -171,6 +172,16 @@ export class JellyfinClient {
 		};
 	}
 
+	/** Require the items array shared by library listings and targeted presence queries. */
+	private async getItemPage(pathname: string, signal?: AbortSignal, onBytes?: (bytes: number) => void): Promise<JellyfinItemPage> {
+		const body = await this.getJson<JellyfinItemPage | null>(pathname, signal, onBytes);
+		if (!Array.isArray(body?.Items)) {
+			throw new MediaServerRequestError(`${serverLabel(this.connection.provider)} did not return an item list`);
+		}
+
+		return body;
+	}
+
 	/** GET one JSON resource. */
 	private async getJson<T>(pathname: string, signal?: AbortSignal, onBytes?: (bytes: number) => void): Promise<T> {
 		const response = await this.fetch(this.url(pathname), {
@@ -191,6 +202,12 @@ interface JellyfinFolder {
 	Id?: string;
 	Name?: string;
 	CollectionType?: string;
+}
+
+/** Item query result, including an explicit array for an empty listing. */
+interface JellyfinItemPage {
+	Items: JellyfinItem[];
+	TotalRecordCount?: number;
 }
 
 /** Jellyfin or Emby item row. */

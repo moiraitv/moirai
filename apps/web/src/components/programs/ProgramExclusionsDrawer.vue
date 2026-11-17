@@ -49,6 +49,8 @@ const browsePages = ref(1);
 const loadedTabs = ref(new Set<ExclusionTab>());
 const rows = ref<ExclusionRow[]>([]);
 const loading = ref(true);
+const refreshing = ref(false);
+const loadedView = ref<string>();
 const failure = ref('');
 const actionError = ref('');
 const aliases = ref<Record<string, string>>({});
@@ -74,7 +76,12 @@ const totalPages = computed(() => tab.value === 'current' ? currentPages.value :
 	: Math.max(1, Math.ceil((tab.value === 'excluded' ? count.value : filteredResults.value.length) / PAGE_SIZE)));
 const displayedRows = computed(() => tab.value === 'results'
 	? filteredResults.value.slice((resultsPage.value - 1) * PAGE_SIZE, resultsPage.value * PAGE_SIZE)
-	: rows.value);
+	: rows.value.filter(row => tab.value === 'current' ? !isExcluded(row) : tab.value !== 'excluded' || isExcluded(row)));
+const view = computed(() => JSON.stringify(tab.value === 'current'
+	? [tab.value, parent.value?.id, currentPage.value, props.currentSource]
+	: tab.value === 'browse' ? [tab.value, parent.value?.id, browsePage.value, search.value, search.value ? target.value : null]
+		: tab.value === 'excluded' ? [tab.value, excludedPage.value] : [tab.value]));
+const hasLoadedView = computed(() => loadedView.value === view.value);
 const tabs = computed<{ id: ExclusionTab; label: string }[]>(() => [
 	{ id: 'current', label: 'Current' },
 	...(props.resultIds ? [{ id: 'results' as const, label: 'AI Results' }] : []),
@@ -155,10 +162,20 @@ function reviewResults(ids: string[], items: MediaSelectionItem[]): ExclusionRow
 	return [...results.values()];
 }
 
-/** Replace the visible page only when its library and navigation request are still current. */
+/** Reconcile the active view without unmounting rows during edits; ignore superseded requests. */
 async function load(): Promise<void> {
+	// A restore can empty the last page. Keep its remaining rows while loading the clamped page.
+	if (tab.value === 'excluded' && excludedPage.value > totalPages.value) {
+		const retainRows = hasLoadedView.value;
+		excludedPage.value = totalPages.value;
+		if (retainRows) {
+			loadedView.value = view.value;
+		}
+	}
+
 	const current = ++revision;
-	loading.value = true;
+	loading.value = !hasLoadedView.value;
+	refreshing.value = hasLoadedView.value;
 	failure.value = '';
 	try {
 		aliasRequest ??= exclusions.value.itemIds.length ? api.mediaSelectionAliases(props.libraryId, exclusions.value.itemIds) : Promise.resolve({});
@@ -178,6 +195,7 @@ async function load(): Promise<void> {
 				rows.value = result.entries.map(entry => ({ id: entry.key, kind: entry.kind,
 					...(entry.group ? { group: entry.group } : {}), ...(entry.item ? { item: entry.item } : {}), parentTitle: entry.parentTitle }));
 				loadedTabs.value.add('current');
+				loadedView.value = view.value;
 			}
 			return;
 		}
@@ -187,18 +205,16 @@ async function load(): Promise<void> {
 			if (current === revision) {
 				resultRows.value = reviewResults(ids, items);
 				loadedTabs.value.add('results');
+				loadedView.value = view.value;
 			}
 			return;
 		}
 		if (tab.value === 'excluded') {
-			if (excludedPage.value > totalPages.value) {
-				excludedPage.value = totalPages.value;
-				return;
-			}
 			const result = await reviewPage();
 			if (current === revision) {
 				rows.value = result;
 				loadedTabs.value.add('excluded');
+				loadedView.value = view.value;
 			}
 			return;
 		}
@@ -218,6 +234,7 @@ async function load(): Promise<void> {
 				...(entry.group ? { group: entry.group } : {}), ...(entry.item ? { item: entry.item } : {}),
 				parentTitle: entry.parentTitle ?? parent.value?.title }));
 			loadedTabs.value.add('browse');
+			loadedView.value = view.value;
 		}
 	}
 	catch (cause) {
@@ -229,8 +246,22 @@ async function load(): Promise<void> {
 	finally {
 		if (current === revision) {
 			loading.value = false;
+			refreshing.value = false;
 		}
 	}
+}
+
+/** Move focus to a surviving action before row removal triggers the modal's focus fallback. */
+function focusNextRow(row: ExclusionRow): void {
+	const index = displayedRows.value.indexOf(row);
+	const elements = [...panel.value?.querySelectorAll<HTMLElement>('.program-exclusions-row') ?? []];
+	const active = document.activeElement;
+	if (!active || !elements[index]?.contains(active)) {
+		return;
+	}
+	const candidates = [...elements.slice(index + 1), ...elements.slice(0, index).reverse()];
+	const button = candidates.map(element => element.querySelector<HTMLButtonElement>('.two-step-action-button:not(:disabled)')).find(Boolean);
+	(button ?? panel.value)?.focus({ preventScroll: true });
 }
 
 /** Navigate into a group or back to an earlier level, starting with unfiltered rows. */
@@ -257,7 +288,7 @@ function submitSearch(): void {
 
 /** Move to a different page without mixing the review and browse positions. */
 function movePage(offset: number): void {
-	if (loading.value || failure.value || page.value + offset < 1 || page.value + offset > totalPages.value) {
+	if (loading.value || !hasLoadedView.value || page.value + offset < 1 || page.value + offset > totalPages.value) {
 		return;
 	}
 
@@ -312,8 +343,8 @@ function exclude(row: ExclusionRow): void {
 		return;
 	}
 	actionError.value = '';
+	focusNextRow(row);
 	exclusions.value = { ...exclusions.value, [field]: [...exclusions.value[field], row.id].sort() };
-	panel.value?.focus({ preventScroll: true });
 }
 
 /** Remove one deleted result from the frozen draft without changing the remaining order. */
@@ -338,12 +369,11 @@ function excludeAllResults(): void {
 /** Remove a confirmed exclusion and keep review focused on a valid page. */
 function restore(row: ExclusionRow): void {
 	const field = row.kind === 'group' ? 'groupIds' : 'itemIds';
-	excludedPage.value = Math.min(excludedPage.value, Math.max(1, Math.ceil((count.value - 1) / PAGE_SIZE)));
 	actionError.value = '';
 	const identity = row.kind === 'item' ? canonicalItemId(row.id) : row.id;
 	const remaining = exclusions.value[field].filter(value => (row.kind === 'item' ? canonicalItemId(value) : value) !== identity);
+	focusNextRow(row);
 	exclusions.value = { ...exclusions.value, [field]: remaining };
-	panel.value?.focus({ preventScroll: true });
 }
 
 /** Keep the drawer mounted until the shared exit transition completes. */
@@ -358,18 +388,7 @@ watch(() => props.currentSource, () => {
 	currentHierarchy.value = [];
 	currentPage.value = 1;
 }, { deep: true });
-watch(() => {
-	if (tab.value === 'current') {
-		return [tab.value, parent.value?.id, currentPage.value, props.currentSource, exclusions.value];
-	}
-	if (tab.value === 'browse') {
-		return [tab.value, parent.value?.id, browsePage.value, search.value, search.value ? target.value : null];
-	}
-	if (tab.value === 'excluded') {
-		return [tab.value, excludedPage.value, exclusions.value];
-	}
-	return tab.value;
-}, () => void load(), { immediate: true, deep: true });
+watch([view, () => tab.value === 'current' || tab.value === 'excluded' ? exclusions.value : null], () => void load(), { immediate: true, deep: true });
 watch([tab, totalPages], ([currentTab, pages]) => {
 	if (currentTab === 'results' && resultsPage.value > pages) {
 		resultsPage.value = pages;
@@ -417,7 +436,7 @@ onBeforeUnmount(() => {
 						</template>
 						<template v-else-if="tab === 'results'">
 							<input v-model="resultSearch" type="search" aria-label="Search AI results" placeholder="Search results…" @input="resultsPage = 1" />
-							<small v-if="!loading && !failure" role="status">{{ filteredResults.length.toLocaleString() }} {{ filteredResults.length === 1 ? 'matching result' : 'matching results' }}</small>
+							<small v-if="!loading && hasLoadedView" role="status">{{ filteredResults.length.toLocaleString() }} {{ filteredResults.length === 1 ? 'matching result' : 'matching results' }}</small>
 						</template>
 						<p v-else-if="tab === 'excluded'" class="muted">Group exclusions cover all descendants. Restoring an entry still leaves it excluded if an ancestor is excluded.</p>
 						<nav v-if="(tab === 'current' || tab === 'browse') && parent" class="program-exclusions-path" aria-label="Library location">
@@ -429,10 +448,10 @@ onBeforeUnmount(() => {
 							</template>
 						</nav>
 						<p v-if="actionError" class="notice warning" role="alert">{{ actionError }}</p>
-						<div :aria-busy="loading">
+						<div :aria-busy="loading || refreshing">
 							<LoadingState v-if="loading" :label="tab === 'current' ? 'Loading current content…' : tab === 'browse' ? 'Loading library media…' : tab === 'results' ? 'Loading AI results…' : 'Loading exclusions…'" />
 							<p v-else-if="failure" class="notice warning" role="alert">{{ failure }} <button type="button" class="text-button" @click="load">Try again</button></p>
-							<div v-else-if="displayedRows.length" class="source-picker-list program-exclusions-list">
+							<div v-if="!loading && hasLoadedView && displayedRows.length" class="source-picker-list program-exclusions-list">
 								<component
 									:is="row.item ? MediaCardPreview : 'div'"
 									v-for="row in displayedRows"
@@ -459,17 +478,18 @@ onBeforeUnmount(() => {
 									</article>
 								</component>
 							</div>
-							<p v-else class="empty-state compact">{{ tab === 'current' ? 'No current content at this location.' : tab === 'browse' ? 'No matching library media.' : tab === 'results' ? 'No matching AI results.' : 'No exclusions added.' }}</p>
+							<p v-else-if="refreshing" class="muted" role="status">Updating list…</p>
+							<p v-else-if="!loading && !failure && hasLoadedView" class="empty-state compact">{{ tab === 'current' ? 'No current content at this location.' : tab === 'browse' ? 'No matching library media.' : tab === 'results' ? 'No matching AI results.' : 'No exclusions added.' }}</p>
 						</div>
 					</div>
 					<footer class="selection-drawer-footer program-exclusions-footer">
 						<nav v-if="loadedTabs.has(tab) && totalPages > 1" class="source-picker-pagination" aria-label="Exclusions pagination">
-							<button type="button" class="toolbar-button" :disabled="loading || Boolean(failure) || page <= 1" @click="movePage(-1)">Previous</button>
+							<button type="button" class="toolbar-button" :disabled="loading || !hasLoadedView || page <= 1" @click="movePage(-1)">Previous</button>
 							<small>Page {{ Math.min(page, totalPages) }} of {{ totalPages }}</small>
-							<button type="button" class="toolbar-button" :disabled="loading || Boolean(failure) || page >= totalPages" @click="movePage(1)">Next</button>
+							<button type="button" class="toolbar-button" :disabled="loading || !hasLoadedView || page >= totalPages" @click="movePage(1)">Next</button>
 						</nav>
 						<div class="program-exclusions-actions">
-							<TwoStepActionButton v-if="tab === 'results'" class="toolbar-button danger-button" :disabled="loading || Boolean(failure) || !indexedResultIds.length" label="Exclude all results" confirm-label="Confirm exclude all results" confirm-text="Confirm exclude" @confirm="excludeAllResults">
+							<TwoStepActionButton v-if="tab === 'results'" class="toolbar-button danger-button" :disabled="loading || !hasLoadedView || !indexedResultIds.length" label="Exclude all results" confirm-label="Confirm exclude all results" confirm-text="Confirm exclude" @confirm="excludeAllResults">
 								<Ban :size="16" aria-hidden="true" />Exclude all results
 							</TwoStepActionButton>
 							<button type="button" class="button secondary" @click="close">Done</button>

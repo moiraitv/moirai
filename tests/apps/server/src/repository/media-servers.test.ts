@@ -131,7 +131,9 @@ it('resolves original Plex item keys and full durations together without treatin
 	const database = createDatabase(':memory:', path.resolve('drizzle'));
 	try {
 		const repository = new Repository(database.db);
-		const serverId = randomUUID();
+		const { id: serverId } = await repository.mediaServers.createMediaServer(mediaServerCreateSchema.parse({
+			provider: 'plex', name: 'Plex', baseUrl: 'https://plex.example', accessToken: 'synthetic-token',
+		}), { serverKey: 'plex', serverName: 'Plex', libraries: [] });
 		const plex = await repository.createLibrary(libraryCreateSchema.parse({
 			name: 'Plex', typeKey: 'movies', sourceType: 'plex',
 			sourceConfig: { mediaServerId: serverId, remoteLibraryId: '1', remoteLibraryName: 'Movies' },

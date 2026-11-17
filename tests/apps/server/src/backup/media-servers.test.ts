@@ -121,10 +121,13 @@ it.each(['missing', 'wrong-provider'] as const)('rejects a restored remote libra
 		const server = await f.repository.mediaServers.createMediaServer(mediaServerCreateSchema.parse({
 			provider: 'jellyfin', name: 'Server', baseUrl: 'https://jellyfin.example', accessToken: 'SECRET_TOKEN',
 		}), { serverKey: 'server', serverName: 'Server', libraries: [] });
-		await f.repository.createLibrary(libraryCreateSchema.parse({
-			name: 'Invalid source', typeKey: 'movies', sourceType: 'plex',
-			sourceConfig: { mediaServerId: reason === 'missing' ? randomUUID() : server.id, remoteLibraryId: '1', remoteLibraryName: 'Movies' },
+		const library = await f.repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Local source', typeKey: 'movies', sourceType: 'on-disk', sourceConfig: { scanRoot: '/movies' },
 		}));
+		// Simulate an invalid definition saved before writes validated the server reference.
+		const invalidSource = { mediaServerId: reason === 'missing' ? randomUUID() : server.id, remoteLibraryId: '1', remoteLibraryName: 'Movies' };
+		f.database.sqlite.prepare("UPDATE libraries SET source_type = 'plex', source_config = ? WHERE id = ?")
+			.run(JSON.stringify(invalidSource), library.id);
 		const { staging, manifest } = await archiveAndExtract(f);
 		await expect(prepareDatabase(f.config, staging, manifest)).rejects.toMatchObject({ code: 'backup_invalid_records' });
 	}

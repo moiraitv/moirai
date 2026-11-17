@@ -1,12 +1,18 @@
+import { chmodSync } from 'node:fs';
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { createDatabase } from '@server/db/index.js';
+import { stopBootstrapServer } from '@server/db/bootstrap-http.js';
 import { runMigrationsInWorker } from '@server/db/migrations.js';
+import { startStorageRecovery } from '@server/db/startup-storage.js';
 import { Repository } from '@server/repository/index.js';
 import { ensurePrivateDirectory } from '@server/operations/private-storage.js';
 import { loadMediaStreamSecret } from '@server/media-servers/secret.js';
+
+vi.mock('node:fs', { spy: true });
 
 async function mode(file: string): Promise<number> {
 	return (await stat(file)).mode & 0o777;
@@ -57,9 +63,10 @@ it('hardens a permissive existing database and preserves credentials and schema 
 	}
 });
 
-it('executes the real migration worker from the prior schema with protected database files', async () => {
+it('serves ownership recovery for an older installation and preserves its data on the subsequent upgrade', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-private-upgrade-'));
 	let database: ReturnType<typeof createDatabase> | undefined;
+	let recovery: Awaited<ReturnType<typeof startStorageRecovery>>;
 	try {
 		const migrations = path.resolve('drizzle');
 		const journal = JSON.parse(await readFile(path.join(migrations, 'meta/_journal.json'), 'utf8'));
@@ -82,6 +89,26 @@ it('executes the real migration worker from the prior schema with protected data
 		database = undefined;
 		await chmod(path.dirname(file), 0o755);
 		await chmod(file, 0o644);
+		const dataDir = path.join(root, 'data');
+		await mkdir(dataDir);
+		await chmod(dataDir, 0o770);
+		const config = { dataDir, databasePath: file, host: '127.0.0.1', port: 0 };
+		vi.mocked(chmodSync).mockImplementationOnce(directory => {
+			expect(directory).toBe(dataDir);
+			throw Object.assign(new Error('Group access does not grant chmod'), { code: 'EPERM' });
+		});
+		recovery = await startStorageRecovery(config);
+		const port = (recovery!.address() as AddressInfo).port;
+		const startup = await fetch(`http://127.0.0.1:${port}/api/v1/health/startup`);
+		expect(await startup.json()).toMatchObject({ status: 'failed', error: expect.stringMatching(/ownership.*data directory/) });
+		expect(await mode(dataDir)).toBe(0o770);
+		expect(await mode(file)).toBe(0o644);
+		await stopBootstrapServer(recovery!);
+		recovery = undefined;
+
+		// The next startup can set private permissions after the service account receives ownership.
+		expect(await startStorageRecovery(config)).toBeUndefined();
+		expect(await mode(dataDir)).toBe(0o700);
 		await runMigrationsInWorker(file, migrations, () => undefined);
 		database = createDatabase(file, migrations);
 		expect(database.sqlite.prepare('SELECT * FROM settings').all()).toEqual(previousSettings);
@@ -93,6 +120,9 @@ it('executes the real migration worker from the prior schema with protected data
 		expect(await mode(path.dirname(file))).toBe(0o755);
 	}
 	finally {
+		if (recovery) {
+			await stopBootstrapServer(recovery);
+		}
 		database?.close();
 		await rm(root, { recursive: true, force: true });
 	}

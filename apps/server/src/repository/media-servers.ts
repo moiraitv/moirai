@@ -244,20 +244,16 @@ export class MediaServerRepository {
 
 	/** Delete a server that no library still references. */
 	async deleteMediaServer(id: string): Promise<boolean> {
-		const existing = await this.getMediaServer(id);
-		if (!existing) {
-			return false;
-		}
+		return this.db.transaction(tx => {
+			if (!tx.select({ id: mediaServers.id }).from(mediaServers).where(eq(mediaServers.id, id)).get()) {
+				return false;
+			}
+			if (this.referencingLibraries(tx, id).limit(1).get()) {
+				throw new MediaServerPersistenceError('Remove the libraries that use this server before deleting it');
+			}
 
-		const used = await this.libraryIdsForMediaServer(id);
-		if (used.length > 0) {
-			throw new MediaServerPersistenceError(
-				'Remove the libraries that use this server before deleting it',
-			);
-		}
-
-		await this.db.delete(mediaServers).where(eq(mediaServers.id, id));
-		return true;
+			return tx.delete(mediaServers).where(eq(mediaServers.id, id)).run().changes > 0;
+		});
 	}
 
 	/**
@@ -265,11 +261,15 @@ export class MediaServerRepository {
 	 * A pending attachment counts so the server cannot disappear before that change is accepted.
 	 */
 	async libraryIdsForMediaServer(id: string): Promise<string[]> {
-		const rows = await this.db.select({ id: libraries.id }).from(libraries).where(
+		return this.referencingLibraries(this.db, id).all().map(row => row.id);
+	}
+
+	/** Find accepted and pending attachments using the caller's transaction when present. */
+	private referencingLibraries(db: Pick<MoiraiDatabase, 'select'>, id: string) {
+		return db.select({ id: libraries.id }).from(libraries).where(
 			sql`json_extract(${libraries.sourceConfig}, '$.mediaServerId') = ${id}
 				OR json_extract(${libraries.pendingSourceDefinition}, '$.sourceConfig.mediaServerId') = ${id}`,
 		);
-		return rows.map((row) => row.id);
 	}
 
 	/** Drop the access token before a row leaves the server. */

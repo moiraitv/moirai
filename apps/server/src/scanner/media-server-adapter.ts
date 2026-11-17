@@ -45,19 +45,10 @@ export class MediaServerSourceAdapter implements LibrarySourceAdapter {
 		private readonly fetchFor: (allowInsecureTls: boolean) => MediaFetch = createMediaFetch,
 	) {}
 
-	/** Confirm the saved server exists and matches this adapter. The remote library is not contacted. */
+	/** Validate the source shape. The library writer checks the connection before saving. */
 	async validateConfig(config: unknown): Promise<void> {
-		let parsed: RemoteLibrarySourceConfig;
-		try {
-			parsed = remoteLibrarySourceConfigSchema.parse(config);
-		}
-		catch {
+		if (!remoteLibrarySourceConfigSchema.safeParse(config).success) {
 			throw new InvalidLibrarySourceConfigurationError('Choose a library on a saved media server');
-		}
-
-		const server = await this.servers.getMediaServerConnection(parsed.mediaServerId);
-		if (!server || server.provider !== this.sourceType) {
-			throw new InvalidLibrarySourceConfigurationError('Choose a saved media server for this library');
 		}
 	}
 

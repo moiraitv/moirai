@@ -41,9 +41,17 @@ const matchingServers = computed(() => servers.value.filter((server) => server.p
 const savedServer = computed(() => matchingServers.value.find((server) => server.id === selectedServerId.value));
 const diskRoot = computed(() => form.value.sourceConfig && isOnDiskSourceConfig(form.value.sourceConfig) ? form.value.sourceConfig.scanRoot : '');
 const diskPlayback = computed(() => form.value.sourceConfig && isOnDiskSourceConfig(form.value.sourceConfig) ? form.value.sourceConfig.playbackRoot ?? '' : '');
-const reusableAttachment = computed(() => {
+const matchingAttachment = computed(() => {
 	const original = attached.value;
-	if (!attachmentIntact.value || !original || original.serverId !== selectedServerId.value || original.typeKey !== form.value.typeKey) {
+	return original?.serverId === selectedServerId.value && original.typeKey === form.value.typeKey ? original : null;
+});
+const selectedRemoteLibrary = computed(() => remoteLibraries.value.find(library => library.id === remoteLibraryId.value));
+const unlistedAttachment = computed(() => {
+	const original = matchingAttachment.value;
+	return original && !remoteLibraries.value.some(library => library.id === original.libraryId) ? original : null;
+});
+const reusableAttachment = computed(() => {
+	if (!attachmentIntact.value || !matchingAttachment.value) {
 		return false;
 	}
 
@@ -144,7 +152,7 @@ function selectSource(source: 'on-disk' | MediaServerProvider): void {
 	selectServer(matchingServers.value[0]?.id ?? 'new');
 }
 
-/** Select a returned library and retain the existing attached id only when it is still offered. */
+/** Keep an existing attachment until the operator chooses a replacement. */
 function tested(result: MediaServerProbeResult): void {
 	if (!connection.value.name.trim()) {
 		connection.value.name = result.serverName;
@@ -152,15 +160,16 @@ function tested(result: MediaServerProbeResult): void {
 
 	remoteLibraries.value = result.libraries;
 	librariesState.value = 'ready';
-	if (!result.libraries.some((library) => library.id === remoteLibraryId.value)) {
-		remoteLibraryId.value = result.libraries[0]?.id ?? '';
+	if (!selectedRemoteLibrary.value) {
+		const original = matchingAttachment.value;
+		remoteLibraryId.value = original ? (attachmentIntact.value ? original.libraryId : '') : result.libraries[0]?.id ?? '';
 	}
 }
 
 /** Mark a manually replaced attachment so a type toggle does not silently restore it. */
 function selectRemoteLibrary(): void {
-	if (attached.value && remoteLibraryId.value !== attached.value.libraryId) {
-		attachmentIntact.value = false;
+	if (attached.value) {
+		attachmentIntact.value = matchingAttachment.value?.libraryId === remoteLibraryId.value;
 	}
 }
 
@@ -193,9 +202,9 @@ watchEffect(() => {
 	const validLibrary = libraryCreateSchema.safeParse(base).success;
 	const serverInput = { ...connection.value, name: connection.value.name.trim() || form.value.name || '' };
 	const validServer = (savedServer.value ? mediaServerUpdateSchema : mediaServerCreateSchema).safeParse(serverInput).success;
-	const validRemote = Boolean(remoteLibraryId.value && (serversState.value === 'error'
-		? reusableAttachment.value
-		: validServer && (librariesState.value === 'ready' || reusableAttachment.value)));
+	const keepsAttachment = reusableAttachment.value && remoteLibraryId.value === matchingAttachment.value?.libraryId;
+	const validRemote = serversState.value === 'error' ? keepsAttachment
+		: validServer && (keepsAttachment || (librariesState.value === 'ready' && Boolean(selectedRemoteLibrary.value)));
 	ready.value = validLibrary && !testing.value && (!provider.value || validRemote);
 	draftDirty.value = Boolean(provider.value) && (authenticationDirty.value
 		|| JSON.stringify(connection.value) !== connectionBaseline.value
@@ -218,7 +227,7 @@ async function prepareSource(): Promise<LibraryCreate> {
 	}
 
 	const chosenLibrary = remoteLibraryId.value;
-	const chosenName = remoteLibraries.value.find((library) => library.id === chosenLibrary)?.name ?? attached.value?.name ?? chosenLibrary;
+	const chosenName = selectedRemoteLibrary.value?.name ?? matchingAttachment.value?.name ?? chosenLibrary;
 	let id = selectedServerId.value;
 	if (serversState.value !== 'error') {
 		const input = { ...cloneContractValue(connection.value), name: connection.value.name.trim() || common.name };
@@ -267,7 +276,14 @@ defineExpose({ prepareSource });
 			<EditorCard v-if="librariesState !== 'idle' || remoteLibraryId" title="Remote Library" description="Choose the library to index from this server." :icon="LibraryBig">
 				<p v-if="librariesState === 'loading'" class="span-2 source-editor-hint" role="status">Loading remote libraries…</p>
 				<p v-else-if="librariesState === 'error'" class="span-2 source-editor-hint">The connection could not be tested. Check the connection details and try again.</p>
-				<template v-else-if="librariesState === 'ready'"><p v-if="!remoteLibraries.length" class="span-2 source-editor-hint">{{ provider === 'plex' && form.typeKey === 'music-videos' ? 'Plex does not offer music-video libraries. Choose Movies, Shows, or Other.' : 'No matching libraries were found for this type.' }}</p><label v-else class="span-2"><span>Remote library</span><select v-model="remoteLibraryId" :disabled="disabled" @change="selectRemoteLibrary"><option v-for="library in remoteLibraries" :key="library.id" :value="library.id">{{ library.name }}</option></select></label></template>
+				<template v-else-if="librariesState === 'ready'">
+					<p v-if="!remoteLibraries.length" class="span-2 source-editor-hint">{{ provider === 'plex' && form.typeKey === 'music-videos' ? 'Plex does not offer music-video libraries. Choose Movies, Shows, or Other.' : 'No matching libraries were found for this type.' }}</p>
+					<label v-if="remoteLibraries.length || unlistedAttachment" class="span-2"><span>Remote library</span><select v-model="remoteLibraryId" :disabled="disabled" @change="selectRemoteLibrary">
+						<option value="" disabled>Choose a library</option>
+						<option v-if="unlistedAttachment" :value="unlistedAttachment.libraryId">{{ unlistedAttachment.name }} (unavailable)</option>
+						<option v-for="library in remoteLibraries" :key="library.id" :value="library.id">{{ library.name }}</option>
+					</select></label>
+				</template>
 				<p v-else class="span-2 source-editor-hint">Saved library: {{ attached?.name }}</p>
 			</EditorCard>
 		</template>

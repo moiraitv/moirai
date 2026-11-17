@@ -19,6 +19,17 @@ export function protectPrivateFile(file: string): void {
 	}
 }
 
+/** Harden existing SQLite files without creating a database during startup preflight. */
+export function protectPrivateDatabaseFiles(databasePath: string): void {
+	if (databasePath === ':memory:') {
+		return;
+	}
+
+	for (const file of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]) {
+		protectPrivateFile(file);
+	}
+}
+
 /**
  * Prepare an owner-only database before SQLite can create its journal or memory files.
  * Existing custom parent directories retain their permissions and all contents are preserved.
@@ -38,7 +49,5 @@ export function preparePrivateDatabase(databasePath: string): void {
 		}
 	}
 
-	for (const file of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]) {
-		protectPrivateFile(file);
-	}
+	protectPrivateDatabaseFiles(databasePath);
 }

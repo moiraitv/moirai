@@ -53,7 +53,7 @@ Remote libraries scan on a schedule instead of watching a folder. **Advanced** c
 
 ### Remote request limits
 
-Moirai limits remote requests to 30 seconds, including artwork download waits. A metadata response can contain up to 8 MiB. One remote library scan can read up to 100,000 items, 1,000 pages, and 128 MiB of metadata. Artwork uses the configured source-image size limit, and excess download requests ask you to retry. If a server exceeds a limit or returns an incomplete listing, Moirai keeps the previous index instead of removing items.
+Moirai limits remote requests to 30 seconds, including artwork download waits. A metadata response can contain up to 8 MiB. One remote library scan can read up to 100,000 items, 1,000 pages, and 128 MiB of metadata. Artwork uses the configured source-image size limit, and excess download requests ask you to retry. Moirai keeps the previous index when the server exceeds a limit or returns an incomplete or unreadable listing.
 
 ### Private playback files
 

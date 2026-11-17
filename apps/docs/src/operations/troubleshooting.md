@@ -33,6 +33,8 @@ Open the channel schedule and generate a preview. Check program eligibility, med
 
 The first start after an upgrade can take several minutes while Moirai updates its database. Leave that page open; it reloads when the application is ready. This screen does not require a sign-in. If it stays for much longer than a typical upgrade or reports a failure, check container logs and restart Moirai.
 
+If startup reports that Moirai could not secure its private storage, stop Moirai and give the account running it ownership of the configured data directory, `moirai.sqlite`, and any existing `moirai.sqlite-wal` and `moirai.sqlite-shm` files. Restricting access to these locations requires ownership even when the account can write through its group. On Linux with Docker Compose, run `docker compose run --rm --no-deps --entrypoint id moirai` to check the container user's numeric UID and GID. Apply the ownership change to Moirai's data directory and database files only. Keep media and separate mounts outside the change. Restart Moirai to continue the upgrade with your existing settings.
+
 ## A change is not visible yet
 
 Saved schedule changes normally begin at the next local midnight. Use **Apply after current item** when available. Refresh the page after the server reconnects, and check Logs if generation failed.

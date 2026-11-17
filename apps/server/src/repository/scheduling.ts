@@ -612,7 +612,8 @@ export class SchedulingRepository extends SchedulingConfigurationRepository {
 								playbackPath: item.playbackPath,
 								durationSeconds: item.durationMilliseconds / 1_000,
 							}],
-					durationSeconds: item.durationMilliseconds === null
+					// Older remote scans could store a partial total for an incomplete stack.
+					durationSeconds: item.durationMilliseconds === null || item.multipartStatus === 'incomplete'
 						? null
 						: item.durationMilliseconds / 1_000,
 					seasonNumber: item.seasonNumber,

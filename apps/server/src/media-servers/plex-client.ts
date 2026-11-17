@@ -139,14 +139,24 @@ export class PlexClient {
 			});
 			const headerTotal = numberedHeader(response.headers.get('x-plex-container-total-size'));
 			const body = await readJson<{
-				MediaContainer?: { totalSize?: number; Metadata?: PlexMetadata[] };
-			}>(response, 'Plex', (bytes) => budget.consumeBytes(bytes));
-			const page = body.MediaContainer?.Metadata ?? [];
+				MediaContainer?: { size?: number; totalSize?: number; Metadata?: PlexMetadata[] };
+			} | null>(response, 'Plex', (bytes) => budget.consumeBytes(bytes));
+			const container = body?.MediaContainer;
+			if (!container || typeof container !== 'object' || Array.isArray(container)) {
+				throw new MediaServerRequestError('Plex did not return a library listing');
+			}
 
-			// `size` is this page, not the library. A missing total must not look complete.
-			const declared = body.MediaContainer?.totalSize;
+			// Plex can omit Metadata on a page it explicitly marks empty.
+			const declared = container.totalSize;
 			const total = declared === undefined ? headerTotal : declared;
-			budget.acceptPage(page.map((row) => row.ratingKey), total);
+			const metadata = container.Metadata;
+			const explicitlyEmpty = container.size === 0 || (container.size === undefined && total === 0);
+			if (metadata === undefined ? !explicitlyEmpty : !Array.isArray(metadata)) {
+				throw new MediaServerRequestError('Plex did not return a library listing');
+			}
+			const page = metadata ?? [];
+
+			budget.acceptPage(page.map((row) => row?.ratingKey), total);
 			if (page.length === 0) {
 				if (total === undefined || total === items.length) {
 					return items;
@@ -249,9 +259,12 @@ interface PlexMedia {
 	Part?: PlexPart[];
 }
 
+/** A Plex version whose parts can all be addressed independently. */
+type IdentifiedPlexMedia = PlexMedia & { Part: PlexPart[] };
+
 /** One physical Plex part. */
 interface PlexPart {
-	id?: number;
+	id: number | string;
 	file?: string;
 	size?: number;
 	container?: string;
@@ -308,24 +321,14 @@ function projectItem(row: PlexMetadata, typeKey: RemoteLibraryType): RemoteMedia
 		return [];
 	}
 
-	let includeChapters = true;
-	const mediaParts = media.Part ?? [];
-	const parts = mediaParts.flatMap((part) => {
+	const parts = media.Part.map((part, index) => {
 		const duration = typeof part.duration === 'number'
 			? part.duration
-			: mediaParts.length === 1 && typeof media.duration === 'number'
+			: media.Part.length === 1 && typeof media.duration === 'number'
 				? media.duration
 				: null;
-		const projected = projectPart(part, includeChapters ? row : { ...row, Chapter: [] }, duration);
-		if (projected.length > 0) {
-			includeChapters = false;
-		}
-
-		return projected;
+		return projectPart(part, index === 0 ? row.Chapter : undefined, duration);
 	});
-	if (parts.length === 0) {
-		return [];
-	}
 
 	const kind = typeKey === 'shows' ? 'episode' : typeKey === 'other' ? 'other' : 'movie';
 	const showId = row.grandparentRatingKey;
@@ -408,12 +411,8 @@ function numberedHeader(value: string | null): number | undefined {
 }
 
 /** Map one Plex part, including provider chapters on the first part. */
-function projectPart(part: PlexPart, row: PlexMetadata, duration: number | null): RemotePart[] {
-	if (part.id === undefined) {
-		return [];
-	}
-
-	const chapters = (row.Chapter ?? []).flatMap((chapter, index, all) => {
+function projectPart(part: PlexPart, providerChapters: PlexMetadata['Chapter'], duration: number | null): RemotePart {
+	const chapters = (providerChapters ?? []).flatMap((chapter, index, all) => {
 		if (typeof chapter.startTimeOffset !== 'number') {
 			return [];
 		}
@@ -427,7 +426,7 @@ function projectPart(part: PlexPart, row: PlexMetadata, duration: number | null)
 				: duration === null ? startSeconds : duration / 1_000;
 		return [{ startSeconds, finishSeconds, title: chapter.title ?? chapter.tag ?? '' }];
 	});
-	return [{
+	return {
 		id: String(part.id),
 		filePath: part.file ?? null,
 		durationMilliseconds: duration,
@@ -435,28 +434,55 @@ function projectPart(part: PlexPart, row: PlexMetadata, duration: number | null)
 		container: part.container ?? null,
 		streams: (part.Stream ?? []).flatMap(projectStream),
 		chapters,
-	}];
+	};
+}
+
+/** Reject unusable or repeated file identities within one ordered Plex version. */
+function hasDistinctPartIds(parts: PlexPart[]): boolean {
+	const ids = new Set<string>();
+	for (const part of parts) {
+		const id = part?.id;
+		if (typeof id === 'number' ? !Number.isSafeInteger(id) || id < 0 : typeof id !== 'string' || !/^\d+$/u.test(id)) {
+			return false;
+		}
+
+		const key = String(id).replace(/^0+(?=\d)/u, '');
+		if (ids.has(key)) {
+			return false;
+		}
+		ids.add(key);
+	}
+	return true;
 }
 
 /**
- * Keep the largest Plex version. Further Media entries are alternate qualities,
- * while parts of the chosen version are stacked files of one item.
+ * Rank versions whose files are all identified. A malformed listing with no usable alternate
+ * aborts the scan so the indexed title cannot be treated as missing.
  */
-function preferredMedia(versions: PlexMedia[]): PlexMedia | undefined {
-	let chosen: PlexMedia | undefined;
+function preferredMedia(versions: PlexMedia[]): IdentifiedPlexMedia | undefined {
+	let chosen: IdentifiedPlexMedia | undefined;
 	let chosenRank = -1;
+	let incomplete = false;
 	for (const media of versions) {
-		if (!media.Part?.some((part) => part.id !== undefined)) {
+		const parts = media.Part;
+		if (parts == null || (Array.isArray(parts) && parts.length === 0)) {
+			continue;
+		}
+		if (!Array.isArray(parts) || !hasDistinctPartIds(parts)) {
+			incomplete = true;
 			continue;
 		}
 
 		const rank = mediaRank(media);
 		if (!chosen || rank > chosenRank) {
-			chosen = media;
+			chosen = { ...media, Part: parts };
 			chosenRank = rank;
 		}
 	}
 
+	if (!chosen && incomplete) {
+		throw new MediaServerRequestError('Plex did not identify every file in a media version');
+	}
 	return chosen;
 }
 

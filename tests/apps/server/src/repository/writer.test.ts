@@ -7,7 +7,7 @@ import { Repository } from '@server/repository/index.js';
 import { DatabaseWriter, DATABASE_WRITE_QUEUE_LIMIT, DatabaseWriteQueueFullError, writerRepository } from '@server/repository/writer.js';
 import { MediaServerPersistenceError } from '@server/repository/media-servers.js';
 import { ResourceIdentityConflictError } from '@server/repository/resource-identity.js';
-import { channelCreateSchema, catalogProgramItemQuerySchema, quickChannelSetupCreateSchema, libraryCreateSchema } from '@moirai/shared';
+import { channelCreateSchema, catalogProgramItemQuerySchema, quickChannelSetupCreateSchema, libraryCreateSchema, mediaServerCreateSchema } from '@moirai/shared';
 import { discoverOnDisk } from '@server/scanner/on-disk.js';
 import { StaleSemanticDecisionError } from '@server/repository/semantic.js';
 import type { TimelineCommit } from '@server/repository/contracts.js';
@@ -145,4 +145,21 @@ it('persists media-server credential changes through the writer with a read-only
 	expect((await repository.mediaServers.getMediaServerConnection(server.id))?.accessToken).toBe('synthetic-replacement-token');
 	expect(await repository.mediaServers.deleteMediaServer(server.id)).toBe(true);
 	expect(await repository.mediaServers.getMediaServer(server.id)).toBeNull();
+});
+
+it.each(['create', 'stage'] as const)('rejects a %s library write if the selected media server was deleted before it reached the writer', async operation => {
+	const { repository } = await fixture();
+	const server = await repository.mediaServers.createMediaServer(mediaServerCreateSchema.parse({
+		provider: 'plex', name: 'Movies', baseUrl: 'https://plex.example', accessToken: 'synthetic-token',
+	}), { serverKey: 'movies', serverName: 'Movies', libraries: [] });
+	const remote = libraryCreateSchema.parse({ name: 'New source', typeKey: 'movies', sourceType: 'plex',
+		sourceConfig: { mediaServerId: server.id, remoteLibraryId: '1', remoteLibraryName: 'Movies' } });
+	const local = await repository.createLibrary(libraryCreateSchema.parse({ name: 'Local', typeKey: 'movies',
+		sourceType: 'on-disk', sourceConfig: { scanRoot: '/movies' } }));
+
+	expect(await repository.mediaServers.deleteMediaServer(server.id)).toBe(true);
+	const write = operation === 'create' ? repository.createLibrary(remote) : repository.stageLibrarySourceChange(local.id, remote, local);
+	await expect(write).rejects.toMatchObject({ name: 'MediaServerPersistenceError', statusCode: 400 });
+	expect(await repository.listLibraries()).toEqual([local]);
+	expect(await repository.getLibraryScanTarget(local.id)).toEqual(local);
 });

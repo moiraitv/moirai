@@ -1,6 +1,7 @@
 import { storageFailureMessage } from '../operations/storage-errors.js';
 import { DatabaseWriteQueueFullError } from '../repository/writer.js';
 import { MidRollPresetError } from '../repository/mid-roll-presets.js';
+import { MediaServerPersistenceError } from '../repository/media-servers.js';
 import { EncodingProfileError } from '../repository/encoding-profiles.js';
 import { CreditTemplateError } from '../repository/credit-templates.js';
 import { GuideTemplateError } from '../repository/guide-templates.js';
@@ -104,6 +105,7 @@ export function publicError(error: unknown, requestId: string): PublicError {
 		|| error instanceof EncodingProfileError
 		|| error instanceof GuideTemplateError
 		|| error instanceof MidRollPresetError
+		|| error instanceof MediaServerPersistenceError
 	) {
 		return response(requestId, error.statusCode, 'request_failed', error.message, true);
 	}

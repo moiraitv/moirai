@@ -164,12 +164,15 @@ through one non-persisting connection test; generation guards ignore responses a
 Reset, or disposal. Saved-connection probes accept draft fields at
 `POST /api/v1/media-servers/:id/probe`, apply the same retained-credential destination and TLS
 restrictions as updates, and return provider identity and matching libraries without writing settings.
-Unchanged attached libraries remain editable while the provider is offline.
+Unchanged attached libraries remain editable while the provider is offline or omits the saved
+library from discovery. The picker preserves the saved attachment until the operator chooses a
+replacement.
 Saved credentials stay on the media-server row and are not returned to the browser, written into
 playout, or passed to FFmpeg. Fresh sign-in credentials stay only in the active editor draft until
 saving; browser recovery storage excludes them. Deleting a saved
 server is refused while a library's accepted source or a pending source change still references
-it. Optional path
+it. The library writer validates the provider and server reference when persisting an attachment,
+so an intervening server deletion cannot leave a dangling source. Optional path
 mappings play a local file when it exists. Otherwise playout uses a signed URL aimed at a dedicated listener bound only to
 `127.0.0.1` on an OS-assigned port. The private listener starts before playout preparation and
 closes after playback workers stop. It is absent from the main HTTP listener, including when
@@ -182,7 +185,8 @@ Saved destinations cannot change, or certificate verification be weakened, using
 credential: the operator must explicitly supply a token before any connection test. The serialized
 writer rechecks these boundaries against the current row after the upstream probe, using its existing
 read. Conflicting saves return HTTP 409 without moving the newer credential or weakening its TLS
-policy. Explicit credentials persist with the transport policy used by their probe. Provider changes
+policy. Explicit credentials persist with the transport policy used by their probe. Folder mappings
+omitted from a PATCH retain their current value at write time. Provider changes
 are rejected before contacting upstream. Tokens and client identifiers are validated
 before header encoding, including provider-issued tokens. Transport failures are replaced with
 credential-safe errors without retaining original exception messages, stacks, or causes.
@@ -194,7 +198,10 @@ persistent warnings beside the library editor's connection and sign-in controls.
 Application-owned data and playout directories are restricted to `0700`; database, WAL, SHM,
 stream-signing secret, and playout files are restricted to `0600`. Database protection runs
 before the first SQLite open in startup, migration, and recovery paths. Existing data and
-custom parent-directory permissions are preserved. Credentials remain plaintext in the private
+custom parent-directory permissions are preserved. If startup cannot secure the data directory
+or existing SQLite files, the bootstrap listener reports the storage error before restore, backup,
+or migration. The operator can transfer ownership to the service account and restart to upgrade
+the original database in place. Credentials remain plaintext in the private
 database; backups require the same access protection.
 
 Provider metadata, sign-in, and artwork requests have a 30-second deadline covering queued
@@ -215,8 +222,14 @@ Metadata labels and credits use existing catalog bounds and normalization. Jelly
 paths and streams fill missing media-source values. Remote fingerprints include the final normalized
 item, so metadata, duration, subtitle, artwork, and hierarchy changes refresh the catalog even when
 the provider modification timestamp stays unchanged. The metadata version refreshes older imports
-on the next scan without changing item identities or saved Program definitions.
-A listing that stops reporting a previously declared total fails without committing partial results.
+on the next scan without changing item identities or saved Program definitions. Remote multipart
+titles require a usable duration for every part and a total within the scheduling limit. Scheduling
+also ignores partial totals retained by older scans of incomplete stacks. Plex ranks versions
+after validating an ordered list of distinct part IDs. If Plex lists files for a title but every
+version has invalid or repeated IDs, the scan fails and preserves the previous catalog.
+Provider listing envelopes must identify a valid item array or a Plex page explicitly marked
+empty. A listing that stops reporting a previously declared total fails without committing partial
+results. Jellyfin and Emby presence checks require an explicit empty item array for absence.
 JSON is limited to 8 MiB per response; a library listing is limited to 100,000 items,
 1,000 pages, and 128 MiB of decoded metadata. Nonfinite or changing totals and duplicate item
 identifiers fail the scan without confirming removals. Artwork downloads enforce the configured
@@ -876,8 +889,12 @@ resolves unsaved membership through a read-only scheduling-worker operation, app
 identity, exclusions, source ordering, and query limits before projecting and paging the hierarchy.
 Only groups with included descendants appear, and browsing never expands beyond current membership.
 Page metadata is read in batches; unavailable indexed media remain visible and missing references
-are omitted. Empty selections need no membership request. Exclusion edits and catalog refreshes reload Current
-without changing persistent playback state. The drawer keeps
+are omitted. Empty selections need no membership request. Exclusion edits immediately remove affected
+Current or Exclusions rows while retaining the surrounding keyed rows, artwork, scroll position, and
+available actions during background reconciliation. Initial loads and navigation have separate loading
+states; background failures retain the list with an inline retry. Superseded responses cannot replace
+newer draft membership. Catalog refreshes also reconcile Current without changing persistent playback
+state. The drawer keeps
 pagination in its footer and uses shared catalog previews for indexed items. It
 resolves saved item aliases when opening the exclusions drawer, groups equivalent item references
 for review, and restores all references to the same indexed item together. Legacy AI cursor

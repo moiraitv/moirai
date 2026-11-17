@@ -181,3 +181,20 @@ it('normalizes retained destinations and rejects unsafe direct writer updates', 
 		expect(await repository.mediaServers.getMediaServerConnection(id)).toEqual(acknowledged);
 	}
 }, 15_000);
+
+it('preserves folder mappings changed while a rename-only PATCH is probing', async () => {
+	const { app, repository, previous, url, id } = await fixture('plex');
+	const held = previous.holdNextProbe();
+	const rename = Promise.resolve(app.inject({ method: 'PATCH', url, payload: { name: 'Renamed' } }));
+	await held.entered;
+	const pathReplacements = [{ remotePrefix: '/remote/movies', localPrefix: path.resolve('mapped-movies') }];
+	try {
+		const mapped = await app.inject({ method: 'PATCH', url, payload: { pathReplacements } });
+		expect(mapped.statusCode).toBe(200);
+	}
+	finally {
+		held.release();
+	}
+	expect((await rename).statusCode).toBe(200);
+	expect(await repository.mediaServers.getMediaServer(id)).toMatchObject({ name: 'Renamed', pathReplacements });
+}, 15_000);

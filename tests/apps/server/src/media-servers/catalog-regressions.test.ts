@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { libraryCreateSchema, mediaServerCreateSchema } from '@moirai/shared';
 import { createDatabase } from '@server/db/index.js';
+import { mediaItems } from '@server/db/schema.js';
 import { Repository } from '@server/repository/index.js';
 import { parseMediaProbeOutput } from '@server/media/media-probe.js';
 import { buildRemoteCatalog, type RemoteCatalog } from '@server/media-servers/catalog.js';
@@ -38,6 +39,51 @@ function probeCache(catalog: RemoteCatalog): Map<string, MediaProbeCacheEntry> {
 		probeErrorCode: null, technicalMetadata: item.technicalMetadata,
 	}]));
 }
+
+it('withholds the duration of a partially measured Plex stack until every part has a duration', async () => {
+	const database = createDatabase(':memory:', path.resolve('drizzle'));
+	try {
+		const repository = new Repository(database.db);
+		const server = await repository.mediaServers.createMediaServer(mediaServerCreateSchema.parse({
+			provider: 'plex', name: 'Plex', baseUrl: 'https://plex.example', accessToken: 'synthetic-token',
+		}), { serverKey: 'plex', serverName: 'Plex', libraries: [] });
+		const library = await repository.createLibrary(libraryCreateSchema.parse({
+			name: 'Movies', typeKey: 'movies', sourceType: 'plex',
+			sourceConfig: { mediaServerId: server.id, remoteLibraryId: 'movies', remoteLibraryName: 'Movies' },
+		}));
+		const remote = movie('stack', '/movies/first.mkv');
+		const first = remote.parts[0]!;
+		const second = { ...first, id: 'second', filePath: '/movies/second.mkv', durationMilliseconds: null };
+		async function scan(part: RemoteMediaItem['parts'][number]) {
+			const found = await buildRemoteCatalog({ libraryId: library.id, mediaServerId: server.id,
+				items: [{ ...remote, parts: [first, part] }], replacements: [] });
+			const run = await repository.beginScan(library.id, 'manual');
+			return repository.reconcileScan(run, found.groups, found.items, found.issues, true, {
+				sourceType: 'plex', sourceKey: server.id, details: {},
+			});
+		}
+
+		const incomplete = await scan(second);
+		expect(incomplete.issues).toEqual([expect.objectContaining({ code: 'multipart_duration_invalid' })]);
+		const stored = database.db.select({ id: mediaItems.id, duration: mediaItems.durationMilliseconds }).from(mediaItems).get()!;
+		expect(stored.duration).toBeNull();
+
+		// A catalog from an older scan can already contain a partial total.
+		database.db.update(mediaItems).set({ durationMilliseconds: first.durationMilliseconds }).run();
+		expect((await repository.getSchedulingCatalogForItems([stored.id])).media).toEqual([
+			expect.objectContaining({ multipartStatus: 'incomplete', durationSeconds: null }),
+		]);
+
+		await scan({ ...second, durationMilliseconds: first.durationMilliseconds });
+		expect((await repository.getSchedulingCatalogForItems([stored.id])).media).toEqual([
+			expect.objectContaining({ multipartStatus: 'complete', durationSeconds: first.durationMilliseconds! * 2 / 1_000,
+				playbackParts: [expect.any(Object), expect.any(Object)] }),
+		]);
+	}
+	finally {
+		database.close();
+	}
+});
 
 it('keeps duration warnings and accepted tail findings when a mapped scan reuses its probe', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'moirai-remote-health-'));
