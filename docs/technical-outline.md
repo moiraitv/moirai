@@ -1849,13 +1849,20 @@ the gap is intentional dead air.
 ### ErsatzTV-Next integration
 
 Moirai owns channel configuration and maps it through a compatibility adapter pinned to ErsatzTV-Next
-v0.2.5 revision `c5cb065f9f35dbbcb7c05845f0f92c70f576a480`. The adapter retains only the channel and playout
+v0.2.6 revision `f18ced056d96a1240924a3523885e4b707b40d3e`. The adapter retains only the channel and playout
 schemas used by the integrated worker; vendored files retain upstream MIT attribution.
-Generated channel configuration uses schema `0.1.3` and playout uses schema `0.0.8`. Next v0.2.5
-accepts channel schemas `0.1.0` through `0.1.3` and playout schemas `0.0.0` through `0.0.8`, so it can
+Generated channel configuration uses schema `0.1.5` and playout uses schema `0.0.8`. Next v0.2.6
+accepts channel schemas `0.1.0` through `0.1.5` and playout schemas `0.0.0` through `0.0.8`, so it can
 read playout generated before the upgrade. Deploy the application and engine together. On rollback to
-v0.2.3, stop workers and regenerate playout with the restored application before tuning because that
-engine rejects `0.0.8`.
+v0.2.5 or earlier, stop workers and regenerate channel configuration with the restored application
+before tuning because those engines reject `0.1.5`. Rollback to v0.2.3 also requires regenerating
+playout because that engine rejects `0.0.8`.
+
+The adapter leaves session and cache settings unset to use upstream defaults. Readiness is signaled
+after three segments, and the idle timeout remains 90 seconds. Still-image graphics are rendered once
+at their overlay size, opacity, and pixel format, then reused across items and channels. The cache
+uses `ersatztv-next` in the system temporary directory and removes files unused for 30 days; failed
+renders fall back to the original image. JPEG watermarks preserve the main video's color range.
 
 The adapter emits explicit transcode mode for concrete audio/video formats. Existing null formats
 select copy mode with upstream default codec allowlists and AAC/H.264 transcode fallback for
@@ -2070,7 +2077,7 @@ Native development resolves the channel engine in this order:
 
 Native worker builds require Rust 1.99.0, selected by the upstream `rust-toolchain.toml` when using
 rustup. The build script runs Cargo from the selected checkout so that toolchain selection applies.
-Use ErsatzTV FFmpeg `8.1.2-8` for native playback. The production image bundles the same version.
+Use ErsatzTV FFmpeg `8.1.2-9` for native playback. The production image bundles the same version.
 
 Useful commands are:
 
