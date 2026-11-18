@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.0 - 2026-11-17
+
+### New
+
+- **Plex, Jellyfin, and Emby libraries** bring remote media, metadata, and artwork into Moirai. Manage shared connections in **Settings → Media Servers**. Channels can stream media directly from the server or read corresponding local files through folder mappings. Plex and Jellyfin can optionally report live channel playback to the connected account. Configuration backups preserve connections and mappings though require signing in again after restoring to reconnect libraries.
+- **Sequence Programs** can now supply filler, including nested Sequences. The scheduler looks for whole clips before truncating -- clips that are too long can be skipped and attempted again in a later break. The new **Chance** ordering gives each step an independent chance to play one clip per cycle.
+- **Once per slot** pre-roll and post-roll can bookend a scheduling slot. Existing assignments default to **Per item**.
+- **Guide and graphics metadata** lets Programs define custom Liquid fields for guide templates and graphics text. Graphics templates also expose more catalog fields.
+- **Top 10 only** option limits Actor filters to the first ten billed cast members in media queries.
+- **Tailscale administration** can now use a separate browser address from LAN playback. `MOIRAI_ALLOWED_ORIGINS` accepts exact administration origins.
+
+### Improvements
+
+- **Guide** and **Channels both respond more quickly, showing today's listings while the full window loads, reuses today's snapshot after a restart, and compresses responses. Background refreshes reserve scheduling worker capacity for live playback.
+- **Programs** and **Quick Setup** both open more quickly without waiting for work that does not apply to them.
+- **Manage exclusions** now has a **Current** tab for more quickly browsing and excluding items or groups from a Content Program's draft selection.
+
+### Changes
+
+- The bundled **ErsatzTV Next** engine is updated to **v0.2.6**, with channel configuration schema **0.1.5** and playout schema **0.0.8**.
+- Updated runtime and development dependencies.
+
+### Fixes
+
+- Private storage permission failures are reported before the database opens.
+
 ## 0.8.0 - 2026-11-07
 
 ### New
